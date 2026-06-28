@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-ink-50: #f6f7fb;
+  --color-ink-900: #0b1020;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: #eef1f8;
+  color: #0b1020;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Aurora background used on the shell */
+.aurora {
+  background:
+    radial-gradient(1100px 600px at 8% -10%, rgba(99,102,241,.20), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(14,165,233,.18), transparent 55%),
+    radial-gradient(800px 500px at 50% 120%, rgba(168,85,247,.12), transparent 60%),
+    #eef1f8;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #eceef4;
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px -12px rgba(16, 24, 40, .12);
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Chặn iOS tự phóng to khi focus ô nhập (font < 16px sẽ bị zoom). Ép ≥16px trên mobile. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+@keyframes floaty { 0%,100%{ transform: translateY(0)} 50%{ transform: translateY(-6px)} }
+.animate-floaty { animation: floaty 6s ease-in-out infinite; }
+
+.fade-up { animation: fadeUp .5s ease both; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
