@@ -245,10 +245,11 @@ export function monthlyCashIn(projects, year) {
 }
 
 // Tiền NẠP vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
+// Bỏ qua giao dịch CHUYỂN QUỸ (xferId) vì đó là di chuyển nội bộ, không phải phân bổ thu nhập mới.
 export function monthlyFundInflow(fundTx, year) {
   const byFund = {}; const total = Array.from({ length: 12 }, () => 0);
   for (const t of fundTx || []) {
-    if (!t.date || t.type === "out") continue;
+    if (!t.date || t.type === "out" || t.xferId) continue;
     const d = new Date(t.date);
     if (d.getFullYear() !== year) continue;
     (byFund[t.fundId] ||= Array.from({ length: 12 }, () => 0))[d.getMonth()] += n(t.amount);
@@ -258,8 +259,9 @@ export function monthlyFundInflow(fundTx, year) {
 }
 
 // Tổng tiền nạp quỹ trong khoảng [from,to] (ISO). Dùng để biết "đã phân bổ" kỳ này.
+// Bỏ qua chuyển quỹ nội bộ (xferId).
 export function fundInflowInRange(fundTx, from, to) {
-  return (fundTx || []).reduce((a, t) => (t.type !== "out" && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
+  return (fundTx || []).reduce((a, t) => (t.type !== "out" && !t.xferId && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
 }
 
 // "Burn rate" — chi phí cố định quy ra mỗi tháng (monthly=amount, yearly=amount/12, once bỏ qua)

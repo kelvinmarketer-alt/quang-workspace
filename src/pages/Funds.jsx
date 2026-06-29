@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, Wallet, ArrowDownToLine, ArrowUpFromLine, Sparkles, TrendingUp } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, Wallet, ArrowDownToLine, ArrowUpFromLine, Sparkles, TrendingUp, ArrowLeftRight } from "lucide-react";
 import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -69,6 +69,48 @@ function TxModal({ fund, type, onClose, onSave }) {
   );
 }
 
+/* ---- Modal chuyển tiền giữa 2 quỹ ---- */
+function TransferModal({ funds, onClose, onSave }) {
+  const [from, setFrom] = useState(funds[0]?.id || "");
+  const [to, setTo] = useState(funds[1]?.id || funds[0]?.id || "");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
+  const fromFund = funds.find((f) => f.id === from);
+  const bad = !from || !to || from === to || num(amount) <= 0;
+  const swap = () => { setFrom(to); setTo(from); };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-extrabold">Chuyển tiền giữa quỹ</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <label className="mb-2 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Từ quỹ</span>
+          <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls}>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
+          {fromFund && <span className="mt-1 block text-[11px] text-slate-400">Số dư hiện tại: {formatVND(fromFund.balance || 0)}</span>}
+        </label>
+        <div className="my-1 flex justify-center"><button type="button" onClick={swap} className="rounded-full border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-50 hover:text-indigo-600"><ArrowLeftRight size={15} /></button></div>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Sang quỹ</span>
+          <select value={to} onChange={(e) => setTo(e.target.value)} className={inputCls}>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền *</span>
+            <MoneyInput value={amount} onChange={setAmount} autoFocus className={inputCls} placeholder="2.000.000" /></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></label>
+        </div>
+        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
+          <input value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="Lý do chuyển (tuỳ chọn)" /></label>
+        {from === to && <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Chọn 2 quỹ khác nhau.</div>}
+        <button disabled={bad} onClick={() => { if (!bad) { onSave(from, to, num(amount), date, note.trim()); onClose(); } }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">
+          <ArrowLeftRight size={16} /> Chuyển tiền
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Modal phân bổ thu nhập theo % vào tất cả quỹ ---- */
 function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   const [date, setDate] = useState(todayISO());
@@ -112,13 +154,14 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
 }
 
 export default function Funds() {
-  const { funds, fundTx, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds } = useData();
+  const { funds, fundTx, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds, transferFund } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const [year, setYear] = useState(curY);
   const [fundModal, setFundModal] = useState(null); // null | {} | fund
   const [txModal, setTxModal] = useState(null);      // { fund, type }
   const [allocOpen, setAllocOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -187,8 +230,9 @@ export default function Funds() {
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-extrabold text-slate-900">Các quỹ <span className="text-slate-400">({fundsWithBal.length})</span></h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {pctTotal !== 100 && fundsWithBal.length > 0 && <Badge tone={pctTotal > 100 ? "rose" : "amber"}>Tổng % = {pctTotal}</Badge>}
+            {fundsWithBal.length >= 2 && <button onClick={() => setTransferOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
             <button onClick={() => setFundModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm quỹ</button>
           </div>
         </div>
@@ -207,9 +251,9 @@ export default function Funds() {
                       <div className="text-[11px] font-semibold text-slate-400">{f.percent || 0}% · phân bổ</div>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                    <button onClick={() => setFundModal(f)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={14} /></button>
-                    <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>
+                  <span className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                    <button onClick={() => setFundModal(f)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                    <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                   </span>
                 </div>
                 <div className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900">{formatVND(f.balance)}</div>
@@ -252,7 +296,37 @@ export default function Funds() {
             <h2 className="text-base font-extrabold text-slate-900">Phân bổ theo tháng · {year}</h2>
             <Badge tone="slate">{monthRows.length} tháng</Badge>
           </div>
-          <div className="overflow-x-auto">
+          {/* MOBILE: thẻ từng tháng (gọn, không kéo ngang) */}
+          <div className="space-y-2 px-4 pb-4 sm:hidden">
+            {monthRows.map((r) => {
+              const rem = r.income - r.alloc;
+              return (
+                <div key={r.i} className="rounded-xl border border-slate-100 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-extrabold text-slate-800">Tháng {r.i + 1}</span>
+                    <span className="text-sm font-bold text-indigo-600">Thu {formatShort(r.income)}</span>
+                  </div>
+                  {r.alloc > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(funds || []).map((f, j) => (r.fundVals[j] > 0 ? (
+                        <span key={f.id} className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                          <span className={`h-2 w-2 rounded-full ${TONE_BG[f.color] || "bg-slate-400"}`} /> {f.name} {formatShort(r.fundVals[j])}
+                        </span>
+                      ) : null))}
+                    </div>
+                  )}
+                  <div className="mt-2 text-[11px] font-bold">{rem > 0 ? <span className="text-amber-600">Chưa chia {formatShort(rem)}</span> : <span className="text-emerald-600">✓ Đã chia hết</span>}</div>
+                </div>
+              );
+            })}
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-extrabold text-slate-700">
+              <span>Cả năm {year}</span>
+              <span>Thu {formatShort(incomeYear)} · tồn {formatShort(Math.max(0, incomeYear - inflow.total.reduce((a, b) => a + b, 0)))}</span>
+            </div>
+          </div>
+
+          {/* DESKTOP: bảng */}
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-y border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
@@ -305,7 +379,7 @@ export default function Funds() {
                     <div className="truncate text-[11px] text-slate-400">{fmtDateVI(t.date)}{t.note ? " · " + t.note : ""}</div>
                   </div>
                   <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
-                  <button onClick={() => { if (confirm("Xoá giao dịch này?")) deleteFundTx(t.id); }} className="shrink-0 rounded p-1 text-slate-300 opacity-0 transition hover:text-rose-600 group-hover:opacity-100"><Trash2 size={14} /></button>
+                  <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>
                 </div>
               );
             })}
@@ -316,6 +390,7 @@ export default function Funds() {
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
       {allocOpen && <AllocateModal funds={funds || []} defaultAmount={unallocated} onClose={() => setAllocOpen(false)} onSave={allocateFunds} />}
+      {transferOpen && <TransferModal funds={fundsWithBal} onClose={() => setTransferOpen(false)} onSave={transferFund} />}
     </div>
   );
 }
