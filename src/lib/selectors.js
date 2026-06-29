@@ -227,6 +227,41 @@ export function expensesInRange(expenses, from, to) {
   return { total, items: items.sort((a, b) => b.total - a.total) };
 }
 
+// ===== QUỸ / PHÂN BỔ DÒNG TIỀN =====
+// Số dư 1 quỹ = tổng nạp − tổng rút (toàn thời gian).
+export function fundBalance(fundTx, fundId) {
+  return (fundTx || []).reduce((a, t) => a + (t.fundId === fundId ? (t.type === "out" ? -n(t.amount) : n(t.amount)) : 0), 0);
+}
+
+// Thu nhập THỰC (tiền vào) theo 12 tháng của 1 năm — dùng cashIn của các đợt.
+export function monthlyCashIn(projects, year) {
+  const out = Array.from({ length: 12 }, () => 0);
+  for (const x of allInstallments(projects)) {
+    if (!x.date) continue;
+    const d = new Date(x.date);
+    if (d.getFullYear() === year) out[d.getMonth()] += n(x.cashIn);
+  }
+  return out;
+}
+
+// Tiền NẠP vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
+export function monthlyFundInflow(fundTx, year) {
+  const byFund = {}; const total = Array.from({ length: 12 }, () => 0);
+  for (const t of fundTx || []) {
+    if (!t.date || t.type === "out") continue;
+    const d = new Date(t.date);
+    if (d.getFullYear() !== year) continue;
+    (byFund[t.fundId] ||= Array.from({ length: 12 }, () => 0))[d.getMonth()] += n(t.amount);
+    total[d.getMonth()] += n(t.amount);
+  }
+  return { byFund, total };
+}
+
+// Tổng tiền nạp quỹ trong khoảng [from,to] (ISO). Dùng để biết "đã phân bổ" kỳ này.
+export function fundInflowInRange(fundTx, from, to) {
+  return (fundTx || []).reduce((a, t) => (t.type !== "out" && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
+}
+
 // "Burn rate" — chi phí cố định quy ra mỗi tháng (monthly=amount, yearly=amount/12, once bỏ qua)
 export function monthlyOperatingCost(expenses) {
   return (expenses || []).filter((e) => e.active !== false).reduce((a, e) => {

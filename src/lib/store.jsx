@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SEED_TASKS, SEED_FAMILY, SEED_TRANSACTIONS, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES } from "../data/seed.js";
+import { SEED_TASKS, SEED_FAMILY, SEED_TRANSACTIONS, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 
@@ -23,18 +23,23 @@ function load() {
     projects: SEED_PROJECTS, // nguồn dữ liệu chính — xem seed.js
     transactions: SEED_TRANSACTIONS,
     expenses: SEED_EXPENSES, // chi phí vận hành công ty
+    funds: SEED_FUNDS, // quỹ phân bổ dòng tiền
+    fundTx: SEED_FUND_TX, // giao dịch nạp/rút quỹ
     settings: { ...SEED_SETTINGS }, // cấu hình app (key OpenAI…) — sẽ đồng bộ DB
   };
 }
 
 // Bù field cho state cũ (tránh undefined sau nâng cấp)
 function migrate(s) {
-  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, transactions: SEED_TRANSACTIONS, expenses: SEED_EXPENSES, settings: { ...SEED_SETTINGS } };
+  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, transactions: SEED_TRANSACTIONS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, settings: { ...SEED_SETTINGS } };
   const merged = { ...base, ...s };
   if (!Array.isArray(merged.customerList)) merged.customerList = [];
   if (!Array.isArray(merged.projects)) merged.projects = [];
   if (!Array.isArray(merged.transactions)) merged.transactions = [];
   if (!Array.isArray(merged.expenses)) merged.expenses = [];
+  // Quỹ: lần đầu (chưa có key) → nạp bộ quỹ mẫu; đã có (kể cả rỗng do user xoá hết) → giữ nguyên
+  if (!Array.isArray(merged.funds)) merged.funds = s.funds === undefined ? SEED_FUNDS : [];
+  if (!Array.isArray(merged.fundTx)) merged.fundTx = [];
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
@@ -174,6 +179,24 @@ export function DataProvider({ children }) {
         setState((s) => ({ ...s, expenses: (s.expenses || []).filter((x) => x.id !== id) })),
       deleteExpensesMany: (ids) =>
         setState((s) => ({ ...s, expenses: (s.expenses || []).filter((x) => !ids.includes(x.id)) })),
+      // QUỸ (phân bổ dòng tiền)
+      addFund: (fd) =>
+        setState((s) => ({ ...s, funds: [...(s.funds || []), { id: "fund" + uid(), color: "indigo", percent: 0, note: "", ...fd }] })),
+      updateFund: (id, patch) =>
+        setState((s) => ({ ...s, funds: (s.funds || []).map((f) => (f.id === id ? { ...f, ...patch } : f)) })),
+      deleteFund: (id) =>
+        setState((s) => ({ ...s, funds: (s.funds || []).filter((f) => f.id !== id), fundTx: (s.fundTx || []).filter((t) => t.fundId !== id) })),
+      // Giao dịch quỹ: nạp (in) / rút (out)
+      addFundTx: (tx) =>
+        setState((s) => ({ ...s, fundTx: [{ id: "ft" + uid(), type: "in", ...tx }, ...(s.fundTx || [])] })),
+      deleteFundTx: (id) =>
+        setState((s) => ({ ...s, fundTx: (s.fundTx || []).filter((t) => t.id !== id) })),
+      // Phân bổ 1 lần: tạo nhiều phiếu NẠP cùng ngày — entries: [{fundId, amount}]
+      allocateFunds: (entries, date, note) =>
+        setState((s) => {
+          const add = (entries || []).filter((e) => Number(e.amount) > 0).map((e) => ({ id: "ft" + uid(), fundId: e.fundId, date, amount: Number(e.amount), type: "in", note: note || "Phân bổ thu nhập" }));
+          return { ...s, fundTx: [...add, ...(s.fundTx || [])] };
+        }),
       // IMPORT từ AI (ảnh / chat) — { customers:[], projects:[] }
       importParsed: (parsed) =>
         setState((s) => {

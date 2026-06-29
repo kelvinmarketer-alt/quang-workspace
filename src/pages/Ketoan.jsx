@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar } from "lucide-react";
+import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard } from "lucide-react";
 import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
+import Expenses from "./Expenses.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", Khác: "slate" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -66,7 +67,7 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
   );
 }
 
-export default function Ketoan() {
+function KetoanReport() {
   const { projects, expenses } = useData();
   const [preset, setPreset] = useState("thisYear");
   const now = new Date();
@@ -278,6 +279,26 @@ export default function Ketoan() {
           </table>
         </div>
       </Card>
+    </div>
+  );
+}
+
+const TABS = [["report", "Doanh thu & Lợi nhuận", BarChart3], ["expenses", "Chi phí vận hành", CreditCard]];
+
+export default function Ketoan({ initialTab = "report" }) {
+  const [tab, setTab] = useState(initialTab);
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <Card className="!p-2">
+        <div className="grid grid-cols-2 gap-1">
+          {TABS.map(([v, l, Ic]) => (
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
+              <Ic size={16} /> <span className="truncate">{l}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+      {tab === "report" ? <KetoanReport /> : <Expenses />}
     </div>
   );
 }

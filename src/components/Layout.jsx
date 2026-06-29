@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, Search, Settings as SettingsIcon, FolderKanban, Calculator, CreditCard,
+  LineChart, Menu, X, Bell, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
@@ -13,12 +13,13 @@ const NAV = [
   { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true },
   { to: "/khach-hang", label: "Khách hàng", icon: Users },
   { to: "/du-an", label: "Dự án / Đơn hàng", icon: FolderKanban },
-  { to: "/ke-toan", label: "Kế toán", icon: Calculator },
-  { to: "/chi-phi", label: "Chi phí", icon: CreditCard },
-  { to: "/lich", label: "Lịch & Âm lịch", icon: CalendarDays },
-  { to: "/cong-viec", label: "Công việc", icon: ListChecks },
+  { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator },
+  { to: "/quy", label: "Quỹ / Dòng tiền", icon: PiggyBank },
+  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
+// Tiêu đề cho các route phụ (tab con) không nằm trong NAV
+const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/don-hang": "Dự án / Đơn hàng" };
 
 function Brand() {
   return (
@@ -181,6 +182,7 @@ export default function Layout({ children }) {
   const loc = useLocation();
   const li = lunarInfo(new Date());
   const title = NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
+    || EXTRA_TITLES[loc.pathname]
     || (loc.pathname === "/" ? "Tổng quan" : "");
 
   return (

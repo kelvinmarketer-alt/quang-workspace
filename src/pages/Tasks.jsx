@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { Plus, X, Trash2, Check, Flag, Clock } from "lucide-react";
+import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
+import Calendar from "./Calendar.jsx";
 
 const PRIO = { high: ["rose", "Cao"], med: ["amber", "TB"], low: ["sky", "Thấp"] };
 
@@ -45,7 +46,7 @@ function TaskModal({ onClose, onSave }) {
   );
 }
 
-export default function Tasks() {
+function TaskBoard() {
   const { tasks, addTask, toggleTask, deleteTask } = useData();
   const [modal, setModal] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -105,6 +106,26 @@ export default function Tasks() {
       </div>
 
       {modal && <TaskModal onClose={() => setModal(false)} onSave={addTask} />}
+    </div>
+  );
+}
+
+const TABS = [["tasks", "Công việc", ListChecks], ["calendar", "Lịch & Âm lịch", CalendarDays]];
+
+export default function Tasks({ initialTab = "tasks" }) {
+  const [tab, setTab] = useState(initialTab);
+  return (
+    <div className="space-y-4 sm:space-y-5">
+      <Card className="!p-2">
+        <div className="grid grid-cols-2 gap-1">
+          {TABS.map(([v, l, Ic]) => (
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
+              <Ic size={16} /> {l}
+            </button>
+          ))}
+        </div>
+      </Card>
+      {tab === "tasks" ? <TaskBoard /> : <Calendar />}
     </div>
   );
 }
