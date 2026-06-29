@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, Wallet, ArrowDownToLine, ArrowUpFromLine, Sparkles, TrendingUp, ArrowLeftRight } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, Wallet, ArrowDownToLine, ArrowUpFromLine, Sparkles, TrendingUp, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward } from "lucide-react";
 import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -13,6 +13,36 @@ const TONE_HEX = { indigo: "#6366f1", emerald: "#10b981", rose: "#f43f5e", sky: 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `T${Number(m)}/${y}` : ""; };
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const EVERY = [["week", "1 tuần"], ["2week", "2 tuần"], ["month", "1 tháng"]];
+const everyLabel = (v) => (EVERY.find(([k]) => k === v) || EVERY[1])[1];
+function addEvery(d, every) {
+  const x = new Date(d);
+  if (every === "week") x.setDate(x.getDate() + 7);
+  else if (every === "month") x.setMonth(x.getMonth() + 1);
+  else x.setDate(x.getDate() + 14); // 2week (mặc định)
+  return x;
+}
+// Các kỳ ĐÃ ĐẾN HẠN (≤ hôm nay) mà chưa xử lý (sau lastDone). Trả mảng ISO tăng dần.
+function pendingOccs(sc, today) {
+  if (sc.active === false || !sc.startDate) return [];
+  const last = sc.lastDone || "";
+  const out = []; let d = new Date(sc.startDate + "T00:00:00"); let g = 0;
+  while (g++ < 400) {
+    const iso = isoOf(d);
+    if (iso > today) break;
+    if (iso > last) out.push(iso);
+    d = addEvery(d, sc.every);
+  }
+  return out;
+}
+// Kỳ KẾ TIẾP (> hôm nay) để hiển thị "lần tới"
+function nextOcc(sc, today) {
+  if (sc.active === false || !sc.startDate) return null;
+  let d = new Date(sc.startDate + "T00:00:00"); let g = 0;
+  while (g++ < 400) { const iso = isoOf(d); if (iso > today && iso > (sc.lastDone || "")) return iso; d = addEvery(d, sc.every); }
+  return null;
+}
 
 /* ---- Modal thêm/sửa quỹ ---- */
 function FundModal({ initial, onClose, onSave }) {
@@ -111,6 +141,47 @@ function TransferModal({ funds, onClose, onSave }) {
   );
 }
 
+/* ---- Modal lịch chuyển quỹ định kỳ ---- */
+function ScheduleModal({ initial, funds, onClose, onSave }) {
+  const [f, setF] = useState(initial || { fromId: funds[0]?.id || "", toId: funds[1]?.id || funds[0]?.id || "", amount: "", every: "2week", startDate: todayISO(), note: "", active: true });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const bad = !f.fromId || !f.toId || f.fromId === f.toId || num(f.amount) <= 0;
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa lịch chuyển" : "Lịch chuyển định kỳ"}</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Từ quỹ</span>
+            <select value={f.fromId} onChange={(e) => set("fromId", e.target.value)} className={inputCls}>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Sang quỹ</span>
+            <select value={f.toId} onChange={(e) => set("toId", e.target.value)} className={inputCls}>{funds.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        </div>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền mỗi kỳ *</span>
+          <MoneyInput value={f.amount} onChange={(v) => set("amount", v)} className={inputCls} placeholder="2.000.000" /></label>
+        <div className="mb-3"><span className="mb-1 block text-sm font-semibold text-slate-600">Tần suất</span>
+          <div className="flex gap-1.5">
+            {EVERY.map(([v, l]) => (
+              <button key={v} type="button" onClick={() => set("every", v)} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${f.every === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Bắt đầu từ</span>
+          <input type="date" value={f.startDate} onChange={(e) => set("startDate", e.target.value)} className={inputCls} /></label>
+        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
+          <input value={f.note} onChange={(e) => set("note", e.target.value)} className={inputCls} placeholder="VD: trích đầu tư định kỳ" /></label>
+        {f.fromId === f.toId && <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Chọn 2 quỹ khác nhau.</div>}
+        <button disabled={bad} onClick={() => { if (!bad) { onSave({ ...f, amount: num(f.amount), note: f.note.trim() }); onClose(); } }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">
+          <Repeat size={16} /> Lưu lịch
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Modal phân bổ thu nhập theo % vào tất cả quỹ ---- */
 function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   const [date, setDate] = useState(todayISO());
@@ -154,14 +225,16 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
 }
 
 export default function Funds() {
-  const { funds, fundTx, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds, transferFund } = useData();
+  const { funds, fundTx, fundSchedules, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
   const now = new Date();
   const curY = now.getFullYear();
+  const today = todayISO();
   const [year, setYear] = useState(curY);
   const [fundModal, setFundModal] = useState(null); // null | {} | fund
   const [txModal, setTxModal] = useState(null);      // { fund, type }
   const [allocOpen, setAllocOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [schedModal, setSchedModal] = useState(null); // null | {} | schedule
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -203,8 +276,41 @@ export default function Funds() {
   const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "—";
   const fundColor = (id) => (funds || []).find((f) => f.id === id)?.color || "slate";
 
+  // Lịch chuyển định kỳ: kỳ đã đến hạn (chờ xác nhận) + danh sách lịch
+  const schedules = fundSchedules || [];
+  const due = useMemo(() => schedules.map((sc) => ({ sc, occs: pendingOccs(sc, today) })).filter((d) => d.occs.length > 0), [schedules, today]);
+
   return (
     <div className="space-y-4 sm:space-y-5">
+      {/* Banner: lịch chuyển đã đến hạn (chờ xác nhận) */}
+      {due.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
+          <div className="mb-2.5 flex items-center gap-2 text-sm font-extrabold text-amber-700"><BellRing size={16} /> Lịch chuyển đến hạn ({due.reduce((a, d) => a + d.occs.length, 0)})</div>
+          <div className="space-y-2">
+            {due.map(({ sc, occs }) => {
+              const occ = occs[0]; // xử lý kỳ sớm nhất trước
+              return (
+                <div key={sc.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-3 shadow-sm">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(sc.fromId)] || "bg-slate-400"}`} />{fundName(sc.fromId)}
+                      <ArrowLeftRight size={13} className="text-slate-400" />
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(sc.toId)] || "bg-slate-400"}`} />{fundName(sc.toId)}
+                      <span className="ml-1 text-indigo-600">{formatShort(sc.amount)}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400">Đến hạn {fmtDateVI(occ)}{occs.length > 1 ? ` · còn ${occs.length - 1} kỳ quá hạn` : ""}</div>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button onClick={() => runFundSchedule(sc.id, occ)} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-1.5 text-xs font-bold text-white shadow"><ArrowLeftRight size={13} /> Chuyển ngay</button>
+                    <button onClick={() => skipFundSchedule(sc.id, occ)} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-50"><SkipForward size={13} /> Bỏ qua</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Thanh năm + nút phân bổ */}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
@@ -267,6 +373,50 @@ export default function Funds() {
           </div>
         )}
       </div>
+
+      {/* Lịch chuyển định kỳ */}
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900"><Repeat size={17} className="text-indigo-500" /> Lịch chuyển định kỳ <span className="text-slate-400">({schedules.length})</span></h2>
+          {fundsWithBal.length >= 2 && <button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button>}
+        </div>
+        {schedules.length === 0 ? (
+          <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+            <CalendarClock size={15} className="mt-0.5 shrink-0 text-slate-400" />
+            <span>Đặt lịch tự chuyển tiền giữa quỹ theo chu kỳ (1 tuần / 2 tuần / 1 tháng). Đến hạn app sẽ <b>nhắc</b> ở đầu trang, bạn bấm <b>“Chuyển ngay”</b> để duyệt.</span>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {schedules.map((sc) => {
+              const off = sc.active === false;
+              const nx = nextOcc(sc, today);
+              const pend = pendingOccs(sc, today).length;
+              return (
+                <div key={sc.id} className={`group flex items-center gap-3 rounded-xl border p-3 ${off ? "border-slate-100 opacity-60" : pend > 0 ? "border-amber-200 bg-amber-50/40" : "border-slate-100"}`}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-500"><Repeat size={16} /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-slate-800">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(sc.fromId)] || "bg-slate-400"}`} />{fundName(sc.fromId)}
+                      <ArrowLeftRight size={12} className="text-slate-400" />
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(sc.toId)] || "bg-slate-400"}`} />{fundName(sc.toId)}
+                      <span className="text-indigo-600">{formatShort(sc.amount)}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400">
+                      <Badge tone="indigo">Mỗi {everyLabel(sc.every)}</Badge>
+                      {off ? <span className="font-bold text-slate-400">đã tắt</span> : pend > 0 ? <span className="font-bold text-amber-600">đến hạn — chờ xác nhận ở trên</span> : nx ? <span>lần tới {fmtDateVI(nx)}</span> : null}
+                    </div>
+                  </div>
+                  <span className="flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                    <button onClick={() => updateFundSchedule(sc.id, { active: off })} title={off ? "Bật lại" : "Tạm tắt"} className={`rounded-lg p-1.5 ${off ? "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-emerald-50"}`}><Power size={15} /></button>
+                    <button onClick={() => setSchedModal(sc)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                    <button onClick={() => { if (confirm("Xoá lịch chuyển này?")) deleteFundSchedule(sc.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
 
       {/* Biểu đồ thu nhập vs phân bổ */}
       {chart.length > 0 && (
@@ -391,6 +541,7 @@ export default function Funds() {
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
       {allocOpen && <AllocateModal funds={funds || []} defaultAmount={unallocated} onClose={() => setAllocOpen(false)} onSave={allocateFunds} />}
       {transferOpen && <TransferModal funds={fundsWithBal} onClose={() => setTransferOpen(false)} onSave={transferFund} />}
+      {schedModal && <ScheduleModal initial={schedModal.id ? schedModal : null} funds={funds || []} onClose={() => setSchedModal(null)} onSave={(data) => (schedModal.id ? updateFundSchedule(schedModal.id, data) : addFundSchedule(data))} />}
     </div>
   );
 }

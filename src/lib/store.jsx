@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SEED_TASKS, SEED_FAMILY, SEED_TRANSACTIONS, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX } from "../data/seed.js";
+import { SEED_TASKS, SEED_FAMILY, SEED_TRANSACTIONS, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 
@@ -25,13 +25,14 @@ function load() {
     expenses: SEED_EXPENSES, // chi phí vận hành công ty
     funds: SEED_FUNDS, // quỹ phân bổ dòng tiền
     fundTx: SEED_FUND_TX, // giao dịch nạp/rút quỹ
+    fundSchedules: SEED_FUND_SCHEDULES, // lịch chuyển quỹ định kỳ
     settings: { ...SEED_SETTINGS }, // cấu hình app (key OpenAI…) — sẽ đồng bộ DB
   };
 }
 
 // Bù field cho state cũ (tránh undefined sau nâng cấp)
 function migrate(s) {
-  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, transactions: SEED_TRANSACTIONS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, settings: { ...SEED_SETTINGS } };
+  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, transactions: SEED_TRANSACTIONS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, fundSchedules: SEED_FUND_SCHEDULES, settings: { ...SEED_SETTINGS } };
   const merged = { ...base, ...s };
   if (!Array.isArray(merged.customerList)) merged.customerList = [];
   if (!Array.isArray(merged.projects)) merged.projects = [];
@@ -40,6 +41,7 @@ function migrate(s) {
   // Quỹ: lần đầu (chưa có key) → nạp bộ quỹ mẫu; đã có (kể cả rỗng do user xoá hết) → giữ nguyên
   if (!Array.isArray(merged.funds)) merged.funds = s.funds === undefined ? SEED_FUNDS : [];
   if (!Array.isArray(merged.fundTx)) merged.fundTx = [];
+  if (!Array.isArray(merged.fundSchedules)) merged.fundSchedules = [];
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
@@ -209,6 +211,36 @@ export function DataProvider({ children }) {
           const xid = tx && tx.xferId;
           return { ...s, fundTx: (s.fundTx || []).filter((t) => t.id !== id && (!xid || t.xferId !== xid)) };
         }),
+      // LỊCH CHUYỂN QUỸ ĐỊNH KỲ
+      addFundSchedule: (sc) =>
+        setState((s) => ({ ...s, fundSchedules: [{ id: "fs" + uid(), every: "2week", active: true, lastDone: "", note: "", ...sc }, ...(s.fundSchedules || [])] })),
+      updateFundSchedule: (id, patch) =>
+        setState((s) => ({ ...s, fundSchedules: (s.fundSchedules || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
+      deleteFundSchedule: (id) =>
+        setState((s) => ({ ...s, fundSchedules: (s.fundSchedules || []).filter((x) => x.id !== id) })),
+      // Thực hiện 1 kỳ của lịch (occIso = ngày kỳ đến hạn): tạo phiếu chuyển 2 chiều + đánh dấu lastDone
+      runFundSchedule: (id, occIso) =>
+        setState((s) => {
+          const sc = (s.fundSchedules || []).find((x) => x.id === id);
+          if (!sc) return s;
+          const amt = Number(sc.amount) || 0;
+          const funds = s.funds || [];
+          const nameOf = (fid) => funds.find((f) => f.id === fid)?.name || "quỹ";
+          let fundTx = s.fundTx || [];
+          if (sc.fromId && sc.toId && sc.fromId !== sc.toId && amt > 0) {
+            const xid = "xf" + uid();
+            const extra = sc.note ? ` · ${sc.note}` : "";
+            fundTx = [
+              { id: "ft" + uid(), fundId: sc.fromId, amount: amt, date: occIso, type: "out", note: `Chuyển định kỳ sang ${nameOf(sc.toId)}${extra}`, xferId: xid },
+              { id: "ft" + uid(), fundId: sc.toId, amount: amt, date: occIso, type: "in", note: `Nhận định kỳ từ ${nameOf(sc.fromId)}${extra}`, xferId: xid },
+              ...fundTx,
+            ];
+          }
+          return { ...s, fundTx, fundSchedules: (s.fundSchedules || []).map((x) => (x.id === id ? { ...x, lastDone: occIso } : x)) };
+        }),
+      // Bỏ qua 1 kỳ (không chuyển), chỉ đánh dấu đã xử lý
+      skipFundSchedule: (id, occIso) =>
+        setState((s) => ({ ...s, fundSchedules: (s.fundSchedules || []).map((x) => (x.id === id ? { ...x, lastDone: occIso } : x)) })),
       // Phân bổ 1 lần: tạo nhiều phiếu NẠP cùng ngày — entries: [{fundId, amount}]
       allocateFunds: (entries, date, note) =>
         setState((s) => {

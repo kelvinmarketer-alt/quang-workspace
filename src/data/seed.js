@@ -36,6 +36,9 @@ export const SEED_FUNDS = [
 ];
 // Giao dịch quỹ (nạp / rút). fundTx: { id, fundId, date, amount, type: "in"|"out", note }
 export const SEED_FUND_TX = [];
+// Lịch chuyển quỹ định kỳ. schedule: { id, fromId, toId, amount, every: "week"|"2week"|"month", startDate, note, active, lastDone }
+// Chế độ "nhắc + xác nhận": đến hạn hiện banner, user bấm "Chuyển ngay" mới thực hiện. lastDone = ISO kỳ gần nhất đã xử lý.
+export const SEED_FUND_SCHEDULES = [];
 
 // Cấu hình app (đồng bộ cùng dữ liệu khi deploy DB online). Gồm key OpenAI.
 export const SEED_SETTINGS = { openaiKey: "", openaiModel: "gpt-4o-mini" };
