@@ -244,12 +244,17 @@ export function monthlyCashIn(projects, year) {
   return out;
 }
 
-// Tiền NẠP vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
-// Bỏ qua giao dịch CHUYỂN QUỸ (xferId) vì đó là di chuyển nội bộ, không phải phân bổ thu nhập mới.
+// 1 phiếu "in" được tính là CẤP VỐN cho quỹ (nạp tay hoặc phân bổ từ quỹ công ty)?
+// - nạp tay: không xferId  → tính
+// - phân bổ từ quỹ công ty: có xferId + alloc=true → tính
+// - chuyển quỹ nội bộ thường: có xferId, không alloc → KHÔNG tính
+const isFundingIn = (t) => t.type !== "out" && (!t.xferId || t.alloc);
+
+// Tiền CẤP VỐN vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
 export function monthlyFundInflow(fundTx, year) {
   const byFund = {}; const total = Array.from({ length: 12 }, () => 0);
   for (const t of fundTx || []) {
-    if (!t.date || t.type === "out" || t.xferId) continue;
+    if (!t.date || !isFundingIn(t)) continue;
     const d = new Date(t.date);
     if (d.getFullYear() !== year) continue;
     (byFund[t.fundId] ||= Array.from({ length: 12 }, () => 0))[d.getMonth()] += n(t.amount);
@@ -258,10 +263,31 @@ export function monthlyFundInflow(fundTx, year) {
   return { byFund, total };
 }
 
-// Tổng tiền nạp quỹ trong khoảng [from,to] (ISO). Dùng để biết "đã phân bổ" kỳ này.
-// Bỏ qua chuyển quỹ nội bộ (xferId).
+// Tổng tiền cấp vốn quỹ trong khoảng [from,to] (ISO). Dùng để biết "đã phân bổ" kỳ này.
 export function fundInflowInRange(fundTx, from, to) {
-  return (fundTx || []).reduce((a, t) => (t.type !== "out" && !t.xferId && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
+  return (fundTx || []).reduce((a, t) => (isFundingIn(t) && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
+}
+
+// Lợi nhuận gộp ĐÃ phát sinh tới hôm nay (các đợt có ngày ≤ today). = nguồn của Quỹ công ty.
+export function grossProfitToDate(projects, today) {
+  let g = 0;
+  for (const x of allInstallments(projects)) {
+    if (!x.date) continue;
+    if (today && x.date > today) continue;
+    g += x.grossProfit;
+  }
+  return g;
+}
+
+// Lợi nhuận gộp theo 12 tháng của 1 năm (cho biểu đồ / bảng quỹ).
+export function monthlyGrossProfit(projects, year) {
+  const out = Array.from({ length: 12 }, () => 0);
+  for (const x of allInstallments(projects)) {
+    if (!x.date) continue;
+    const d = new Date(x.date);
+    if (d.getFullYear() === year) out[d.getMonth()] += x.grossProfit;
+  }
+  return out;
 }
 
 // "Burn rate" — chi phí cố định quy ra mỗi tháng (monthly=amount, yearly=amount/12, once bỏ qua)

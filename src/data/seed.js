@@ -27,8 +27,10 @@ export const SEED_EXPENSES = [];
 // QUỸ phân bổ dòng tiền. Mỗi quỹ là 1 "túi tiền" với % phân bổ mặc định.
 // fund: { id, name, color, percent, note }
 export const FUND_COLORS = ["indigo", "emerald", "rose", "sky", "amber", "violet", "teal", "pink"];
+// role: "company" = quỹ nguồn (số dư = Lợi nhuận gộp tự động), người dùng phân bổ ra các quỹ khác.
 export const SEED_FUNDS = [
-  { id: "fund-invest", name: "Đầu tư", color: "indigo", percent: 30, note: "Forex / dự án góp vốn" },
+  { id: "fund-company", name: "Quỹ công ty", color: "indigo", percent: 0, role: "company", note: "Lợi nhuận gộp — nguồn phân bổ hằng tháng" },
+  { id: "fund-invest", name: "Đầu tư", color: "violet", percent: 30, note: "Forex / dự án góp vốn" },
   { id: "fund-personal", name: "Cá nhân", color: "emerald", percent: 30, note: "Chi tiêu hằng ngày" },
   { id: "fund-family", name: "Gia đình", color: "rose", percent: 20, note: "Biếu bố mẹ, việc nhà" },
   { id: "fund-travel", name: "Du lịch", color: "sky", percent: 10, note: "" },

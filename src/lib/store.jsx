@@ -42,6 +42,10 @@ function migrate(s) {
   if (!Array.isArray(merged.funds)) merged.funds = s.funds === undefined ? SEED_FUNDS : [];
   if (!Array.isArray(merged.fundTx)) merged.fundTx = [];
   if (!Array.isArray(merged.fundSchedules)) merged.fundSchedules = [];
+  // Quỹ công ty mặc định (nguồn = Lợi nhuận gộp) — thêm vào đầu nếu chưa có
+  if (Array.isArray(merged.funds) && merged.funds.length > 0 && !merged.funds.some((f) => f.role === "company")) {
+    merged.funds = [{ id: "fund-company", name: "Quỹ công ty", color: "indigo", percent: 0, role: "company", note: "Lợi nhuận gộp — nguồn phân bổ hằng tháng" }, ...merged.funds];
+  }
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
@@ -241,10 +245,19 @@ export function DataProvider({ children }) {
       // Bỏ qua 1 kỳ (không chuyển), chỉ đánh dấu đã xử lý
       skipFundSchedule: (id, occIso) =>
         setState((s) => ({ ...s, fundSchedules: (s.fundSchedules || []).map((x) => (x.id === id ? { ...x, lastDone: occIso } : x)) })),
-      // Phân bổ 1 lần: tạo nhiều phiếu NẠP cùng ngày — entries: [{fundId, amount}]
-      allocateFunds: (entries, date, note) =>
+      // Phân bổ từ QUỸ CÔNG TY ra các quỹ — mỗi entry tạo 1 cặp chuyển (rút quỹ công ty + nạp quỹ đích), gắn alloc=true
+      allocateFromCompany: (companyId, entries, date, note) =>
         setState((s) => {
-          const add = (entries || []).filter((e) => Number(e.amount) > 0).map((e) => ({ id: "ft" + uid(), fundId: e.fundId, date, amount: Number(e.amount), type: "in", note: note || "Phân bổ thu nhập" }));
+          const funds = s.funds || [];
+          const nameOf = (fid) => funds.find((f) => f.id === fid)?.name || "quỹ";
+          const add = [];
+          for (const e of entries || []) {
+            const amt = Number(e.amount) || 0;
+            if (amt <= 0 || !e.fundId || e.fundId === companyId) continue;
+            const xid = "xf" + uid();
+            add.push({ id: "ft" + uid(), fundId: companyId, amount: amt, date, type: "out", note: `${note || "Phân bổ"} → ${nameOf(e.fundId)}`, xferId: xid, alloc: true });
+            add.push({ id: "ft" + uid(), fundId: e.fundId, amount: amt, date, type: "in", note: `${note || "Phân bổ"} từ ${nameOf(companyId)}`, xferId: xid, alloc: true });
+          }
           return { ...s, fundTx: [...add, ...(s.fundTx || [])] };
         }),
       // IMPORT từ AI (ảnh / chat) — { customers:[], projects:[] }

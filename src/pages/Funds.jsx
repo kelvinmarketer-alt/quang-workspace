@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, Wallet, ArrowDownToLine, ArrowUpFromLine, Sparkles, TrendingUp, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward } from "lucide-react";
-import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward } from "lucide-react";
+import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
-import { fundBalance, monthlyCashIn, monthlyFundInflow, fundInflowInRange, projectYears } from "../lib/selectors.js";
+import { fundBalance, monthlyGrossProfit, monthlyFundInflow, fundInflowInRange, grossProfitToDate, projectYears } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
@@ -182,7 +182,7 @@ function ScheduleModal({ initial, funds, onClose, onSave }) {
   );
 }
 
-/* ---- Modal phân bổ thu nhập theo % vào tất cả quỹ ---- */
+/* ---- Modal phân bổ từ Quỹ công ty vào các quỹ theo % ---- */
 function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState(String(defaultAmount || ""));
@@ -195,10 +195,11 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-extrabold">Phân bổ thu nhập vào quỹ</h3>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-lg font-extrabold">Phân bổ từ Quỹ công ty</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
+        <p className="mb-4 text-xs text-slate-400">Chia lợi nhuận gộp trong <b>Quỹ công ty</b> ra các quỹ. Quỹ công ty còn lại: <b className="text-indigo-600">{formatShort(defaultAmount || 0)}</b></p>
         <div className="mb-4 grid grid-cols-2 gap-3">
           <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tổng tiền chia</span>
             <MoneyInput value={amount} onChange={setTotal} className={inputCls} placeholder="10.000.000" /></label>
@@ -218,21 +219,25 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
           <span>Đã chia {formatShort(allocated)} / {formatShort(total)}</span>
           <span>{allocated === total ? "Khớp ✓" : `Lệch ${formatShort(Math.abs(total - allocated))}`}</span>
         </div>
-        <button onClick={() => { const entries = funds.map((f) => ({ fundId: f.id, amount: Number(rows[f.id]) || 0 })); if (entries.some((e) => e.amount > 0)) { onSave(entries, date, `Phân bổ ${monthLabel(date)}`); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Phân bổ vào quỹ</button>
+        <button onClick={() => { const entries = funds.map((f) => ({ fundId: f.id, amount: Number(rows[f.id]) || 0 })); if (entries.some((e) => e.amount > 0)) { onSave(entries, date, `Phân bổ ${monthLabel(date)}`); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Phân bổ ra các quỹ</button>
       </div>
     </div>
   );
 }
 
 /* ---- Chi tiết 1 quỹ + lịch sử giao dịch riêng ---- */
-function FundDetail({ fund, fundTx, onClose, onAdd, onTransfer, onDelTx }) {
+function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onTransfer, onDelTx }) {
+  const isCompany = fund.role === "company";
   const txs = (fundTx || []).filter((t) => t.fundId === fund.id);
-  const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0);
+  const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0) + autoCredit;
   const totalOut = txs.filter((t) => t.type === "out").reduce((a, t) => a + num(t.amount), 0);
   const bal = totalIn - totalOut;
   const asc = [...txs].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  let run = 0;
-  const rows = asc.map((t) => { run += t.type === "out" ? -num(t.amount) : num(t.amount); return { ...t, run }; }).reverse();
+  let run = autoCredit; // khởi điểm = lợi nhuận gộp (với quỹ công ty)
+  const txRows = asc.map((t) => { run += t.type === "out" ? -num(t.amount) : num(t.amount); return { ...t, run }; }).reverse();
+  const rows = autoCredit > 0
+    ? [...txRows, { id: "_auto", note: "Lợi nhuận gộp lũy kế (tự động từ Kế toán)", amount: autoCredit, type: "in", run: autoCredit, synthetic: true }]
+    : txRows;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -244,13 +249,13 @@ function FundDetail({ fund, fundTx, onClose, onAdd, onTransfer, onDelTx }) {
           {fund.note && <div className="mt-0.5 text-xs text-white/80">{fund.note}</div>}
         </div>
         <div className="grid grid-cols-2 gap-px bg-slate-100">
-          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">Tổng nạp</div><div className="text-base font-extrabold text-emerald-600">+{formatShort(totalIn)}</div></div>
-          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">Tổng chi</div><div className="text-base font-extrabold text-rose-600">−{formatShort(totalOut)}</div></div>
+          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">{isCompany ? "Tổng vào (LN gộp)" : "Tổng nạp"}</div><div className="text-base font-extrabold text-emerald-600">+{formatShort(totalIn)}</div></div>
+          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">{isCompany ? "Đã phân bổ/chi" : "Tổng chi"}</div><div className="text-base font-extrabold text-rose-600">−{formatShort(totalOut)}</div></div>
         </div>
         <div className="flex gap-2 border-b border-slate-100 p-3">
-          <button onClick={() => onAdd(fund, "in")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>
+          {!isCompany && <button onClick={() => onAdd(fund, "in")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>}
           <button onClick={() => onAdd(fund, "out")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
-          <button onClick={() => onTransfer(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100"><ArrowLeftRight size={14} /> Chuyển</button>
+          <button onClick={() => onTransfer(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100"><ArrowLeftRight size={14} /> {isCompany ? "Phân bổ" : "Chuyển"}</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="px-4 pt-3 text-[11px] font-bold uppercase text-slate-400">Lịch sử giao dịch ({rows.length})</div>
@@ -265,13 +270,13 @@ function FundDetail({ fund, fundTx, onClose, onAdd, onTransfer, onDelTx }) {
                     <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-slate-700">{t.note || (isIn ? "Nạp tiền" : "Khoản chi")}</div>
-                      <div className="text-[11px] text-slate-400">{fmtDateVI(t.date)}</div>
+                      <div className="text-[11px] text-slate-400">{t.synthetic ? "tự động" : fmtDateVI(t.date)}</div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
                       <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
                     </div>
-                    <button onClick={() => onDelTx(t.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>
+                    {t.synthetic ? <span className="w-7 shrink-0" /> : <button onClick={() => onDelTx(t.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>}
                   </div>
                 );
               })}
@@ -284,7 +289,7 @@ function FundDetail({ fund, fundTx, onClose, onAdd, onTransfer, onDelTx }) {
 }
 
 export default function Funds() {
-  const { funds, fundTx, fundSchedules, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
+  const { funds, fundTx, fundSchedules, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -302,35 +307,37 @@ export default function Funds() {
     return [...ys].sort((a, b) => b - a);
   }, [projects, fundTx, curY]);
 
-  const fundsWithBal = useMemo(() => (funds || []).map((f) => ({ ...f, balance: fundBalance(fundTx, f.id) })), [funds, fundTx]);
-  const totalBalance = fundsWithBal.reduce((a, f) => a + f.balance, 0);
-  const pctTotal = (funds || []).reduce((a, f) => a + (Number(f.percent) || 0), 0);
+  // Quỹ công ty (nguồn = LN gộp) vs các quỹ cá nhân
+  const grossTotal = useMemo(() => grossProfitToDate(projects, today), [projects, today]);
+  const companyFund = (funds || []).find((f) => f.role === "company");
+  const companyBalance = companyFund ? grossTotal + fundBalance(fundTx, companyFund.id) : 0;
+  const distributed = grossTotal - companyBalance; // đã phân bổ/chi ra khỏi quỹ công ty
 
-  const cashInMonths = useMemo(() => monthlyCashIn(projects, year), [projects, year]);
+  const personalFunds = useMemo(() => (funds || []).filter((f) => f.role !== "company"), [funds]);
+  const personalWithBal = useMemo(() => personalFunds.map((f) => ({ ...f, balance: fundBalance(fundTx, f.id) })), [personalFunds, fundTx]);
+  const totalPersonal = personalWithBal.reduce((a, f) => a + f.balance, 0);
+  // Danh sách kèm số dư cho chuyển/lịch (gồm cả quỹ công ty với số dư đặc biệt)
+  const allWithBal = useMemo(() => (funds || []).map((f) => ({ ...f, balance: f.role === "company" ? companyBalance : fundBalance(fundTx, f.id) })), [funds, fundTx, companyBalance]);
+  const pctTotal = personalFunds.reduce((a, f) => a + (Number(f.percent) || 0), 0);
+
+  const gpMonths = useMemo(() => monthlyGrossProfit(projects, year), [projects, year]);
   const inflow = useMemo(() => monthlyFundInflow(fundTx, year), [fundTx, year]);
-  const incomeYear = cashInMonths.reduce((a, b) => a + b, 0);
+  const gpYear = gpMonths.reduce((a, b) => a + b, 0);
 
-  // Tháng hiện tại (chỉ khi đang xem năm nay)
-  const m = now.getMonth();
-  const mFrom = `${curY}-${String(m + 1).padStart(2, "0")}-01`;
-  const mTo = `${curY}-${String(m + 1).padStart(2, "0")}-${String(new Date(curY, m + 1, 0).getDate()).padStart(2, "0")}`;
-  const incomeThisMonth = monthlyCashIn(projects, curY)[m];
-  const allocatedThisMonth = fundInflowInRange(fundTx, mFrom, mTo);
-  const unallocated = Math.max(0, incomeThisMonth - allocatedThisMonth);
-
-  // Bảng dòng tiền theo tháng (các tháng có phát sinh)
+  // Bảng theo tháng: LN gộp vs phân bổ ra từng quỹ cá nhân
   const monthRows = useMemo(() => {
     const rows = [];
     for (let i = 0; i < 12; i++) {
-      const fundVals = (funds || []).map((f) => (inflow.byFund[f.id] || [])[i] || 0);
-      const alloc = inflow.total[i] || 0;
-      if (cashInMonths[i] || alloc) rows.push({ i, income: cashInMonths[i], alloc, fundVals });
+      const fundVals = personalFunds.map((f) => (inflow.byFund[f.id] || [])[i] || 0);
+      const alloc = fundVals.reduce((a, b) => a + b, 0);
+      if (gpMonths[i] || alloc) rows.push({ i, income: gpMonths[i], alloc, fundVals });
     }
     return rows;
-  }, [funds, inflow, cashInMonths]);
+  }, [personalFunds, inflow, gpMonths]);
+  const allocYear = monthRows.reduce((a, r) => a + r.alloc, 0);
 
-  // Biểu đồ: thu nhập vs đã phân bổ theo tháng
-  const chart = useMemo(() => Array.from({ length: 12 }, (_, i) => ({ name: "T" + (i + 1), thu: cashInMonths[i], pb: inflow.total[i] || 0 })).filter((x) => x.thu || x.pb), [cashInMonths, inflow]);
+  // Biểu đồ: LN gộp vs đã phân bổ theo tháng
+  const chart = useMemo(() => Array.from({ length: 12 }, (_, i) => ({ name: "T" + (i + 1), thu: gpMonths[i], pb: personalFunds.reduce((a, f) => a + ((inflow.byFund[f.id] || [])[i] || 0), 0) })).filter((x) => x.thu || x.pb), [gpMonths, inflow, personalFunds]);
 
   const recentTx = useMemo(() => (fundTx || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 40), [fundTx]);
   const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "—";
@@ -372,43 +379,53 @@ export default function Funds() {
         </div>
       )}
 
-      {/* Thanh năm + nút phân bổ */}
+      {/* Thanh năm */}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">
             {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
           </select>
-          <div className="text-sm font-semibold text-slate-400">Thu nhập {year}: <span className="text-slate-700">{formatVND(incomeYear)}</span></div>
-          <button onClick={() => setAllocOpen(true)} className="ml-auto flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
-            <Sparkles size={16} /> Phân bổ thu nhập
-          </button>
+          <div className="text-sm font-semibold text-slate-400">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span> · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
         </div>
       </Card>
 
-      {/* Thẻ tổng quan */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard icon={PiggyBank} label="Tổng số dư quỹ" value={totalBalance} tone="indigo" />
-        <StatCard icon={Wallet} label="Thu nhập tháng này" value={incomeThisMonth} tone="emerald" />
-        <StatCard icon={ArrowDownToLine} label="Đã phân bổ tháng này" value={allocatedThisMonth} tone="sky" />
-        <StatCard icon={TrendingUp} label="Chưa phân bổ" value={unallocated} sub={unallocated > 0 ? "nên chia vào quỹ" : "đã chia hết"} tone={unallocated > 0 ? "amber" : "emerald"} />
-      </div>
+      {/* QUỸ CÔNG TY — nguồn = Lợi nhuận gộp, người dùng điều phối ra các quỹ */}
+      {companyFund && (
+        <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-5 text-white shadow-xl">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><PiggyBank size={14} /> Quỹ công ty · nguồn Lợi nhuận gộp</div>
+              <div className="mt-1 text-3xl font-extrabold sm:text-4xl">{formatVND(companyBalance)}</div>
+              <div className="mt-0.5 text-xs text-indigo-200">còn lại chưa phân bổ</div>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                <span className="text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
+                <span className="text-indigo-200">Đã phân bổ/chi: <b className="text-white">{formatShort(distributed)}</b></span>
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button onClick={() => setAllocOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-white px-4 py-2 text-sm font-bold text-indigo-700 shadow hover:bg-indigo-50"><Sparkles size={15} /> Phân bổ</button>
+              <button onClick={() => setDetailId(companyFund.id)} className="rounded-xl border border-white/30 px-3 py-2 text-sm font-bold text-white hover:bg-white/10">Chi tiết</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Lưới quỹ */}
+      {/* Lưới quỹ cá nhân */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-extrabold text-slate-900">Các quỹ <span className="text-slate-400">({fundsWithBal.length})</span></h2>
+          <h2 className="text-base font-extrabold text-slate-900">Các quỹ cá nhân <span className="text-slate-400">({personalWithBal.length})</span> · Tổng <span className="text-indigo-600">{formatShort(totalPersonal)}</span></h2>
           <div className="flex flex-wrap items-center gap-2">
-            {pctTotal !== 100 && fundsWithBal.length > 0 && <Badge tone={pctTotal > 100 ? "rose" : "amber"}>Tổng % = {pctTotal}</Badge>}
-            {fundsWithBal.length >= 2 && <button onClick={() => setTransferInit({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
+            {pctTotal !== 100 && personalWithBal.length > 0 && <Badge tone={pctTotal > 100 ? "rose" : "amber"}>Tổng % = {pctTotal}</Badge>}
+            {allWithBal.length >= 2 && <button onClick={() => setTransferInit({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
             <button onClick={() => setFundModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm quỹ</button>
           </div>
         </div>
 
-        {fundsWithBal.length === 0 ? (
-          <Card><div className="py-10 text-center"><PiggyBank size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có quỹ nào</div><div className="mt-1 text-xs text-slate-400">Tạo các quỹ: Đầu tư, Cá nhân, Gia đình, Du lịch…</div></div></Card>
+        {personalWithBal.length === 0 ? (
+          <Card><div className="py-10 text-center"><PiggyBank size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có quỹ cá nhân nào</div><div className="mt-1 text-xs text-slate-400">Tạo các quỹ: Đầu tư, Cá nhân, Gia đình, Du lịch…</div></div></Card>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {fundsWithBal.map((f) => (
+            {personalWithBal.map((f) => (
               <div key={f.id} className="card group relative flex flex-col p-4">
                 <span className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
                   <button onClick={() => setFundModal(f)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
@@ -440,7 +457,7 @@ export default function Funds() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900"><Repeat size={17} className="text-indigo-500" /> Lịch chuyển định kỳ <span className="text-slate-400">({schedules.length})</span></h2>
-          {fundsWithBal.length >= 2 && <button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button>}
+          {allWithBal.length >= 2 && <button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button>}
         </div>
         {schedules.length === 0 ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
@@ -483,7 +500,7 @@ export default function Funds() {
       {/* Biểu đồ thu nhập vs phân bổ */}
       {chart.length > 0 && (
         <Card>
-          <SectionTitle action={<span className="text-xs font-bold text-slate-400">Thu nhập vs Phân bổ vào quỹ</span>}>Dòng tiền {year}</SectionTitle>
+          <SectionTitle action={<span className="text-xs font-bold text-slate-400">LN gộp vs Phân bổ vào quỹ</span>}>Dòng tiền {year}</SectionTitle>
           <div className="overflow-x-auto">
             <div className="h-56 min-w-[560px] sm:min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -491,8 +508,8 @@ export default function Funds() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip formatter={(v, k) => [formatVND(v), k === "thu" ? "Thu nhập" : "Đã phân bổ"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "#f8fafc" }} />
-                  <Bar dataKey="thu" name="Thu nhập" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+                  <Tooltip formatter={(v, k) => [formatVND(v), k === "thu" ? "LN gộp" : "Đã phân bổ"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "#f8fafc" }} />
+                  <Bar dataKey="thu" name="LN gộp" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                   <Bar dataKey="pb" name="Đã phân bổ" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
@@ -516,11 +533,11 @@ export default function Funds() {
                 <div key={r.i} className="rounded-xl border border-slate-100 p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-extrabold text-slate-800">Tháng {r.i + 1}</span>
-                    <span className="text-sm font-bold text-indigo-600">Thu {formatShort(r.income)}</span>
+                    <span className="text-sm font-bold text-indigo-600">LN gộp {formatShort(r.income)}</span>
                   </div>
                   {r.alloc > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(funds || []).map((f, j) => (r.fundVals[j] > 0 ? (
+                      {personalFunds.map((f, j) => (r.fundVals[j] > 0 ? (
                         <span key={f.id} className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600">
                           <span className={`h-2 w-2 rounded-full ${TONE_BG[f.color] || "bg-slate-400"}`} /> {f.name} {formatShort(r.fundVals[j])}
                         </span>
@@ -533,7 +550,7 @@ export default function Funds() {
             })}
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-extrabold text-slate-700">
               <span>Cả năm {year}</span>
-              <span>Thu {formatShort(incomeYear)} · tồn {formatShort(Math.max(0, incomeYear - inflow.total.reduce((a, b) => a + b, 0)))}</span>
+              <span>LN gộp {formatShort(gpYear)} · tồn {formatShort(Math.max(0, gpYear - allocYear))}</span>
             </div>
           </div>
 
@@ -543,8 +560,8 @@ export default function Funds() {
               <thead>
                 <tr className="border-y border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
                   <th className="px-4 py-2.5 sm:px-5">Tháng</th>
-                  <th className="px-3 py-2.5 text-right">Thu nhập</th>
-                  {(funds || []).map((f) => <th key={f.id} className="px-3 py-2.5 text-right"><span className="inline-flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${TONE_BG[f.color] || "bg-slate-400"}`} />{f.name}</span></th>)}
+                  <th className="px-3 py-2.5 text-right">LN gộp</th>
+                  {personalFunds.map((f) => <th key={f.id} className="px-3 py-2.5 text-right"><span className="inline-flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${TONE_BG[f.color] || "bg-slate-400"}`} />{f.name}</span></th>)}
                   <th className="px-3 py-2.5 text-right">Tồn (chưa chia)</th>
                 </tr>
               </thead>
@@ -561,9 +578,9 @@ export default function Funds() {
               <tfoot>
                 <tr className="border-t-2 border-slate-100 bg-slate-50/60 font-extrabold">
                   <td className="px-4 py-3 sm:px-5">Cả năm</td>
-                  <td className="px-3 py-3 text-right text-indigo-600">{formatShort(incomeYear)}</td>
-                  {(funds || []).map((f) => <td key={f.id} className="px-3 py-3 text-right text-slate-700">{formatShort((inflow.byFund[f.id] || []).reduce((a, b) => a + b, 0))}</td>)}
-                  <td className="px-3 py-3 text-right text-amber-600">{formatShort(Math.max(0, incomeYear - inflow.total.reduce((a, b) => a + b, 0)))}</td>
+                  <td className="px-3 py-3 text-right text-indigo-600">{formatShort(gpYear)}</td>
+                  {personalFunds.map((f) => <td key={f.id} className="px-3 py-3 text-right text-slate-700">{formatShort((inflow.byFund[f.id] || []).reduce((a, b) => a + b, 0))}</td>)}
+                  <td className="px-3 py-3 text-right text-amber-600">{formatShort(Math.max(0, gpYear - allocYear))}</td>
                 </tr>
               </tfoot>
             </table>
@@ -600,11 +617,11 @@ export default function Funds() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
+      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} autoCredit={detailFund.role === "company" ? grossTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
-      {allocOpen && <AllocateModal funds={funds || []} defaultAmount={unallocated} onClose={() => setAllocOpen(false)} onSave={allocateFunds} />}
-      {transferInit && <TransferModal funds={fundsWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}
+      {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}
+      {transferInit && <TransferModal funds={allWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}
       {schedModal && <ScheduleModal initial={schedModal.id ? schedModal : null} funds={funds || []} onClose={() => setSchedModal(null)} onSave={(data) => (schedModal.id ? updateFundSchedule(schedModal.id, data) : addFundSchedule(data))} />}
     </div>
   );
