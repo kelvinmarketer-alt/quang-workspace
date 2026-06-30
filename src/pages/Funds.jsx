@@ -84,25 +84,25 @@ function TxModal({ fund, type, onClose, onSave }) {
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-extrabold">{isIn ? "Nạp vào" : "Rút từ"} quỹ {fund.name}</h3>
+          <h3 className="text-lg font-extrabold">{isIn ? "Nạp vào" : "Chi tiêu từ"} quỹ {fund.name}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền *</span>
           <MoneyInput value={f.amount} onChange={(v) => setF((p) => ({ ...p, amount: v }))} autoFocus className={inputCls} placeholder="2.000.000" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
           <input type="date" value={f.date} onChange={(e) => setF((p) => ({ ...p, date: e.target.value }))} className={inputCls} /></label>
-        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
-          <input value={f.note} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} className={inputCls} placeholder={isIn ? "Nguồn tiền" : "Lý do rút / chi gì"} /></label>
-        <button onClick={() => { if (num(f.amount) > 0) { onSave({ fundId: fund.id, amount: num(f.amount), date: f.date, type, note: f.note.trim() }); onClose(); } }} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>{isIn ? "Nạp tiền" : "Rút tiền"}</button>
+        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">{isIn ? "Ghi chú" : "Chi cho việc gì *"}</span>
+          <input value={f.note} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} className={inputCls} placeholder={isIn ? "Nguồn tiền" : "VD: mua đồ, biếu bố mẹ, rút ra mặt…"} /></label>
+        <button onClick={() => { if (num(f.amount) > 0) { onSave({ fundId: fund.id, amount: num(f.amount), date: f.date, type, note: f.note.trim() }); onClose(); } }} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>{isIn ? "Nạp tiền" : "Ghi khoản chi"}</button>
       </div>
     </div>
   );
 }
 
 /* ---- Modal chuyển tiền giữa 2 quỹ ---- */
-function TransferModal({ funds, onClose, onSave }) {
-  const [from, setFrom] = useState(funds[0]?.id || "");
-  const [to, setTo] = useState(funds[1]?.id || funds[0]?.id || "");
+function TransferModal({ funds, initialFrom, onClose, onSave }) {
+  const [from, setFrom] = useState(initialFrom || funds[0]?.id || "");
+  const [to, setTo] = useState((funds.find((f) => f.id !== (initialFrom || funds[0]?.id)) || {}).id || "");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState("");
@@ -224,6 +224,65 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   );
 }
 
+/* ---- Chi tiết 1 quỹ + lịch sử giao dịch riêng ---- */
+function FundDetail({ fund, fundTx, onClose, onAdd, onTransfer, onDelTx }) {
+  const txs = (fundTx || []).filter((t) => t.fundId === fund.id);
+  const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0);
+  const totalOut = txs.filter((t) => t.type === "out").reduce((a, t) => a + num(t.amount), 0);
+  const bal = totalIn - totalOut;
+  const asc = [...txs].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  let run = 0;
+  const rows = asc.map((t) => { run += t.type === "out" ? -num(t.amount) : num(t.amount); return { ...t, run }; }).reverse();
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className={`relative bg-gradient-to-br p-5 text-white ${TONE_GRAD[fund.color] || TONE_GRAD.indigo}`}>
+          <button onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/80 hover:bg-white/20"><X size={18} /></button>
+          <div className="flex items-center gap-2 text-sm font-semibold text-white/90"><PiggyBank size={16} /> {fund.name} · {fund.percent || 0}%</div>
+          <div className="mt-1 text-3xl font-extrabold">{formatVND(bal)}</div>
+          {fund.note && <div className="mt-0.5 text-xs text-white/80">{fund.note}</div>}
+        </div>
+        <div className="grid grid-cols-2 gap-px bg-slate-100">
+          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">Tổng nạp</div><div className="text-base font-extrabold text-emerald-600">+{formatShort(totalIn)}</div></div>
+          <div className="bg-white p-3 text-center"><div className="text-[11px] font-bold uppercase text-slate-400">Tổng chi</div><div className="text-base font-extrabold text-rose-600">−{formatShort(totalOut)}</div></div>
+        </div>
+        <div className="flex gap-2 border-b border-slate-100 p-3">
+          <button onClick={() => onAdd(fund, "in")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>
+          <button onClick={() => onAdd(fund, "out")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
+          <button onClick={() => onTransfer(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100"><ArrowLeftRight size={14} /> Chuyển</button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="px-4 pt-3 text-[11px] font-bold uppercase text-slate-400">Lịch sử giao dịch ({rows.length})</div>
+          {rows.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-400">Quỹ chưa có giao dịch nào.</div>
+          ) : (
+            <div className="mt-1 divide-y divide-slate-50">
+              {rows.map((t) => {
+                const isIn = t.type !== "out";
+                return (
+                  <div key={t.id} className="group flex items-center gap-3 px-4 py-2.5">
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-slate-700">{t.note || (isIn ? "Nạp tiền" : "Khoản chi")}</div>
+                      <div className="text-[11px] text-slate-400">{fmtDateVI(t.date)}</div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
+                      <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
+                    </div>
+                    <button onClick={() => onDelTx(t.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Funds() {
   const { funds, fundTx, fundSchedules, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFunds, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
   const now = new Date();
@@ -233,8 +292,9 @@ export default function Funds() {
   const [fundModal, setFundModal] = useState(null); // null | {} | fund
   const [txModal, setTxModal] = useState(null);      // { fund, type }
   const [allocOpen, setAllocOpen] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferInit, setTransferInit] = useState(null); // null | {} | { from }
   const [schedModal, setSchedModal] = useState(null); // null | {} | schedule
+  const [detailId, setDetailId] = useState(null); // quỹ đang xem chi tiết
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -279,6 +339,7 @@ export default function Funds() {
   // Lịch chuyển định kỳ: kỳ đã đến hạn (chờ xác nhận) + danh sách lịch
   const schedules = fundSchedules || [];
   const due = useMemo(() => schedules.map((sc) => ({ sc, occs: pendingOccs(sc, today) })).filter((d) => d.occs.length > 0), [schedules, today]);
+  const detailFund = (funds || []).find((f) => f.id === detailId);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -338,7 +399,7 @@ export default function Funds() {
           <h2 className="text-base font-extrabold text-slate-900">Các quỹ <span className="text-slate-400">({fundsWithBal.length})</span></h2>
           <div className="flex flex-wrap items-center gap-2">
             {pctTotal !== 100 && fundsWithBal.length > 0 && <Badge tone={pctTotal > 100 ? "rose" : "amber"}>Tổng % = {pctTotal}</Badge>}
-            {fundsWithBal.length >= 2 && <button onClick={() => setTransferOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
+            {fundsWithBal.length >= 2 && <button onClick={() => setTransferInit({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
             <button onClick={() => setFundModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm quỹ</button>
           </div>
         </div>
@@ -348,25 +409,26 @@ export default function Funds() {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {fundsWithBal.map((f) => (
-              <div key={f.id} className="card group flex flex-col p-4">
-                <div className="flex items-start justify-between">
+              <div key={f.id} className="card group relative flex flex-col p-4">
+                <span className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                  <button onClick={() => setFundModal(f)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                  <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                </span>
+                <button onClick={() => setDetailId(f.id)} className="flex flex-col text-left">
                   <div className="flex items-center gap-2.5">
-                    <span className={`grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg ${TONE_GRAD[f.color] || TONE_GRAD.indigo}`}><PiggyBank size={18} /></span>
+                    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg ${TONE_GRAD[f.color] || TONE_GRAD.indigo}`}><PiggyBank size={18} /></span>
                     <div className="min-w-0">
                       <div className="truncate text-sm font-extrabold text-slate-800">{f.name}</div>
                       <div className="text-[11px] font-semibold text-slate-400">{f.percent || 0}% · phân bổ</div>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                    <button onClick={() => setFundModal(f)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
-                    <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
-                  </span>
-                </div>
-                <div className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900">{formatVND(f.balance)}</div>
-                {f.note && <div className="mt-0.5 truncate text-[11px] text-slate-400">{f.note}</div>}
+                  <div className="mt-3 text-2xl font-extrabold tracking-tight text-slate-900">{formatVND(f.balance)}</div>
+                  {f.note && <div className="mt-0.5 truncate text-[11px] text-slate-400">{f.note}</div>}
+                  <div className="mt-1 text-[11px] font-semibold text-indigo-500">{(fundTx || []).filter((t) => t.fundId === f.id).length} giao dịch · Xem lịch sử →</div>
+                </button>
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => setTxModal({ fund: f, type: "in" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>
-                  <button onClick={() => setTxModal({ fund: f, type: "out" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Rút</button>
+                  <button onClick={() => setTxModal({ fund: f, type: "out" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
                 </div>
               </div>
             ))}
@@ -537,10 +599,12 @@ export default function Funds() {
         )}
       </Card>
 
+      {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
+      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
       {allocOpen && <AllocateModal funds={funds || []} defaultAmount={unallocated} onClose={() => setAllocOpen(false)} onSave={allocateFunds} />}
-      {transferOpen && <TransferModal funds={fundsWithBal} onClose={() => setTransferOpen(false)} onSave={transferFund} />}
+      {transferInit && <TransferModal funds={fundsWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}
       {schedModal && <ScheduleModal initial={schedModal.id ? schedModal : null} funds={funds || []} onClose={() => setSchedModal(null)} onSave={(data) => (schedModal.id ? updateFundSchedule(schedModal.id, data) : addFundSchedule(data))} />}
     </div>
   );
