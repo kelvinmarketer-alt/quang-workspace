@@ -17,7 +17,6 @@ export const SEED_PROJECTS = [];
 // Công việc — KHÔNG seed mặc định (tránh tự hồi sau khi user xoá)
 export const SEED_TASKS = [];
 export const SEED_FAMILY = [];
-export const SEED_TRANSACTIONS = [];
 
 // Chi phí vận hành công ty (overhead) — KHÁC chi phí gắn vào job (CTV/chi phí đợt).
 // expense: { id, name, category, amount, date(bắt đầu), recurring: "monthly"|"yearly"|"once", note, active }

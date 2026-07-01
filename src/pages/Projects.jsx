@@ -430,7 +430,7 @@ export default function Projects() {
     return acc;
   }, [projects, year]);
 
-  const monthly = projectsMonthly(projects, year).map((m) => ({ name: MONTHS_VI[m.month - 1], dt: m.revenue, ln: m.grossProfit }));
+  const monthly = useMemo(() => projectsMonthly(projects, year).map((m) => ({ name: MONTHS_VI[m.month - 1], dt: m.revenue, ln: m.grossProfit })), [projects, year]);
   const statusCounts = useMemo(() => {
     const r = { doing: 0, done: 0, paused: 0, cancel: 0 };
     for (const p of projects) r[p.status] = (r[p.status] || 0) + 1;

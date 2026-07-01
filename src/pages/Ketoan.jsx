@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard } from "lucide-react";
-import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
+import { Card, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
 
-const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", Khác: "slate" };
+const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 const PRESETS = [

@@ -91,11 +91,6 @@ export function projectYears(projects) {
   return [...ys].sort((a, b) => b - a);
 }
 
-// Công nợ 1 khách
-export function customerDebt(projects, customerId) {
-  return projects.filter((p) => p.customerId === customerId).reduce((a, p) => a + projectMetrics(p).debt, 0);
-}
-
 // Tổng hợp dự án theo khách
 export function customerProjectSummary(projects, customerId) {
   const list = projects.filter((p) => p.customerId === customerId);
@@ -233,39 +228,27 @@ export function fundBalance(fundTx, fundId) {
   return (fundTx || []).reduce((a, t) => a + (t.fundId === fundId ? (t.type === "out" ? -n(t.amount) : n(t.amount)) : 0), 0);
 }
 
-// Thu nhập THỰC (tiền vào) theo 12 tháng của 1 năm — dùng cashIn của các đợt.
-export function monthlyCashIn(projects, year) {
-  const out = Array.from({ length: 12 }, () => 0);
-  for (const x of allInstallments(projects)) {
-    if (!x.date) continue;
-    const d = new Date(x.date);
-    if (d.getFullYear() === year) out[d.getMonth()] += n(x.cashIn);
-  }
-  return out;
-}
-
 // 1 phiếu "in" được tính là CẤP VỐN cho quỹ (nạp tay hoặc phân bổ từ quỹ công ty)?
-// - nạp tay: không xferId  → tính
-// - phân bổ từ quỹ công ty: có xferId + alloc=true → tính
-// - chuyển quỹ nội bộ thường: có xferId, không alloc → KHÔNG tính
-const isFundingIn = (t) => t.type !== "out" && (!t.xferId || t.alloc);
-
-// Tiền CẤP VỐN vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
-export function monthlyFundInflow(fundTx, year) {
+// Tiền PHÂN BỔ vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
+// "Đã phân bổ" = tiền ĐI TỪ QUỸ CÔNG TY ra quỹ cá nhân: phiếu in alloc=true (nút Phân bổ)
+// HOẶC phiếu in của 1 cặp chuyển mà đầu RÚT là quỹ công ty (nút Chuyển quỹ từ công ty).
+// KHÔNG tính: nạp tay (không xferId, không alloc) và chuyển giữa 2 quỹ cá nhân.
+export function monthlyFundInflow(fundTx, year, companyId) {
+  const txs = fundTx || [];
+  const outFundByXfer = {}; // xferId → fundId của đầu RÚT
+  for (const t of txs) if (t.xferId && t.type === "out") outFundByXfer[t.xferId] = t.fundId;
+  const fromCompany = (t) =>
+    t.type !== "out" && t.fundId !== companyId &&
+    (t.alloc === true || (t.xferId && outFundByXfer[t.xferId] === companyId));
   const byFund = {}; const total = Array.from({ length: 12 }, () => 0);
-  for (const t of fundTx || []) {
-    if (!t.date || !isFundingIn(t)) continue;
+  for (const t of txs) {
+    if (!t.date || !fromCompany(t)) continue;
     const d = new Date(t.date);
     if (d.getFullYear() !== year) continue;
     (byFund[t.fundId] ||= Array.from({ length: 12 }, () => 0))[d.getMonth()] += n(t.amount);
     total[d.getMonth()] += n(t.amount);
   }
   return { byFund, total };
-}
-
-// Tổng tiền cấp vốn quỹ trong khoảng [from,to] (ISO). Dùng để biết "đã phân bổ" kỳ này.
-export function fundInflowInRange(fundTx, from, to) {
-  return (fundTx || []).reduce((a, t) => (isFundingIn(t) && t.date && t.date >= from && t.date <= to ? a + n(t.amount) : a), 0);
 }
 
 // Lợi nhuận gộp ĐÃ phát sinh tới hôm nay (các đợt có ngày ≤ today). = nguồn của Quỹ công ty.

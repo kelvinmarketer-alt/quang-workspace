@@ -64,15 +64,6 @@ export function Badge({ children, tone = "slate" }) {
   );
 }
 
-export function EmptyState({ title, sub }) {
-  return (
-    <div className="grid place-items-center rounded-2xl border border-dashed border-slate-200 bg-white/50 py-12 text-center">
-      <div className="text-sm font-bold text-slate-700">{title}</div>
-      {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
-    </div>
-  );
-}
-
 // Ô nhập tiền: hiển thị có dấu chấm (6.000.000), trả về chuỗi số thuần qua onChange(rawDigits)
 export function MoneyInput({ value, onChange, className = "", placeholder, autoFocus }) {
   const digits = String(value ?? "").replace(/[^\d]/g, "");

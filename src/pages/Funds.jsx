@@ -4,43 +4,43 @@ import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, S
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
-import { fundBalance, monthlyGrossProfit, monthlyFundInflow, fundInflowInRange, grossProfitToDate, projectYears } from "../lib/selectors.js";
+import { fundBalance, monthlyGrossProfit, monthlyFundInflow, grossProfitToDate, projectYears } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
 const TONE_GRAD = { indigo: "from-indigo-500 to-violet-500", emerald: "from-emerald-500 to-teal-500", rose: "from-rose-500 to-pink-500", sky: "from-sky-500 to-cyan-500", amber: "from-amber-500 to-orange-500", violet: "from-violet-500 to-purple-500", teal: "from-teal-500 to-emerald-500", pink: "from-pink-500 to-rose-500" };
-const TONE_HEX = { indigo: "#6366f1", emerald: "#10b981", rose: "#f43f5e", sky: "#0ea5e9", amber: "#f59e0b", violet: "#8b5cf6", teal: "#14b8a6", pink: "#ec4899" };
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `T${Number(m)}/${y}` : ""; };
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const EVERY = [["week", "1 tuần"], ["2week", "2 tuần"], ["month", "1 tháng"]];
 const everyLabel = (v) => (EVERY.find(([k]) => k === v) || EVERY[1])[1];
-function addEvery(d, every) {
-  const x = new Date(d);
-  if (every === "week") x.setDate(x.getDate() + 7);
-  else if (every === "month") x.setMonth(x.getMonth() + 1);
-  else x.setDate(x.getDate() + 14); // 2week (mặc định)
-  return x;
+// Kỳ thứ k của lịch (neo theo startDate, KHÔNG cộng dồn để tránh trôi ngày cuối tháng)
+function occAt(sc, k) {
+  const base = new Date(sc.startDate + "T00:00:00");
+  if (sc.every === "week") return new Date(base.getTime() + k * 7 * 86400000);
+  if (sc.every === "2week") return new Date(base.getTime() + k * 14 * 86400000);
+  const m = base.getMonth() + k; // 1 tháng: neo theo ngày gốc, kẹp về cuối tháng nếu tràn (giống bot)
+  const y = base.getFullYear() + Math.floor(m / 12), mm = ((m % 12) + 12) % 12;
+  const lastDay = new Date(y, mm + 1, 0).getDate();
+  return new Date(y, mm, Math.min(base.getDate(), lastDay));
 }
 // Các kỳ ĐÃ ĐẾN HẠN (≤ hôm nay) mà chưa xử lý (sau lastDone). Trả mảng ISO tăng dần.
 function pendingOccs(sc, today) {
   if (sc.active === false || !sc.startDate) return [];
   const last = sc.lastDone || "";
-  const out = []; let d = new Date(sc.startDate + "T00:00:00"); let g = 0;
-  while (g++ < 400) {
-    const iso = isoOf(d);
+  const out = [];
+  for (let k = 0; k < 400; k++) {
+    const iso = isoOf(occAt(sc, k));
     if (iso > today) break;
     if (iso > last) out.push(iso);
-    d = addEvery(d, sc.every);
   }
   return out;
 }
 // Kỳ KẾ TIẾP (> hôm nay) để hiển thị "lần tới"
 function nextOcc(sc, today) {
   if (sc.active === false || !sc.startDate) return null;
-  let d = new Date(sc.startDate + "T00:00:00"); let g = 0;
-  while (g++ < 400) { const iso = isoOf(d); if (iso > today && iso > (sc.lastDone || "")) return iso; d = addEvery(d, sc.every); }
+  for (let k = 0; k < 400; k++) { const iso = isoOf(occAt(sc, k)); if (iso > today && iso > (sc.lastDone || "")) return iso; }
   return null;
 }
 
@@ -184,13 +184,23 @@ function ScheduleModal({ initial, funds, onClose, onSave }) {
 
 /* ---- Modal phân bổ từ Quỹ công ty vào các quỹ theo % ---- */
 function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
+  const cap = Math.max(0, defaultAmount || 0); // số dư quỹ công ty — không được chia vượt
   const [date, setDate] = useState(todayISO());
-  const [amount, setAmount] = useState(String(defaultAmount || ""));
-  const splitByPct = (total) => Object.fromEntries(funds.map((f) => [f.id, Math.round((total * (f.percent || 0)) / 100)]));
-  const [rows, setRows] = useState(() => splitByPct(defaultAmount || 0));
+  const [amount, setAmount] = useState(String(cap || ""));
+  // Chia theo %: các quỹ đầu làm tròn, quỹ CUỐI nhận phần dư → tổng luôn KHỚP total (hết lệch làm tròn)
+  const splitByPct = (total) => {
+    const out = {}; let acc = 0;
+    funds.forEach((f, i) => {
+      if (i === funds.length - 1) out[f.id] = Math.max(0, total - acc);
+      else { const v = Math.round((total * (f.percent || 0)) / 100); out[f.id] = v; acc += v; }
+    });
+    return out;
+  };
+  const [rows, setRows] = useState(() => splitByPct(cap));
   const setTotal = (v) => { const t = num(v); setAmount(v); setRows(splitByPct(t)); };
   const allocated = Object.values(rows).reduce((a, b) => a + (Number(b) || 0), 0);
   const total = num(amount);
+  const over = allocated > cap; // chia nhiều hơn số dư quỹ công ty
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -215,11 +225,11 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
             </div>
           ))}
         </div>
-        <div className={`mb-4 flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-bold ${allocated === total ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-          <span>Đã chia {formatShort(allocated)} / {formatShort(total)}</span>
-          <span>{allocated === total ? "Khớp ✓" : `Lệch ${formatShort(Math.abs(total - allocated))}`}</span>
+        <div className={`mb-4 flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-bold ${over ? "bg-rose-50 text-rose-700" : allocated === total ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+          <span>Đã chia {formatShort(allocated)} / còn {formatShort(cap)}</span>
+          <span>{over ? "Vượt quỹ công ty!" : allocated === total ? "Khớp ✓" : `Lệch ${formatShort(Math.abs(total - allocated))}`}</span>
         </div>
-        <button onClick={() => { const entries = funds.map((f) => ({ fundId: f.id, amount: Number(rows[f.id]) || 0 })); if (entries.some((e) => e.amount > 0)) { onSave(entries, date, `Phân bổ ${monthLabel(date)}`); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Phân bổ ra các quỹ</button>
+        <button disabled={over || allocated <= 0} onClick={() => { const entries = funds.map((f) => ({ fundId: f.id, amount: Number(rows[f.id]) || 0 })); if (!over && entries.some((e) => e.amount > 0)) { onSave(entries, date, `Phân bổ ${monthLabel(date)}`); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">Phân bổ ra các quỹ</button>
       </div>
     </div>
   );
@@ -321,7 +331,7 @@ export default function Funds() {
   const pctTotal = personalFunds.reduce((a, f) => a + (Number(f.percent) || 0), 0);
 
   const gpMonths = useMemo(() => monthlyGrossProfit(projects, year), [projects, year]);
-  const inflow = useMemo(() => monthlyFundInflow(fundTx, year), [fundTx, year]);
+  const inflow = useMemo(() => monthlyFundInflow(fundTx, year, companyFund?.id), [fundTx, year, companyFund?.id]);
   const gpYear = gpMonths.reduce((a, b) => a + b, 0);
 
   // Bảng theo tháng: LN gộp vs phân bổ ra từng quỹ cá nhân

@@ -12,7 +12,7 @@ import { generateCalendarEvents } from "../lib/events.js";
 import { lunarInfo } from "../lib/lunar.js";
 
 const BARC = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e", "#a855f7", "#14b8a6", "#ec4899"];
-const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", Khác: "slate" };
+const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 
 export default function Dashboard() {
   const { tasks, family, projects, customerList } = useData();

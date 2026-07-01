@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
 
 export default function Settings() {
-  const { tasks, family, transactions, customerList, projects, exportData, importData, reset } = useData();
+  const { tasks, family, customerList, projects, exportData, importData, reset } = useData();
   const { user, signOut, changePassword } = useAuth();
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState(null);
@@ -50,7 +50,6 @@ export default function Settings() {
     ["Đợt thu / phiếu", totalInstallments],
     ["Công việc", tasks.length],
     ["Giỗ / Sinh nhật", family.length],
-    ["Giao dịch thu/chi", transactions.length],
   ];
 
   return (

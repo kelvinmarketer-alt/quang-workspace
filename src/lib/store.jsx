@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SEED_TASKS, SEED_FAMILY, SEED_TRANSACTIONS, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES } from "../data/seed.js";
+import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 
@@ -21,7 +21,6 @@ function load() {
     family: SEED_FAMILY,
     customerList: SEED_CUSTOMERS, // {id, name, phone, zalo, note}
     projects: SEED_PROJECTS, // nguồn dữ liệu chính — xem seed.js
-    transactions: SEED_TRANSACTIONS,
     expenses: SEED_EXPENSES, // chi phí vận hành công ty
     funds: SEED_FUNDS, // quỹ phân bổ dòng tiền
     fundTx: SEED_FUND_TX, // giao dịch nạp/rút quỹ
@@ -32,11 +31,10 @@ function load() {
 
 // Bù field cho state cũ (tránh undefined sau nâng cấp)
 function migrate(s) {
-  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, transactions: SEED_TRANSACTIONS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, fundSchedules: SEED_FUND_SCHEDULES, settings: { ...SEED_SETTINGS } };
+  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, fundSchedules: SEED_FUND_SCHEDULES, settings: { ...SEED_SETTINGS } };
   const merged = { ...base, ...s };
   if (!Array.isArray(merged.customerList)) merged.customerList = [];
   if (!Array.isArray(merged.projects)) merged.projects = [];
-  if (!Array.isArray(merged.transactions)) merged.transactions = [];
   if (!Array.isArray(merged.expenses)) merged.expenses = [];
   // Quỹ: lần đầu (chưa có key) → nạp bộ quỹ mẫu; đã có (kể cả rỗng do user xoá hết) → giữ nguyên
   if (!Array.isArray(merged.funds)) merged.funds = s.funds === undefined ? SEED_FUNDS : [];
@@ -155,7 +153,8 @@ export function DataProvider({ children }) {
   const api = useMemo(() => {
     const uid = () => Math.random().toString(36).slice(2, 9);
     return {
-      ...migrate(state),
+      // state LUÔN đã ở dạng migrate (load()/fetch đã migrate) → không migrate lại mỗi render (tốn CPU + phá tham chiếu)
+      ...state,
       // TASKS
       addTask: (t) => setState((s) => ({ ...s, tasks: [{ id: "t" + uid(), status: "todo", ...t }, ...s.tasks] })),
       updateTask: (id, patch) =>
@@ -227,11 +226,6 @@ export function DataProvider({ children }) {
             p.id === projectId ? { ...p, installments: (p.installments || []).filter((x) => x.id !== instId) } : p
           ),
         })),
-      // TRANSACTIONS (thu/chi cá nhân)
-      addTransaction: (tx) =>
-        setState((s) => ({ ...s, transactions: [{ id: "x" + uid(), ...tx }, ...s.transactions] })),
-      deleteTransaction: (id) =>
-        setState((s) => ({ ...s, transactions: s.transactions.filter((x) => x.id !== id) })),
       // EXPENSES (chi phí vận hành công ty)
       addExpense: (ex) =>
         setState((s) => ({ ...s, expenses: [{ id: "e" + uid(), active: true, recurring: "monthly", ...ex }, ...(s.expenses || [])] })),
