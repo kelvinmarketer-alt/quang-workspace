@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank,
+  LineChart, Menu, X, Bell, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
@@ -126,6 +126,15 @@ function SearchBox() {
   );
 }
 
+function SyncBadge() {
+  const { syncStatus } = useData();
+  if (syncStatus === "saving")
+    return <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500 sm:flex"><RefreshCw size={12} className="animate-spin" /> Đang lưu</span>;
+  if (syncStatus === "error")
+    return <span title="Bản sửa chưa lên cloud — app đang tự thử lại" className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700"><CloudOff size={12} /> <span className="hidden sm:inline">Chưa đồng bộ</span></span>;
+  return null;
+}
+
 function Notifications() {
   const { tasks, family } = useData();
   const [open, setOpen] = useState(false);
@@ -229,6 +238,7 @@ export default function Layout({ children }) {
             </button>
             <h1 className="text-lg font-extrabold tracking-tight text-slate-900">{title}</h1>
             <div className="ml-auto flex items-center gap-2">
+              <SyncBadge />
               <SearchBox />
               <Notifications />
               <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-sm font-bold text-white">

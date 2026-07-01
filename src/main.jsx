@@ -19,7 +19,7 @@ function Gate() {
   }
   if (!session) return <Login />;
   return (
-    <DataProvider>
+    <DataProvider key={session.user.id}>
       <App />
     </DataProvider>
   );

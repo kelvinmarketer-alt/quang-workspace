@@ -163,7 +163,7 @@ export default function Customers() {
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size} khách</span>
             <div className="flex gap-2">
               <button onClick={() => setPicked(new Set())} className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-white">Bỏ chọn</button>
-              <button onClick={() => { if (confirm(`Xoá ${picked.size} khách đã chọn?`)) { deleteCustomers([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
+              <button onClick={() => { if (confirm(`Xoá ${picked.size} khách đã chọn? Toàn bộ dự án của các khách này cũng bị xoá theo.`)) { deleteCustomers([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
             </div>
           </div>
         )}
@@ -230,7 +230,7 @@ export default function Customers() {
               <h3 className="text-lg font-extrabold text-slate-900">{selCust.name}</h3>
               <div className="flex items-center gap-1">
                 <button onClick={() => setModal(selCust)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
-                <button onClick={() => { if (confirm("Xoá khách hàng này?")) { deleteCustomer(selCust.id); setSel(null); } }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
+                <button onClick={() => { const nP = projects.filter((p) => p.customerId === selCust.id).length; if (confirm(nP ? `Xoá khách "${selCust.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) { deleteCustomer(selCust.id); setSel(null); } }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
                 <button onClick={() => setSel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
               </div>
             </div>

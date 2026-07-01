@@ -66,8 +66,31 @@ export function DataProvider({ children }) {
   const { user } = useAuth();
   const [state, setState] = useState(load);
   const [synced, setSynced] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("idle"); // idle | saving | error
+  const [reloadTick, setReloadTick] = useState(0);
   const skipSave = useRef(false);
   const saveTimer = useRef(null);
+  const retryTimer = useRef(null);
+  const stateRef = useRef(state);
+  const dirty = useRef(false);
+  stateRef.current = state;
+
+  // Đẩy state hiện tại lên Supabase (dùng chung cho debounce / flush / retry)
+  const pushCloud = () => {
+    if (!user) return;
+    setSyncStatus("saving");
+    supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current }).then(({ error }) => {
+      if (error) {
+        console.warn("Lưu Supabase lỗi:", error.message);
+        setSyncStatus("error");
+        clearTimeout(retryTimer.current);
+        retryTimer.current = setTimeout(pushCloud, 5000); // tự thử lại
+      } else {
+        dirty.current = false;
+        setSyncStatus("idle");
+      }
+    });
+  };
 
   // Tải dữ liệu từ Supabase khi đăng nhập (đám mây là nguồn chính)
   useEffect(() => {
@@ -77,30 +100,57 @@ export function DataProvider({ children }) {
     (async () => {
       const { data, error } = await supabase.from(WORKSPACE_TABLE).select("data").eq("user_id", user.id).maybeSingle();
       if (!alive) return;
-      if (!error && data && data.data && Object.keys(data.data).length > 0) {
+      if (error) {
+        // ĐỌC LỖI (mạng/token/RLS): TUYỆT ĐỐI không ghi gì để tránh đè dữ liệu thật bằng bản local/rỗng.
+        // Giữ local, chặn mọi save (synced vẫn false), tự thử đọc lại sau.
+        setSyncStatus("error");
+        setTimeout(() => { if (alive) setReloadTick((t) => t + 1); }, 4000);
+        return;
+      }
+      if (data && data.data && Object.keys(data.data).length > 0) {
         skipSave.current = true;
         setState(migrate(data.data));
       } else {
-        // Lần đầu: tạo dòng từ state hiện có (hoặc rỗng)
-        await supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: state });
+        // error=null + không có dòng/dòng rỗng → CHẮC CHẮN lần đầu, tạo dòng an toàn
+        skipSave.current = true;
+        await supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current });
       }
       setSynced(true);
+      setSyncStatus("idle");
     })();
     return () => { alive = false; };
-  }, [user?.id]);
+  }, [user?.id, reloadTick]);
 
-  // Lưu: localStorage (cache) + đẩy Supabase (debounce)
+  // Cache localStorage ngay mỗi lần state đổi
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }, [state]);
+
+  // Đẩy Supabase (debounce) — chỉ khi đã đọc xong cloud lần đầu (synced)
+  useEffect(() => {
     if (!user || !synced) return;
     if (skipSave.current) { skipSave.current = false; return; }
+    dirty.current = true;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: state }).then(({ error }) => {
-        if (error) console.warn("Lưu Supabase lỗi:", error.message);
-      });
-    }, 700);
+    saveTimer.current = setTimeout(pushCloud, 700);
   }, [state, user?.id, synced]);
+
+  // Flush write đang treo khi ẩn tab / đóng tab / unmount (tránh mất bản sửa trong 700ms)
+  useEffect(() => {
+    const flush = () => {
+      if (!dirty.current || !user || !synced) return;
+      clearTimeout(saveTimer.current);
+      pushCloud();
+    };
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("beforeunload", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      document.removeEventListener("visibilitychange", onHide);
+      flush(); // flush khi đổi user / unmount
+    };
+  }, [user?.id, synced]);
 
   const api = useMemo(() => {
     const uid = () => Math.random().toString(36).slice(2, 9);
@@ -137,11 +187,17 @@ export function DataProvider({ children }) {
       addCustomers: (arr) =>
         setState((s) => ({ ...s, customerList: [...arr.map((c) => ({ id: "c" + uid(), name: "", phone: "", zalo: "", note: "", feeRate: 20, type: "remote", monthlySalary: 0, active: true, ...c })), ...s.customerList] })),
       updateCustomer: (id, patch) =>
-        setState((s) => ({ ...s, customerList: s.customerList.map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+        setState((s) => ({
+          ...s,
+          customerList: s.customerList.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+          // Đổi tên khách → đồng bộ luôn customerName đã lưu trong các dự án (tránh kẹt tên cũ)
+          projects: patch.name ? s.projects.map((p) => (p.customerId === id ? { ...p, customerName: patch.name } : p)) : s.projects,
+        })),
+      // Xoá khách → xoá luôn dự án của khách đó (tránh dự án mồ côi làm lệch tổng)
       deleteCustomer: (id) =>
-        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => c.id !== id) })),
+        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => c.id !== id), projects: s.projects.filter((p) => p.customerId !== id) })),
       deleteCustomers: (ids) =>
-        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => !ids.includes(c.id)) })),
+        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => !ids.includes(c.id)), projects: s.projects.filter((p) => !ids.includes(p.customerId)) })),
       // PROJECTS / DỰ ÁN
       addProject: (p) =>
         setState((s) => ({ ...s, projects: [{ id: "p" + uid(), status: "unpaid", ...p }, ...s.projects] })),
@@ -191,7 +247,16 @@ export function DataProvider({ children }) {
       updateFund: (id, patch) =>
         setState((s) => ({ ...s, funds: (s.funds || []).map((f) => (f.id === id ? { ...f, ...patch } : f)) })),
       deleteFund: (id) =>
-        setState((s) => ({ ...s, funds: (s.funds || []).filter((f) => f.id !== id), fundTx: (s.fundTx || []).filter((t) => t.fundId !== id) })),
+        setState((s) => {
+          if ((s.funds || []).find((f) => f.id === id)?.role === "company") return s; // KHÔNG cho xoá quỹ công ty (nguồn phân bổ)
+          return {
+            ...s,
+            funds: (s.funds || []).filter((f) => f.id !== id),
+            fundTx: (s.fundTx || []).filter((t) => t.fundId !== id),
+            // Xoá luôn lịch chuyển định kỳ trỏ tới quỹ này (tránh lịch mồ côi vẫn nhắc + tạo phiếu vô nghĩa)
+            fundSchedules: (s.fundSchedules || []).filter((sc) => sc.fromId !== id && sc.toId !== id),
+          };
+        }),
       // Giao dịch quỹ: nạp (in) / rút (out)
       addFundTx: (tx) =>
         setState((s) => ({ ...s, fundTx: [{ id: "ft" + uid(), type: "in", ...tx }, ...(s.fundTx || [])] })),
@@ -230,8 +295,10 @@ export function DataProvider({ children }) {
           const amt = Number(sc.amount) || 0;
           const funds = s.funds || [];
           const nameOf = (fid) => funds.find((f) => f.id === fid)?.name || "quỹ";
+          const exists = (fid) => funds.some((f) => f.id === fid);
           let fundTx = s.fundTx || [];
-          if (sc.fromId && sc.toId && sc.fromId !== sc.toId && amt > 0) {
+          // Chỉ tạo phiếu khi CẢ 2 quỹ còn tồn tại (tránh phiếu trỏ quỹ đã xoá); vẫn đánh dấu lastDone để thôi nhắc
+          if (sc.fromId && sc.toId && sc.fromId !== sc.toId && amt > 0 && exists(sc.fromId) && exists(sc.toId)) {
             const xid = "xf" + uid();
             const extra = sc.note ? ` · ${sc.note}` : "";
             fundTx = [
@@ -311,7 +378,8 @@ export function DataProvider({ children }) {
     };
   }, [state]);
 
-  return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+  const value = useMemo(() => ({ ...api, syncStatus }), [api, syncStatus]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useData() {
