@@ -310,7 +310,8 @@ function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClose, onE
   const [instModal, setInstModal] = useState(null); // {edit?:inst}
   const [aiInst, setAiInst] = useState(false);
   const [stone, slabel] = STATUS[project.status] || STATUS.doing;
-  const insts = [...(project.installments || [])].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  // Sắp xếp đợt MỚI NHẤT → CŨ NHẤT (theo ngày giảm dần)
+  const insts = [...(project.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
