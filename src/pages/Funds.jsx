@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -286,12 +286,21 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-slate-200 py-6 text-center hover:border-rose-300 hover:bg-rose-50/40">
-            <Camera size={22} className="text-slate-400" />
-            <span className="text-sm font-bold text-slate-600">Chọn ảnh biên lai (nhiều ảnh)</span>
-            <span className="text-[11px] text-slate-400">Ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</span>
-            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-slate-200 py-5 text-center hover:border-fuchsia-300 hover:bg-fuchsia-50/40">
+              <Images size={22} className="text-slate-400" />
+              <span className="text-sm font-bold text-slate-600">Bộ sưu tập</span>
+              <span className="text-[11px] text-slate-400">chọn nhiều ảnh có sẵn</span>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+            </label>
+            <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-slate-200 py-5 text-center hover:border-rose-300 hover:bg-rose-50/40">
+              <Camera size={22} className="text-slate-400" />
+              <span className="text-sm font-bold text-slate-600">Chụp ảnh</span>
+              <span className="text-[11px] text-slate-400">mở camera điện thoại</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+            </label>
+          </div>
+          <p className="mt-2 text-center text-[11px] text-slate-400">Ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</p>
 
           <div className="mt-3 space-y-2">
             {items.map((it) => (
