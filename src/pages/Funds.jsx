@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
 import { fundBalance, monthlyGrossProfit, monthlyFundInflow, grossProfitToDate, projectYears } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
+import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
 const TONE_GRAD = { indigo: "from-indigo-500 to-violet-500", emerald: "from-emerald-500 to-teal-500", rose: "from-rose-500 to-pink-500", sky: "from-sky-500 to-cyan-500", amber: "from-amber-500 to-orange-500", violet: "from-violet-500 to-purple-500", teal: "from-teal-500 to-emerald-500", pink: "from-pink-500 to-rose-500" };
@@ -235,8 +236,103 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   );
 }
 
+/* ---- Modal CHI TỪ ẢNH (nhiều ảnh biên lai) — OpenAI Vision đọc số tiền ---- */
+function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
+  const [items, setItems] = useState([]); // {id, thumb, status:'reading'|'done'|'error', amount, note, date, error}
+  const hasKey = !!(apiKey || "").trim();
+
+  const readOne = async (id, dataUrl) => {
+    try {
+      const r = await aiReadExpense({ imageDataUrl: dataUrl, apiKey, model });
+      setItems((p) => p.map((it) => (it.id === id ? { ...it, status: "done", amount: r.amount, date: r.date, note: r.note } : it)));
+    } catch (e) {
+      setItems((p) => p.map((it) => (it.id === id ? { ...it, status: "error", error: e.message } : it)));
+    }
+  };
+
+  const addFiles = async (fileList) => {
+    const files = [...(fileList || [])].filter((f) => f.type && f.type.startsWith("image/"));
+    for (const f of files) {
+      const id = "im" + Math.random().toString(36).slice(2, 8);
+      let dataUrl;
+      try { dataUrl = await imageToDataUrl(f); } catch { continue; }
+      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "done", amount: 0, date: todayISO(), note: "" }]);
+      if (hasKey) readOne(id, dataUrl);
+    }
+  };
+
+  const update = (id, patch) => setItems((p) => p.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  const remove = (id) => setItems((p) => p.filter((it) => it.id !== id));
+  const reading = items.some((it) => it.status === "reading");
+  const valid = items.filter((it) => num(it.amount) > 0 && it.status !== "reading");
+  const total = valid.reduce((a, it) => a + num(it.amount), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold"><Camera size={18} className="text-rose-500" /> Chi từ ảnh · {fund.name}</h3>
+            <p className="mt-0.5 text-xs text-slate-400">Tải nhiều ảnh biên lai — AI tự đọc số tiền, bạn ghi chú rồi ghi 1 loạt.</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+
+        {!hasKey && (
+          <div className="mx-4 mt-3 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-700">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" /> Chưa có OpenAI key (vào <b>Cài đặt</b> để bật tự đọc số tiền). Bạn vẫn thêm ảnh và <b>nhập tay</b> số tiền được.
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-slate-200 py-6 text-center hover:border-rose-300 hover:bg-rose-50/40">
+            <Camera size={22} className="text-slate-400" />
+            <span className="text-sm font-bold text-slate-600">Chọn ảnh biên lai (nhiều ảnh)</span>
+            <span className="text-[11px] text-slate-400">Ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</span>
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+          </label>
+
+          <div className="mt-3 space-y-2">
+            {items.map((it) => (
+              <div key={it.id} className="flex items-center gap-2.5 rounded-xl border border-slate-100 p-2">
+                <img src={it.thumb} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                <div className="min-w-0 flex-1">
+                  {it.status === "reading" ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-500"><Loader2 size={13} className="animate-spin" /> Đang đọc…</div>
+                  ) : it.status === "error" ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500" title={it.error}><AlertCircle size={13} /> Không đọc được — nhập tay</div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600"><Check size={12} /> Đã đọc</div>
+                  )}
+                  <div className="mt-1 flex items-center gap-2">
+                    <MoneyInput value={String(it.amount ?? "")} onChange={(v) => update(it.id, { amount: num(v) })} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-bold" placeholder="0" />
+                    <input value={it.date} onChange={(e) => update(it.id, { date: e.target.value })} type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                  </div>
+                  <input value={it.note} onChange={(e) => update(it.id, { note: e.target.value })} placeholder="Chi cho việc gì…" className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                </div>
+                <button onClick={() => remove(it.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-slate-100 p-4">
+          <button
+            disabled={!valid.length || reading}
+            onClick={() => { onSave(valid.map((it) => ({ fundId: fund.id, amount: num(it.amount), date: it.date, note: (it.note || "").trim() || "Chi (từ ảnh)" }))); onClose(); }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-500/30 disabled:opacity-40"
+          >
+            {reading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <>Ghi {valid.length || ""} khoản chi · {formatShort(total)}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Chi tiết 1 quỹ + lịch sử giao dịch riêng ---- */
-function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onTransfer, onDelTx }) {
+function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onImage, onTransfer, onDelTx }) {
   const isCompany = fund.role === "company";
   const txs = (fundTx || []).filter((t) => t.fundId === fund.id);
   const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0) + autoCredit;
@@ -265,6 +361,7 @@ function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onTransfer, 
         <div className="flex gap-2 border-b border-slate-100 p-3">
           {!isCompany && <button onClick={() => onAdd(fund, "in")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>}
           <button onClick={() => onAdd(fund, "out")} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
+          <button onClick={() => onImage(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-fuchsia-50 py-2 text-xs font-bold text-fuchsia-600 hover:bg-fuchsia-100"><Camera size={14} /> Ảnh</button>
           <button onClick={() => onTransfer(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100"><ArrowLeftRight size={14} /> {isCompany ? "Phân bổ" : "Chuyển"}</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -299,7 +396,7 @@ function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onTransfer, 
 }
 
 export default function Funds() {
-  const { funds, fundTx, fundSchedules, projects, addFund, updateFund, deleteFund, addFundTx, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
+  const { funds, fundTx, fundSchedules, projects, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -310,6 +407,7 @@ export default function Funds() {
   const [transferInit, setTransferInit] = useState(null); // null | {} | { from }
   const [schedModal, setSchedModal] = useState(null); // null | {} | schedule
   const [detailId, setDetailId] = useState(null); // quỹ đang xem chi tiết
+  const [imgFund, setImgFund] = useState(null); // quỹ đang chi từ ảnh
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -456,6 +554,7 @@ export default function Funds() {
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => setTxModal({ fund: f, type: "in" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>
                   <button onClick={() => setTxModal({ fund: f, type: "out" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
+                  <button onClick={() => setImgFund(f)} title="Chi từ ảnh biên lai" className="flex shrink-0 items-center justify-center rounded-xl bg-fuchsia-50 px-2.5 text-fuchsia-600 hover:bg-fuchsia-100"><Camera size={15} /></button>
                 </div>
               </div>
             ))}
@@ -627,7 +726,8 @@ export default function Funds() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} autoCredit={detailFund.role === "company" ? grossTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
+      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} autoCredit={detailFund.role === "company" ? grossTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
+      {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
       {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}

@@ -254,6 +254,9 @@ export function DataProvider({ children }) {
       // Giao dịch quỹ: nạp (in) / rút (out)
       addFundTx: (tx) =>
         setState((s) => ({ ...s, fundTx: [{ id: "ft" + uid(), type: "in", ...tx }, ...(s.fundTx || [])] })),
+      // Ghi NHIỀU giao dịch cùng lúc (vd chi từ nhiều ảnh biên lai)
+      addFundTxMany: (arr) =>
+        setState((s) => ({ ...s, fundTx: [...(arr || []).map((tx) => ({ id: "ft" + uid(), type: "out", ...tx })), ...(s.fundTx || [])] })),
       // Chuyển tiền giữa 2 quỹ = 1 phiếu rút (nguồn) + 1 phiếu nạp (đích), liên kết bằng xferId
       transferFund: (fromId, toId, amount, date, note) =>
         setState((s) => {

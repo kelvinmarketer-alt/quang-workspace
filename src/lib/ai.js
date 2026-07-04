@@ -85,3 +85,71 @@ export function fileToDataUrl(file) {
     r.readAsDataURL(file);
   });
 }
+
+// Đọc ảnh + THU NHỎ (max cạnh maxDim) + nén JPEG -> data URL (giảm dung lượng gửi OpenAI + làm thumbnail)
+export function imageToDataUrl(file, maxDim = 1280, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = reject;
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          const scale = Math.min(1, maxDim / Math.max(width, height));
+          width = Math.max(1, Math.round(width * scale));
+          height = Math.max(1, Math.round(height * scale));
+          const c = document.createElement("canvas");
+          c.width = width; c.height = height;
+          c.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(c.toDataURL("image/jpeg", quality));
+        } catch (e) { resolve(r.result); } // lỗi canvas → dùng ảnh gốc
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+// Đọc 1 ảnh BIÊN LAI / GIAO DỊCH NGÂN HÀNG -> { amount, date, note } bằng OpenAI Vision.
+export async function aiReadExpense({ imageDataUrl, apiKey, model }) {
+  const key = (apiKey || "").trim();
+  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
+  if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
+  const today = iso(new Date());
+  const sys = `Bạn đọc ảnh chụp BIÊN LAI / GIAO DỊCH NGÂN HÀNG / VÍ ĐIỆN TỬ (chuyển khoản, quẹt thẻ, Momo, hoá đơn). Trích SỐ TIỀN đã chi và mô tả. Hôm nay ${today}. CHỈ trả JSON, không giải thích.
+QUY TẮC:
+- amount = số tiền giao dịch, SỐ nguyên đồng, bỏ hết dấu chấm/phẩy/ký hiệu ("-500.000đ" hoặc "500,000 VND" → 500000). Nếu là số tiền TRỪ/chuyển đi, vẫn lấy giá trị dương. Không đọc được thì amount = 0.
+- date = ngày giao dịch dạng "YYYY-MM-DD"; không rõ thì "${today}".
+- note = nội dung/người nhận/mô tả NGẮN gọn (vd "Chuyển Shopee", "Thanh toán điện", tên người/nơi nhận). Không rõ thì "".
+SCHEMA: { "amount": 500000, "date": "${today}", "note": "..." }`;
+  const body = {
+    model: model || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: [{ type: "text", text: "Đọc biên lai/giao dịch này." }, { type: "image_url", image_url: { url: imageDataUrl } }] },
+    ],
+    response_format: { type: "json_object" },
+    temperature: 0,
+  };
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const data = await res.json();
+  const txt = data.choices?.[0]?.message?.content || "{}";
+  let p;
+  try { p = JSON.parse(txt); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  return {
+    amount: Math.abs(Number(String(p.amount ?? "").replace(/[^\d-]/g, "")) || 0),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(p.date || "") ? p.date : today,
+    note: (p.note || "").toString().slice(0, 120),
+  };
+}
