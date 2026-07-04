@@ -241,10 +241,17 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
   const [items, setItems] = useState([]); // {id, thumb, status:'reading'|'done'|'error', amount, note, date, error}
   const hasKey = !!(apiKey || "").trim();
 
+  // Đọc 1 ảnh → có thể ra NHIỀU giao dịch → thay dòng placeholder bằng N dòng
   const readOne = async (id, dataUrl) => {
     try {
-      const r = await aiReadExpense({ imageDataUrl: dataUrl, apiKey, model });
-      setItems((p) => p.map((it) => (it.id === id ? { ...it, status: "done", amount: r.amount, date: r.date, note: r.note } : it)));
+      const { transactions } = await aiReadExpense({ imageDataUrl: dataUrl, apiKey, model });
+      setItems((p) => {
+        const idx = p.findIndex((it) => it.id === id);
+        if (idx < 0) return p;
+        const src = transactions.length ? transactions : [{ amount: 0, date: todayISO(), note: "" }];
+        const rows = src.map((t, i) => ({ id: id + "_" + i, thumb: dataUrl, status: t.amount > 0 ? "done" : "empty", amount: t.amount, date: t.date, note: t.note }));
+        return [...p.slice(0, idx), ...rows, ...p.slice(idx + 1)];
+      });
     } catch (e) {
       setItems((p) => p.map((it) => (it.id === id ? { ...it, status: "error", error: e.message } : it)));
     }
@@ -256,7 +263,7 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
       const id = "im" + Math.random().toString(36).slice(2, 8);
       let dataUrl;
       try { dataUrl = await imageToDataUrl(f); } catch { continue; }
-      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "done", amount: 0, date: todayISO(), note: "" }]);
+      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "empty", amount: 0, date: todayISO(), note: "" }]);
       if (hasKey) readOne(id, dataUrl);
     }
   };
@@ -310,7 +317,9 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
                   {it.status === "reading" ? (
                     <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-500"><Loader2 size={13} className="animate-spin" /> Đang đọc…</div>
                   ) : it.status === "error" ? (
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500" title={it.error}><AlertCircle size={13} /> Không đọc được — nhập tay</div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500" title={it.error}><AlertCircle size={13} /> Lỗi — nhập tay</div>
+                  ) : it.status === "empty" ? (
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600"><AlertCircle size={13} /> Chưa đọc được số — nhập tay</div>
                   ) : (
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600"><Check size={12} /> Đã đọc</div>
                   )}

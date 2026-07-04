@@ -112,23 +112,25 @@ export function imageToDataUrl(file, maxDim = 1280, quality = 0.82) {
   });
 }
 
-// Đọc 1 ảnh BIÊN LAI / GIAO DỊCH NGÂN HÀNG -> { amount, date, note } bằng OpenAI Vision.
+// Đọc ảnh BIÊN LAI / SAO KÊ / DANH SÁCH giao dịch -> { transactions: [{amount,date,note}] } bằng OpenAI Vision.
+// Ảnh có thể là 1 giao dịch HOẶC danh sách nhiều giao dịch → trả về MẢNG (mỗi giao dịch 1 phần tử).
 export async function aiReadExpense({ imageDataUrl, apiKey, model }) {
   const key = (apiKey || "").trim();
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
   const today = iso(new Date());
-  const sys = `Bạn đọc ảnh chụp BIÊN LAI / GIAO DỊCH NGÂN HÀNG / VÍ ĐIỆN TỬ (chuyển khoản, quẹt thẻ, Momo, hoá đơn). Trích SỐ TIỀN đã chi và mô tả. Hôm nay ${today}. CHỈ trả JSON, không giải thích.
+  const sys = `Bạn đọc ảnh chụp BIÊN LAI / GIAO DỊCH / SAO KÊ / LỊCH SỬ NGÂN HÀNG / VÍ ĐIỆN TỬ. Ảnh có thể là 1 giao dịch HOẶC DANH SÁCH nhiều giao dịch (nhiều dòng). Trích TỪNG giao dịch thành 1 phần tử. Hôm nay ${today}. CHỈ trả JSON, không giải thích.
 QUY TẮC:
-- amount = số tiền giao dịch, SỐ nguyên đồng, bỏ hết dấu chấm/phẩy/ký hiệu ("-500.000đ" hoặc "500,000 VND" → 500000). Nếu là số tiền TRỪ/chuyển đi, vẫn lấy giá trị dương. Không đọc được thì amount = 0.
-- date = ngày giao dịch dạng "YYYY-MM-DD"; không rõ thì "${today}".
-- note = nội dung/người nhận/mô tả NGẮN gọn (vd "Chuyển Shopee", "Thanh toán điện", tên người/nơi nhận). Không rõ thì "".
-SCHEMA: { "amount": 500000, "date": "${today}", "note": "..." }`;
+- amount = số tiền của giao dịch đó, SỐ nguyên đồng, bỏ hết dấu chấm/phẩy/ký hiệu tiền: "-500.000đ"→500000, "500,000 VND"→500000, "1,5tr"→1500000. Ngân hàng VN hay ghi rút gọn theo NGHÌN: "42,0" / "42.0" / "42K" nghĩa là 42.000 → trả 42000; "110,0"→110000. Luôn lấy giá trị DƯƠNG.
+- date = ngày giao dịch "YYYY-MM-DD"; không rõ thì "${today}".
+- note = người nhận / nội dung ngắn của dòng đó (vd tên người, "Chuyển khoản", "Thanh toán").
+- Lấy MỌI dòng giao dịch có số tiền đọc được. Không đọc được dòng nào thì bỏ dòng đó (đừng bịa).
+SCHEMA: { "transactions": [ { "amount": 42000, "date": "${today}", "note": "Phạm Văn Hải" } ] }`;
   const body = {
     model: model || "gpt-4o-mini",
     messages: [
       { role: "system", content: sys },
-      { role: "user", content: [{ type: "text", text: "Đọc biên lai/giao dịch này." }, { type: "image_url", image_url: { url: imageDataUrl } }] },
+      { role: "user", content: [{ type: "text", text: "Đọc tất cả giao dịch trong ảnh này." }, { type: "image_url", image_url: { url: imageDataUrl } }] },
     ],
     response_format: { type: "json_object" },
     temperature: 0,
@@ -147,9 +149,14 @@ SCHEMA: { "amount": 500000, "date": "${today}", "note": "..." }`;
   const txt = data.choices?.[0]?.message?.content || "{}";
   let p;
   try { p = JSON.parse(txt); } catch { throw new Error("Không đọc được JSON từ AI."); }
-  return {
-    amount: Math.abs(Number(String(p.amount ?? "").replace(/[^\d-]/g, "")) || 0),
-    date: /^\d{4}-\d{2}-\d{2}$/.test(p.date || "") ? p.date : today,
-    note: (p.note || "").toString().slice(0, 120),
-  };
+  // Hỗ trợ cả schema mảng lẫn 1 giao dịch lẻ (phòng khi model trả {amount} thay vì {transactions})
+  const raw = Array.isArray(p.transactions) ? p.transactions : (p.amount != null ? [p] : []);
+  const transactions = raw
+    .map((t) => ({
+      amount: Math.abs(Number(String(t.amount ?? "").replace(/[^\d-]/g, "")) || 0),
+      date: /^\d{4}-\d{2}-\d{2}$/.test(t.date || "") ? t.date : today,
+      note: (t.note || "").toString().slice(0, 120),
+    }))
+    .filter((t) => t.amount > 0);
+  return { transactions };
 }
