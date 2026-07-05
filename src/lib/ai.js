@@ -122,10 +122,11 @@ export async function aiReadExpense({ imageDataUrl, apiKey, model }) {
   const sys = `Bạn đọc ảnh chụp BIÊN LAI / GIAO DỊCH / SAO KÊ / LỊCH SỬ NGÂN HÀNG / VÍ ĐIỆN TỬ. Ảnh có thể là 1 giao dịch HOẶC DANH SÁCH nhiều giao dịch (nhiều dòng). Trích TỪNG giao dịch thành 1 phần tử. Hôm nay ${today}. CHỈ trả JSON, không giải thích.
 QUY TẮC:
 - amount = số tiền của giao dịch đó, SỐ nguyên đồng, bỏ hết dấu chấm/phẩy/ký hiệu tiền: "-500.000đ"→500000, "500,000 VND"→500000, "1,5tr"→1500000. Ngân hàng VN hay ghi rút gọn theo NGHÌN: "42,0" / "42.0" / "42K" nghĩa là 42.000 → trả 42000; "110,0"→110000. Luôn lấy giá trị DƯƠNG.
+- type = CHIỀU tiền của dòng đó: "in" nếu TIỀN VÀO (nhận tiền, cộng "+", màu xanh, "Nhận từ", "GD ghi có", số dương); "out" nếu TIỀN RA (chi/chuyển đi, trừ "-", màu đỏ, "Chuyển tới", "GD ghi nợ", thanh toán). Dựa vào dấu +/−, màu sắc, hoặc chữ để quyết định. Không chắc thì "out".
 - date = ngày giao dịch "YYYY-MM-DD"; không rõ thì "${today}".
-- note = người nhận / nội dung ngắn của dòng đó (vd tên người, "Chuyển khoản", "Thanh toán").
+- note = người gửi/nhận hoặc nội dung ngắn của dòng đó (vd tên người, "Chuyển khoản", "Thanh toán").
 - Lấy MỌI dòng giao dịch có số tiền đọc được. Không đọc được dòng nào thì bỏ dòng đó (đừng bịa).
-SCHEMA: { "transactions": [ { "amount": 42000, "date": "${today}", "note": "Phạm Văn Hải" } ] }`;
+SCHEMA: { "transactions": [ { "amount": 42000, "type": "out", "date": "${today}", "note": "Phạm Văn Hải" } ] }`;
   const body = {
     model: model || "gpt-4o-mini",
     messages: [
@@ -154,6 +155,7 @@ SCHEMA: { "transactions": [ { "amount": 42000, "date": "${today}", "note": "Ph�
   const transactions = raw
     .map((t) => ({
       amount: Math.abs(Number(String(t.amount ?? "").replace(/[^\d-]/g, "")) || 0),
+      type: t.type === "in" ? "in" : "out",
       date: /^\d{4}-\d{2}-\d{2}$/.test(t.date || "") ? t.date : today,
       note: (t.note || "").toString().slice(0, 120),
     }))

@@ -310,7 +310,7 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
         const idx = p.findIndex((it) => it.id === id);
         if (idx < 0) return p;
         const src = transactions.length ? transactions : [{ amount: 0, date: todayISO(), note: "" }];
-        const rows = src.map((t, i) => ({ id: id + "_" + i, thumb: dataUrl, status: t.amount > 0 ? "done" : "empty", amount: t.amount, date: t.date, note: t.note, cat: cat || "" }));
+        const rows = src.map((t, i) => ({ id: id + "_" + i, thumb: dataUrl, status: t.amount > 0 ? "done" : "empty", amount: t.amount, type: t.type || "out", date: t.date, note: t.note, cat: cat || "" }));
         return [...p.slice(0, idx), ...rows, ...p.slice(idx + 1)];
       });
     } catch (e) {
@@ -324,7 +324,7 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
       const id = "im" + Math.random().toString(36).slice(2, 8);
       let dataUrl;
       try { dataUrl = await imageToDataUrl(f); } catch { continue; }
-      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "empty", amount: 0, date: todayISO(), note: "", cat: defaultCat }]);
+      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "empty", amount: 0, type: "out", date: todayISO(), note: "", cat: defaultCat }]);
       if (hasKey) readOne(id, dataUrl, defaultCat);
     }
   };
@@ -333,7 +333,10 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
   const remove = (id) => setItems((p) => p.filter((it) => it.id !== id));
   const reading = items.some((it) => it.status === "reading");
   const valid = items.filter((it) => num(it.amount) > 0 && it.status !== "reading");
-  const total = valid.reduce((a, it) => a + num(it.amount), 0);
+  const inTotal = valid.filter((it) => it.type === "in").reduce((a, it) => a + num(it.amount), 0);
+  const outTotal = valid.filter((it) => it.type !== "in").reduce((a, it) => a + num(it.amount), 0);
+  const nIn = valid.filter((it) => it.type === "in").length;
+  const nOut = valid.length - nIn;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -341,8 +344,8 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <div>
-            <h3 className="flex items-center gap-2 text-lg font-extrabold"><Camera size={18} className="text-rose-500" /> Chi từ ảnh · {fund.name}</h3>
-            <p className="mt-0.5 text-xs text-slate-400">Tải nhiều ảnh biên lai — AI tự đọc số tiền, bạn ghi chú rồi ghi 1 loạt.</p>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold"><Camera size={18} className="text-indigo-500" /> Ghi giao dịch từ ảnh · {fund.name}</h3>
+            <p className="mt-0.5 text-xs text-slate-400">AI tự đọc số tiền + phân biệt <b className="text-emerald-600">Nạp (+)</b> / <b className="text-rose-600">Chi (−)</b>. Bạn chỉnh lại rồi ghi 1 loạt.</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
@@ -390,16 +393,22 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
                   ) : (
                     <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600"><Check size={12} /> Đã đọc</div>
                   )}
-                  <div className="mt-1 flex items-center gap-2">
-                    <MoneyInput value={String(it.amount ?? "")} onChange={(v) => update(it.id, { amount: num(v) })} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-bold" placeholder="0" />
-                    <input value={it.date} onChange={(e) => update(it.id, { date: e.target.value })} type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-200 text-[11px] font-bold">
+                      <button type="button" onClick={() => update(it.id, { type: "in" })} className={`px-2 py-1 ${it.type === "in" ? "bg-emerald-500 text-white" : "text-slate-400"}`}>Nạp</button>
+                      <button type="button" onClick={() => update(it.id, { type: "out" })} className={`px-2 py-1 ${it.type !== "in" ? "bg-rose-500 text-white" : "text-slate-400"}`}>Chi</button>
+                    </div>
+                    <MoneyInput value={String(it.amount ?? "")} onChange={(v) => update(it.id, { amount: num(v) })} className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-bold" placeholder="0" />
+                    <input value={it.date} onChange={(e) => update(it.id, { date: e.target.value })} type="date" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-1.5 py-1 text-xs" />
                   </div>
                   <div className="mt-1 flex items-center gap-1.5">
-                    <input value={it.note} onChange={(e) => update(it.id, { note: e.target.value })} placeholder="Chi cho việc gì…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs" />
-                    <select value={it.cat || ""} onChange={(e) => update(it.id, { cat: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-1 text-[11px]">
-                      <option value="">— DM —</option>
-                      {(cats || []).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
+                    <input value={it.note} onChange={(e) => update(it.id, { note: e.target.value })} placeholder={it.type === "in" ? "Nguồn tiền…" : "Chi cho việc gì…"} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                    {it.type !== "in" && (
+                      <select value={it.cat || ""} onChange={(e) => update(it.id, { cat: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-1 text-[11px]">
+                        <option value="">— DM —</option>
+                        {(cats || []).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => remove(it.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
@@ -409,12 +418,18 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
         </div>
 
         <div className="border-t border-slate-100 p-4">
+          {valid.length > 0 && !reading && (
+            <div className="mb-2 flex items-center justify-center gap-3 text-[11px] font-bold">
+              {nIn > 0 && <span className="text-emerald-600">Nạp {nIn} · +{formatShort(inTotal)}</span>}
+              {nOut > 0 && <span className="text-rose-600">Chi {nOut} · −{formatShort(outTotal)}</span>}
+            </div>
+          )}
           <button
             disabled={!valid.length || reading}
-            onClick={() => { onSave(valid.map((it) => ({ fundId: fund.id, amount: num(it.amount), date: it.date, note: (it.note || "").trim() || "Chi (từ ảnh)", cat: it.cat || "" }))); onClose(); }}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-500/30 disabled:opacity-40"
+            onClick={() => { onSave(valid.map((it) => ({ fundId: fund.id, amount: num(it.amount), date: it.date, type: it.type === "in" ? "in" : "out", note: (it.note || "").trim() || (it.type === "in" ? "Nạp (từ ảnh)" : "Chi (từ ảnh)"), ...(it.type === "in" ? {} : { cat: it.cat || "" }) }))); onClose(); }}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40"
           >
-            {reading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <>Ghi {valid.length || ""} khoản chi · {formatShort(total)}</>}
+            {reading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <>Ghi {valid.length || ""} giao dịch</>}
           </button>
         </div>
       </div>
@@ -649,7 +664,7 @@ export default function Funds() {
                 <div className="mt-3 flex gap-2">
                   <button onClick={() => setTxModal({ fund: f, type: "in" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2 text-xs font-bold text-emerald-600 hover:bg-emerald-100"><ArrowDownToLine size={14} /> Nạp</button>
                   <button onClick={() => setTxModal({ fund: f, type: "out" })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-rose-50 py-2 text-xs font-bold text-rose-600 hover:bg-rose-100"><ArrowUpFromLine size={14} /> Chi</button>
-                  <button onClick={() => setImgFund(f)} title="Chi từ ảnh biên lai" className="flex shrink-0 items-center justify-center rounded-xl bg-fuchsia-50 px-2.5 text-fuchsia-600 hover:bg-fuchsia-100"><Camera size={15} /></button>
+                  <button onClick={() => setImgFund(f)} title="Ghi giao dịch từ ảnh (nạp/chi)" className="flex shrink-0 items-center justify-center rounded-xl bg-fuchsia-50 px-2.5 text-fuchsia-600 hover:bg-fuchsia-100"><Camera size={15} /></button>
                 </div>
               </div>
             ))}
