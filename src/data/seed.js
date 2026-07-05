@@ -35,8 +35,19 @@ export const SEED_FUNDS = [
   { id: "fund-travel", name: "Du lịch", color: "sky", percent: 10, note: "" },
   { id: "fund-reserve", name: "Dự phòng", color: "amber", percent: 10, note: "Quỹ khẩn cấp" },
 ];
-// Giao dịch quỹ (nạp / rút). fundTx: { id, fundId, date, amount, type: "in"|"out", note }
+// Giao dịch quỹ (nạp / rút). fundTx: { id, fundId, date, amount, type: "in"|"out", note, cat? }
 export const SEED_FUND_TX = [];
+// Danh mục chi tiêu (gắn vào khoản CHI). spendCat: { id, name, color }
+export const SEED_SPEND_CATS = [
+  { id: "sc-food", name: "Ăn uống", color: "amber" },
+  { id: "sc-move", name: "Đi lại", color: "indigo" },
+  { id: "sc-shop", name: "Mua sắm", color: "rose" },
+  { id: "sc-bill", name: "Hoá đơn", color: "violet" },
+  { id: "sc-travel", name: "Du lịch", color: "sky" },
+  { id: "sc-health", name: "Sức khoẻ", color: "emerald" },
+  { id: "sc-fun", name: "Giải trí", color: "pink" },
+  { id: "sc-other", name: "Khác", color: "slate" },
+];
 // Lịch chuyển quỹ định kỳ. schedule: { id, fromId, toId, amount, every: "week"|"2week"|"month", startDate, note, active, lastDone }
 // Chế độ "nhắc + xác nhận": đến hạn hiện banner, user bấm "Chuyển ngay" mới thực hiện. lastDone = ISO kỳ gần nhất đã xử lý.
 export const SEED_FUND_SCHEDULES = [];

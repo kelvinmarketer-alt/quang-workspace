@@ -45,6 +45,65 @@ function nextOcc(sc, today) {
   return null;
 }
 
+const catTone = (cats, name) => (cats || []).find((c) => c.name === name)?.color || "slate";
+
+/* ---- Bộ chọn danh mục chi (chips) + link sửa ---- */
+function SpendCatPicker({ cats, value, onChange, onManage, label = "Danh mục" }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-sm font-semibold text-slate-600">{label}</span>
+        <button type="button" onClick={onManage} className="flex items-center gap-1 text-[11px] font-bold text-indigo-500 hover:underline"><Pencil size={11} /> Sửa danh mục</button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {(cats || []).map((c) => {
+          const on = value === c.name;
+          return (
+            <button key={c.id} type="button" onClick={() => onChange(on ? "" : c.name)} className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${on ? `${TONE_BG[c.color] || "bg-slate-500"} text-white` : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{c.name}</button>
+          );
+        })}
+        {(!cats || cats.length === 0) && <button type="button" onClick={onManage} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">+ Thêm danh mục</button>}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Quản lý danh mục chi: thêm / sửa tên / đổi màu / xoá ---- */
+function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("amber");
+  const next = (c) => FUND_COLORS[(FUND_COLORS.indexOf(c) + 1) % FUND_COLORS.length];
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
+          <h3 className="text-lg font-extrabold">Danh mục chi tiêu</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+          {(cats || []).length === 0 && <div className="py-6 text-center text-sm text-slate-400">Chưa có danh mục. Thêm bên dưới.</div>}
+          {(cats || []).map((c) => (
+            <div key={c.id} className="flex items-center gap-2 rounded-xl border border-slate-100 p-2">
+              <button onClick={() => onUpdate(c.id, { color: next(c.color) })} title="Bấm để đổi màu" className={`h-6 w-6 shrink-0 rounded-full ${TONE_BG[c.color] || "bg-slate-400"}`} />
+              <input value={c.name} onChange={(e) => onUpdate(c.id, { name: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold" />
+              <button onClick={() => { if (confirm(`Xoá danh mục "${c.name}"?`)) onDelete(c.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-slate-100 p-4">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setColor(next(color))} title="Bấm để đổi màu" className={`h-8 w-8 shrink-0 rounded-full ${TONE_BG[color]}`} />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên danh mục mới…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { onAdd({ name: name.trim(), color }); setName(""); } }} />
+            <button onClick={() => { if (name.trim()) { onAdd({ name: name.trim(), color }); setName(""); } }} className="flex shrink-0 items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white"><Plus size={14} /> Thêm</button>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Sửa tên trực tiếp trong ô · bấm chấm màu để đổi màu.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Modal thêm/sửa quỹ ---- */
 function FundModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial || { name: "", color: "indigo", percent: "", note: "" });
@@ -77,8 +136,8 @@ function FundModal({ initial, onClose, onSave }) {
 }
 
 /* ---- Modal nạp / rút 1 quỹ ---- */
-function TxModal({ fund, type, onClose, onSave }) {
-  const [f, setF] = useState({ amount: "", date: todayISO(), note: "" });
+function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
+  const [f, setF] = useState({ amount: "", date: todayISO(), note: "", cat: "" });
   const isIn = type === "in";
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -92,9 +151,10 @@ function TxModal({ fund, type, onClose, onSave }) {
           <MoneyInput value={f.amount} onChange={(v) => setF((p) => ({ ...p, amount: v }))} autoFocus className={inputCls} placeholder="2.000.000" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
           <input type="date" value={f.date} onChange={(e) => setF((p) => ({ ...p, date: e.target.value }))} className={inputCls} /></label>
-        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">{isIn ? "Ghi chú" : "Chi cho việc gì *"}</span>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">{isIn ? "Ghi chú" : "Chi cho việc gì *"}</span>
           <input value={f.note} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} className={inputCls} placeholder={isIn ? "Nguồn tiền" : "VD: mua đồ, biếu bố mẹ, rút ra mặt…"} /></label>
-        <button onClick={() => { if (num(f.amount) > 0) { onSave({ fundId: fund.id, amount: num(f.amount), date: f.date, type, note: f.note.trim() }); onClose(); } }} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>{isIn ? "Nạp tiền" : "Ghi khoản chi"}</button>
+        {!isIn && <div className="mb-4"><SpendCatPicker cats={cats} value={f.cat} onChange={(v) => setF((p) => ({ ...p, cat: v }))} onManage={onManage} /></div>}
+        <button onClick={() => { if (num(f.amount) > 0) { onSave({ fundId: fund.id, amount: num(f.amount), date: f.date, type, note: f.note.trim(), ...(isIn ? {} : { cat: f.cat }) }); onClose(); } }} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>{isIn ? "Nạp tiền" : "Ghi khoản chi"}</button>
       </div>
     </div>
   );
@@ -237,19 +297,20 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
 }
 
 /* ---- Modal CHI TỪ ẢNH (nhiều ảnh biên lai) — OpenAI Vision đọc số tiền ---- */
-function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
-  const [items, setItems] = useState([]); // {id, thumb, status:'reading'|'done'|'error', amount, note, date, error}
+function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSave }) {
+  const [items, setItems] = useState([]); // {id, thumb, status, amount, note, date, cat, error}
+  const [defaultCat, setDefaultCat] = useState("");
   const hasKey = !!(apiKey || "").trim();
 
   // Đọc 1 ảnh → có thể ra NHIỀU giao dịch → thay dòng placeholder bằng N dòng
-  const readOne = async (id, dataUrl) => {
+  const readOne = async (id, dataUrl, cat) => {
     try {
       const { transactions } = await aiReadExpense({ imageDataUrl: dataUrl, apiKey, model });
       setItems((p) => {
         const idx = p.findIndex((it) => it.id === id);
         if (idx < 0) return p;
         const src = transactions.length ? transactions : [{ amount: 0, date: todayISO(), note: "" }];
-        const rows = src.map((t, i) => ({ id: id + "_" + i, thumb: dataUrl, status: t.amount > 0 ? "done" : "empty", amount: t.amount, date: t.date, note: t.note }));
+        const rows = src.map((t, i) => ({ id: id + "_" + i, thumb: dataUrl, status: t.amount > 0 ? "done" : "empty", amount: t.amount, date: t.date, note: t.note, cat: cat || "" }));
         return [...p.slice(0, idx), ...rows, ...p.slice(idx + 1)];
       });
     } catch (e) {
@@ -263,8 +324,8 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
       const id = "im" + Math.random().toString(36).slice(2, 8);
       let dataUrl;
       try { dataUrl = await imageToDataUrl(f); } catch { continue; }
-      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "empty", amount: 0, date: todayISO(), note: "" }]);
-      if (hasKey) readOne(id, dataUrl);
+      setItems((p) => [...p, { id, thumb: dataUrl, status: hasKey ? "reading" : "empty", amount: 0, date: todayISO(), note: "", cat: defaultCat }]);
+      if (hasKey) readOne(id, dataUrl, defaultCat);
     }
   };
 
@@ -309,6 +370,12 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
           </div>
           <p className="mt-2 text-center text-[11px] text-slate-400">Ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</p>
 
+          {items.length > 0 && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-2.5">
+              <SpendCatPicker cats={cats} value={defaultCat} label="Danh mục (áp cho tất cả)" onManage={onManage} onChange={(v) => { setDefaultCat(v); setItems((p) => p.map((it) => ({ ...it, cat: v }))); }} />
+            </div>
+          )}
+
           <div className="mt-3 space-y-2">
             {items.map((it) => (
               <div key={it.id} className="flex items-center gap-2.5 rounded-xl border border-slate-100 p-2">
@@ -327,7 +394,13 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
                     <MoneyInput value={String(it.amount ?? "")} onChange={(v) => update(it.id, { amount: num(v) })} className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-right text-sm font-bold" placeholder="0" />
                     <input value={it.date} onChange={(e) => update(it.id, { date: e.target.value })} type="date" className="rounded-lg border border-slate-200 px-2 py-1 text-xs" />
                   </div>
-                  <input value={it.note} onChange={(e) => update(it.id, { note: e.target.value })} placeholder="Chi cho việc gì…" className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <input value={it.note} onChange={(e) => update(it.id, { note: e.target.value })} placeholder="Chi cho việc gì…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs" />
+                    <select value={it.cat || ""} onChange={(e) => update(it.id, { cat: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-1 text-[11px]">
+                      <option value="">— DM —</option>
+                      {(cats || []).map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <button onClick={() => remove(it.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
@@ -338,7 +411,7 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
         <div className="border-t border-slate-100 p-4">
           <button
             disabled={!valid.length || reading}
-            onClick={() => { onSave(valid.map((it) => ({ fundId: fund.id, amount: num(it.amount), date: it.date, note: (it.note || "").trim() || "Chi (từ ảnh)" }))); onClose(); }}
+            onClick={() => { onSave(valid.map((it) => ({ fundId: fund.id, amount: num(it.amount), date: it.date, note: (it.note || "").trim() || "Chi (từ ảnh)", cat: it.cat || "" }))); onClose(); }}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-rose-500/30 disabled:opacity-40"
           >
             {reading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <>Ghi {valid.length || ""} khoản chi · {formatShort(total)}</>}
@@ -350,7 +423,7 @@ function ExpenseImageModal({ fund, apiKey, model, onClose, onSave }) {
 }
 
 /* ---- Chi tiết 1 quỹ + lịch sử giao dịch riêng ---- */
-function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onImage, onTransfer, onDelTx }) {
+function FundDetail({ fund, fundTx, cats, autoCredit = 0, onClose, onAdd, onImage, onTransfer, onDelTx }) {
   const isCompany = fund.role === "company";
   const txs = (fundTx || []).filter((t) => t.fundId === fund.id);
   const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0) + autoCredit;
@@ -395,7 +468,10 @@ function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onImage, onT
                     <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-slate-700">{t.note || (isIn ? "Nạp tiền" : "Khoản chi")}</div>
-                      <div className="text-[11px] text-slate-400">{t.synthetic ? "tự động" : fmtDateVI(t.date)}</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400">
+                        <span>{t.synthetic ? "tự động" : fmtDateVI(t.date)}</span>
+                        {t.cat && <Badge tone={catTone(cats, t.cat)}>{t.cat}</Badge>}
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
@@ -414,7 +490,7 @@ function FundDetail({ fund, fundTx, autoCredit = 0, onClose, onAdd, onImage, onT
 }
 
 export default function Funds() {
-  const { funds, fundTx, fundSchedules, projects, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule } = useData();
+  const { funds, fundTx, fundSchedules, spendCats, projects, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -426,6 +502,7 @@ export default function Funds() {
   const [schedModal, setSchedModal] = useState(null); // null | {} | schedule
   const [detailId, setDetailId] = useState(null); // quỹ đang xem chi tiết
   const [imgFund, setImgFund] = useState(null); // quỹ đang chi từ ảnh
+  const [catMgr, setCatMgr] = useState(false); // mở quản lý danh mục chi
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -731,7 +808,7 @@ export default function Funds() {
                 <div key={t.id} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/70 sm:px-5">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span></div>
+                    <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span>{t.cat && <Badge tone={catTone(spendCats, t.cat)}>{t.cat}</Badge>}</div>
                     <div className="truncate text-[11px] text-slate-400">{fmtDateVI(t.date)}{t.note ? " · " + t.note : ""}</div>
                   </div>
                   <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
@@ -744,10 +821,11 @@ export default function Funds() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} autoCredit={detailFund.role === "company" ? grossTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
-      {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
+      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
+      {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
-      {txModal && <TxModal fund={txModal.fund} type={txModal.type} onClose={() => setTxModal(null)} onSave={addFundTx} />}
+      {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTx} />}
+      {catMgr && <SpendCatManager cats={spendCats} onAdd={addSpendCat} onUpdate={updateSpendCat} onDelete={deleteSpendCat} onClose={() => setCatMgr(false)} />}
       {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}
       {transferInit && <TransferModal funds={allWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}
       {schedModal && <ScheduleModal initial={schedModal.id ? schedModal : null} funds={funds || []} onClose={() => setSchedModal(null)} onSave={(data) => (schedModal.id ? updateFundSchedule(schedModal.id, data) : addFundSchedule(data))} />}

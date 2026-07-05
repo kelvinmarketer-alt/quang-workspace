@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES } from "../data/seed.js";
+import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES, SEED_SPEND_CATS } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 
@@ -25,13 +25,14 @@ function load() {
     funds: SEED_FUNDS, // quỹ phân bổ dòng tiền
     fundTx: SEED_FUND_TX, // giao dịch nạp/rút quỹ
     fundSchedules: SEED_FUND_SCHEDULES, // lịch chuyển quỹ định kỳ
+    spendCats: SEED_SPEND_CATS, // danh mục chi tiêu
     settings: { ...SEED_SETTINGS }, // cấu hình app (key OpenAI…) — sẽ đồng bộ DB
   };
 }
 
 // Bù field cho state cũ (tránh undefined sau nâng cấp)
 function migrate(s) {
-  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, fundSchedules: SEED_FUND_SCHEDULES, settings: { ...SEED_SETTINGS } };
+  const base = { tasks: [], family: [], customerList: SEED_CUSTOMERS, projects: SEED_PROJECTS, expenses: SEED_EXPENSES, funds: SEED_FUNDS, fundTx: SEED_FUND_TX, fundSchedules: SEED_FUND_SCHEDULES, spendCats: SEED_SPEND_CATS, settings: { ...SEED_SETTINGS } };
   const merged = { ...base, ...s };
   if (!Array.isArray(merged.customerList)) merged.customerList = [];
   if (!Array.isArray(merged.projects)) merged.projects = [];
@@ -44,6 +45,8 @@ function migrate(s) {
   if (Array.isArray(merged.funds) && merged.funds.length > 0 && !merged.funds.some((f) => f.role === "company")) {
     merged.funds = [{ id: "fund-company", name: "Quỹ công ty", color: "indigo", percent: 0, role: "company", note: "Lợi nhuận gộp — nguồn phân bổ hằng tháng" }, ...merged.funds];
   }
+  // Danh mục chi tiêu: lần đầu (chưa có key) → nạp bộ mẫu; đã có → giữ nguyên
+  if (!Array.isArray(merged.spendCats)) merged.spendCats = s.spendCats === undefined ? SEED_SPEND_CATS : [];
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
@@ -257,6 +260,13 @@ export function DataProvider({ children }) {
       // Ghi NHIỀU giao dịch cùng lúc (vd chi từ nhiều ảnh biên lai)
       addFundTxMany: (arr) =>
         setState((s) => ({ ...s, fundTx: [...(arr || []).map((tx) => ({ id: "ft" + uid(), type: "out", ...tx })), ...(s.fundTx || [])] })),
+      // DANH MỤC CHI TIÊU
+      addSpendCat: (c) =>
+        setState((s) => ({ ...s, spendCats: [...(s.spendCats || []), { id: "sc" + uid(), color: "slate", ...c }] })),
+      updateSpendCat: (id, patch) =>
+        setState((s) => ({ ...s, spendCats: (s.spendCats || []).map((c) => (c.id === id ? { ...c, ...patch } : c)) })),
+      deleteSpendCat: (id) =>
+        setState((s) => ({ ...s, spendCats: (s.spendCats || []).filter((c) => c.id !== id) })),
       // Chuyển tiền giữa 2 quỹ = 1 phiếu rút (nguồn) + 1 phiếu nạp (đích), liên kết bằng xferId
       transferFund: (fromId, toId, amount, date, note) =>
         setState((s) => {
