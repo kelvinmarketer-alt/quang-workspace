@@ -60,7 +60,7 @@ function SpendCatPicker({ cats, value, onChange, onManage, label = "Danh mục" 
         {(cats || []).map((c) => {
           const on = value === c.name;
           return (
-            <button key={c.id} type="button" onClick={() => onChange(on ? "" : c.name)} className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${on ? `${TONE_BG[c.color] || "bg-slate-500"} text-white` : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{c.name}</button>
+            <button key={c.id} type="button" title={c.note || c.name} onClick={() => onChange(on ? "" : c.name)} className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${on ? `${TONE_BG[c.color] || "bg-slate-500"} text-white` : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{c.name}</button>
           );
         })}
         {(!cats || cats.length === 0) && <button type="button" onClick={onManage} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">+ Thêm danh mục</button>}
@@ -72,6 +72,7 @@ function SpendCatPicker({ cats, value, onChange, onManage, label = "Danh mục" 
 /* ---- Quản lý danh mục chi: thêm / sửa tên / đổi màu / xoá ---- */
 function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
   const [name, setName] = useState("");
+  const [note, setNote] = useState("");
   const [color, setColor] = useState("amber");
   const next = (c) => FUND_COLORS[(FUND_COLORS.indexOf(c) + 1) % FUND_COLORS.length];
   return (
@@ -85,20 +86,24 @@ function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
           {(cats || []).length === 0 && <div className="py-6 text-center text-sm text-slate-400">Chưa có danh mục. Thêm bên dưới.</div>}
           {(cats || []).map((c) => (
-            <div key={c.id} className="flex items-center gap-2 rounded-xl border border-slate-100 p-2">
-              <button onClick={() => onUpdate(c.id, { color: next(c.color) })} title="Bấm để đổi màu" className={`h-6 w-6 shrink-0 rounded-full ${TONE_BG[c.color] || "bg-slate-400"}`} />
-              <input value={c.name} onChange={(e) => onUpdate(c.id, { name: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold" />
-              <button onClick={() => { if (confirm(`Xoá danh mục "${c.name}"?`)) onDelete(c.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+            <div key={c.id} className="rounded-xl border border-slate-100 p-2">
+              <div className="flex items-center gap-2">
+                <button onClick={() => onUpdate(c.id, { color: next(c.color) })} title="Bấm để đổi màu" className={`h-6 w-6 shrink-0 rounded-full ${TONE_BG[c.color] || "bg-slate-400"}`} />
+                <input value={c.name} onChange={(e) => onUpdate(c.id, { name: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold" />
+                <button onClick={() => { if (confirm(`Xoá danh mục "${c.name}"?`)) onDelete(c.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+              </div>
+              <input value={c.note || ""} onChange={(e) => onUpdate(c.id, { note: e.target.value })} placeholder="Ghi chú: gồm những khoản gì…" className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] text-slate-500" />
             </div>
           ))}
         </div>
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center gap-2">
             <button onClick={() => setColor(next(color))} title="Bấm để đổi màu" className={`h-8 w-8 shrink-0 rounded-full ${TONE_BG[color]}`} />
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên danh mục mới…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { onAdd({ name: name.trim(), color }); setName(""); } }} />
-            <button onClick={() => { if (name.trim()) { onAdd({ name: name.trim(), color }); setName(""); } }} className="flex shrink-0 items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white"><Plus size={14} /> Thêm</button>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên danh mục mới…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm" onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) { onAdd({ name: name.trim(), color, note: note.trim() }); setName(""); setNote(""); } }} />
+            <button onClick={() => { if (name.trim()) { onAdd({ name: name.trim(), color, note: note.trim() }); setName(""); setNote(""); } }} className="flex shrink-0 items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white"><Plus size={14} /> Thêm</button>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400">Sửa tên trực tiếp trong ô · bấm chấm màu để đổi màu.</p>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (tuỳ chọn) — gồm những khoản gì…" className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs" />
+          <p className="mt-2 text-[11px] text-slate-400">Sửa tên/ghi chú trực tiếp · bấm chấm màu để đổi màu.</p>
         </div>
       </div>
     </div>

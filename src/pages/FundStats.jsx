@@ -74,14 +74,10 @@ function Kpi({ icon: Icon, label, value, prev, compare, sub, money = true, tone 
 
 // Gợi ý danh mục theo từ khoá trong nội dung (chỉ trả về danh mục ĐANG CÓ).
 const GUESS = [
-  [/ăn|uống|chợ|\bcf\b|cà phê|cafe|nhậu|quán|cơm|phở/i, "Ăn uống"],
-  [/trọ|tiền nhà|điện|nước|internet|wifi|đth|điện thoại|nạp|\bsim\b|cước/i, "Hoá đơn"],
-  [/viện|bệnh|thuốc|khám|nha khoa/i, "Sức khoẻ"],
-  [/sữa|bỉm|\bcon\b|học|trường|mầm non/i, "gia đình"],
-  [/xăng|grab|taxi|vé xe|gửi xe|đổ xăng/i, "Đi lại"],
-  [/máy|mua sắm|quần áo|giày|đồ dùng/i, "Mua sắm"],
-  [/du lịch|resort|\btour\b|khách sạn|vé máy bay/i, "Du lịch"],
-  [/phim|game|giải trí|\bnhạc\b/i, "Giải trí"],
+  [/viện|bệnh|thuốc|khám|nha khoa|bảo hiểm/i, "Sức Khoẻ"],
+  [/trọ|tiền nhà|điện|nước|internet|wifi|đth|điện thoại|nạp|\bsim\b|cước|gửi xe|xăng|grab|taxi|vé xe|đổ xăng/i, "Hoá Đơn"],
+  [/biếu|bố mẹ|ông bà|\bnội\b|\bngoại\b|sữa|bỉm|\bcon\b|học|trường|mầm non/i, "Gia Đình"],
+  [/ăn|uống|chợ|\bcf\b|cà phê|cafe|nhậu|quán|cơm|phở|mua sắm|quần áo|giày|đồ dùng|\bmáy\b|\bsắm\b|du lịch|resort|\btour\b|khách sạn|vé máy bay/i, "Chi Tiêu"],
 ];
 function guessCat(note, cats) {
   const n = (note || "").toLowerCase();

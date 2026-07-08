@@ -39,14 +39,11 @@ export const SEED_FUNDS = [
 export const SEED_FUND_TX = [];
 // Danh mục chi tiêu (gắn vào khoản CHI). spendCat: { id, name, color }
 export const SEED_SPEND_CATS = [
-  { id: "sc-food", name: "Ăn uống", color: "amber" },
-  { id: "sc-move", name: "Đi lại", color: "indigo" },
-  { id: "sc-shop", name: "Mua sắm", color: "rose" },
-  { id: "sc-bill", name: "Hoá đơn", color: "violet" },
-  { id: "sc-travel", name: "Du lịch", color: "sky" },
-  { id: "sc-health", name: "Sức khoẻ", color: "emerald" },
-  { id: "sc-fun", name: "Giải trí", color: "pink" },
-  { id: "sc-other", name: "Khác", color: "slate" },
+  { id: "sc-chitieu", name: "Chi Tiêu", color: "amber", note: "Ăn uống, Mua sắm, Đi chợ, Du lịch" },
+  { id: "sc-suckhoe", name: "Sức Khoẻ", color: "emerald", note: "Thuốc, Bệnh viện, Bảo hiểm" },
+  { id: "sc-hoadon", name: "Hoá Đơn", color: "violet", note: "Điện, Nước, Gửi xe, Tiền nhà, Đi lại…" },
+  { id: "sc-giadinh", name: "Gia Đình", color: "rose", note: "Biếu bố mẹ, Ông bà" },
+  { id: "sc-khac", name: "Khác", color: "slate", note: "Khoản chi khác" },
 ];
 // Lịch chuyển quỹ định kỳ. schedule: { id, fromId, toId, amount, every: "week"|"2week"|"month", startDate, note, active, lastDone }
 // Chế độ "nhắc + xác nhận": đến hạn hiện banner, user bấm "Chuyển ngay" mới thực hiện. lastDone = ISO kỳ gần nhất đã xử lý.

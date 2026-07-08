@@ -47,6 +47,20 @@ function migrate(s) {
   }
   // Danh mục chi tiêu: lần đầu (chưa có key) → nạp bộ mẫu; đã có → giữ nguyên
   if (!Array.isArray(merged.spendCats)) merged.spendCats = s.spendCats === undefined ? SEED_SPEND_CATS : [];
+  // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
+  // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
+  if (!merged.catsV5) {
+    const CAT_MAP = {
+      "Ăn uống": "Chi Tiêu", "Mua sắm": "Chi Tiêu", "Du lịch": "Chi Tiêu", "Giải trí": "Chi Tiêu", "Đi chợ": "Chi Tiêu",
+      "Đi lại": "Hoá Đơn", "Hoá đơn": "Hoá Đơn",
+      "Sức khoẻ": "Sức Khoẻ",
+      "gia đình": "Gia Đình", "Gia đình": "Gia Đình",
+      "Khác": "Khác",
+    };
+    merged.fundTx = (merged.fundTx || []).map((t) => (t.cat ? { ...t, cat: CAT_MAP[t.cat] || t.cat } : t));
+    merged.spendCats = SEED_SPEND_CATS;
+    merged.catsV5 = true;
+  }
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
