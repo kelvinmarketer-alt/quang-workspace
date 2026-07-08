@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard } from "lucide-react";
+import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange } from "../lib/selectors.js";
@@ -80,6 +80,15 @@ function KetoanReport() {
 
   const list = useMemo(() => installmentsInRange(projects, from, to), [projects, from, to]);
   const cur = useMemo(() => sumInstallments(list), [list]);
+  // Gom phiếu thu theo THÁNG (mới → cũ) để hiển thị dạng xổ
+  const monthLbl = (m) => { const [y, mo] = m.split("-"); return mo ? `Tháng ${Number(mo)}/${y}` : m; };
+  const byMonth = useMemo(() => {
+    const map = new Map();
+    for (const x of list) { const m = (x.date || "").slice(0, 7) || "—"; if (!map.has(m)) map.set(m, []); map.get(m).push(x); }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([month, items]) => ({ month, items, count: items.length, revenue: items.reduce((a, x) => a + x.revenue, 0), grossProfit: items.reduce((a, x) => a + x.grossProfit, 0), debt: items.reduce((a, x) => a + x.debt, 0) }));
+  }, [list]);
+  const [openMonths, setOpenMonths] = useState(() => { const latest = list.reduce((mx, x) => { const m = (x.date || "").slice(0, 7); return m > mx ? m : mx; }, ""); return new Set(latest ? [latest] : []); });
+  const toggleMonth = (m) => setOpenMonths((prev) => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n; });
   const prevSum = useMemo(() => sumInstallments(installmentsInRange(projects, prev.from, prev.to)), [projects, prev.from, prev.to]);
   const series = useMemo(() => monthlySeriesInRange(projects, from, to).map((m) => ({ name: "Th" + m.key.slice(5), dt: m.revenue, ln: m.grossProfit })), [projects, from, to]);
   const opCost = useMemo(() => expensesInRange(expenses, from, to), [expenses, from, to]);
@@ -203,25 +212,42 @@ function KetoanReport() {
           <h2 className="text-base font-extrabold text-slate-900">Chi tiết phiếu thu</h2>
           <Badge tone="slate">{cur.count} đợt</Badge>
         </div>
-        {/* MOBILE: thẻ phiếu thu */}
-        <div className="space-y-2 px-4 pb-4 sm:hidden">
+        {/* MOBILE: nhóm theo tháng */}
+        <div className="space-y-3 px-4 pb-4 sm:hidden">
           {list.length === 0 && <div className="py-8 text-center text-sm text-slate-400">Chưa có phiếu thu nào trong kỳ này.</div>}
-          {list.map((x) => (
-            <div key={x.id} className="rounded-xl border border-slate-100 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-bold text-slate-800">{x.customerName}</span></div>
-                  <div className="truncate text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
-                  <div className="text-[11px] text-slate-400">{fmtDateVI(x.date)}{x.isAds && x.spend ? ` · chạy ${formatShort(x.spend)}` : ""}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-sm font-extrabold text-indigo-600">{formatShort(x.revenue)}</div>
-                  <div className="text-[11px] font-bold text-emerald-600">LN {formatShort(x.grossProfit)}</div>
-                  <div className={`text-[11px] font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? `nợ ${formatShort(x.debt)}` : "đủ"}</div>
-                </div>
+          {byMonth.map((g) => {
+            const open = openMonths.has(g.month);
+            return (
+              <div key={g.month} className="overflow-hidden rounded-xl border border-slate-100">
+                <button onClick={() => toggleMonth(g.month)} className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
+                  <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                  <span className="text-sm font-extrabold text-slate-700">{monthLbl(g.month)}</span>
+                  <Badge tone="slate">{g.count}</Badge>
+                  <span className="ml-auto text-xs font-bold"><span className="text-indigo-600">{formatShort(g.revenue)}</span> · <span className="text-emerald-600">LN {formatShort(g.grossProfit)}</span></span>
+                </button>
+                {open && (
+                  <div className="space-y-2 border-t border-slate-100 p-2">
+                    {g.items.map((x) => (
+                      <div key={x.id} className="rounded-xl border border-slate-100 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-bold text-slate-800">{x.customerName}</span></div>
+                            <div className="truncate text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
+                            <div className="text-[11px] text-slate-400">{fmtDateVI(x.date)}{x.isAds && x.spend ? ` · chạy ${formatShort(x.spend)}` : ""}</div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-sm font-extrabold text-indigo-600">{formatShort(x.revenue)}</div>
+                            <div className="text-[11px] font-bold text-emerald-600">LN {formatShort(x.grossProfit)}</div>
+                            <div className={`text-[11px] font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? `nợ ${formatShort(x.debt)}` : "đủ"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {list.length > 0 && (
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-extrabold text-slate-700">
               <span>Tổng {cur.count} đợt</span>
@@ -247,21 +273,38 @@ function KetoanReport() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {list.length === 0 && <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-slate-400">Chưa có phiếu thu nào trong kỳ này.</td></tr>}
-              {list.map((x) => (
-                <tr key={x.id} className="hover:bg-slate-50/70">
-                  <td className="px-5 py-3 whitespace-nowrap text-slate-500">{fmtDateVI(x.date)}</td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="font-semibold text-slate-700">{x.customerName}</span></div>
-                    <div className="text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
-                  </td>
-                  <td className="px-3 py-3 text-right font-semibold text-slate-700">{formatShort(x.contractValue)}</td>
-                  <td className="px-3 py-3 text-right text-slate-400">{x.isAds ? formatShort(x.spend) : "—"}</td>
-                  <td className="px-3 py-3 text-right text-sky-600">{x.platformDiscount ? formatShort(x.platformDiscount) : "—"}</td>
-                  <td className="px-3 py-3 text-right font-bold text-indigo-600">{formatShort(x.revenue)}</td>
-                  <td className="px-3 py-3 text-right font-bold text-emerald-600">{formatShort(x.grossProfit)}</td>
-                  <td className={`px-3 py-3 text-right font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? formatShort(x.debt) : "0"}</td>
-                </tr>
-              ))}
+              {byMonth.map((g) => {
+                const open = openMonths.has(g.month);
+                return (
+                  <Fragment key={g.month}>
+                    <tr className="cursor-pointer border-b border-slate-100 bg-slate-50/50 hover:bg-slate-50" onClick={() => toggleMonth(g.month)}>
+                      <td colSpan={8} className="px-5 py-2">
+                        <div className="flex items-center gap-2.5">
+                          <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                          <span className="text-sm font-extrabold text-slate-700">{monthLbl(g.month)}</span>
+                          <Badge tone="slate">{g.count} đợt</Badge>
+                          <span className="ml-auto flex gap-4 text-xs font-bold"><span className="text-indigo-600">DT {formatShort(g.revenue)}</span><span className="text-emerald-600">LN {formatShort(g.grossProfit)}</span>{g.debt > 0 && <span className="text-rose-600">nợ {formatShort(g.debt)}</span>}</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {open && g.items.map((x) => (
+                      <tr key={x.id} className="hover:bg-slate-50/70">
+                        <td className="px-5 py-3 whitespace-nowrap text-slate-500">{fmtDateVI(x.date)}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="font-semibold text-slate-700">{x.customerName}</span></div>
+                          <div className="text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
+                        </td>
+                        <td className="px-3 py-3 text-right font-semibold text-slate-700">{formatShort(x.contractValue)}</td>
+                        <td className="px-3 py-3 text-right text-slate-400">{x.isAds ? formatShort(x.spend) : "—"}</td>
+                        <td className="px-3 py-3 text-right text-sky-600">{x.platformDiscount ? formatShort(x.platformDiscount) : "—"}</td>
+                        <td className="px-3 py-3 text-right font-bold text-indigo-600">{formatShort(x.revenue)}</td>
+                        <td className="px-3 py-3 text-right font-bold text-emerald-600">{formatShort(x.grossProfit)}</td>
+                        <td className={`px-3 py-3 text-right font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? formatShort(x.debt) : "0"}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
             {list.length > 0 && (
               <tfoot>

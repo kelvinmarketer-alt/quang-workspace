@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Plus, X, Trash2, Pencil, Repeat, Power, CheckSquare, Square, CreditCard, TrendingDown, Layers, CalendarClock } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { Plus, X, Trash2, Pencil, Repeat, Power, CheckSquare, Square, CreditCard, TrendingDown, Layers, CalendarClock, ChevronDown } from "lucide-react";
 import { Card, StatCard, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { EXPENSE_CATEGORIES } from "../data/seed.js";
@@ -78,6 +78,51 @@ export default function Expenses() {
 
   const counts = useMemo(() => { const c = {}; for (const e of expenses || []) c[e.category] = (c[e.category] || 0) + 1; return c; }, [expenses]);
 
+  // Gom theo CHU KỲ (Hằng tháng → Hằng năm → 1 lần), mỗi nhóm có tổng burn/tháng
+  const REC_ORDER = ["monthly", "yearly", "once"];
+  const byRec = useMemo(() => {
+    const map = new Map();
+    for (const e of rows) { const k = e.recurring || "monthly"; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
+    return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + monthEquiv(e), 0) }; });
+  }, [rows]);
+  const [openRec, setOpenRec] = useState(() => new Set(["monthly", "yearly", "once"]));
+  const toggleRec = (k) => setOpenRec((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const renderCard = (e) => {
+    const off = e.active === false, isPicked = picked.has(e.id);
+    return (
+      <div key={e.id} className={`flex items-center gap-2.5 p-3 ${isPicked ? "bg-indigo-50/60" : ""} ${off ? "opacity-50" : ""}`}>
+        <button onClick={() => toggle(e.id)} className="shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-bold text-slate-800">{e.name}{off && <span className="ml-1 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>
+          <div className="mt-0.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
+          {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
+          <div className="mt-1 flex justify-end gap-2">
+            <button onClick={() => setModal(e)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
+            <button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  const renderDeskRow = (e) => {
+    const off = e.active === false, isPicked = picked.has(e.id);
+    return (
+      <tr key={e.id} className={`group border-b border-slate-50 ${isPicked ? "bg-indigo-50/70" : ""} ${off ? "opacity-50" : ""}`}>
+        <td className="px-2 py-2.5"><button onClick={() => toggle(e.id)} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button></td>
+        <td className="px-2 py-2.5"><div className="font-semibold text-slate-800">{e.name}{off && <span className="ml-1.5 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>{e.note && <div className="text-[11px] text-slate-400">{e.note}</div>}</td>
+        <td className="px-2 py-2.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></td>
+        <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
+        <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
+        <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}</td>
+        <td className="px-2 py-2.5 text-right"><span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100"><button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button><button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button></span></td>
+      </tr>
+    );
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -115,65 +160,52 @@ export default function Expenses() {
           <div className="py-12 text-center"><CreditCard size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có chi phí nào</div><div className="mt-1 text-xs text-slate-400">Thêm các khoản chi vận hành: phần mềm AI, tool, hosting, quảng cáo…</div></div>
         ) : (
           <>
-            {/* MOBILE: danh sách thẻ */}
-            <div className="mt-4 space-y-2 sm:hidden">
-              {rows.map((e) => {
-                const off = e.active === false;
-                const isPicked = picked.has(e.id);
-                const [rl, rt] = REC[e.recurring] || REC.monthly;
+            {/* MOBILE: nhóm theo chu kỳ */}
+            <div className="mt-4 space-y-3 sm:hidden">
+              {byRec.map((g) => {
+                const open = openRec.has(g.rec);
+                const [rl, rt] = REC[g.rec] || REC.monthly;
                 return (
-                  <div key={e.id} className={`flex items-center gap-2.5 rounded-xl border p-3 ${isPicked ? "border-indigo-300 bg-indigo-50/60" : "border-slate-100"} ${off ? "opacity-50" : ""}`}>
-                    <button onClick={() => toggle(e.id)} className="shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-slate-800">{e.name}{off && <span className="ml-1 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1">
-                        <Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge>
-                        <Badge tone={rt}>{rl}</Badge>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
-                      {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
-                      <div className="mt-1 flex justify-end gap-2">
-                        <button onClick={() => setModal(e)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
-                        <button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
-                      </div>
-                    </div>
+                  <div key={g.rec} className="overflow-hidden rounded-xl border border-slate-100">
+                    <button onClick={() => toggleRec(g.rec)} className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
+                      <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                      <Badge tone={rt}>{rl}</Badge>
+                      <span className="text-xs font-bold text-slate-400">{g.count} khoản</span>
+                      <span className="ml-auto text-sm font-extrabold text-rose-600">{g.burn ? `~${formatShort(g.burn)}/th` : formatShort(g.total)}</span>
+                    </button>
+                    {open && <div className="divide-y divide-slate-50 border-t border-slate-100">{g.items.map((e) => renderCard(e))}</div>}
                   </div>
                 );
               })}
             </div>
 
-            {/* DESKTOP: bảng */}
+            {/* DESKTOP: bảng nhóm theo chu kỳ */}
             <div className="mt-4 hidden overflow-x-auto sm:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
-                    <th className="w-8 px-2 py-2"></th><th className="px-2 py-2">Khoản chi</th><th className="px-2 py-2">Danh mục</th><th className="px-2 py-2">Chu kỳ</th>
+                    <th className="w-8 px-2 py-2"></th><th className="px-2 py-2">Khoản chi</th><th className="px-2 py-2">Danh mục</th>
                     <th className="px-2 py-2 text-right">Số tiền</th><th className="px-2 py-2 text-right">~ / tháng</th><th className="px-2 py-2">Từ</th><th className="px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((e) => {
-                    const off = e.active === false;
-                    const isPicked = picked.has(e.id);
-                    const [rl, rt] = REC[e.recurring] || REC.monthly;
+                  {byRec.map((g) => {
+                    const open = openRec.has(g.rec);
+                    const [rl, rt] = REC[g.rec] || REC.monthly;
                     return (
-                      <tr key={e.id} className={`group border-b border-slate-50 ${isPicked ? "bg-indigo-50/70" : ""} ${off ? "opacity-50" : ""}`}>
-                        <td className="px-2 py-2.5"><button onClick={() => toggle(e.id)} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button></td>
-                        <td className="px-2 py-2.5"><div className="font-semibold text-slate-800">{e.name}{off && <span className="ml-1.5 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>{e.note && <div className="text-[11px] text-slate-400">{e.note}</div>}</td>
-                        <td className="px-2 py-2.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></td>
-                        <td className="px-2 py-2.5"><Badge tone={rt}>{rl}</Badge></td>
-                        <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
-                        <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
-                        <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}</td>
-                        <td className="px-2 py-2.5 text-right">
-                          <span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-                            <button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                            <button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
-                          </span>
-                        </td>
-                      </tr>
+                      <Fragment key={g.rec}>
+                        <tr className="cursor-pointer border-b border-slate-100 bg-slate-50/50 hover:bg-slate-50" onClick={() => toggleRec(g.rec)}>
+                          <td colSpan={7} className="px-3 py-2">
+                            <div className="flex items-center gap-2.5">
+                              <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                              <Badge tone={rt}>{rl}</Badge>
+                              <span className="text-xs font-bold text-slate-400">{g.count} khoản</span>
+                              <span className="ml-auto text-sm font-extrabold text-rose-600">{g.burn ? `~${formatShort(g.burn)}/th` : formatShort(g.total)}</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {open && g.items.map((e) => renderDeskRow(e))}
+                      </Fragment>
                     );
                   })}
                 </tbody>
