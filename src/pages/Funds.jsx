@@ -4,7 +4,7 @@ import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, S
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
-import { fundBalance, monthlyGrossProfit, monthlyFundInflow, grossProfitToDate, projectYears, expensesInRange } from "../lib/selectors.js";
+import { fundBalance, monthlyGrossProfit, monthlyOpex, monthlyFundInflow, grossProfitToDate, projectYears, expensesInRange } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
 
@@ -543,8 +543,10 @@ export default function Funds() {
   const pctTotal = personalFunds.reduce((a, f) => a + (Number(f.percent) || 0), 0);
 
   const gpMonths = useMemo(() => monthlyGrossProfit(projects, year), [projects, year]);
+  const opexMonths = useMemo(() => monthlyOpex(expenses, year), [expenses, year]);
   const inflow = useMemo(() => monthlyFundInflow(fundTx, year, companyFund?.id), [fundTx, year, companyFund?.id]);
   const gpYear = gpMonths.reduce((a, b) => a + b, 0);
+  const opexYear = opexMonths.reduce((a, b) => a + b, 0);
 
   // Bảng theo tháng: LN gộp vs phân bổ ra từng quỹ cá nhân
   const monthRows = useMemo(() => {
@@ -552,10 +554,12 @@ export default function Funds() {
     for (let i = 0; i < 12; i++) {
       const fundVals = personalFunds.map((f) => (inflow.byFund[f.id] || [])[i] || 0);
       const alloc = fundVals.reduce((a, b) => a + b, 0);
-      if (gpMonths[i] || alloc) rows.push({ i, income: gpMonths[i], alloc, fundVals });
+      const opex = opexMonths[i] || 0;
+      const net = gpMonths[i] - opex; // lợi nhuận ròng tháng = LN gộp − chi phí vận hành
+      if (gpMonths[i] || alloc || opex) rows.push({ i, income: gpMonths[i], opex, net, alloc, fundVals });
     }
     return rows;
-  }, [personalFunds, inflow, gpMonths]);
+  }, [personalFunds, inflow, gpMonths, opexMonths]);
   const allocYear = monthRows.reduce((a, r) => a + r.alloc, 0);
 
   // Biểu đồ: LN gộp vs đã phân bổ theo tháng
@@ -607,7 +611,7 @@ export default function Funds() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">
             {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
           </select>
-          <div className="text-sm font-semibold text-slate-400">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span> · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
+          <div className="text-sm font-semibold text-slate-400">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
         </div>
       </Card>
 
@@ -752,13 +756,14 @@ export default function Funds() {
           {/* MOBILE: thẻ từng tháng (gọn, không kéo ngang) */}
           <div className="space-y-2 px-4 pb-4 sm:hidden">
             {monthRows.map((r) => {
-              const rem = r.income - r.alloc;
+              const rem = r.net - r.alloc;
               return (
                 <div key={r.i} className="rounded-xl border border-slate-100 p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-extrabold text-slate-800">Tháng {r.i + 1}</span>
                     <span className="text-sm font-bold text-indigo-600">LN gộp {formatShort(r.income)}</span>
                   </div>
+                  {r.opex > 0 && <div className="mt-1 text-[11px] font-semibold text-rose-500">− CP vận hành {formatShort(r.opex)} → ròng {formatShort(r.net)}</div>}
                   {r.alloc > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {personalFunds.map((f, j) => (r.fundVals[j] > 0 ? (
@@ -768,13 +773,13 @@ export default function Funds() {
                       ) : null))}
                     </div>
                   )}
-                  <div className="mt-2 text-[11px] font-bold">{rem > 0 ? <span className="text-amber-600">Chưa chia {formatShort(rem)}</span> : <span className="text-emerald-600">✓ Đã chia hết</span>}</div>
+                  <div className="mt-2 text-[11px] font-bold">{rem > 0 ? <span className="text-amber-600">Chưa chia {formatShort(rem)}</span> : rem < 0 ? <span className="text-rose-600">Thiếu {formatShort(-rem)}</span> : <span className="text-emerald-600">✓ Đã chia hết</span>}</div>
                 </div>
               );
             })}
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-extrabold text-slate-700">
               <span>Cả năm {year}</span>
-              <span>LN gộp {formatShort(gpYear)} · tồn {formatShort(Math.max(0, gpYear - allocYear))}</span>
+              <span>LN gộp {formatShort(gpYear)}{opexYear > 0 ? ` − CP ${formatShort(opexYear)}` : ""} · tồn {formatShort(Math.max(0, gpYear - opexYear - allocYear))}</span>
             </div>
           </div>
 
@@ -785,26 +790,32 @@ export default function Funds() {
                 <tr className="border-y border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
                   <th className="px-4 py-2.5 sm:px-5">Tháng</th>
                   <th className="px-3 py-2.5 text-right">LN gộp</th>
+                  <th className="px-3 py-2.5 text-right">CP vận hành</th>
                   {personalFunds.map((f) => <th key={f.id} className="px-3 py-2.5 text-right"><span className="inline-flex items-center gap-1"><span className={`h-2 w-2 rounded-full ${TONE_BG[f.color] || "bg-slate-400"}`} />{f.name}</span></th>)}
                   <th className="px-3 py-2.5 text-right">Tồn (chưa chia)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {monthRows.map((r) => (
+                {monthRows.map((r) => {
+                  const rem = r.net - r.alloc;
+                  return (
                   <tr key={r.i} className="hover:bg-slate-50/70">
                     <td className="whitespace-nowrap px-4 py-3 font-bold text-slate-700 sm:px-5">Tháng {r.i + 1}</td>
                     <td className="px-3 py-3 text-right font-bold text-indigo-600">{formatShort(r.income)}</td>
+                    <td className="px-3 py-3 text-right text-rose-500">{r.opex ? "−" + formatShort(r.opex) : "—"}</td>
                     {r.fundVals.map((v, j) => <td key={j} className="px-3 py-3 text-right text-slate-600">{v ? formatShort(v) : "—"}</td>)}
-                    <td className={`px-3 py-3 text-right font-bold ${r.income - r.alloc > 0 ? "text-amber-600" : "text-slate-300"}`}>{r.income - r.alloc > 0 ? formatShort(r.income - r.alloc) : "0"}</td>
+                    <td className={`px-3 py-3 text-right font-bold ${rem > 0 ? "text-amber-600" : rem < 0 ? "text-rose-600" : "text-slate-300"}`}>{rem > 0 ? formatShort(rem) : rem < 0 ? "−" + formatShort(-rem) : "0"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-100 bg-slate-50/60 font-extrabold">
                   <td className="px-4 py-3 sm:px-5">Cả năm</td>
                   <td className="px-3 py-3 text-right text-indigo-600">{formatShort(gpYear)}</td>
+                  <td className="px-3 py-3 text-right text-rose-500">{opexYear ? "−" + formatShort(opexYear) : "—"}</td>
                   {personalFunds.map((f) => <td key={f.id} className="px-3 py-3 text-right text-slate-700">{formatShort((inflow.byFund[f.id] || []).reduce((a, b) => a + b, 0))}</td>)}
-                  <td className="px-3 py-3 text-right text-amber-600">{formatShort(Math.max(0, gpYear - allocYear))}</td>
+                  <td className="px-3 py-3 text-right text-amber-600">{formatShort(Math.max(0, gpYear - opexYear - allocYear))}</td>
                 </tr>
               </tfoot>
             </table>

@@ -273,6 +273,19 @@ export function monthlyGrossProfit(projects, year) {
   return out;
 }
 
+// Chi phí vận hành THỰC phát sinh theo từng tháng của 1 năm (chặn ở hôm nay — không tính kỳ tương lai).
+export function monthlyOpex(expenses, year) {
+  const out = Array.from({ length: 12 }, () => 0);
+  const now = Date.now();
+  for (let m = 0; m < 12; m++) {
+    if (new Date(year, m, 1).getTime() > now) break; // tháng tương lai: chưa phát sinh
+    const lastDay = new Date(year, m + 1, 0).getDate();
+    const mm = String(m + 1).padStart(2, "0");
+    out[m] = expensesInRange(expenses, `${year}-${mm}-01`, `${year}-${mm}-${String(lastDay).padStart(2, "0")}`).total;
+  }
+  return out;
+}
+
 // "Burn rate" — chi phí cố định quy ra mỗi tháng (monthly=amount, yearly=amount/12, once bỏ qua)
 export function monthlyOperatingCost(expenses) {
   return (expenses || []).filter((e) => e.active !== false).reduce((a, e) => {
