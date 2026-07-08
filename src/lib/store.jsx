@@ -260,6 +260,12 @@ export function DataProvider({ children }) {
       // Ghi NHIỀU giao dịch cùng lúc (vd chi từ nhiều ảnh biên lai)
       addFundTxMany: (arr) =>
         setState((s) => ({ ...s, fundTx: [...(arr || []).map((tx) => ({ id: "ft" + uid(), type: "out", ...tx })), ...(s.fundTx || [])] })),
+      // Sửa 1 giao dịch quỹ (vd gắn/đổi danh mục chi)
+      updateFundTx: (id, patch) =>
+        setState((s) => ({ ...s, fundTx: (s.fundTx || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
+      // Gắn danh mục HÀNG LOẠT cho các khoản chi: map { [txId]: "Tên danh mục" }
+      categorizeFundTx: (map) =>
+        setState((s) => ({ ...s, fundTx: (s.fundTx || []).map((t) => (map && map[t.id] != null ? { ...t, cat: map[t.id] } : t)) })),
       // DANH MỤC CHI TIÊU
       addSpendCat: (c) =>
         setState((s) => ({ ...s, spendCats: [...(s.spendCats || []), { id: "sc" + uid(), color: "slate", ...c }] })),

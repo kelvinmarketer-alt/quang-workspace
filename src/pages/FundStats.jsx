@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
-import { Receipt, Layers, Tag, ArrowUp, ArrowDown, PiggyBank, Wallet } from "lucide-react";
+import { Receipt, Layers, Tag, Tags, ArrowUp, ArrowDown, PiggyBank, Wallet, Sparkles, Plus, Check, X } from "lucide-react";
 import { Card, SectionTitle, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { fundSpends } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
+import { FUND_COLORS } from "../data/seed.js";
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const UNCAT = "Chưa phân loại";
@@ -71,8 +72,99 @@ function Kpi({ icon: Icon, label, value, prev, compare, sub, money = true, tone 
   );
 }
 
+// Gợi ý danh mục theo từ khoá trong nội dung (chỉ trả về danh mục ĐANG CÓ).
+const GUESS = [
+  [/ăn|uống|chợ|\bcf\b|cà phê|cafe|nhậu|quán|cơm|phở/i, "Ăn uống"],
+  [/trọ|tiền nhà|điện|nước|internet|wifi|đth|điện thoại|nạp|\bsim\b|cước/i, "Hoá đơn"],
+  [/viện|bệnh|thuốc|khám|nha khoa/i, "Sức khoẻ"],
+  [/sữa|bỉm|\bcon\b|học|trường|mầm non/i, "gia đình"],
+  [/xăng|grab|taxi|vé xe|gửi xe|đổ xăng/i, "Đi lại"],
+  [/máy|mua sắm|quần áo|giày|đồ dùng/i, "Mua sắm"],
+  [/du lịch|resort|\btour\b|khách sạn|vé máy bay/i, "Du lịch"],
+  [/phim|game|giải trí|\bnhạc\b/i, "Giải trí"],
+];
+function guessCat(note, cats) {
+  const n = (note || "").toLowerCase();
+  for (const [re, name] of GUESS) {
+    if (re.test(n) && (cats || []).some((c) => (c.name || "").toLowerCase() === name.toLowerCase())) return name;
+  }
+  return "";
+}
+
+/* ---- Modal gắn danh mục HÀNG LOẠT cho các khoản chi chưa phân loại ---- */
+function CategorizeModal({ rows, funds, cats, onAddCat, onSave, onClose }) {
+  const [assign, setAssign] = useState({}); // { [txId]: "Tên danh mục" }
+  const [bulk, setBulk] = useState("");
+  const [newCat, setNewCat] = useState("");
+  const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "Quỹ";
+  const fundColor = (id) => (funds || []).find((f) => f.id === id)?.color || "slate";
+  const catColor = (name) => (cats || []).find((c) => c.name === name)?.color || "slate";
+  const set = (id, v) => setAssign((p) => ({ ...p, [id]: v }));
+  const autoGuess = () => setAssign((p) => { const n = { ...p }; for (const r of rows) if (!n[r.id]) { const g = guessCat(r.note, cats); if (g) n[r.id] = g; } return n; });
+  const applyBlank = () => { if (!bulk) return; setAssign((p) => { const n = { ...p }; for (const r of rows) if (!n[r.id]) n[r.id] = bulk; return n; }); };
+  const addCat = () => { const nm = newCat.trim(); if (nm && !(cats || []).some((c) => (c.name || "").toLowerCase() === nm.toLowerCase())) onAddCat({ name: nm, color: FUND_COLORS[(cats?.length || 0) % FUND_COLORS.length] }); setNewCat(""); };
+  const done = Object.values(assign).filter(Boolean).length;
+  const save = () => { const map = {}; for (const [id, v] of Object.entries(assign)) if (v) map[id] = v; if (Object.keys(map).length) onSave(map); onClose(); };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-extrabold"><Tags size={18} className="text-indigo-500" /> Gắn danh mục hàng loạt</h3>
+            <p className="mt-0.5 text-xs text-slate-400">{rows.length} khoản chưa phân loại · bấm <b>Gợi ý tự động</b> rồi chỉnh lại</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="space-y-2 border-b border-slate-100 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={autoGuess} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-500 px-3 py-1.5 text-xs font-bold text-white shadow"><Sparkles size={13} /> Gợi ý tự động</button>
+            <select value={bulk} onChange={(e) => setBulk(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+              <option value="">— chọn danh mục —</option>
+              {(cats || []).map((c) => <option key={c.id || c.name} value={c.name}>{c.name}</option>)}
+            </select>
+            <button onClick={applyBlank} disabled={!bulk} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40">Áp cho dòng trống</button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Plus size={13} className="shrink-0 text-slate-400" />
+            <input value={newCat} onChange={(e) => setNewCat(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addCat(); }} placeholder="Thêm danh mục mới…" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+            <button onClick={addCat} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200">Thêm</button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="space-y-2">
+            {rows.map((r) => (
+              <div key={r.id} className="rounded-xl border border-slate-100 p-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-700">{r.note || "(không ghi chú)"}</span>
+                  <span className="shrink-0 text-sm font-extrabold text-rose-600">−{formatShort(r.amount)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500"><span className={`h-2 w-2 rounded-full ${TONE_BG[fundColor(r.fundId)] || "bg-slate-400"}`} />{fundName(r.fundId)}</span>
+                  <span className="text-[11px] text-slate-400">{fmtDateVI(r.date)}</span>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    {assign[r.id] && <span className={`h-2.5 w-2.5 rounded-full ${TONE_BG[catColor(assign[r.id])] || "bg-slate-400"}`} />}
+                    <select value={assign[r.id] || ""} onChange={(e) => set(r.id, e.target.value)} className={`rounded-lg border px-2 py-1 text-xs font-bold ${assign[r.id] ? "border-indigo-200 text-slate-700" : "border-slate-200 text-slate-400"}`}>
+                      <option value="">— chưa gắn —</option>
+                      {(cats || []).map((c) => <option key={c.id || c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-slate-100 p-4">
+          <span className="text-xs font-bold text-slate-500">{done}/{rows.length} đã gắn</span>
+          <button onClick={save} disabled={!done} className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40"><Check size={16} /> Lưu{done > 0 ? ` ${done}` : ""}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FundStats() {
-  const { fundTx, funds, spendCats } = useData();
+  const { fundTx, funds, spendCats, addSpendCat, categorizeFundTx } = useData();
   const now = new Date();
   const [preset, setPreset] = useState("thisMonth");
   const [cf, setCf] = useState(iso(new Date(now.getFullYear(), now.getMonth(), 1)));
@@ -86,6 +178,9 @@ export default function FundStats() {
 
   const spends = useMemo(() => fundSpends(fundTx), [fundTx]); // tự cập nhật theo mọi giao dịch chi
   const spendFundIds = useMemo(() => [...new Set(spends.map((t) => t.fundId))], [spends]);
+  const uncat = useMemo(() => spends.filter((t) => !t.cat).sort((a, b) => b.amount - a.amount), [spends]);
+  const uncatTotal = uncat.reduce((a, t) => a + t.amount, 0);
+  const [catOpen, setCatOpen] = useState(false);
   const { from, to } = periodFor(preset, cf, ct);
   const prev = prevPeriod(preset, from, to);
   const matchFund = (t) => fundId === "all" || t.fundId === fundId;
@@ -171,6 +266,17 @@ export default function FundStats() {
         )}
       </Card>
 
+      {uncat.length > 0 && (
+        <button onClick={() => setCatOpen(true)} className="flex w-full items-center gap-3 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-3.5 text-left transition hover:from-amber-100">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-400 text-white"><Tags size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-extrabold text-amber-800">{uncat.length} khoản chưa phân loại · {formatShort(uncatTotal)}</div>
+            <div className="text-[11px] font-medium text-amber-600">Gắn danh mục hàng loạt (có gợi ý tự động) để báo cáo biết tiền đi đâu</div>
+          </div>
+          <span className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white">Gắn danh mục</span>
+        </button>
+      )}
+
       {noneEver ? (
         <Card><div className="py-12 text-center"><Wallet size={30} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có khoản chi nào từ quỹ</div><div className="mt-1 text-xs text-slate-400">Bấm "Chi" ở một quỹ (hoặc ghi chi từ ảnh) để bắt đầu thống kê.</div></div></Card>
       ) : (
@@ -250,6 +356,8 @@ export default function FundStats() {
           )}
         </>
       )}
+
+      {catOpen && <CategorizeModal rows={uncat} funds={funds} cats={spendCats} onAddCat={addSpendCat} onSave={categorizeFundTx} onClose={() => setCatOpen(false)} />}
     </div>
   );
 }
