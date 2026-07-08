@@ -166,6 +166,50 @@ function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
   );
 }
 
+/* ---- Modal SỬA 1 giao dịch quỹ (nạp / chi / chuyển) ---- */
+function TxEditModal({ tx, fund, cats, onManage, onClose, onSave }) {
+  const isXfer = !!tx.xferId;
+  const [f, setF] = useState({ amount: String(tx.amount ?? ""), date: tx.date || todayISO(), note: tx.note || "", cat: tx.cat || "", type: tx.type === "out" ? "out" : "in" });
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const isIn = f.type === "in";
+  const save = () => {
+    if (num(f.amount) <= 0) return;
+    const patch = { amount: num(f.amount), date: f.date, note: f.note.trim() };
+    if (!isXfer) { patch.type = f.type; patch.cat = isIn ? "" : (f.cat || ""); }
+    onSave(tx.id, patch);
+    onClose();
+  };
+  return (
+    <div className="fixed inset-0 z-[55] grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-extrabold">Sửa giao dịch{fund ? ` · ${fund.name}` : ""}</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        {isXfer ? (
+          <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs font-semibold text-indigo-700">
+            <ArrowLeftRight size={15} className="mt-0.5 shrink-0" /> Phiếu chuyển quỹ 2 chiều — sửa số tiền/ngày sẽ áp cho CẢ 2 quỹ.
+          </div>
+        ) : (
+          <div className="mb-3 flex overflow-hidden rounded-xl border border-slate-200 text-sm font-bold">
+            <button type="button" onClick={() => set("type", "in")} className={`flex-1 py-2 ${isIn ? "bg-emerald-500 text-white" : "text-slate-500"}`}>Nạp</button>
+            <button type="button" onClick={() => set("type", "out")} className={`flex-1 py-2 ${!isIn ? "bg-rose-500 text-white" : "text-slate-500"}`}>Chi</button>
+          </div>
+        )}
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền *</span>
+          <MoneyInput value={f.amount} onChange={(v) => set("amount", v)} autoFocus className={inputCls} placeholder="2.000.000" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
+          <input type="date" value={f.date} onChange={(e) => set("date", e.target.value)} className={inputCls} /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
+          <input value={f.note} onChange={(e) => set("note", e.target.value)} className={inputCls} placeholder="Nội dung giao dịch" /></label>
+        {!isXfer && !isIn && <div className="mb-4"><SpendCatPicker cats={cats} value={f.cat} onChange={(v) => set("cat", v)} onManage={onManage} /></div>}
+        <button onClick={save} disabled={num(f.amount) <= 0} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">Lưu thay đổi</button>
+      </div>
+    </div>
+  );
+}
+
 /* ---- Modal chuyển tiền giữa 2 quỹ ---- */
 function TransferModal({ funds, initialFrom, onClose, onSave }) {
   const [from, setFrom] = useState(initialFrom || funds[0]?.id || "");
@@ -444,7 +488,7 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
 }
 
 /* ---- Chi tiết 1 quỹ + lịch sử giao dịch riêng ---- */
-function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose, onAdd, onImage, onTransfer, onDelTx }) {
+function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose, onAdd, onImage, onTransfer, onDelTx, onEditTx }) {
   const isCompany = fund.role === "company";
   const txs = (fundTx || []).filter((t) => t.fundId === fund.id);
   const totalIn = txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0) + autoCredit;
@@ -500,7 +544,12 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose
                       <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
                       <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
                     </div>
-                    {t.synthetic ? <span className="w-7 shrink-0" /> : <button onClick={() => onDelTx(t.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>}
+                    {t.synthetic ? <span className="w-7 shrink-0" /> : (
+                      <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
+                        <button onClick={() => onEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+                        <button onClick={() => onDelTx(t.id)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -513,7 +562,7 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose
 }
 
 function FundsMain() {
-  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
+  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -525,6 +574,7 @@ function FundsMain() {
   const [schedModal, setSchedModal] = useState(null); // null | {} | schedule
   const [detailId, setDetailId] = useState(null); // quỹ đang xem chi tiết
   const [imgFund, setImgFund] = useState(null); // quỹ đang chi từ ảnh
+  const [editTx, setEditTx] = useState(null); // giao dịch quỹ đang sửa
   const [catMgr, setCatMgr] = useState(false); // mở quản lý danh mục chi
 
   const years = useMemo(() => {
@@ -849,7 +899,10 @@ function FundsMain() {
                     <div className="truncate text-[11px] text-slate-400">{fmtDateVI(t.date)}{t.note ? " · " + t.note : ""}</div>
                   </div>
                   <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
-                  <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 sm:opacity-0 sm:group-hover:opacity-100"><Trash2 size={14} /></button>
+                  <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
+                    <button onClick={() => setEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+                    <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                  </span>
                 </div>
               );
             })}
@@ -858,10 +911,11 @@ function FundsMain() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} />}
+      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
       {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTx} />}
+      {editTx && <TxEditModal key={editTx.id} tx={editTx} fund={(funds || []).find((f) => f.id === editTx.fundId)} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setEditTx(null)} onSave={updateFundTx} />}
       {catMgr && <SpendCatManager cats={spendCats} onAdd={addSpendCat} onUpdate={updateSpendCat} onDelete={deleteSpendCat} onClose={() => setCatMgr(false)} />}
       {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}
       {transferInit && <TransferModal funds={allWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}

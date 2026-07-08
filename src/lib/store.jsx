@@ -274,9 +274,20 @@ export function DataProvider({ children }) {
       // Ghi NHIỀU giao dịch cùng lúc (vd chi từ nhiều ảnh biên lai)
       addFundTxMany: (arr) =>
         setState((s) => ({ ...s, fundTx: [...(arr || []).map((tx) => ({ id: "ft" + uid(), type: "out", ...tx })), ...(s.fundTx || [])] })),
-      // Sửa 1 giao dịch quỹ (vd gắn/đổi danh mục chi)
+      // Sửa 1 giao dịch quỹ. Nếu là phiếu CHUYỂN (có xferId) thì đồng bộ số tiền + ngày cho CẢ 2 chiều.
       updateFundTx: (id, patch) =>
-        setState((s) => ({ ...s, fundTx: (s.fundTx || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
+        setState((s) => {
+          const list = s.fundTx || [];
+          const tx = list.find((t) => t.id === id);
+          if (!tx) return s;
+          const sib = {}; // patch cho phiếu đối ứng của cặp chuyển (chỉ số tiền/ngày)
+          if (tx.xferId) { if (patch.amount != null) sib.amount = patch.amount; if (patch.date != null) sib.date = patch.date; }
+          return { ...s, fundTx: list.map((t) => {
+            if (t.id === id) return { ...t, ...patch };
+            if (tx.xferId && t.id !== id && t.xferId === tx.xferId) return { ...t, ...sib };
+            return t;
+          }) };
+        }),
       // Gắn danh mục HÀNG LOẠT cho các khoản chi: map { [txId]: "Tên danh mục" }
       categorizeFundTx: (map) =>
         setState((s) => ({ ...s, fundTx: (s.fundTx || []).map((t) => (map && map[t.id] != null ? { ...t, cat: map[t.id] } : t)) })),
