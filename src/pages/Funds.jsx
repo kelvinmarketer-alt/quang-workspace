@@ -142,25 +142,51 @@ function FundModal({ initial, onClose, onSave }) {
 }
 
 /* ---- Modal nạp / rút 1 quỹ ---- */
+// Nạp / Chi — nhập NHIỀU khoản cùng lúc rồi lưu 1 lần
 function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
-  const [f, setF] = useState({ amount: "", date: todayISO(), note: "", cat: "" });
   const isIn = type === "in";
+  const blank = () => ({ key: "r" + Math.random().toString(36).slice(2, 8), amount: "", date: todayISO(), note: "", cat: "" });
+  const [rows, setRows] = useState([blank()]);
+  const setRow = (key, patch) => setRows((p) => p.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((p) => [...p, { ...blank(), date: p[p.length - 1]?.date || todayISO() }]);
+  const delRow = (key) => setRows((p) => (p.length > 1 ? p.filter((r) => r.key !== key) : p));
+  const valid = rows.filter((r) => num(r.amount) > 0);
+  const total = valid.reduce((a, r) => a + num(r.amount), 0);
+  const save = () => { if (!valid.length) return; onSave(valid.map((r) => ({ fundId: fund.id, amount: num(r.amount), date: r.date, type, note: r.note.trim() || (isIn ? "Nạp tiền" : "Khoản chi"), ...(isIn ? {} : { cat: r.cat || "" }) }))); onClose(); };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">{isIn ? "Nạp vào" : "Chi tiêu từ"} quỹ {fund.name}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền *</span>
-          <MoneyInput value={f.amount} onChange={(v) => setF((p) => ({ ...p, amount: v }))} autoFocus className={inputCls} placeholder="2.000.000" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
-          <input type="date" value={f.date} onChange={(e) => setF((p) => ({ ...p, date: e.target.value }))} className={inputCls} /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">{isIn ? "Ghi chú" : "Chi cho việc gì *"}</span>
-          <input value={f.note} onChange={(e) => setF((p) => ({ ...p, note: e.target.value }))} className={inputCls} placeholder={isIn ? "Nguồn tiền" : "VD: mua đồ, biếu bố mẹ, rút ra mặt…"} /></label>
-        {!isIn && <div className="mb-4"><SpendCatPicker cats={cats} value={f.cat} onChange={(v) => setF((p) => ({ ...p, cat: v }))} onManage={onManage} /></div>}
-        <button onClick={() => { if (num(f.amount) > 0) { onSave({ fundId: fund.id, amount: num(f.amount), date: f.date, type, note: f.note.trim(), ...(isIn ? {} : { cat: f.cat }) }); onClose(); } }} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>{isIn ? "Nạp tiền" : "Ghi khoản chi"}</button>
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+          {rows.map((r, i) => (
+            <div key={r.key} className="rounded-xl border border-slate-100 p-2.5">
+              <div className="flex items-center gap-2">
+                <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} autoFocus={i === 0} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-bold" placeholder="Số tiền *" />
+                <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+                {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <input value={r.note} onChange={(e) => setRow(r.key, { note: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs" placeholder={isIn ? "Nguồn tiền…" : "Chi cho việc gì…"} />
+                {!isIn && (
+                  <select value={r.cat} onChange={(e) => setRow(r.key, { cat: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-1.5 py-1.5 text-xs">
+                    <option value="">— DM —</option>
+                    {(cats || []).map((c) => <option key={c.id || c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+          ))}
+          <button onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm dòng</button>
+          {!isIn && <button type="button" onClick={onManage} className="mt-1 flex items-center gap-1 text-[11px] font-bold text-indigo-500 hover:underline"><Pencil size={11} /> Sửa danh mục</button>}
+        </div>
+        <div className="border-t border-slate-100 p-4">
+          {valid.length > 0 && <div className="mb-2 text-center text-xs font-bold text-slate-500">{valid.length} khoản · tổng <span className={isIn ? "text-emerald-600" : "text-rose-600"}>{isIn ? "+" : "−"}{formatShort(total)}</span></div>}
+          <button onClick={save} disabled={!valid.length} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40 ${isIn ? "bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30" : "bg-gradient-to-r from-rose-500 to-pink-500 shadow-rose-500/30"}`}>Lưu {valid.length || ""} khoản {isIn ? "nạp" : "chi"}</button>
+        </div>
       </div>
     </div>
   );
@@ -969,7 +995,7 @@ function FundsMain() {
       {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
       {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
-      {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTx} />}
+      {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTxMany} />}
       {editTx && <TxEditModal key={editTx.id} tx={editTx} fund={(funds || []).find((f) => f.id === editTx.fundId)} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setEditTx(null)} onSave={updateFundTx} />}
       {catMgr && <SpendCatManager cats={spendCats} onAdd={addSpendCat} onUpdate={updateSpendCat} onDelete={deleteSpendCat} onClose={() => setCatMgr(false)} />}
       {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}

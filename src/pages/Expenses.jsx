@@ -52,11 +52,54 @@ function ExpenseModal({ initial, onClose, onSave }) {
   );
 }
 
+// Thêm NHIỀU chi phí cùng lúc (nhập 1 loạt → lưu 1 lần)
+function ExpenseBatchModal({ onClose, onSave }) {
+  const blank = () => ({ key: "e" + Math.random().toString(36).slice(2, 8), name: "", category: EXPENSE_CATEGORIES[0], amount: "", recurring: "monthly", date: todayISO() });
+  const [rows, setRows] = useState([blank(), blank(), blank()]);
+  const setRow = (key, patch) => setRows((p) => p.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((p) => [...p, blank()]);
+  const delRow = (key) => setRows((p) => (p.length > 1 ? p.filter((r) => r.key !== key) : p));
+  const valid = rows.filter((r) => r.name.trim() && num(r.amount) > 0);
+  const save = () => { if (!valid.length) return; onSave(valid.map((r) => ({ name: r.name.trim(), category: r.category, amount: num(r.amount), recurring: r.recurring, date: r.date, active: true }))); onClose(); };
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
+          <div><h3 className="text-lg font-extrabold">Thêm nhiều chi phí</h3><p className="mt-0.5 text-xs text-slate-400">Nhập một loạt rồi lưu 1 lần</p></div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
+          {rows.map((r, i) => (
+            <div key={r.key} className="rounded-xl border border-slate-100 p-2.5">
+              <div className="flex items-center gap-2">
+                <input value={r.name} onChange={(e) => setRow(r.key, { name: e.target.value })} autoFocus={i === 0} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-semibold" placeholder="Tên khoản chi *" />
+                <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} className="w-28 shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-bold" placeholder="Số tiền *" />
+                {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <select value={r.category} onChange={(e) => setRow(r.key, { category: e.target.value })} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+                <select value={r.recurring} onChange={(e) => setRow(r.key, { recurring: e.target.value })} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{Object.entries(REC).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}</select>
+                <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              </div>
+            </div>
+          ))}
+          <button onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm dòng</button>
+        </div>
+        <div className="border-t border-slate-100 p-4">
+          <button onClick={save} disabled={!valid.length} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">Lưu {valid.length || ""} chi phí</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const monthEquiv = (e) => (e.recurring === "monthly" ? num(e.amount) : e.recurring === "yearly" ? num(e.amount) / 12 : 0);
 
 export default function Expenses() {
-  const { expenses, addExpense, updateExpense, deleteExpense, deleteExpensesMany } = useData();
+  const { expenses, addExpense, addExpensesMany, updateExpense, deleteExpense, deleteExpensesMany } = useData();
   const [modal, setModal] = useState(null);
+  const [batch, setBatch] = useState(false);
   const [catF, setCatF] = useState("all");
   const [picked, setPicked] = useState(() => new Set());
 
@@ -136,7 +179,7 @@ export default function Expenses() {
           <h2 className="text-base font-extrabold text-slate-900">Chi phí vận hành <span className="text-slate-400">({rows.length})</span></h2>
           <div className="flex items-center gap-2">
             {rows.length > 0 && <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />} Chọn</button>}
-            <button onClick={() => setModal({})} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm chi phí</button>
+            <button onClick={() => setBatch(true)} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm chi phí</button>
           </div>
         </div>
 
@@ -220,6 +263,7 @@ export default function Expenses() {
       </Card>
 
       {modal && <ExpenseModal initial={modal.id ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateExpense(modal.id, data) : addExpense(data))} />}
+      {batch && <ExpenseBatchModal onClose={() => setBatch(false)} onSave={addExpensesMany} />}
     </div>
   );
 }

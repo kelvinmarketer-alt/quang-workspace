@@ -246,6 +246,9 @@ export function DataProvider({ children }) {
       // EXPENSES (chi phí vận hành công ty)
       addExpense: (ex) =>
         setState((s) => ({ ...s, expenses: [{ id: "e" + uid(), active: true, recurring: "monthly", ...ex }, ...(s.expenses || [])] })),
+      // Thêm NHIỀU chi phí cùng lúc
+      addExpensesMany: (arr) =>
+        setState((s) => ({ ...s, expenses: [...(arr || []).map((ex) => ({ id: "e" + uid(), active: true, recurring: "monthly", ...ex })), ...(s.expenses || [])] })),
       updateExpense: (id, patch) =>
         setState((s) => ({ ...s, expenses: (s.expenses || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
       deleteExpense: (id) =>
