@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3 } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3, ChevronDown } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -621,7 +621,18 @@ function FundsMain() {
   // Biểu đồ: LN gộp vs đã phân bổ theo tháng
   const chart = useMemo(() => Array.from({ length: 12 }, (_, i) => ({ name: "T" + (i + 1), thu: gpMonths[i], pb: personalFunds.reduce((a, f) => a + ((inflow.byFund[f.id] || [])[i] || 0), 0) })).filter((x) => x.thu || x.pb), [gpMonths, inflow, personalFunds]);
 
-  const recentTx = useMemo(() => (fundTx || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 40), [fundTx]);
+  // Lịch sử TOÀN BỘ giao dịch quỹ, gom theo NGÀY (mới → cũ) — hiển thị dạng xổ (accordion)
+  const txByDate = useMemo(() => {
+    const map = new Map();
+    for (const t of (fundTx || [])) { const d = (t.date || "").slice(0, 10) || "—"; if (!map.has(d)) map.set(d, []); map.get(d).push(t); }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([date, txs]) => ({
+      date, txs, count: txs.length,
+      inSum: txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0),
+      outSum: txs.filter((t) => t.type === "out").reduce((a, t) => a + num(t.amount), 0),
+    }));
+  }, [fundTx]);
+  const [openDates, setOpenDates] = useState(() => { const latest = (fundTx || []).reduce((mx, t) => { const d = (t.date || "").slice(0, 10); return d > mx ? d : mx; }, ""); return new Set(latest ? [latest] : []); });
+  const toggleDate = (d) => setOpenDates((prev) => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
   const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "—";
   const fundColor = (id) => (funds || []).find((f) => f.id === id)?.color || "slate";
 
@@ -879,30 +890,53 @@ function FundsMain() {
         </Card>
       )}
 
-      {/* Lịch sử giao dịch quỹ */}
+      {/* Lịch sử giao dịch quỹ — gom theo ngày, click để xổ */}
       <Card className="!p-0 overflow-hidden">
         <div className="flex items-center justify-between p-4 pb-3 sm:p-5">
-          <h2 className="text-base font-extrabold text-slate-900">Giao dịch quỹ gần đây</h2>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">Lịch sử giao dịch quỹ</h2>
+            <p className="mt-0.5 text-[11px] text-slate-400">Bấm vào ngày để xem chi tiết giao dịch</p>
+          </div>
           <Badge tone="slate">{(fundTx || []).length}</Badge>
         </div>
-        {recentTx.length === 0 ? (
-          <div className="px-4 pb-8 pt-2 text-center text-sm text-slate-400">Chưa có giao dịch. Bấm "Phân bổ thu nhập" hoặc "Nạp" trên từng quỹ.</div>
+        {txByDate.length === 0 ? (
+          <div className="px-4 pb-8 pt-2 text-center text-sm text-slate-400">Chưa có giao dịch. Bấm "Phân bổ" hoặc "Nạp" trên từng quỹ.</div>
         ) : (
-          <div className="divide-y divide-slate-50">
-            {recentTx.map((t) => {
-              const isIn = t.type !== "out";
+          <div className="divide-y divide-slate-100">
+            {txByDate.map((g) => {
+              const open = openDates.has(g.date);
               return (
-                <div key={t.id} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/70 sm:px-5">
-                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span>{t.cat && <Badge tone={catTone(spendCats, t.cat)}>{t.cat}</Badge>}</div>
-                    <div className="truncate text-[11px] text-slate-400">{fmtDateVI(t.date)}{t.note ? " · " + t.note : ""}</div>
-                  </div>
-                  <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
-                  <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-                    <button onClick={() => setEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-                    <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
-                  </span>
+                <div key={g.date}>
+                  <button onClick={() => toggleDate(g.date)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 sm:px-5 ${open ? "bg-slate-50/60" : ""}`}>
+                    <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                    <span className="text-sm font-extrabold text-slate-700">{fmtDateVI(g.date)}</span>
+                    <Badge tone="slate">{g.count}</Badge>
+                    <span className="ml-auto flex items-center gap-2 text-sm font-bold">
+                      {g.inSum > 0 && <span className="text-emerald-600">+{formatShort(g.inSum)}</span>}
+                      {g.outSum > 0 && <span className="text-rose-600">−{formatShort(g.outSum)}</span>}
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="divide-y divide-slate-50 bg-slate-50/40">
+                      {g.txs.map((t) => {
+                        const isIn = t.type !== "out";
+                        return (
+                          <div key={t.id} className="group flex items-center gap-3 py-2.5 pl-10 pr-4 hover:bg-white sm:pl-14 sm:pr-5">
+                            <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span>{t.cat && <Badge tone={catTone(spendCats, t.cat)}>{t.cat}</Badge>}</div>
+                              {t.note && <div className="truncate text-[11px] text-slate-400">{t.note}</div>}
+                            </div>
+                            <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
+                            <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
+                              <button onClick={() => setEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+                              <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
