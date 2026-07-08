@@ -501,7 +501,35 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose
   const autoRows = [];
   if (autoDebit > 0) autoRows.push({ id: "_opex", note: "Chi phí vận hành lũy kế (tự động từ Kế toán)", amount: autoDebit, type: "out", run: autoCredit - autoDebit, synthetic: true });
   if (autoCredit > 0) autoRows.push({ id: "_auto", note: "Lợi nhuận gộp lũy kế (tự động từ Kế toán)", amount: autoCredit, type: "in", run: autoCredit, synthetic: true });
-  const rows = [...txRows, ...autoRows];
+  // Gom giao dịch thật theo NGÀY (mới → cũ) để hiển thị dạng xổ
+  const byDate = [];
+  { const map = new Map();
+    for (const t of txRows) { const d = (t.date || "").slice(0, 10) || "—"; if (!map.has(d)) map.set(d, []); map.get(d).push(t); }
+    for (const [date, items] of map) byDate.push({ date, items, inSum: items.filter((x) => x.type !== "out").reduce((a, x) => a + num(x.amount), 0), outSum: items.filter((x) => x.type === "out").reduce((a, x) => a + num(x.amount), 0) }); }
+  const [openDays, setOpenDays] = useState(() => new Set(byDate.length ? [byDate[0].date] : []));
+  const toggleDay = (d) => setOpenDays((prev) => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
+  const renderRow = (t, indent) => {
+    const isIn = t.type !== "out";
+    return (
+      <div key={t.id} className={`group flex items-center gap-3 py-2.5 pr-4 ${indent ? "pl-10" : "pl-4"}`}>
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-slate-700">{t.note || (isIn ? "Nạp tiền" : "Khoản chi")}</div>
+          {t.cat && <div className="mt-0.5"><Badge tone={catTone(cats, t.cat)}>{t.cat}</Badge></div>}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
+          <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
+        </div>
+        {t.synthetic ? <span className="w-7 shrink-0" /> : (
+          <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
+            <button onClick={() => onEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+            <button onClick={() => onDelTx(t.id)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+          </span>
+        )}
+      </div>
+    );
+  };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -523,36 +551,29 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose
           <button onClick={() => onTransfer(fund)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100"><ArrowLeftRight size={14} /> {isCompany ? "Phân bổ" : "Chuyển"}</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="px-4 pt-3 text-[11px] font-bold uppercase text-slate-400">Lịch sử giao dịch ({rows.length})</div>
-          {rows.length === 0 ? (
+          <div className="px-4 pt-3 text-[11px] font-bold uppercase text-slate-400">Lịch sử giao dịch ({txs.length}) · bấm ngày để xem</div>
+          {byDate.length === 0 && autoRows.length === 0 ? (
             <div className="p-8 text-center text-sm text-slate-400">Quỹ chưa có giao dịch nào.</div>
           ) : (
-            <div className="mt-1 divide-y divide-slate-50">
-              {rows.map((t) => {
-                const isIn = t.type !== "out";
+            <div className="mt-1 divide-y divide-slate-100">
+              {byDate.map((g) => {
+                const open = openDays.has(g.date);
                 return (
-                  <div key={t.id} className="group flex items-center gap-3 px-4 py-2.5">
-                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-slate-700">{t.note || (isIn ? "Nạp tiền" : "Khoản chi")}</div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-400">
-                        <span>{t.synthetic ? "tự động" : fmtDateVI(t.date)}</span>
-                        {t.cat && <Badge tone={catTone(cats, t.cat)}>{t.cat}</Badge>}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
-                      <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
-                    </div>
-                    {t.synthetic ? <span className="w-7 shrink-0" /> : (
-                      <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-                        <button onClick={() => onEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-                        <button onClick={() => onDelTx(t.id)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                  <div key={g.date}>
+                    <button onClick={() => toggleDay(g.date)} className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
+                      <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                      <span className="text-sm font-extrabold text-slate-700">{fmtDateVI(g.date)}</span>
+                      <Badge tone="slate">{g.items.length}</Badge>
+                      <span className="ml-auto flex items-center gap-2 text-xs font-bold">
+                        {g.inSum > 0 && <span className="text-emerald-600">+{formatShort(g.inSum)}</span>}
+                        {g.outSum > 0 && <span className="text-rose-600">−{formatShort(g.outSum)}</span>}
                       </span>
-                    )}
+                    </button>
+                    {open && <div className="divide-y divide-slate-50 bg-slate-50/40">{g.items.map((t) => renderRow(t, true))}</div>}
                   </div>
                 );
               })}
+              {autoRows.length > 0 && <div className="divide-y divide-slate-50 border-t-2 border-slate-100 bg-slate-50/30">{autoRows.map((t) => renderRow(t, false))}</div>}
             </div>
           )}
         </div>
@@ -945,7 +966,7 @@ function FundsMain() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
+      {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
       {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTx} />}
