@@ -228,6 +228,15 @@ export function fundBalance(fundTx, fundId) {
   return (fundTx || []).reduce((a, t) => a + (t.fundId === fundId ? (t.type === "out" ? -n(t.amount) : n(t.amount)) : 0), 0);
 }
 
+// Giao dịch CHI THẬT của quỹ (type=out, KHÔNG phải phiếu chuyển/phân bổ nội bộ có xferId).
+// = tiền thực sự tiêu ra khỏi hệ thống. Dùng cho thống kê chi tiêu.
+export function fundSpends(fundTx) {
+  return (fundTx || [])
+    .filter((t) => t && t.type === "out" && !t.xferId)
+    .map((t) => ({ id: t.id, fundId: t.fundId, date: (t.date || "").slice(0, 10), amount: n(t.amount), cat: t.cat || "", note: t.note || "" }))
+    .filter((t) => t.amount > 0 && t.date);
+}
+
 // 1 phiếu "in" được tính là CẤP VỐN cho quỹ (nạp tay hoặc phân bổ từ quỹ công ty)?
 // Tiền PHÂN BỔ vào từng quỹ theo 12 tháng của 1 năm. Trả { byFund: {fundId: number[12]}, total: number[12] }
 // "Đã phân bổ" = tiền ĐI TỪ QUỸ CÔNG TY ra quỹ cá nhân: phiếu in alloc=true (nút Phân bổ)

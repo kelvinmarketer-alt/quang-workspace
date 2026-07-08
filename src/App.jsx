@@ -19,6 +19,7 @@ export default function App() {
         <Route path="/ke-toan" element={<Ketoan />} />
         <Route path="/chi-phi" element={<Ketoan initialTab="expenses" />} />
         <Route path="/quy" element={<Funds />} />
+        <Route path="/quy-thong-ke" element={<Funds initialTab="stats" />} />
         <Route path="/cong-viec" element={<Tasks />} />
         <Route path="/lich" element={<Tasks initialTab="calendar" />} />
         <Route path="/cai-dat" element={<Settings />} />
