@@ -167,6 +167,15 @@ export function DataProvider({ children }) {
     };
   }, [user?.id, synced]);
 
+  // Tự TẢI LẠI dữ liệu cloud khi quay lại tab (đồng bộ đa thiết bị / nhiều tab) —
+  // bỏ qua nếu đang có bản sửa chưa lưu (tránh đè mất). Đã flush khi ẩn tab nên lúc hiện lại thường sạch.
+  useEffect(() => {
+    if (!user) return;
+    const onVisible = () => { if (document.visibilityState === "visible" && !dirty.current) setReloadTick((t) => t + 1); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [user?.id]);
+
   const api = useMemo(() => {
     const uid = () => Math.random().toString(36).slice(2, 9);
     return {
