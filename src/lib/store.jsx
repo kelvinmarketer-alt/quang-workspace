@@ -334,6 +334,22 @@ export function DataProvider({ children }) {
           const inn = { id: "ft" + uid(), fundId: toId, amount: amt, date, type: "in", note: `Nhận từ ${nameOf(fromId)}${extra}`, xferId: xid };
           return { ...s, fundTx: [out, inn, ...(s.fundTx || [])] };
         }),
+      // Chuyển NHIỀU khoản 1 lúc từ 1 quỹ nguồn sang nhiều quỹ đích. entries=[{toId, amount, note}]
+      transferFundMany: (fromId, entries, date) =>
+        setState((s) => {
+          const funds = s.funds || [];
+          const nameOf = (id) => funds.find((f) => f.id === id)?.name || "quỹ";
+          const add = [];
+          for (const e of entries || []) {
+            const amt = Number(e.amount) || 0;
+            if (!fromId || !e.toId || fromId === e.toId || amt <= 0) continue;
+            const xid = "xf" + uid();
+            const extra = e.note ? ` · ${e.note}` : "";
+            add.push({ id: "ft" + uid(), fundId: fromId, amount: amt, date, type: "out", note: `Chuyển sang ${nameOf(e.toId)}${extra}`, xferId: xid });
+            add.push({ id: "ft" + uid(), fundId: e.toId, amount: amt, date, type: "in", note: `Nhận từ ${nameOf(fromId)}${extra}`, xferId: xid });
+          }
+          return { ...s, fundTx: [...add, ...(s.fundTx || [])] };
+        }),
       // Xoá 1 giao dịch — nếu là phiếu chuyển quỹ thì xoá cả 2 chiều
       deleteFundTx: (id) =>
         setState((s) => {

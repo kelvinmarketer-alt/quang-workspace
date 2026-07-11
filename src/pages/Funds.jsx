@@ -237,42 +237,69 @@ function TxEditModal({ tx, fund, cats, onManage, onClose, onSave }) {
 }
 
 /* ---- Modal chuyển tiền giữa 2 quỹ ---- */
+// Chuyển tiền: 1 quỹ NGUỒN → NHIỀU quỹ đích, nhiều dòng, chuyển 1 lần
 function TransferModal({ funds, initialFrom, onClose, onSave }) {
-  const [from, setFrom] = useState(initialFrom || funds[0]?.id || "");
-  const [to, setTo] = useState((funds.find((f) => f.id !== (initialFrom || funds[0]?.id)) || {}).id || "");
-  const [amount, setAmount] = useState("");
+  const defFrom = initialFrom || funds[0]?.id || "";
+  const otherThan = (fid) => (funds.find((f) => f.id !== fid) || {}).id || "";
+  const blank = (fid) => ({ key: "r" + Math.random().toString(36).slice(2, 8), to: otherThan(fid), amount: "", note: "" });
+  const [from, setFrom] = useState(defFrom);
   const [date, setDate] = useState(todayISO());
-  const [note, setNote] = useState("");
+  const [rows, setRows] = useState([blank(defFrom)]);
+  const setRow = (key, patch) => setRows((p) => p.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((p) => [...p, blank(from)]);
+  const delRow = (key) => setRows((p) => (p.length > 1 ? p.filter((r) => r.key !== key) : p));
+  const changeFrom = (nf) => { setFrom(nf); setRows((p) => p.map((r) => (r.to === nf ? { ...r, to: otherThan(nf) } : r))); };
   const fromFund = funds.find((f) => f.id === from);
-  const bad = !from || !to || from === to || num(amount) <= 0;
-  const swap = () => { setFrom(to); setTo(from); };
+  const dests = funds.filter((f) => f.id !== from);
+  const valid = rows.filter((r) => r.to && r.to !== from && num(r.amount) > 0);
+  const total = valid.reduce((a, r) => a + num(r.amount), 0);
+  const balance = fromFund?.balance || 0;
+  const over = total > balance;
+  const save = () => { if (!valid.length) return; onSave(from, valid.map((r) => ({ toId: r.to, amount: num(r.amount), note: r.note.trim() })), date); onClose(); };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">Chuyển tiền giữa quỹ</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <label className="mb-2 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Từ quỹ</span>
-          <select value={from} onChange={(e) => setFrom(e.target.value)} className={inputCls}>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select>
-          {fromFund && <span className="mt-1 block text-[11px] text-slate-400">Số dư hiện tại: {formatVND(fromFund.balance || 0)}</span>}
-        </label>
-        <div className="my-1 flex justify-center"><button type="button" onClick={swap} className="rounded-full border border-slate-200 p-1.5 text-slate-400 hover:bg-slate-50 hover:text-indigo-600"><ArrowLeftRight size={15} /></button></div>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Sang quỹ</span>
-          <select value={to} onChange={(e) => setTo(e.target.value)} className={inputCls}>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền *</span>
-            <MoneyInput value={amount} onChange={setAmount} autoFocus className={inputCls} placeholder="2.000.000" /></label>
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></label>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="mb-2 grid grid-cols-2 gap-3">
+            <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Từ quỹ</span>
+              <select value={from} onChange={(e) => changeFrom(e.target.value)} className={inputCls}>{funds.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+            <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ngày</span>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></label>
+          </div>
+          <div className="mb-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">Số dư nguồn: <span className="text-slate-800">{formatVND(balance)}</span></div>
+          <div className="mb-1 text-xs font-bold uppercase text-slate-400">Chuyển sang các quỹ</div>
+          <div className="space-y-2">
+            {rows.map((r) => (
+              <div key={r.key} className="rounded-xl border border-slate-100 p-2.5">
+                <div className="flex items-center gap-2">
+                  <select value={r.to} onChange={(e) => setRow(r.key, { to: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold">
+                    {dests.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                  <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} className="w-32 shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-bold" placeholder="Số tiền" />
+                  {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+                </div>
+                <input value={r.note} onChange={(e) => setRow(r.key, { note: e.target.value })} className="mt-2 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs" placeholder="Ghi chú (tuỳ chọn)" />
+              </div>
+            ))}
+          </div>
+          <button onClick={addRow} className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm quỹ đích</button>
         </div>
-        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} placeholder="Lý do chuyển (tuỳ chọn)" /></label>
-        {from === to && <div className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">Chọn 2 quỹ khác nhau.</div>}
-        <button disabled={bad} onClick={() => { if (!bad) { onSave(from, to, num(amount), date, note.trim()); onClose(); } }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">
-          <ArrowLeftRight size={16} /> Chuyển tiền
-        </button>
+        <div className="border-t border-slate-100 p-4">
+          {valid.length > 0 && (
+            <div className={`mb-2 flex items-center justify-between text-xs font-bold ${over ? "text-rose-600" : "text-slate-500"}`}>
+              <span>{valid.length} khoản · tổng {formatShort(total)}</span>
+              <span>{over ? `⚠ Vượt số dư ${formatShort(total - balance)}` : `Còn lại ${formatShort(balance - total)}`}</span>
+            </div>
+          )}
+          <button disabled={!valid.length} onClick={save} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 disabled:opacity-40">
+            <ArrowLeftRight size={16} /> Chuyển {valid.length || ""} khoản
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -609,7 +636,7 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, onClose
 }
 
 function FundsMain() {
-  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFund, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
+  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFund, transferFundMany, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -999,7 +1026,7 @@ function FundsMain() {
       {editTx && <TxEditModal key={editTx.id} tx={editTx} fund={(funds || []).find((f) => f.id === editTx.fundId)} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setEditTx(null)} onSave={updateFundTx} />}
       {catMgr && <SpendCatManager cats={spendCats} onAdd={addSpendCat} onUpdate={updateSpendCat} onDelete={deleteSpendCat} onClose={() => setCatMgr(false)} />}
       {allocOpen && companyFund && <AllocateModal funds={personalFunds} defaultAmount={Math.max(0, companyBalance)} onClose={() => setAllocOpen(false)} onSave={(entries, date, note) => allocateFromCompany(companyFund.id, entries, date, note)} />}
-      {transferInit && <TransferModal funds={allWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFund} />}
+      {transferInit && <TransferModal funds={allWithBal} initialFrom={transferInit.from} onClose={() => setTransferInit(null)} onSave={transferFundMany} />}
       {schedModal && <ScheduleModal initial={schedModal.id ? schedModal : null} funds={funds || []} onClose={() => setSchedModal(null)} onSave={(data) => (schedModal.id ? updateFundSchedule(schedModal.id, data) : addFundSchedule(data))} />}
     </div>
   );
