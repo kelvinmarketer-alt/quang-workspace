@@ -11,8 +11,9 @@ const REC = { monthly: ["Hằng tháng", "rose"], yearly: ["Hằng năm", "amber
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 
-function ExpenseModal({ initial, onClose, onSave }) {
+function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
   const [f, setF] = useState(initial || { name: "", category: EXPENSE_CATEGORIES[0], amount: "", date: todayISO(), recurring: "monthly", note: "", active: true });
+  const [plan, setPlan] = useState(null); // đổi gói: null | { date, amount }
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -43,9 +44,34 @@ function ExpenseModal({ initial, onClose, onSave }) {
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
           <input value={f.note} onChange={(e) => set("note", e.target.value)} className={inputCls} placeholder="VD: gói năm, dùng cho job VTY…" /></label>
-        <button type="button" onClick={() => set("active", !(f.active ?? true))} className={`mb-4 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold ${(f.active ?? true) ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+        <button type="button" onClick={() => set("active", !(f.active ?? true))} className={`mb-3 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold ${(f.active ?? true) ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
           <Power size={15} /> {(f.active ?? true) ? "Đang chi (bấm để tạm dừng)" : "Đã dừng (bấm để bật lại)"}
         </button>
+        {f.recurring !== "once" && (
+          <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Gia hạn đến <span className="font-normal text-slate-400">· để trống nếu còn dùng</span></span>
+            <input type="date" value={f.endDate || ""} onChange={(e) => set("endDate", e.target.value)} className={inputCls} /></label>
+        )}
+        {initial?.id && f.recurring !== "once" && (
+          <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+            {!plan ? (
+              <button type="button" onClick={() => setPlan({ date: todayISO(), amount: String(num(f.amount) || "") })} className="flex items-center gap-1.5 text-sm font-bold text-indigo-600"><Repeat size={14} /> Đổi gói gia hạn (ngày/phí mới)</button>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-[11px] font-semibold text-indigo-700">Chốt gói cũ tới hôm nay (giữ nguyên kỳ đã tính), mở gói mới từ:</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block text-xs"><span className="mb-1 block font-semibold text-slate-600">Ngày gia hạn mới</span>
+                    <input type="date" value={plan.date} onChange={(e) => setPlan((p) => ({ ...p, date: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label>
+                  <label className="block text-xs"><span className="mb-1 block font-semibold text-slate-600">Phí mới</span>
+                    <MoneyInput value={plan.amount} onChange={(v) => setPlan((p) => ({ ...p, amount: v }))} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" placeholder="500.000" /></label>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setPlan(null)} className="flex-1 rounded-lg border border-slate-200 py-1.5 text-xs font-bold text-slate-500">Huỷ</button>
+                  <button type="button" disabled={!plan.date || num(plan.amount) <= 0} onClick={() => { onChangePlan({ date: plan.date, amount: num(plan.amount) }); onClose(); }} className="flex-1 rounded-lg bg-indigo-500 py-1.5 text-xs font-bold text-white disabled:opacity-40">Xác nhận đổi gói</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <button onClick={() => { if (f.name.trim() && num(f.amount)) { onSave({ ...f, name: f.name.trim(), amount: num(f.amount) }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu chi phí</button>
       </div>
     </div>
@@ -97,7 +123,7 @@ function ExpenseBatchModal({ onClose, onSave }) {
 const monthEquiv = (e) => (e.recurring === "monthly" ? num(e.amount) : e.recurring === "yearly" ? num(e.amount) / 12 : 0);
 
 export default function Expenses() {
-  const { expenses, addExpense, addExpensesMany, updateExpense, deleteExpense, deleteExpensesMany } = useData();
+  const { expenses, addExpense, addExpensesMany, updateExpense, changeExpensePlan, deleteExpense, deleteExpensesMany } = useData();
   const [modal, setModal] = useState(null);
   const [batch, setBatch] = useState(false);
   const [catF, setCatF] = useState("all");
@@ -138,7 +164,7 @@ export default function Expenses() {
         <button onClick={() => toggle(e.id)} className="shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-bold text-slate-800">{e.name}{off && <span className="ml-1 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>
-          <div className="mt-0.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></div>
+          <div className="mt-0.5 flex items-center gap-1.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge>{e.endDate && <span className="text-[10px] font-bold text-rose-400">đến {fmtDateVI(e.endDate)}</span>}</div>
         </div>
         <div className="shrink-0 text-right">
           <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
@@ -160,7 +186,7 @@ export default function Expenses() {
         <td className="px-2 py-2.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></td>
         <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
         <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
-        <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}</td>
+        <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}{e.endDate && <span className="text-rose-400"> → {fmtDateVI(e.endDate)}</span>}</td>
         <td className="px-2 py-2.5 text-right"><span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100"><button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button><button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button></span></td>
       </tr>
     );
@@ -262,7 +288,7 @@ export default function Expenses() {
         </div>
       </Card>
 
-      {modal && <ExpenseModal initial={modal.id ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateExpense(modal.id, data) : addExpense(data))} />}
+      {modal && <ExpenseModal initial={modal.id ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateExpense(modal.id, data) : addExpense(data))} onChangePlan={(patch) => changeExpensePlan(modal.id, patch)} />}
       {batch && <ExpenseBatchModal onClose={() => setBatch(false)} onSave={addExpensesMany} />}
     </div>
   );

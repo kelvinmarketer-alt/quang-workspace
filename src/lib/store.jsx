@@ -260,6 +260,17 @@ export function DataProvider({ children }) {
         setState((s) => ({ ...s, expenses: [...(arr || []).map((ex) => ({ id: "e" + uid(), active: true, recurring: "monthly", ...ex })), ...(s.expenses || [])] })),
       updateExpense: (id, patch) =>
         setState((s) => ({ ...s, expenses: (s.expenses || []).map((x) => (x.id === id ? { ...x, ...patch } : x)) })),
+      // ĐỔI GÓI gia hạn: chốt gói cũ (endDate) giữ nguyên các kỳ đã tính + tạo gói MỚI (ngày/phí mới).
+      changeExpensePlan: (id, patch) =>
+        setState((s) => {
+          const ex = (s.expenses || []).find((x) => x.id === id);
+          if (!ex) return s;
+          const d = new Date();
+          const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          const ended = { ...ex, endDate: patch.endDate || today }; // gói cũ dừng tại hôm nay (các kỳ trước vẫn tính)
+          const fresh = { id: "e" + uid(), name: ex.name, category: ex.category, recurring: patch.recurring || ex.recurring || "monthly", amount: Number(patch.amount) || 0, date: patch.date, note: ex.note || "", active: true };
+          return { ...s, expenses: [fresh, ...(s.expenses || []).map((x) => (x.id === id ? ended : x))] };
+        }),
       deleteExpense: (id) =>
         setState((s) => ({ ...s, expenses: (s.expenses || []).filter((x) => x.id !== id) })),
       deleteExpensesMany: (ids) =>

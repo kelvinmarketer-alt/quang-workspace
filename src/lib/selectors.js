@@ -187,8 +187,9 @@ function expenseCharges(ex, from, to) {
   if (ex.active === false) return [];
   if (!ex.date) return [];
   const start = new Date(ex.date + "T00:00:00");
+  const end = ex.endDate ? new Date(ex.endDate + "T23:59:59") : null; // "gia hạn đến": ngừng tính sau ngày này (đổi gói / huỷ)
   const out = [];
-  const ok = (d) => d >= from && d <= to && d >= start;
+  const ok = (d) => d >= from && d <= to && d >= start && (!end || d <= end);
   const rec = ex.recurring || "monthly";
   if (rec === "once") {
     if (ok(start)) out.push(start);
@@ -200,7 +201,7 @@ function expenseCharges(ex, from, to) {
   } else { // monthly
     let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
     while (d < from) d = new Date(d.getFullYear(), d.getMonth() + 1, start.getDate());
-    while (d <= to) { if (d >= start) out.push(new Date(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, start.getDate()); }
+    while (d <= to && (!end || d <= end)) { if (d >= start) out.push(new Date(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, start.getDate()); }
   }
   return out;
 }
@@ -297,7 +298,9 @@ export function monthlyOpex(expenses, year) {
 
 // "Burn rate" — chi phí cố định quy ra mỗi tháng (monthly=amount, yearly=amount/12, once bỏ qua)
 export function monthlyOperatingCost(expenses) {
-  return (expenses || []).filter((e) => e.active !== false).reduce((a, e) => {
+  const t = new Date();
+  const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  return (expenses || []).filter((e) => e.active !== false && (!e.endDate || e.endDate >= today)).reduce((a, e) => {
     const amt = n(e.amount);
     if ((e.recurring || "monthly") === "monthly") return a + amt;
     if (e.recurring === "yearly") return a + amt / 12;
