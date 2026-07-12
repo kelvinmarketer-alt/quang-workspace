@@ -139,7 +139,7 @@ export default function Expenses() {
 
   const rows = useMemo(() => (expenses || [])
     .filter((e) => catF === "all" || e.category === catF)
-    .slice().sort((a, b) => (a.active === false ? 1 : 0) - (b.active === false ? 1 : 0) || monthEquiv(b) - monthEquiv(a)), [expenses, catF]);
+    .slice().sort((a, b) => (a.active === false ? 1 : 0) - (b.active === false ? 1 : 0) || (b.date || "").localeCompare(a.date || "")), [expenses, catF]);
 
   const allPicked = rows.length > 0 && rows.every((r) => picked.has(r.id));
   const toggle = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
