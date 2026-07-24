@@ -662,10 +662,10 @@ function FundsMain() {
   const grossTotal = useMemo(() => grossProfitToDate(projects, today), [projects, today]);
   // Chi phí vận hành THỰC đã phát sinh tới hôm nay — trừ vào nguồn quỹ công ty (tiền đã tiêu, không thể phân bổ)
   const opexTotal = useMemo(() => expensesInRange(expenses, "2000-01-01", today).total, [expenses, today]);
-  // Công nợ chưa thu (đợt ≤ hôm nay) — trừ khỏi quỹ công ty để phản ánh TIỀN THỰC THU (không phân bổ tiền chưa cầm)
+  // Công nợ chưa thu (đợt ≤ hôm nay) — CHỈ để hiển thị. Công nợ vẫn là TÀI SẢN của bạn (tiền người ta còn nợ), KHÔNG trừ khỏi quỹ.
   const debtTotal = useMemo(() => debtToDate(projects, today), [projects, today]);
   const companyFund = (funds || []).find((f) => f.role === "company");
-  const companyBalance = companyFund ? grossTotal - opexTotal - debtTotal + fundBalance(fundTx, companyFund.id) : 0;
+  const companyBalance = companyFund ? grossTotal - opexTotal + fundBalance(fundTx, companyFund.id) : 0;
   const distributed = companyFund ? -fundBalance(fundTx, companyFund.id) : 0; // tiền đã phân bổ/chuyển/chi TRỰC TIẾP ra khỏi quỹ công ty (KHÔNG gồm chi phí vận hành)
 
   const personalFunds = useMemo(() => (funds || []).filter((f) => f.role !== "company"), [funds]);
@@ -766,11 +766,11 @@ function FundsMain() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><PiggyBank size={14} /> Quỹ công ty · nguồn Lợi nhuận gộp</div>
               <div className={`mt-1 text-3xl font-extrabold sm:text-4xl ${companyBalance < 0 ? "text-rose-300" : ""}`}>{formatVND(companyBalance)}</div>
-              <div className={`mt-0.5 text-xs ${companyBalance < 0 ? "font-bold text-rose-200" : "text-indigo-200"}`}>{companyBalance < 0 ? "⚠ đã phân bổ vượt tiền thực thu" : "còn lại chưa phân bổ (tiền thực)"}</div>
+              <div className={`mt-0.5 text-xs ${companyBalance < 0 ? "font-bold text-rose-200" : "text-indigo-200"}`}>{companyBalance < 0 ? "⚠ đã phân bổ vượt lợi nhuận gộp" : "còn lại chưa phân bổ"}</div>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                 <span className="text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
                 {opexTotal > 0 && <span className="text-indigo-200">− Chi phí vận hành: <b className="text-rose-200">{formatShort(opexTotal)}</b></span>}
-                {debtTotal > 0 && <span className="text-indigo-200">− Công nợ chưa thu: <b className="text-amber-200">{formatShort(debtTotal)}</b></span>}
+                {debtTotal > 0 && <span className="text-indigo-200/70">Công nợ chưa thu (không trừ, vẫn là tài sản): <b className="text-amber-200">{formatShort(debtTotal)}</b></span>}
                 <span className="text-indigo-200">Đã phân bổ/chi: <b className="text-white">{formatShort(distributed)}</b></span>
               </div>
             </div>
@@ -1023,7 +1023,7 @@ function FundsMain() {
       </Card>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
-      {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} autoDebt={detailFund.role === "company" ? debtTotal : 0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
+      {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} autoDebt={0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
       {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTxMany} />}
