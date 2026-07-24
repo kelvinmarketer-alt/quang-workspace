@@ -272,6 +272,18 @@ export function grossProfitToDate(projects, today) {
   return g;
 }
 
+// Công nợ chưa thu của các đợt ĐÃ tới ngày (≤ today) = phần LN gộp đã ghi nhận nhưng CHƯA vào tiền mặt.
+// Trừ khỏi quỹ công ty để quỹ = TIỀN THỰC THU (không phân bổ tiền chưa cầm).
+export function debtToDate(projects, today) {
+  let d = 0;
+  for (const x of allInstallments(projects)) {
+    if (!x.date) continue;
+    if (today && x.date > today) continue;
+    d += x.debt; // = max(0, amount − collected)
+  }
+  return d;
+}
+
 // Lợi nhuận gộp theo 12 tháng của 1 năm (cho biểu đồ / bảng quỹ).
 export function monthlyGrossProfit(projects, year) {
   const out = Array.from({ length: 12 }, () => 0);
