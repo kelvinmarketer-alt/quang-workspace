@@ -666,6 +666,7 @@ function FundsMain() {
   const debtTotal = useMemo(() => debtToDate(projects, today), [projects, today]);
   const companyFund = (funds || []).find((f) => f.role === "company");
   const companyBalance = companyFund ? grossTotal - opexTotal + fundBalance(fundTx, companyFund.id) : 0;
+  const cashReal = companyBalance - debtTotal; // phần quỹ đã THỰC VỀ tiền mặt (tổng quỹ − công nợ chưa thu). Âm = đã phân bổ vượt tiền về.
   const distributed = companyFund ? -fundBalance(fundTx, companyFund.id) : 0; // tiền đã phân bổ/chuyển/chi TRỰC TIẾP ra khỏi quỹ công ty (KHÔNG gồm chi phí vận hành)
 
   const personalFunds = useMemo(() => (funds || []).filter((f) => f.role !== "company"), [funds]);
@@ -766,11 +767,24 @@ function FundsMain() {
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><PiggyBank size={14} /> Quỹ công ty · nguồn Lợi nhuận gộp</div>
               <div className={`mt-1 text-3xl font-extrabold sm:text-4xl ${companyBalance < 0 ? "text-rose-300" : ""}`}>{formatVND(companyBalance)}</div>
-              <div className={`mt-0.5 text-xs ${companyBalance < 0 ? "font-bold text-rose-200" : "text-indigo-200"}`}>{companyBalance < 0 ? "⚠ đã phân bổ vượt lợi nhuận gộp" : "còn lại chưa phân bổ"}</div>
+              <div className={`mt-0.5 text-xs ${companyBalance < 0 ? "font-bold text-rose-200" : "text-indigo-200"}`}>{companyBalance < 0 ? "⚠ đã phân bổ vượt lợi nhuận gộp" : "còn lại chưa phân bổ · gồm cả công nợ"}</div>
+              {debtTotal > 0 && (
+                <div className="mt-3 grid max-w-md grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-white/10 p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">💵 Tiền thực (đã về)</div>
+                    <div className={`mt-0.5 text-lg font-extrabold ${cashReal < 0 ? "text-rose-300" : "text-emerald-300"}`}>{formatVND(cashReal)}</div>
+                    <div className="text-[10px] text-indigo-200/80">{cashReal < 0 ? `đã phân bổ vượt tiền mặt ${formatShort(-cashReal)}` : "có thể phân bổ an toàn"}</div>
+                  </div>
+                  <div className="rounded-xl bg-white/10 p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">⏳ Công nợ (chưa về)</div>
+                    <div className="mt-0.5 text-lg font-extrabold text-amber-300">{formatVND(debtTotal)}</div>
+                    <div className="text-[10px] text-indigo-200/80">thu xong sẽ thành tiền mặt</div>
+                  </div>
+                </div>
+              )}
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                 <span className="text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
                 {opexTotal > 0 && <span className="text-indigo-200">− Chi phí vận hành: <b className="text-rose-200">{formatShort(opexTotal)}</b></span>}
-                {debtTotal > 0 && <span className="text-indigo-200/70">Công nợ chưa thu (không trừ, vẫn là tài sản): <b className="text-amber-200">{formatShort(debtTotal)}</b></span>}
                 <span className="text-indigo-200">Đã phân bổ/chi: <b className="text-white">{formatShort(distributed)}</b></span>
               </div>
             </div>
