@@ -1,14 +1,15 @@
 import { Fragment, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown } from "lucide-react";
-import { Card, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
+import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search } from "lucide-react";
+import { Card, SectionTitle, Badge, MoneyInput, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange } from "../lib/selectors.js";
+import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const num = (v) => Number(v) || 0;
 
 const PRESETS = [
   ["thisMonth", "Tháng này"], ["lastMonth", "Tháng trước"], ["thisQuarter", "Quý này"],
@@ -326,22 +327,148 @@ function KetoanReport() {
   );
 }
 
-const TABS = [["report", "Doanh thu & Lợi nhuận", BarChart3], ["expenses", "Chi phí vận hành", CreditCard]];
+// ===== THU HỒI CÔNG NỢ =====
+function CollectModal({ item, onClose, onSave }) {
+  const remain = num(item.debt);
+  const [amt, setAmt] = useState(String(remain));
+  const val = Math.min(remain, Math.max(0, num(amt)));
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="text-base font-extrabold text-slate-900">Thu hồi công nợ</div>
+        <div className="mt-0.5 truncate text-sm text-slate-500">{item.customerName} · {item.projectName} · {item.label}</div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-slate-50 p-2"><div className="text-[10px] font-bold uppercase text-slate-400">Phải trả</div><div className="text-sm font-extrabold text-slate-700">{formatShort(item.contractValue)}</div></div>
+          <div className="rounded-xl bg-slate-50 p-2"><div className="text-[10px] font-bold uppercase text-slate-400">Đã thu</div><div className="text-sm font-extrabold text-sky-600">{formatShort(item.collected)}</div></div>
+          <div className="rounded-xl bg-rose-50 p-2"><div className="text-[10px] font-bold uppercase text-rose-400">Còn nợ</div><div className="text-sm font-extrabold text-rose-600">{formatShort(item.debt)}</div></div>
+        </div>
+        <label className="mt-4 block text-sm font-semibold text-slate-600">Số tiền thu lần này</label>
+        <MoneyInput value={amt} onChange={setAmt} autoFocus className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-lg font-bold outline-none focus:border-indigo-400" placeholder="0" />
+        <div className="mt-1.5 flex items-center justify-between text-[11px]">
+          <button type="button" onClick={() => setAmt(String(remain))} className="font-bold text-indigo-600">Thu đủ ({formatShort(remain)})</button>
+          <span className="text-slate-400">Còn nợ sau thu: <b className="text-slate-600">{formatShort(remain - val)}</b></span>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50">Huỷ</button>
+          <button disabled={val <= 0} onClick={() => onSave(val)} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-40">Ghi nhận thu</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DebtPanel() {
+  const { projects, updateInstallment } = useData();
+  const [collect, setCollect] = useState(null);
+  const [q, setQ] = useState("");
+  const [closed, setClosed] = useState(() => new Set());
+
+  const outstanding = useMemo(
+    () => allInstallments(projects).filter((x) => num(x.debt) > 0).sort((a, b) => (a.date || "").localeCompare(b.date || "")),
+    [projects]
+  );
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return outstanding;
+    return outstanding.filter((x) => (x.customerName || "").toLowerCase().includes(s) || (x.projectName || "").toLowerCase().includes(s));
+  }, [outstanding, q]);
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const x of filtered) {
+      const k = x.customerId || x.customerName || "—";
+      if (!map.has(k)) map.set(k, { key: String(k), name: x.customerName || "Khách lẻ", items: [], debt: 0 });
+      const g = map.get(k); g.items.push(x); g.debt += num(x.debt);
+    }
+    return [...map.values()].sort((a, b) => b.debt - a.debt);
+  }, [filtered]);
+  const totalDebt = outstanding.reduce((a, x) => a + num(x.debt), 0);
+  const toggle = (k) => setClosed((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const doCollect = (val) => {
+    const it = collect;
+    updateInstallment(it.projectId, it.id, { collected: Math.min(num(it.contractValue), num(it.collected) + val) });
+    setCollect(null);
+  };
+  const collectFull = (it) => updateInstallment(it.projectId, it.id, { collected: num(it.contractValue) });
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 p-4 text-white shadow-lg shadow-rose-500/20">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Tổng công nợ</div>
+          <div className="mt-1 text-lg font-extrabold sm:text-2xl"><span className="sm:hidden">{formatShort(totalDebt)}</span><span className="hidden sm:inline">{formatVND(totalDebt)}</span></div>
+        </div>
+        <div className="rounded-2xl bg-white p-4 shadow-sm"><div className="text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Khách đang nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
+        <div className="rounded-2xl bg-white p-4 shadow-sm"><div className="text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>
+      </div>
+
+      <div className="rounded-xl bg-indigo-50 px-3.5 py-2.5 text-[12px] text-indigo-700">💡 Thu nợ chỉ cập nhật <b>Đã thu</b> / giảm <b>công nợ</b>. Quỹ công ty không đổi vì lợi nhuận đã được ghi nhận từ khi có job.</div>
+
+      {outstanding.length === 0 ? (
+        <Card><div className="py-12 text-center"><div className="text-3xl">🎉</div><div className="mt-2 text-sm font-bold text-slate-500">Không còn công nợ nào — tất cả đã thu đủ!</div></div></Card>
+      ) : (
+        <>
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm khách / dự án…" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-indigo-400" />
+          </div>
+          <div className="space-y-3">
+            {groups.map((g) => {
+              const open = !closed.has(g.key);
+              return (
+                <div key={g.key} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                  <button onClick={() => toggle(g.key)} className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
+                    <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                    <span className="truncate text-sm font-extrabold text-slate-800">{g.name}</span>
+                    <Badge tone="slate">{g.items.length}</Badge>
+                    <span className="ml-auto shrink-0 text-sm font-extrabold text-rose-600">{formatShort(g.debt)}</span>
+                  </button>
+                  {open && (
+                    <div className="divide-y divide-slate-50 border-t border-slate-100">
+                      {g.items.map((x) => (
+                        <div key={x.id} className="flex items-center gap-3 px-4 py-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
+                            <div className="truncate text-[11px] text-slate-400">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}</div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
+                            <div className="mt-1 flex justify-end gap-1.5">
+                              <button onClick={() => { if (confirm(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
+                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700">Thu…</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {collect && <CollectModal item={collect} onClose={() => setCollect(null)} onSave={doCollect} />}
+    </div>
+  );
+}
+
+const TABS = [["report", "Doanh thu / LN", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí vận hành", CreditCard]];
 
 export default function Ketoan({ initialTab = "report" }) {
   const [tab, setTab] = useState(initialTab);
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card className="!p-2">
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-3 gap-1">
           {TABS.map(([v, l, Ic]) => (
-            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
-              <Ic size={16} /> <span className="truncate">{l}</span>
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-[13px] font-bold transition sm:gap-2 sm:text-sm ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
+              <Ic size={16} className="shrink-0" /> <span className="truncate">{l}</span>
             </button>
           ))}
         </div>
       </Card>
-      {tab === "report" ? <KetoanReport /> : <Expenses />}
+      {tab === "report" ? <KetoanReport /> : tab === "debt" ? <DebtPanel /> : <Expenses />}
     </div>
   );
 }
