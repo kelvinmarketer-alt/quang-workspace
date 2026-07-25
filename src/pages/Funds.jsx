@@ -771,12 +771,12 @@ function FundsMain() {
               {debtTotal > 0 && (
                 <div className="mt-3 grid max-w-md grid-cols-2 gap-2">
                   <div className="rounded-xl bg-white/10 p-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">💵 Tiền thực (đã về)</div>
-                    <div className={`mt-0.5 text-lg font-extrabold ${cashReal < 0 ? "text-rose-300" : "text-emerald-300"}`}>{formatVND(cashReal)}</div>
-                    <div className="text-[10px] text-indigo-200/80">{cashReal < 0 ? `đã phân bổ vượt tiền mặt ${formatShort(-cashReal)}` : "có thể phân bổ an toàn"}</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">💵 Tiền thực (có thể phân bổ)</div>
+                    <div className={`mt-0.5 text-lg font-extrabold ${cashReal < 0 ? "text-rose-300" : "text-emerald-300"}`}>{formatVND(Math.max(0, cashReal))}</div>
+                    <div className="text-[10px] text-indigo-200/80">{cashReal < 0 ? `⚠ đã phân bổ vượt ${formatShort(-cashReal)} — chờ thu nợ bù` : "an toàn để phân bổ"}</div>
                   </div>
                   <div className="rounded-xl bg-white/10 p-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">⏳ Công nợ (chưa về)</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-200">⏳ Công nợ phải thu</div>
                     <div className="mt-0.5 text-lg font-extrabold text-amber-300">{formatVND(debtTotal)}</div>
                     <div className="text-[10px] text-indigo-200/80">thu xong sẽ thành tiền mặt</div>
                   </div>
