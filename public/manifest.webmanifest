@@ -1,0 +1,15 @@
+{
+  "name": "Quang Workspace",
+  "short_name": "Quang WS",
+  "description": "Quản lý công việc & dòng tiền",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "lang": "vi",
+  "icons": [
+    { "src": "/logo-mark.png", "sizes": "409x409", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-mark.png", "sizes": "409x409", "type": "image/png", "purpose": "maskable" }
+  ]
+}

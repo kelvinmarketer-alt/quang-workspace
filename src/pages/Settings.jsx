@@ -1,9 +1,62 @@
-import { useRef, useState } from "react";
-import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
+import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
+
+function PushCard({ userId }) {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const supported = pushSupported();
+  useEffect(() => { if (supported) isSubscribed().then(setOn); }, [supported]);
+
+  const toggle = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      if (on) { await disablePush(); setOn(false); setMsg({ t: "ok", m: "Đã tắt thông báo trên thiết bị này." }); }
+      else { await enablePush(userId); setOn(true); setMsg({ t: "ok", m: "✓ Đã bật! Thiết bị này sẽ nhận thông báo nền." }); }
+    } catch (e) { setMsg({ t: "err", m: e.message || String(e) }); }
+    setBusy(false);
+  };
+  const test = async () => {
+    setBusy(true); setMsg(null);
+    try { const r = await sendTest(userId); setMsg({ t: "ok", m: `Đã gửi thử tới ${r?.sent ?? "?"} thiết bị. Chờ vài giây…` }); }
+    catch (e) { setMsg({ t: "err", m: "Gửi thử lỗi: " + (e.message || String(e)) }); }
+    setBusy(false);
+  };
+
+  return (
+    <Card>
+      <SectionTitle action={<BellRing size={18} className="text-amber-500" />}>Thông báo đẩy (nền)</SectionTitle>
+      {!supported ? (
+        <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
+          Thiết bị/trình duyệt này chưa hỗ trợ thông báo đẩy. Trên <b>iPhone/iPad</b> cần <b>“Thêm vào MH chính”</b> (cài như app) rồi mở từ icon đó mới bật được.
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+            <div className="flex items-center gap-3">
+              <div className={`grid h-11 w-11 place-items-center rounded-xl ${on ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400"}`}><Bell size={20} /></div>
+              <div>
+                <div className="text-sm font-bold text-slate-800">{on ? "Đang bật trên thiết bị này" : "Đang tắt"}</div>
+                <div className="text-[11px] text-slate-400">Nhắc quỹ đến hạn, việc, công nợ… kể cả khi đóng app.</div>
+              </div>
+            </div>
+            <button onClick={toggle} disabled={busy} className={`rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-50 ${on ? "bg-slate-500 hover:bg-slate-600" : "bg-amber-500 hover:bg-amber-600"}`}>{busy ? "…" : on ? "Tắt" : "Bật"}</button>
+          </div>
+          {on && (
+            <button onClick={test} disabled={busy} className="mt-3 flex items-center gap-2 rounded-xl border border-indigo-200 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"><Send size={15} /> Gửi thử tới máy tôi</button>
+          )}
+          {permission() === "denied" && <div className="mt-2 text-[11px] font-semibold text-rose-500">⚠ Quyền thông báo đang bị chặn — mở cài đặt trình duyệt để cho phép lại.</div>}
+        </>
+      )}
+      {msg && <div className={`mt-2 text-xs font-semibold ${msg.t === "err" ? "text-rose-600" : "text-emerald-600"}`}>{msg.m}</div>}
+    </Card>
+  );
+}
 
 export default function Settings() {
   const { tasks, family, customerList, projects, exportData, importData, reset } = useData();
@@ -74,6 +127,8 @@ export default function Settings() {
           {pwMsg && <div className={`mt-2 text-xs font-semibold ${pwMsg.t === "err" ? "text-rose-600" : "text-emerald-600"}`}>{pwMsg.m}</div>}
         </div>
       </Card>
+
+      <PushCard userId={user?.id} />
 
       <AiImport />
 
