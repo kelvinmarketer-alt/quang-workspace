@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, X, Phone, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Briefcase, Power, Clock } from "lucide-react";
+import { Search, X, Phone, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Briefcase, Power } from "lucide-react";
 import { Card, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
@@ -106,14 +106,18 @@ export default function Customers() {
       const lastIncome = customerLastIncome(projects, c.id);
       return { ...c, type: c.type || "remote", active: c.active ?? true, debt, revenue, projectCount: cps.length, lastIncome, offDays: daysSince(lastIncome) };
     }).filter((c) => c.name.toLowerCase().includes(q.toLowerCase()) || (c.phone || "").includes(q))
-      .filter((c) => typeF === "all" || (typeF === "off" ? !c.active : typeF === c.type))
+      // Mặc định chỉ khách đang hoạt động; khách OFF chỉ hiện khi chọn bộ lọc "Off"
+      .filter((c) => (typeF === "off" ? !c.active : c.active && (typeF === "all" || typeF === c.type)))
       // Đang hợp tác lên đầu, OFF xuống cuối; cùng nhóm thì thu tiền gần đây nhất ("online") lên trên
       .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
   }, [customerList, projects, q, typeF]);
 
   const counts = useMemo(() => {
-    const r = { fulltime: 0, remote: 0, le: 0, off: 0 };
-    for (const c of customerList) { if (!(c.active ?? true)) r.off++; r[c.type || "remote"]++; }
+    const r = { active: 0, fulltime: 0, remote: 0, le: 0, off: 0 };
+    for (const c of customerList) {
+      if (!(c.active ?? true)) { r.off++; continue; }
+      r.active++; r[c.type || "remote"]++;
+    }
     return r;
   }, [customerList]);
 
@@ -148,13 +152,13 @@ export default function Customers() {
         </div>
         {/* MOBILE: dropdown lọc */}
         <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
-          {[["all", "Tất cả", customerList.length], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
+          {[["all", "Tất cả", counts.active], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
             <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
           ))}
         </select>
         {/* DESKTOP: chips lọc */}
         <div className="mt-3 hidden flex-wrap gap-1 sm:flex">
-          {[["all", "Tất cả", customerList.length], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
+          {[["all", "Tất cả", counts.active], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
             <button key={v} onClick={() => setTypeF(v)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${typeF === v ? (v === "off" ? "bg-rose-500 text-white" : "bg-indigo-500 text-white") : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l} {n > 0 && <span className="opacity-70">{n}</span>}</button>
           ))}
         </div>
@@ -190,31 +194,17 @@ export default function Customers() {
                         <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
                         {!c.active && <Badge tone="rose">OFF</Badge>}
                       </div>
-                      <div className="text-xs text-slate-400">{c.phone || "Chưa có SĐT"} · {c.projectCount} dự án</div>
+                      <div className="text-xs text-slate-400">{c.projectCount} dự án</div>
                     </div>
                   </button>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <button onClick={() => setSel(c.id)} className="mt-4 grid w-full grid-cols-2 gap-3 text-left">
                   <div className="rounded-xl bg-slate-50 p-3"><div className="text-[11px] font-semibold uppercase text-slate-400">{c.type === "fulltime" ? "Lương đã nhận" : "Doanh thu"}</div><div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>{c.type === "fulltime" && c.monthlySalary > 0 && <div className="text-[10px] text-slate-400">CB {formatShort(c.monthlySalary)}/th</div>}</div>
                   <div className={`rounded-xl p-3 ${c.debt > 0 ? "bg-rose-50" : "bg-emerald-50"}`}><div className={`text-[11px] font-semibold uppercase ${c.debt > 0 ? "text-rose-500" : "text-emerald-500"}`}>Đang nợ</div><div className={`text-sm font-extrabold ${c.debt > 0 ? "text-rose-700" : "text-emerald-700"}`}>{c.debt > 0 ? formatShort(c.debt) : "0"}</div></div>
-                </div>
-                <div className="mt-2 text-[11px]">
-                  {!c.active ? (
-                    <span className="flex items-center gap-1 font-bold text-rose-600"><Power size={11} /> OFF{c.offDays != null ? ` · ${c.offDays} ngày kể từ lần thu cuối` : ""}</span>
-                  ) : c.offDays != null ? (
-                    <span className={`flex items-center gap-1 ${c.offDays > 45 ? "font-bold text-amber-600" : "text-slate-400"}`}><Clock size={11} /> {c.offDays === 0 ? "Thu hôm nay" : `${c.offDays} ngày từ lần thu cuối`}</span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-slate-300"><Clock size={11} /> Chưa thu lần nào</span>
-                  )}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  {zl ? (
-                    <a href={zl} target="_blank" rel="noreferrer" className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0068FF]/10 py-2 text-xs font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={14} /> Nhắn Zalo</a>
-                  ) : (
-                    <span className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-slate-100 py-2 text-xs font-bold text-slate-400"><MessageCircle size={14} /> Chưa có SĐT</span>
-                  )}
-                  <button onClick={() => setModal(c)} className="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:text-indigo-600"><Pencil size={14} /></button>
-                </div>
+                </button>
+                {zl && (
+                  <a href={zl} target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-[#0068FF]/10 py-2 text-xs font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={14} /> Nhắn Zalo</a>
+                )}
               </div>
             );
           })}

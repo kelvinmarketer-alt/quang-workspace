@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Sparkles, ImagePlus, MessageSquareText, Key, Save, Loader2, Check, X, Trash2, Eye, EyeOff, Settings as SettingsIcon } from "lucide-react";
+import { Sparkles, ImagePlus, MessageSquareText, Key, Save, Loader2, Check, X, Trash2, Eye, EyeOff, Settings as SettingsIcon, Mic, MicOff } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND } from "./ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiImport, fileToDataUrl } from "../lib/ai.js";
@@ -94,6 +94,27 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
   const [parsed, setParsed] = useState(null);
   const [done, setDone] = useState("");
 
+  // Nhập bằng giọng nói (Web Speech API) — Chrome/Android/desktop. iOS dùng nút micro của bàn phím.
+  const recRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const toggleMic = () => {
+    if (listening) { recRef.current?.stop(); return; }
+    if (!SR) { setErr("Thiết bị/trình duyệt không hỗ trợ thu âm trực tiếp. Trên iPhone hãy bấm nút micro 🎤 trên bàn phím để đọc vào ô này."); return; }
+    const rec = new SR();
+    rec.lang = "vi-VN"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (e) => {
+      let add = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) add += e.results[i][0].transcript;
+      if (add.trim()) setText((p) => (p ? p + " " : "") + add.trim());
+    };
+    rec.onerror = () => setListening(false);
+    rec.onend = () => setListening(false);
+    recRef.current = rec;
+    setErr(""); setTab("chat"); setListening(true);
+    try { rec.start(); } catch { setListening(false); }
+  };
+
   const ctxHint = mode === "installment" ? "(Đây là các ĐỢT THU thêm cho 1 dự án đã có. Trích các đợt thu.) " : "";
 
   const pickImage = async (e) => { const file = e.target.files?.[0]; if (!file) return; setImgData(await fileToDataUrl(file)); e.target.value = ""; };
@@ -136,7 +157,13 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
       </div>
 
       {tab === "chat" ? (
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder={placeholder} />
+        <div className="relative mt-3">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} className="w-full rounded-xl border border-slate-200 px-3 py-2 pr-14 text-sm" placeholder={placeholder} />
+          <button type="button" onClick={toggleMic} title="Đọc bằng giọng nói" className={`absolute right-2.5 top-2.5 grid h-10 w-10 place-items-center rounded-full shadow ${listening ? "animate-pulse bg-rose-500 text-white" : "bg-indigo-100 text-indigo-600 hover:bg-indigo-200"}`}>
+            {listening ? <MicOff size={18} /> : <Mic size={18} />}
+          </button>
+          {listening && <div className="mt-1 text-[11px] font-bold text-rose-500">🔴 Đang nghe… cứ đọc tự nhiên (vd "Cao JBL chạy ads tháng 6 nhận 10 triệu chạy 4 triệu thu đủ"), xong bấm micro để dừng rồi Phân tích.</div>}
+        </div>
       ) : (
         <div className="mt-3 space-y-3">
           <button onClick={() => fileRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40">
