@@ -14,7 +14,7 @@ const NAV = [
   { to: "/khach-hang", label: "Khách hàng", icon: Users },
   { to: "/du-an", label: "Dự án / Đơn hàng", icon: FolderKanban },
   { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator },
-  { to: "/quy", label: "Quỹ / Dòng tiền", icon: PiggyBank },
+  // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
