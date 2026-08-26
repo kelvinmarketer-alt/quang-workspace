@@ -453,7 +453,7 @@ function DebtPanel() {
   );
 }
 
-const TABS = [["report", "Doanh thu / LN", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí vận hành", CreditCard]];
+const TABS = [["report", "Doanh thu", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí", CreditCard]];
 
 export default function Ketoan({ initialTab = "report" }) {
   const [tab, setTab] = useState(initialTab);
