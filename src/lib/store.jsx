@@ -477,6 +477,7 @@ export function DataProvider({ children }) {
       addResources: (arr) => setState((s) => ({ ...s, resources: [...(arr || []).map((r) => ({ id: "r" + uid(), title: (r.title || "").trim(), url: normUrl(r.url), type: r.type || "web", projectId: r.projectId || "", customerId: r.customerId || "", username: (r.username || "").trim(), password: r.password || "", tags: r.tags || [], note: r.note || "", createdAt: Date.now() })), ...(s.resources || [])] })),
       updateResource: (id, patch) => setState((s) => ({ ...s, resources: (s.resources || []).map((x) => (x.id === id ? { ...x, ...patch, ...(patch.url != null ? { url: normUrl(patch.url) } : {}) } : x)) })),
       deleteResource: (id) => setState((s) => ({ ...s, resources: (s.resources || []).filter((x) => x.id !== id) })),
+      deleteResources: (ids) => setState((s) => ({ ...s, resources: (s.resources || []).filter((x) => !ids.includes(x.id)) })),
       // BACKUP
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {

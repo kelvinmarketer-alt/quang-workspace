@@ -27,7 +27,7 @@ export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[
 
 // Các method GHI của store theo từng tính năng — để CHẶN khi thành viên chỉ có quyền Xem.
 export const FEATURE_WRITES = {
-  customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed", "addResource", "addResources", "updateResource", "deleteResource"],
+  customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed", "addResource", "addResources", "updateResource", "deleteResource", "deleteResources"],
   ketoan: ["addExpense", "addExpensesMany", "updateExpense", "deleteExpense", "deleteExpensesMany", "changeExpensePlan", "addFund", "updateFund", "deleteFund", "addFundTx", "addFundTxMany", "updateFundTx", "deleteFundTx", "categorizeFundTx", "addSpendCat", "updateSpendCat", "deleteSpendCat", "transferFund", "transferFundMany", "allocateFromCompany", "addFundSchedule", "updateFundSchedule", "deleteFundSchedule", "runFundSchedule", "skipFundSchedule"],
   tasks: ["addTask", "updateTask", "deleteTask", "toggleTask", "addFamily", "addFamilyMany", "updateFamily", "updateFamilyMany", "deleteFamily", "deleteFamilyMany"],
   coin: ["addCoin", "updateCoin", "deleteCoin"],

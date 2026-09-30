@@ -260,15 +260,22 @@ function VaultAiModal({ onClose, onAdd }) {
           {items && items.length > 0 && (
             <div className="rounded-xl border border-slate-100 p-2">
               <div className="mb-1 px-1 text-[11px] font-bold uppercase text-slate-400">AI bóc được ({items.length}) — sửa/bỏ trước khi thêm</div>
-              <div className="max-h-56 space-y-1.5 overflow-y-auto">
-                {items.map((r, i) => { const t = TYPES[r.type] || TYPES.app; const sub = r.type === "app" ? [r.username, r.password ? "••••" : ""].filter(Boolean).join(" · ") : r.type === "card" ? [r.bank, r.number].filter(Boolean).join(" · ") : [r.bank, r.number].filter(Boolean).join(" · "); return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
-                    <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${t.grad} text-white`}><t.icon size={14} /></div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1"><input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none" /><Badge tone={t.tone}>{t.label}</Badge></div>
-                      <div className="truncate text-[11px] text-slate-400">{sub || "—"}</div>
+              <div className="max-h-80 space-y-2 overflow-y-auto">
+                {items.map((r, i) => { const t = TYPES[r.type] || TYPES.app; const cell = "w-full rounded-lg border border-slate-200 px-2 py-1 text-[13px] outline-none focus:border-indigo-400"; return (
+                  <div key={i} className="space-y-1.5 rounded-lg border border-slate-100 bg-slate-50/50 p-2">
+                    <div className="flex items-center gap-1.5">
+                      {TYPE_KEYS.map((k) => { const Ty = TYPES[k]; const on = r.type === k; return (
+                        <button key={k} onClick={() => setItem(i, { type: k })} className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-bold ${on ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}><Ty.icon size={12} /> {Ty.label}</button>
+                      ); })}
+                      <button onClick={() => removeItem(i)} className="ml-auto shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
                     </div>
-                    <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>
+                    <input value={r.title || ""} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Tên gọi" className={`${cell} font-semibold`} />
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {t.fields.map(([k, lbl]) => (
+                        <input key={k} value={r[k] || ""} onChange={(e) => setItem(i, { [k]: e.target.value })} placeholder={lbl} className={cell} autoComplete="off" />
+                      ))}
+                    </div>
+                    <input value={r.note || ""} onChange={(e) => setItem(i, { note: e.target.value })} placeholder="Ghi chú" className={cell} />
                   </div>
                 ); })}
               </div>

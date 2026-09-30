@@ -39,16 +39,21 @@ function CredLine({ label, value, secret }) {
 }
 
 // 1 dòng tài nguyên
-export function ResRow({ r, subLabel, canW, onEdit, onDelete }) {
+export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, onCheck }) {
   const [done, setDone] = useState(false);
   const [open, setOpen] = useState(false);
   const t = RES_TYPES[r.type] || RES_TYPES.web;
   const hasCred = !!(r.username || r.password);
   const doCopy = async (e) => { e.stopPropagation(); if (await copy(r.url)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
   return (
-    <div className="rounded-xl border border-slate-100 hover:border-indigo-200">
+    <div className={`rounded-xl border ${checked ? "border-indigo-300 bg-indigo-50/40" : "border-slate-100 hover:border-indigo-200"}`}>
       <div className="group flex items-center gap-3 p-2.5">
-        <button onClick={() => openUrl(r.url)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title="Mở link">
+        {select && (
+          <button onClick={() => onCheck && onCheck(r.id)} className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${checked ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}>
+            <Check size={14} />
+          </button>
+        )}
+        <button onClick={() => (select ? onCheck && onCheck(r.id) : openUrl(r.url))} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title="Mở link">
           <t.icon size={16} />
         </button>
         <button onClick={() => openUrl(r.url)} className="min-w-0 flex-1 text-left">
@@ -249,16 +254,24 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
           {err && <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{err}</div>}
           {items && items.length > 0 && (
             <div className="rounded-xl border border-slate-100 p-2">
-              <div className="mb-1 px-1 text-[11px] font-bold uppercase text-slate-400">AI bóc được ({items.length}) — sửa/bỏ trước khi thêm</div>
-              <div className="max-h-56 space-y-1.5 overflow-y-auto">
-                {items.map((r, i) => { const t = RES_TYPES[r.type] || RES_TYPES.web; const hasCred = !!(r.username || r.password); return (
-                  <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
-                    <t.icon size={15} className="shrink-0 text-slate-400" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1"><input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none" />{hasCred && <KeyRound size={12} className="shrink-0 text-amber-500" title="Có tài khoản/mật khẩu" />}</div>
-                      <div className="truncate text-[11px] text-slate-400">{hasCred ? `${r.username || "—"}${r.password ? " · ••••" : ""} · ` : ""}{hostOf(r.url) || r.url}</div>
+              <div className="mb-1 px-1 text-[11px] font-bold uppercase text-slate-400">AI bóc được ({items.length}) — sửa trực tiếp rồi thêm</div>
+              <div className="max-h-80 space-y-2 overflow-y-auto">
+                {items.map((r, i) => { const t = RES_TYPES[r.type] || RES_TYPES.web; const cell = "w-full rounded-lg border border-slate-200 px-2 py-1 text-[13px] outline-none focus:border-indigo-400"; return (
+                  <div key={i} className="space-y-1.5 rounded-lg border border-slate-100 bg-slate-50/50 p-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`}><t.icon size={13} /></div>
+                      <input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Tên nguồn / hạng mục" className={`${cell} flex-1 font-semibold`} />
+                      <select value={r.type} onChange={(e) => setItem(i, { type: e.target.value })} className={`${cell} w-24`}>
+                        {RES_TYPE_KEYS.map((k) => <option key={k} value={k}>{RES_TYPES[k].label}</option>)}
+                      </select>
+                      <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
                     </div>
-                    <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>
+                    <input value={r.url || ""} onChange={(e) => setItem(i, { url: e.target.value })} placeholder="Link đăng nhập / URL" className={`${cell} font-mono`} />
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input value={r.username || ""} onChange={(e) => setItem(i, { username: e.target.value })} placeholder="Tài khoản" className={cell} autoComplete="off" />
+                      <input value={r.password || ""} onChange={(e) => setItem(i, { password: e.target.value })} placeholder="Mật khẩu" className={cell} autoComplete="off" />
+                    </div>
+                    <input value={r.note || ""} onChange={(e) => setItem(i, { note: e.target.value })} placeholder="Ghi chú" className={cell} />
                   </div>
                 ); })}
               </div>
@@ -318,7 +331,7 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
 }
 
 export default function Resources() {
-  const { resources = [], customerList = [], projects = [], addResource, addResources, updateResource, deleteResource, canEdit } = useData();
+  const { resources = [], customerList = [], projects = [], addResource, addResources, updateResource, deleteResource, deleteResources, canEdit } = useData();
   const canW = canEdit ? canEdit("customers") : true;
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("all");
@@ -327,6 +340,13 @@ export default function Resources() {
   const [batch, setBatch] = useState(false);
   const [ai, setAi] = useState(false);
   const [openGroups, setOpenGroups] = useState(() => new Set());
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState(() => new Set());
+  const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const clearSel = () => setSel(new Set());
+  const deleteSelected = () => { if (sel.size && confirm(`Xoá ${sel.size} tài nguyên đã chọn?`)) { deleteResources([...sel]); clearSel(); } };
+  const deleteGroup = (g) => { if (confirm(`Xoá TẤT CẢ ${g.items.length} tài nguyên của "${g.name}"?`)) deleteResources(g.items.map((r) => r.id)); };
+  const toggleGroupSel = (g) => setSel((s) => { const n = new Set(s); const all = g.items.every((r) => n.has(r.id)); g.items.forEach((r) => (all ? n.delete(r.id) : n.add(r.id))); return n; });
 
   const activeCustomers = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
   const projName = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
@@ -392,9 +412,19 @@ export default function Resources() {
             <button onClick={() => setAi(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={15} /> AI</button>
             <button onClick={() => setModal({})} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex-none"><Plus size={15} /> Thêm</button>
             <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white shadow-lg sm:flex-none"><Plus size={15} /> Hàng loạt</button>
+            <button onClick={() => { setSelMode((v) => !v); clearSel(); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold sm:flex-none ${selMode ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}><Check size={15} /> {selMode ? "Xong" : "Chọn"}</button>
           </div>
         )}
       </div>
+
+      {/* Thanh chọn hàng loạt */}
+      {canW && selMode && (
+        <div className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+          <span className="text-sm font-bold text-indigo-700">Đã chọn {sel.size}</span>
+          <button onClick={clearSel} className="ml-auto rounded-lg px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-white">Bỏ chọn</button>
+          <button onClick={deleteSelected} disabled={!sel.size} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-40"><Trash2 size={14} /> Xoá đã chọn</button>
+        </div>
+      )}
 
       {/* Danh sách — nhóm theo khách (accordion) */}
       {list.length === 0 ? (
@@ -405,21 +435,28 @@ export default function Resources() {
             const open = isOpen(g.cid);
             const cust = custById[g.cid];
             const initials = (g.name || "?").trim().split(/\s+/).slice(-2).map((w) => w[0]).join("").toUpperCase();
+            const allSel = selMode && g.items.every((r) => sel.has(r.id));
             return (
               <Card key={g.cid} className="!p-0 overflow-hidden">
-                <button onClick={() => toggleGroup(g.cid)} className="flex w-full items-center gap-3 p-3 text-left">
-                  <div className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[13px] font-extrabold ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}>
-                    {cust?.logo ? <img src={cust.logo} alt="" className="h-full w-full object-cover" /> : g.cid === "__none__" ? <Users size={16} /> : initials}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-extrabold text-slate-800">{g.name}</div>
-                    <div className="text-[11px] text-slate-400">{g.items.length} tài nguyên</div>
-                  </div>
-                  <ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
-                </button>
+                <div className="flex w-full items-center gap-3 p-3">
+                  {selMode && canW && (
+                    <button onClick={() => toggleGroupSel(g)} className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${allSel ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}><Check size={14} /></button>
+                  )}
+                  <button onClick={() => toggleGroup(g.cid)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <div className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[13px] font-extrabold ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}>
+                      {cust?.logo ? <img src={cust.logo} alt="" className="h-full w-full object-cover" /> : g.cid === "__none__" ? <Users size={16} /> : initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-extrabold text-slate-800">{g.name}</div>
+                      <div className="text-[11px] text-slate-400">{g.items.length} tài nguyên</div>
+                    </div>
+                    <ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+                  </button>
+                  {canW && <button onClick={() => deleteGroup(g)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title={`Xoá tất cả tài nguyên của ${g.name}`}><Trash2 size={16} /></button>}
+                </div>
                 {open && (
                   <div className="space-y-1.5 border-t border-slate-100 p-3">
-                    {g.items.map((r) => <ResRow key={r.id} r={r} subLabel={projName[r.projectId] || ""} canW={canW} onEdit={setModal} onDelete={deleteResource} />)}
+                    {g.items.map((r) => <ResRow key={r.id} r={r} subLabel={projName[r.projectId] || ""} canW={canW} onEdit={setModal} onDelete={deleteResource} select={selMode} checked={sel.has(r.id)} onCheck={toggleSel} />)}
                   </div>
                 )}
               </Card>
