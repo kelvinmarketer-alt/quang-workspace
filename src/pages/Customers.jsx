@@ -1,24 +1,29 @@
 import { useMemo, useState } from "react";
-import { Search, X, Phone, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Briefcase, Power } from "lucide-react";
+import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus } from "lucide-react";
 import { Card, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
+import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
+import { AiImportModal } from "../components/AiImport.jsx";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
+const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
+const STATUS_ORDER = { doing: 0, paused: 1, done: 2, cancel: 3 };
 const TYPES = { fulltime: ["indigo", "Full-time"], remote: ["sky", "Remote"], le: ["slate", "Khách lẻ"] };
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2";
+const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 
 function zaloLink(phone, zalo) {
-  const num = String(zalo || phone || "").replace(/[^\d]/g, "");
-  return num ? `https://zalo.me/${num}` : null;
+  const n = String(zalo || phone || "").replace(/[^\d]/g, "");
+  return n ? `https://zalo.me/${n}` : null;
 }
 
 function CustomerModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
@@ -71,7 +76,7 @@ function BulkAddModal({ onClose, onSave }) {
     return { name: parts[0] || "", phone: parts[1] || "", zalo: parts[2] || "", note: "" };
   }).filter((c) => c.name);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-2 flex items-center justify-between">
@@ -89,28 +94,59 @@ function BulkAddModal({ onClose, onSave }) {
   );
 }
 
+// 1 dự án (dòng gọn trong phần xổ của khách)
+function ProjectRow({ p, onOpen }) {
+  const m = projectMetrics(p);
+  const [stone, slabel] = STATUS[p.status] || STATUS.doing;
+  const cnt = (p.installments || []).length;
+  return (
+    <button onClick={onOpen} className="flex w-full items-center gap-2.5 rounded-xl border border-slate-100 bg-white p-2.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50/30">
+      <Badge tone={CAT_TONE[p.category] || "slate"}>{p.category}</Badge>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-bold text-slate-700">{p.name}</div>
+        <div className="text-[11px] text-slate-400">DT {formatShort(m.revenue)} · LN {formatShort(m.grossProfit)}{m.debt > 0 ? <> · <span className="text-rose-500">nợ {formatShort(m.debt)}</span></> : ""} · <Repeat size={9} className="inline" /> {cnt}</div>
+      </div>
+      <Badge tone={stone}>{slabel}</Badge>
+    </button>
+  );
+}
+
 export default function Customers() {
-  const { customerList, projects, addCustomer, addCustomers, updateCustomer, deleteCustomer, deleteCustomers } = useData();
+  const {
+    customerList, projects, addCustomer, addCustomers, updateCustomer, deleteCustomer, deleteCustomers,
+    addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment,
+  } = useData();
   const [q, setQ] = useState("");
-  const [sel, setSel] = useState(null);
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(null);       // customer add/edit
   const [bulk, setBulk] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [typeF, setTypeF] = useState("all");
+  const [expanded, setExpanded] = useState(() => new Set());
+  const [projModal, setProjModal] = useState(null);   // project add/edit
+  const [projDrawerId, setProjDrawerId] = useState(null);
+  const [aiOpen, setAiOpen] = useState(false);
+
+  // Gom dự án theo khách (sort: đang làm trước → hoạt động gần nhất)
+  const projByCust = useMemo(() => {
+    const lastDate = (p) => (p.installments || []).reduce((mx, i) => (i.date && i.date > mx ? i.date : mx), "");
+    const m = new Map();
+    for (const p of projects) { if (!m.has(p.customerId)) m.set(p.customerId, []); m.get(p.customerId).push(p); }
+    for (const arr of m.values()) arr.sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || lastDate(b).localeCompare(lastDate(a)));
+    return m;
+  }, [projects]);
 
   const rows = useMemo(() => {
     return customerList.map((c) => {
-      const cps = projects.filter((p) => p.customerId === c.id);
+      const cps = projByCust.get(c.id) || [];
       let debt = 0, revenue = 0;
-      for (const p of cps) { const m = projectMetrics(p); debt += m.debt; revenue += m.revenue; }
+      for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; }
       const lastIncome = customerLastIncome(projects, c.id);
-      return { ...c, type: c.type || "remote", active: c.active ?? true, debt, revenue, projectCount: cps.length, lastIncome, offDays: daysSince(lastIncome) };
+      return { ...c, type: c.type || "remote", active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome };
     }).filter((c) => c.name.toLowerCase().includes(q.toLowerCase()) || (c.phone || "").includes(q))
-      // Mặc định chỉ khách đang hoạt động; khách OFF chỉ hiện khi chọn bộ lọc "Off"
+      // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off"
       .filter((c) => (typeF === "off" ? !c.active : c.active && (typeF === "all" || typeF === c.type)))
-      // Đang hợp tác lên đầu, OFF xuống cuối; cùng nhóm thì thu tiền gần đây nhất ("online") lên trên
       .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
-  }, [customerList, projects, q, typeF]);
+  }, [customerList, projByCust, projects, q, typeF]);
 
   const counts = useMemo(() => {
     const r = { active: 0, fulltime: 0, remote: 0, le: 0, off: 0 };
@@ -121,21 +157,23 @@ export default function Customers() {
     return r;
   }, [customerList]);
 
-  const selCust = sel ? rows.find((c) => c.id === sel) : null;
-  const selProjects = sel ? projects.filter((p) => p.customerId === sel) : [];
-
   const toggle = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allPicked = rows.length > 0 && rows.every((c) => picked.has(c.id));
   const toggleAll = () => setPicked(allPicked ? new Set() : new Set(rows.map((c) => c.id)));
+  const toggleExp = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const drawerProject = projDrawerId ? projects.find((p) => p.id === projDrawerId) : null;
+  const drawerCust = drawerProject ? customerList.find((c) => c.id === drawerProject.customerId) : null;
 
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card>
         <div className="flex items-center gap-2">
           <div className="mr-auto min-w-0">
-            <div className="text-sm font-bold text-slate-800">{customerList.length} khách hàng</div>
-            <div className="truncate text-xs text-slate-400">Mỗi khách có thể có nhiều dự án</div>
+            <div className="text-sm font-bold text-slate-800">{counts.active} khách · {projects.length} dự án</div>
+            <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
+          <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Sparkles size={16} /> AI</button>
           <button onClick={() => setModal({ name: "", phone: "", zalo: "", note: "", feeRate: 20, type: "remote", monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -176,34 +214,51 @@ export default function Customers() {
       {rows.length === 0 ? (
         <Card><div className="py-12 text-center"><Users size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có khách hàng</div><div className="mt-1 text-xs text-slate-400">Bấm "Thêm khách" hoặc "Hàng loạt" để nhập danh sách.</div></div></Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="space-y-2.5">
           {rows.map((c, i) => {
-            const zl = zaloLink(c.phone, c.zalo);
             const isPicked = picked.has(c.id);
+            const open = expanded.has(c.id);
+            const zl = zaloLink(c.phone, c.zalo);
             return (
-              <div key={c.id} className={`card fade-up p-5 ${isPicked ? "ring-2 ring-indigo-400" : ""} ${!c.active ? "opacity-70" : ""}`}>
-                <div className="flex items-center gap-3">
+              <div key={c.id} className={`card overflow-hidden !p-0 ${isPicked ? "ring-2 ring-indigo-400" : ""} ${!c.active ? "opacity-70" : ""}`}>
+                {/* DÒNG KHÁCH */}
+                <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-3.5">
                   <button onClick={() => toggle(c.id)} className="shrink-0 text-slate-300 hover:text-indigo-600">
                     {isPicked ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
                   </button>
-                  <button onClick={() => setSel(c.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                    <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${!c.active ? "from-slate-400 to-slate-500" : AVA[i % AVA.length]} text-base font-extrabold text-white`}>{c.name.slice(0, 2).toUpperCase()}</div>
+                  <button onClick={() => toggleExp(c.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left sm:gap-3">
+                    <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                    <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${!c.active ? "from-slate-400 to-slate-500" : AVA[i % AVA.length]} text-sm font-extrabold text-white`}>{c.name.slice(0, 2).toUpperCase()}</div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-extrabold text-slate-800">{c.name}</span>
                         <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
                         {!c.active && <Badge tone="rose">OFF</Badge>}
                       </div>
-                      <div className="text-xs text-slate-400">{c.projectCount} dự án</div>
+                      <div className="text-[11px] text-slate-400">{c.projectCount} dự án</div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>
+                      <div className={`text-[11px] font-bold ${c.debt > 0 ? "text-rose-600" : "text-emerald-500"}`}>{c.debt > 0 ? `nợ ${formatShort(c.debt)}` : "đủ"}</div>
                     </div>
                   </button>
                 </div>
-                <button onClick={() => setSel(c.id)} className="mt-4 grid w-full grid-cols-2 gap-3 text-left">
-                  <div className="rounded-xl bg-slate-50 p-3"><div className="text-[11px] font-semibold uppercase text-slate-400">{c.type === "fulltime" ? "Lương đã nhận" : "Doanh thu"}</div><div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>{c.type === "fulltime" && c.monthlySalary > 0 && <div className="text-[10px] text-slate-400">CB {formatShort(c.monthlySalary)}/th</div>}</div>
-                  <div className={`rounded-xl p-3 ${c.debt > 0 ? "bg-rose-50" : "bg-emerald-50"}`}><div className={`text-[11px] font-semibold uppercase ${c.debt > 0 ? "text-rose-500" : "text-emerald-500"}`}>Đang nợ</div><div className={`text-sm font-extrabold ${c.debt > 0 ? "text-rose-700" : "text-emerald-700"}`}>{c.debt > 0 ? formatShort(c.debt) : "0"}</div></div>
-                </button>
-                {zl && (
-                  <a href={zl} target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-[#0068FF]/10 py-2 text-xs font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={14} /> Nhắn Zalo</a>
+
+                {/* XỔ: dự án của khách */}
+                {open && (
+                  <div className="space-y-2 border-t border-slate-100 bg-slate-50/50 p-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>
+                      {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-1.5 text-[11px] font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
+                      <button onClick={() => { const nP = c.projectCount; if (confirm(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>
+                      <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[11px] font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>
+                    </div>
+                    {c.projects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>
+                    ) : (
+                      c.projects.map((p) => <ProjectRow key={p.id} p={p} onOpen={() => setProjDrawerId(p.id)} />)
+                    )}
+                  </div>
                 )}
               </div>
             );
@@ -211,50 +266,27 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Drawer chi tiết */}
-      {selCust && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSel(null)} />
-          <div className="relative h-full w-full max-w-md overflow-y-auto bg-white p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-extrabold text-slate-900">{selCust.name}</h3>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setModal(selCust)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
-                <button onClick={() => { const nP = projects.filter((p) => p.customerId === selCust.id).length; if (confirm(nP ? `Xoá khách "${selCust.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) { deleteCustomer(selCust.id); setSel(null); } }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
-                <button onClick={() => setSel(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-2 text-sm text-slate-500"><Phone size={15} /> {selCust.phone || "Chưa có SĐT"}</div>
-            {selCust.note && <div className="mt-1 text-sm text-slate-400">{selCust.note}</div>}
-            {zaloLink(selCust.phone, selCust.zalo) && (
-              <a href={zaloLink(selCust.phone, selCust.zalo)} target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-[#0068FF] py-2.5 text-sm font-bold text-white"><MessageCircle size={16} /> Nhắn tin Zalo</a>
-            )}
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-indigo-50 p-3"><div className="text-[11px] font-bold uppercase text-indigo-400">Doanh thu</div><div className="text-lg font-extrabold text-indigo-700">{formatVND(selCust.revenue)}</div></div>
-              <div className={`rounded-xl p-3 ${selCust.debt > 0 ? "bg-rose-50" : "bg-emerald-50"}`}><div className={`text-[11px] font-bold uppercase ${selCust.debt > 0 ? "text-rose-400" : "text-emerald-400"}`}>Đang nợ</div><div className={`text-lg font-extrabold ${selCust.debt > 0 ? "text-rose-700" : "text-emerald-700"}`}>{formatVND(selCust.debt)}</div></div>
-            </div>
-            <div className="mt-5 text-sm font-bold text-slate-500">Dự án ({selProjects.length})</div>
-            {selProjects.length === 0 && <div className="mt-1 text-xs text-slate-400">Chưa có dự án. Thêm ở mục "Dự án / Đơn hàng".</div>}
-            <div className="mt-2 space-y-2">
-              {selProjects.map((p) => {
-                const m = projectMetrics(p);
-                return (
-                  <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2"><Badge tone={CAT_TONE[p.category] || "slate"}>{p.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{p.name}</span></div>
-                      <div className="mt-1 text-[11px] text-slate-400">DT {formatShort(m.revenue)} · LN {formatShort(m.grossProfit)} · {(p.installments || []).length} đợt</div>
-                    </div>
-                    <div className="text-right"><div className={`text-sm font-extrabold ${m.debt > 0 ? "text-rose-600" : "text-emerald-600"}`}>{m.debt > 0 ? formatVND(m.debt) : "Đủ"}</div><div className="text-[10px] text-slate-400">{m.debt > 0 ? "còn nợ" : "đã thu"}</div></div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
       {modal && <CustomerModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateCustomer(modal.id, data) : addCustomer(data))} />}
       {bulk && <BulkAddModal onClose={() => setBulk(false)} onSave={addCustomers} />}
+      {aiOpen && <AiImportModal mode="project" onClose={() => setAiOpen(false)} />}
+      {projModal && (
+        <ProjectModal
+          initial={projModal} customers={customerList}
+          onClose={() => setProjModal(null)}
+          onSave={(data) => (projModal.id ? updateProject(projModal.id, data) : addProject(data))}
+        />
+      )}
+      {drawerProject && (
+        <ProjectDrawer
+          project={drawerProject}
+          custFeeRate={num(drawerCust?.feeRate) || 20}
+          custSalary={num(drawerCust?.monthlySalary)}
+          onClose={() => setProjDrawerId(null)}
+          onEdit={() => { setProjModal(drawerProject); setProjDrawerId(null); }}
+          onDelete={() => deleteProject(drawerProject.id)}
+          addInstallment={addInstallment} updateInstallment={updateInstallment} deleteInstallment={deleteInstallment}
+        />
+      )}
     </div>
   );
 }

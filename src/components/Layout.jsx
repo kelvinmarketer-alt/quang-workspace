@@ -11,15 +11,14 @@ import { todayISO, fmtDateVI } from "../lib/format.js";
 
 const NAV = [
   { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true },
-  { to: "/khach-hang", label: "Khách hàng", icon: Users },
-  { to: "/du-an", label: "Dự án / Đơn hàng", icon: FolderKanban },
+  { to: "/khach-hang", label: "Khách & Dự án", icon: Users },
   { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
-const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/don-hang": "Dự án / Đơn hàng" };
+const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án" };
 
 function Brand() {
   return (

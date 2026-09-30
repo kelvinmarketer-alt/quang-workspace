@@ -191,7 +191,7 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
-function ProjectModal({ initial, customers, onClose, onSave }) {
+export function ProjectModal({ initial, customers, onClose, onSave }) {
   const [f, setF] = useState(initial);
   const [inst, setInst] = useState(blankInst());
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -303,7 +303,7 @@ function InstModal({ isAds, isSalary, salaryBase = 0, initial, dup = false, defa
   );
 }
 
-function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClose, onEdit, onDelete, addInstallment, updateInstallment, deleteInstallment }) {
+export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClose, onEdit, onDelete, addInstallment, updateInstallment, deleteInstallment }) {
   const m = projectMetrics(project);
   const isAds = project.category === "ADS";
   const isSalary = project.category === "Lương";

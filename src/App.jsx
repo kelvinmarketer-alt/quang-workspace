@@ -2,7 +2,6 @@ import { Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Customers from "./pages/Customers.jsx";
-import Projects from "./pages/Projects.jsx";
 import Ketoan from "./pages/Ketoan.jsx";
 import Funds from "./pages/Funds.jsx";
 import Tasks from "./pages/Tasks.jsx";
@@ -14,8 +13,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/khach-hang" element={<Customers />} />
-        <Route path="/du-an" element={<Projects />} />
-        <Route path="/don-hang" element={<Projects />} />
+        <Route path="/du-an" element={<Customers />} />
+        <Route path="/don-hang" element={<Customers />} />
         <Route path="/ke-toan" element={<Ketoan />} />
         <Route path="/chi-phi" element={<Ketoan initialTab="expenses" />} />
         <Route path="/quy" element={<Funds />} />
