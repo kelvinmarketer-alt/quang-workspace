@@ -291,12 +291,30 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
 
 function InstModal({ isAds, isSalary, salaryBase = 0, initial, dup = false, defaultFeeRate = 20, onClose, onSave }) {
   const [f, setF] = useState(initial || (isSalary ? { ...blankInst(), amount: salaryBase ? String(salaryBase) : "", collected: salaryBase ? String(salaryBase) : "" } : blankInst(defaultFeeRate)));
-  const title = dup ? (isSalary ? "Nhân bản lương tháng" : "Nhân bản đợt") : isSalary ? (initial?.id ? "Sửa lương tháng" : "Ghi lương tháng") : (initial?.id ? "Sửa đợt" : "Thêm đợt");
+  const [added, setAdded] = useState(0); // đã lưu bao nhiêu đợt trong phiên này
+  const editing = !!(initial && initial.id);
+  const title = dup ? (isSalary ? "Nhân bản lương tháng" : "Nhân bản đợt") : isSalary ? (editing ? "Sửa lương tháng" : "Ghi lương tháng") : (editing ? "Sửa đợt" : "Thêm đợt");
+  const saveClose = () => { if (num(f.amount)) { onSave(instFromForm(f, isAds, isSalary)); onClose(); } };
+  // Lưu rồi ở lại thêm đợt mới: giữ số tiền/% để nhập nhanh chuỗi định kỳ, ngày +1 tháng, xoá tên đợt
+  const saveMore = () => {
+    if (!num(f.amount)) return;
+    onSave(instFromForm(f, isAds, isSalary));
+    setAdded((n) => n + 1);
+    setF((p) => ({ ...p, label: "", date: addMonthISO(p.date) }));
+  };
   return (
     <Modal title={title} onClose={onClose} wide>
       {dup && <div className="mb-3 flex items-center gap-2 rounded-xl bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-600"><Copy size={14} /> Đã sao chép thông số đợt cũ — chỉ cần đổi <b>ngày thu</b> rồi lưu.</div>}
+      {added > 0 && <div className="mb-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-600"><Check size={14} /> Đã thêm <b>{added}</b> {isSalary ? "tháng" : "đợt"} — nhập tiếp hoặc bấm "Xong".</div>}
       <InstallmentFields f={f} setF={setF} isAds={isAds} isSalary={isSalary} salaryBase={salaryBase} />
-      <button onClick={() => { if (num(f.amount)) { onSave(instFromForm(f, isAds, isSalary)); onClose(); } }} className="mt-4 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{dup ? "Tạo đợt mới" : isSalary ? "Ghi lương" : "Lưu đợt"}</button>
+      {editing ? (
+        <button onClick={saveClose} className="mt-4 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
+      ) : (
+        <div className="mt-4 flex gap-2">
+          <button onClick={saveMore} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Plus size={15} /> Lưu & thêm tiếp</button>
+          <button onClick={() => { if (num(f.amount)) saveClose(); else onClose(); }} className="flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{added > 0 ? "Xong" : dup ? "Tạo đợt mới" : isSalary ? "Ghi lương" : "Lưu đợt"}</button>
+        </div>
+      )}
     </Modal>
   );
 }

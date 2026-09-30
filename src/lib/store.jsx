@@ -466,6 +466,7 @@ export function DataProvider({ children }) {
       deleteCoin: (id) => setState((s) => ({ ...s, coins: (s.coins || []).filter((c) => c.id !== id) })),
       // KHO TÀI KHOẢN / THẺ / THANH TOÁN (CHỈ CHỦ) — {id,type:"app"|"card"|"bank",title,...fields,note,updatedAt}
       addVaultItem: (v) => setState((s) => ({ ...s, vault: [{ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() }, ...(s.vault || [])] })),
+      addVaultItems: (arr) => setState((s) => ({ ...s, vault: [...(arr || []).map((v) => ({ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() })), ...(s.vault || [])] })),
       updateVaultItem: (id, patch) => setState((s) => ({ ...s, vault: (s.vault || []).map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) })),
       deleteVaultItem: (id) => setState((s) => ({ ...s, vault: (s.vault || []).filter((x) => x.id !== id) })),
       // BACKUP

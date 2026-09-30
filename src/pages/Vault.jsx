@@ -142,6 +142,60 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
   );
 }
 
+// Thêm HÀNG LOẠT: nhiều dòng trong 1 lần, lưu 1 phát
+function VaultBatchModal({ startType = "app", onClose, onSave }) {
+  const blank = (type) => ({ _k: Math.random().toString(36).slice(2, 8), type, title: "", note: "" });
+  const [rows, setRows] = useState([blank(startType)]);
+  const setRow = (k, patch) => setRows((rs) => rs.map((r) => (r._k === k ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((rs) => [...rs, blank(rs[rs.length - 1]?.type || "app")]);
+  const delRow = (k) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r._k !== k) : rs));
+  const valid = rows.filter((r) => (r.title || "").trim());
+  const save = () => { if (valid.length) { onSave(valid.map(({ _k, ...r }) => ({ ...r, title: r.title.trim() }))); onClose(); } };
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-4">
+          <h3 className="text-lg font-extrabold">Thêm hàng loạt</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {rows.map((r, idx) => {
+            const t = TYPES[r.type] || TYPES.app;
+            return (
+              <div key={r._k} className="rounded-xl border border-slate-200 p-3">
+                <div className="mb-2 flex items-center gap-1.5">
+                  {TYPE_KEYS.map((k) => {
+                    const Ty = TYPES[k]; const on = r.type === k;
+                    return (
+                      <button key={k} onClick={() => setRow(r._k, { type: k })} className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${on ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}>
+                        <Ty.icon size={12} /> {Ty.label}
+                      </button>
+                    );
+                  })}
+                  <span className="ml-auto text-[11px] font-bold text-slate-300">#{idx + 1}</span>
+                  {rows.length > 1 && <button onClick={() => delRow(r._k)} className="rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>}
+                </div>
+                <input value={r.title} onChange={(e) => setRow(r._k, { title: e.target.value })} className={`${inputCls} mb-2 font-semibold`} placeholder={r.type === "app" ? "Tên gọi * (Facebook, Gmail…)" : r.type === "card" ? "Tên gọi * (Visa Techcombank…)" : "Tên gọi * (Vietcombank, Momo…)"} />
+                <div className="grid grid-cols-2 gap-2">
+                  {t.fields.map(([k, lbl]) => (
+                    <input key={k} value={r[k] || ""} onChange={(e) => setRow(r._k, { [k]: e.target.value })} className={inputCls} placeholder={lbl} autoComplete="off" />
+                  ))}
+                </div>
+                <input value={r.note || ""} onChange={(e) => setRow(r._k, { note: e.target.value })} className={`${inputCls} mt-2`} placeholder="Ghi chú (tuỳ chọn)" />
+              </div>
+            );
+          })}
+          <button onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm dòng</button>
+        </div>
+        <div className="border-t border-slate-100 p-4">
+          <button onClick={save} disabled={!valid.length} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40">Lưu tất cả ({valid.length})</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VaultModal({ initial, onClose, onSave }) {
   const [f, setF] = useState({ type: "app", title: "", note: "", ...initial });
   const t = TYPES[f.type] || TYPES.app;
@@ -181,11 +235,12 @@ function VaultModal({ initial, onClose, onSave }) {
 }
 
 export default function Vault() {
-  const { vault = [], addVaultItem, updateVaultItem, deleteVaultItem, isOwner, ownerId } = useData();
+  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId } = useData();
   const canW = isOwner || !ownerId; // ghi = chủ (store đã chặn owner-only)
   const [tab, setTab] = useState("all");
   const [q, setQ] = useState("");
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(null); // sửa 1 mục
+  const [batch, setBatch] = useState(false); // thêm hàng loạt
 
   const counts = useMemo(() => {
     const c = { all: vault.length, app: 0, card: 0, bank: 0 };
@@ -255,12 +310,18 @@ export default function Vault() {
       )}
 
       {canW && (
-        <button onClick={() => setModal({ type: tab === "all" ? "app" : tab })} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600">
-          <Plus size={15} /> Thêm mục mới
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setModal({ type: tab === "all" ? "app" : tab })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600">
+            <Plus size={15} /> Thêm 1 mục
+          </button>
+          <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
+            <Plus size={15} /> Thêm hàng loạt
+          </button>
+        </div>
       )}
 
       {modal && <VaultModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateVaultItem(modal.id, data) : addVaultItem(data))} />}
+      {batch && <VaultBatchModal startType={tab === "all" ? "app" : tab} onClose={() => setBatch(false)} onSave={addVaultItems} />}
     </div>
   );
 }
