@@ -5,22 +5,27 @@ import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
-import { FEATURES, ALL_FEATURES, featLabel } from "../lib/permissions.js";
+import { FEATURES, memberAccess } from "../lib/permissions.js";
+
+const accBadge = (v) => (v === "edit" ? "bg-emerald-500 text-white" : v === "view" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400");
+const accLbl = (v) => (v === "edit" ? "Sửa" : v === "view" ? "Xem" : "—");
+const cycleAcc = (v) => (v === "none" || !v ? "view" : v === "view" ? "edit" : "none");
+const allAccess = (val) => Object.fromEntries(FEATURES.map(([k]) => [k, val]));
 
 function MembersCard() {
-  const { members = [], addMember, updateMember, removeMember, myEmail } = useData();
+  const { members = [], addMember, updateMember, removeMember } = useData();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [perms, setPerms] = useState(ALL_FEATURES);
-  const togNew = (k) => setPerms((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
-  const add = () => { const e = email.trim().toLowerCase(); if (!e) return; addMember({ email: e, name: name.trim(), perms }); setEmail(""); setName(""); setPerms(ALL_FEATURES); };
-  const togMember = (m, k) => { const cur = m.perms || []; updateMember(m.email, { perms: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] }); };
+  const [access, setAccess] = useState(() => allAccess("view")); // mặc định: chỉ Xem tất cả
+  const setNew = (k) => setAccess((a) => ({ ...a, [k]: cycleAcc(a[k]) }));
+  const add = () => { const e = email.trim().toLowerCase(); if (!e) return; addMember({ email: e, name: name.trim(), access }); setEmail(""); setName(""); setAccess(allAccess("view")); };
+  const setMember = (m, k) => { const cur = memberAccess(m); updateMember(m.email, { access: { ...cur, [k]: cycleAcc(cur[k]) } }); };
   return (
     <Card>
       <SectionTitle action={<Users2 size={18} className="text-indigo-500" />}>Người dùng & phân quyền</SectionTitle>
       <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700">
         <ShieldCheck size={15} className="mt-0.5 shrink-0" />
-        <span>Bạn là <b>chủ workspace</b> (toàn quyền). Thêm thành viên bằng <b>email</b> họ dùng đăng nhập app, rồi tick những mục họ được vào. Cùng chung 1 dữ liệu.</span>
+        <span>Bạn là <b>chủ (admin)</b> — toàn quyền + là người duy nhất sửa cài đặt dữ liệu/bảo mật. Thêm thành viên bằng <b>email</b>, mỗi tính năng bấm để chọn <b className="text-slate-500">—</b> (không) → <b className="text-sky-600">Xem</b> → <b className="text-emerald-600">Sửa</b>.</span>
       </div>
 
       {/* Thêm thành viên */}
@@ -31,8 +36,13 @@ function MembersCard() {
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {FEATURES.map(([k, l]) => (
-            <button key={k} type="button" onClick={() => togNew(k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${perms.includes(k) ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
+            <button key={k} type="button" onClick={() => setNew(k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${accBadge(access[k])}`}>{l}: {accLbl(access[k])}</button>
           ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
+          <button type="button" onClick={() => setAccess(allAccess("view"))} className="font-bold text-sky-600">Chỉ xem tất cả</button>
+          <button type="button" onClick={() => setAccess(allAccess("edit"))} className="font-bold text-emerald-600">Toàn quyền sửa</button>
+          <button type="button" onClick={() => setAccess(allAccess("none"))} className="font-bold text-slate-400">Bỏ hết</button>
         </div>
         <button onClick={add} disabled={!email.trim()} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2 text-sm font-bold text-white disabled:opacity-40"><UserPlus size={15} /> Thêm thành viên</button>
       </div>
@@ -40,25 +50,28 @@ function MembersCard() {
       {/* Danh sách thành viên */}
       <div className="mt-3 space-y-2">
         {members.length === 0 && <div className="py-4 text-center text-xs text-slate-400">Chưa có thành viên nào. Chỉ mình bạn dùng app.</div>}
-        {members.map((m) => (
-          <div key={m.email} className="rounded-xl border border-slate-100 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-bold text-slate-800">{m.name || m.email}</div>
-                <div className="truncate text-[11px] text-slate-400">{m.email}</div>
+        {members.map((m) => {
+          const a = memberAccess(m);
+          return (
+            <div key={m.email} className="rounded-xl border border-slate-100 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold text-slate-800">{m.name || m.email}</div>
+                  <div className="truncate text-[11px] text-slate-400">{m.email}</div>
+                </div>
+                <button onClick={() => { if (confirm(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
-              <button onClick={() => { if (confirm(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {FEATURES.map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setMember(m, k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${accBadge(a[k])}`}>{l}: {accLbl(a[k])}</button>
+                ))}
+              </div>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {FEATURES.map(([k, l]) => (
-                <button key={k} type="button" onClick={() => togMember(m, k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${(m.perms || []).includes(k) ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{l}</button>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="mt-3 rounded-xl bg-amber-50 p-3 text-[11px] text-amber-700">
-        ⚠️ Để thành viên đăng nhập thấy dữ liệu chung, cần bật <b>chia sẻ RLS</b> 1 lần trên Supabase (xem <b>supabase/SETUP-USERS.md</b>) và thành viên tự <b>đăng ký tài khoản</b> đúng email này trên app.
+        ⚠️ Để thành viên thấy dữ liệu chung: đã bật <b>chia sẻ RLS</b> trên Supabase ✓. Thành viên chỉ cần tự <b>đăng ký tài khoản</b> đúng email này trên app rồi đăng nhập.
       </div>
     </Card>
   );
@@ -190,7 +203,7 @@ export default function Settings() {
 
       {isOwner && <MembersCard />}
 
-      <AiImport />
+      {isOwner && <AiImport />}
 
       <Card>
         <SectionTitle action={<Database size={18} className="text-slate-400" />}>Dữ liệu hiện có</SectionTitle>
@@ -208,6 +221,7 @@ export default function Settings() {
         </div>
       </Card>
 
+      {isOwner && (<>
       <Card>
         <SectionTitle action={<ShieldCheck size={18} className="text-emerald-500" />}>Sao lưu & Khôi phục</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -239,6 +253,7 @@ export default function Settings() {
           Đặt lại dữ liệu gốc
         </button>
       </Card>
+      </>)}
     </div>
   );
 }

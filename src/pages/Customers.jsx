@@ -107,8 +107,9 @@ function ProjectRow({ p, onOpen }) {
 export default function Customers() {
   const {
     customerList, projects, addCustomer, addCustomers, updateCustomer, deleteCustomer, deleteCustomers,
-    addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment,
+    addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment, canEdit,
   } = useData();
+  const canW = canEdit ? canEdit("customers") : true; // quyền Sửa module Khách & Dự án
   const [q, setQ] = useState("");
   const [modal, setModal] = useState(null);       // customer add/edit
   const [bulk, setBulk] = useState(false);
@@ -166,20 +167,21 @@ export default function Customers() {
             <div className="text-sm font-bold text-slate-800">{counts.active} khách · {projects.length} dự án</div>
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
-          <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Sparkles size={16} /> AI</button>
-          <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>
+          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Sparkles size={16} /> AI</button>}
+          {canW && <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>}
+          {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>}
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <Search size={16} className="shrink-0 text-slate-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / SĐT…" className="w-full text-sm outline-none" />
           </div>
-          {rows.length > 0 && (
+          {canW && rows.length > 0 && (
             <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
               {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
             </button>
           )}
-          <button onClick={() => setBulk(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ListPlus size={16} /> Hàng loạt</button>
+          {canW && <button onClick={() => setBulk(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ListPlus size={16} /> Hàng loạt</button>}
         </div>
         {/* MOBILE: dropdown lọc */}
         <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
@@ -216,9 +218,11 @@ export default function Customers() {
               <div key={c.id} className={`card overflow-hidden !p-0 ${isPicked ? "ring-2 ring-indigo-400" : ""} ${!c.active ? "opacity-70" : ""}`}>
                 {/* DÒNG KHÁCH */}
                 <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-3.5">
-                  <button onClick={() => toggle(c.id)} className="shrink-0 text-slate-300 hover:text-indigo-600">
-                    {isPicked ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
-                  </button>
+                  {canW && (
+                    <button onClick={() => toggle(c.id)} className="shrink-0 text-slate-300 hover:text-indigo-600">
+                      {isPicked ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
+                    </button>
+                  )}
                   <button onClick={() => toggleExp(c.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left sm:gap-3">
                     <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                     {c.logo ? (
@@ -245,10 +249,10 @@ export default function Customers() {
                 {open && (
                   <div className="space-y-2 border-t border-slate-100 bg-slate-50/50 p-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>
+                      {canW && <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>}
                       {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-1.5 text-[11px] font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
-                      <button onClick={() => { const nP = c.projectCount; if (confirm(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>
-                      <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[11px] font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>
+                      {canW && <button onClick={() => { const nP = c.projectCount; if (confirm(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
+                      {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[11px] font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
                     {c.projects.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>

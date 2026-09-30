@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES, SEED_SPEND_CATS } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
-import { ALL_FEATURES } from "./permissions.js";
+import { ALL_FEATURES, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess } from "./permissions.js";
 
 const KEY = "quang-workspace-v4";
 const Ctx = createContext(null);
@@ -454,7 +454,7 @@ export function DataProvider({ children }) {
         const email = (m.email || "").trim().toLowerCase();
         if (!email) return s;
         const others = (s.members || []).filter((x) => (x.email || "").toLowerCase() !== email);
-        return { ...s, members: [...others, { email, name: (m.name || "").trim(), perms: m.perms || [] }] };
+        return { ...s, members: [...others, { email, name: (m.name || "").trim(), access: m.access || {} }] };
       }),
       updateMember: (email, patch) => setState((s) => ({ ...s, members: (s.members || []).map((x) => ((x.email || "").toLowerCase() === (email || "").toLowerCase() ? { ...x, ...patch } : x)) })),
       removeMember: (email) => setState((s) => ({ ...s, members: (s.members || []).filter((x) => (x.email || "").toLowerCase() !== (email || "").toLowerCase()) })),
@@ -481,9 +481,22 @@ export function DataProvider({ children }) {
     const email = (user?.email || "").toLowerCase();
     const isOwner = !!user && !!ownerId && ownerId === user.id;
     const me = (state.members || []).find((m) => (m.email || "").toLowerCase() === email);
-    // Chưa resolve xong owner → tạm full (tránh chớp menu). Chủ → full. Thành viên → đúng quyền được cấp.
-    const perms = !ownerId ? ALL_FEATURES : isOwner ? ALL_FEATURES : (me?.perms || []);
-    return { ...api, syncStatus, isOwner, perms, myEmail: email, ownerId };
+    const access = isOwner || !ownerId ? null : memberAccess(me);
+    // Chưa resolve owner → tạm full (tránh chớp). Chủ → full. Thành viên → theo access (none/view/edit).
+    const perms = !ownerId || isOwner ? ALL_FEATURES : ALL_FEATURES.filter((k) => access[k] && access[k] !== "none");
+    const editable = !ownerId || isOwner ? ALL_FEATURES : ALL_FEATURES.filter((k) => access[k] === "edit");
+    const canEdit = (f) => editable.includes(f);
+    // CHẶN GHI: thành viên không có quyền Sửa (hoặc cài đặt dữ liệu/bảo mật) → method thành no-op.
+    let guarded = api;
+    if (ownerId && !isOwner) {
+      const noop = () => {};
+      guarded = { ...api };
+      for (const m of OWNER_ONLY_WRITES) if (m in guarded) guarded[m] = noop;
+      for (const [feat, methods] of Object.entries(FEATURE_WRITES)) {
+        if (!editable.includes(feat)) for (const m of methods) if (m in guarded) guarded[m] = noop;
+      }
+    }
+    return { ...guarded, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId };
   }, [api, syncStatus, user?.id, user?.email, ownerId, state.members]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -21,3 +21,20 @@ export const ROUTE_FEATURE = {
 };
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];
+
+// Các method GHI của store theo từng tính năng — để CHẶN khi thành viên chỉ có quyền Xem.
+export const FEATURE_WRITES = {
+  customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed"],
+  ketoan: ["addExpense", "addExpensesMany", "updateExpense", "deleteExpense", "deleteExpensesMany", "changeExpensePlan", "addFund", "updateFund", "deleteFund", "addFundTx", "addFundTxMany", "updateFundTx", "deleteFundTx", "categorizeFundTx", "addSpendCat", "updateSpendCat", "deleteSpendCat", "transferFund", "transferFundMany", "allocateFromCompany", "addFundSchedule", "updateFundSchedule", "deleteFundSchedule", "runFundSchedule", "skipFundSchedule"],
+  tasks: ["addTask", "updateTask", "deleteTask", "toggleTask", "addFamily", "addFamilyMany", "updateFamily", "updateFamilyMany", "deleteFamily", "deleteFamilyMany"],
+};
+// Cài đặt DỮ LIỆU / BẢO MẬT — chỉ CHỦ (admin) được: quản lý user, đổi cấu hình, backup/restore/reset.
+export const OWNER_ONLY_WRITES = ["addMember", "updateMember", "removeMember", "setSettings", "importData", "reset"];
+
+// Quyền của 1 thành viên theo tính năng: { feat: "none" | "view" | "edit" }. Tương thích ngược schema cũ (perms[]=edit).
+export function memberAccess(member) {
+  if (member && member.access) return member.access;
+  const a = {};
+  for (const [k] of FEATURES) a[k] = ((member && member.perms) || []).includes(k) ? "edit" : "none";
+  return a;
+}
