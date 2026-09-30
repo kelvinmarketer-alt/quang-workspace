@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle } from "lucide-react";
 import { Card, Badge, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
+import { supabase } from "../lib/supabase.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const n = (v) => Number(String(v ?? "").replace(/[^\d.\-]/g, "")) || 0;
@@ -39,11 +40,16 @@ export default function Coin() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState(null);
+  const [wallet, setWallet] = useState(null);
+  const [wErr, setWErr] = useState("");
+  const [syncing, setSyncing] = useState(false);
   const rate = Number(settings?.coinVndRate) || 26000;
+  const px = (asset) => { const a = (asset || "").toUpperCase(); return a === "USDT" ? 1 : prices[a]?.price; };
 
-  const symKey = coins.map((c) => c.symbol).join(",");
+  const walletAssets = (wallet || []).map((b) => b.asset);
+  const symKey = [...coins.map((c) => c.symbol), ...walletAssets].join(",");
   const load = async () => {
-    const syms = [...new Set(coins.map((c) => (c.symbol || "").toUpperCase()).filter(Boolean))];
+    const syms = [...new Set([...coins.map((c) => (c.symbol || "").toUpperCase()), ...walletAssets.map((a) => (a || "").toUpperCase())].filter((s) => s && s !== "USDT"))];
     if (!syms.length) { setPrices({}); return; }
     setLoading(true);
     try {
@@ -75,6 +81,18 @@ export default function Coin() {
   const tot = useMemo(() => rows.reduce((a, r) => ({ value: a.value + (r.value || 0), cost: a.cost + r.cost }), { value: 0, cost: 0 }), [rows]);
   const totPnl = tot.value - tot.cost;
   const totPct = tot.cost > 0 ? (totPnl / tot.cost) * 100 : 0;
+
+  const walletTotal = useMemo(() => (wallet || []).reduce((a, b) => { const p = px(b.asset); return a + (p != null ? b.total * p : 0); }, 0), [wallet, prices]);
+  const syncBinance = async () => {
+    setSyncing(true); setWErr("");
+    try {
+      const { data, error } = await supabase.functions.invoke("qws-binance");
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setWallet(data.balances || []);
+    } catch (e) { setWErr("Đồng bộ lỗi: " + (e.message || String(e))); }
+    setSyncing(false);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -138,7 +156,30 @@ export default function Coin() {
           ))}
         </div>
       )}
-      <div className="text-center text-[11px] text-slate-400">Giá cập nhật mỗi 15 giây từ Binance (public). Đồng bộ ví Binance thật (số dư/lịch sử) sẽ thêm ở bản v2 qua API key read-only.</div>
+      {/* Ví Binance thật (chỉ chủ) */}
+      {isOwner && (
+        <Card className="!p-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-extrabold text-slate-700">Ví Binance {wallet ? <span className="font-normal text-slate-400">· {wallet.length} tài sản · {fmtUSD(walletTotal)} ≈ {fmtVND(walletTotal * rate)}</span> : ""}</div>
+            <button onClick={syncBinance} disabled={syncing} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"><RefreshCw size={13} className={syncing ? "animate-spin" : ""} /> {syncing ? "Đang đồng bộ…" : "Đồng bộ ví Binance"}</button>
+          </div>
+          {wErr && <div className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-rose-600"><AlertTriangle size={13} /> {wErr}</div>}
+          {wallet && wallet.length > 0 && (
+            <div className="mt-2 divide-y divide-slate-50">
+              {wallet.map((b) => { const p = px(b.asset); const val = p != null ? b.total * p : null; return (
+                <div key={b.asset} className="flex items-center justify-between py-1.5 text-sm">
+                  <span className="font-bold text-slate-700">{b.asset}</span>
+                  <span className="text-slate-500">{b.total.toLocaleString("en-US", { maximumFractionDigits: 6 })}{val != null ? <> · <b className="text-slate-700">{fmtUSD(val)}</b></> : ""}</span>
+                </div>
+              ); })}
+            </div>
+          )}
+          {wallet && wallet.length === 0 && <div className="mt-2 text-xs text-slate-400">Ví trống.</div>}
+          {!wallet && !wErr && <div className="mt-2 text-xs text-slate-400">Bấm "Đồng bộ ví Binance" để kéo số dư thật (read-only, an toàn).</div>}
+        </Card>
+      )}
+
+      <div className="text-center text-[11px] text-slate-400">Giá cập nhật mỗi 15 giây từ Binance (public). Ví thật đồng bộ qua API key read-only (bảo mật server-side).</div>
 
       {modal && <CoinModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateCoin(modal.id, data) : addCoin(data))} />}
     </div>
