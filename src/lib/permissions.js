@@ -20,13 +20,14 @@ export const ROUTE_FEATURE = {
   "/cong-viec": "tasks",
   "/lich": "tasks",
   "/coin": "coin",
+  "/tai-nguyen": "customers",
 };
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];
 
 // Các method GHI của store theo từng tính năng — để CHẶN khi thành viên chỉ có quyền Xem.
 export const FEATURE_WRITES = {
-  customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed"],
+  customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed", "addResource", "addResources", "updateResource", "deleteResource"],
   ketoan: ["addExpense", "addExpensesMany", "updateExpense", "deleteExpense", "deleteExpensesMany", "changeExpensePlan", "addFund", "updateFund", "deleteFund", "addFundTx", "addFundTxMany", "updateFundTx", "deleteFundTx", "categorizeFundTx", "addSpendCat", "updateSpendCat", "deleteSpendCat", "transferFund", "transferFundMany", "allocateFromCompany", "addFundSchedule", "updateFundSchedule", "deleteFundSchedule", "runFundSchedule", "skipFundSchedule"],
   tasks: ["addTask", "updateTask", "deleteTask", "toggleTask", "addFamily", "addFamilyMany", "updateFamily", "updateFamilyMany", "deleteFamily", "deleteFamilyMany"],
   coin: ["addCoin", "updateCoin", "deleteCoin"],

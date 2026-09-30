@@ -28,6 +28,7 @@ function load() {
     fundSchedules: SEED_FUND_SCHEDULES, // lịch chuyển quỹ định kỳ
     spendCats: SEED_SPEND_CATS, // danh mục chi tiêu
     vault: [], // kho tài khoản/thẻ/thanh toán (CHỈ chủ) — {id,type,title,...fields}
+    resources: [], // tài liệu/tài nguyên online (LINK) — {id,title,url,type,projectId,customerId,tags,note}
     settings: { ...SEED_SETTINGS }, // cấu hình app (key OpenAI…) — sẽ đồng bộ DB
   };
 }
@@ -50,6 +51,7 @@ function migrate(s) {
   // Danh mục chi tiêu: lần đầu (chưa có key) → nạp bộ mẫu; đã có → giữ nguyên
   if (!Array.isArray(merged.spendCats)) merged.spendCats = s.spendCats === undefined ? SEED_SPEND_CATS : [];
   if (!Array.isArray(merged.vault)) merged.vault = [];
+  if (!Array.isArray(merged.resources)) merged.resources = [];
   // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
   // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
   if (!merged.catsV5) {
@@ -193,6 +195,7 @@ export function DataProvider({ children }) {
 
   const api = useMemo(() => {
     const uid = () => Math.random().toString(36).slice(2, 9);
+    const normUrl = (u) => { u = (u || "").trim(); return u && !/^https?:\/\//i.test(u) ? "https://" + u : u; };
     return {
       // state LUÔN đã ở dạng migrate (load()/fetch đã migrate) → không migrate lại mỗi render (tốn CPU + phá tham chiếu)
       ...state,
@@ -233,18 +236,18 @@ export function DataProvider({ children }) {
           // Đổi tên khách → đồng bộ luôn customerName đã lưu trong các dự án (tránh kẹt tên cũ)
           projects: patch.name ? s.projects.map((p) => (p.customerId === id ? { ...p, customerName: patch.name } : p)) : s.projects,
         })),
-      // Xoá khách → xoá luôn dự án của khách đó (tránh dự án mồ côi làm lệch tổng)
+      // Xoá khách → xoá luôn dự án + tài nguyên của khách đó (tránh mồ côi)
       deleteCustomer: (id) =>
-        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => c.id !== id), projects: s.projects.filter((p) => p.customerId !== id) })),
+        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => c.id !== id), projects: s.projects.filter((p) => p.customerId !== id), resources: (s.resources || []).filter((r) => r.customerId !== id) })),
       deleteCustomers: (ids) =>
-        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => !ids.includes(c.id)), projects: s.projects.filter((p) => !ids.includes(p.customerId)) })),
+        setState((s) => ({ ...s, customerList: s.customerList.filter((c) => !ids.includes(c.id)), projects: s.projects.filter((p) => !ids.includes(p.customerId)), resources: (s.resources || []).filter((r) => !ids.includes(r.customerId)) })),
       // PROJECTS / DỰ ÁN
       addProject: (p) =>
         setState((s) => ({ ...s, projects: [{ id: "p" + uid(), status: "unpaid", ...p }, ...s.projects] })),
       updateProject: (id, patch) =>
         setState((s) => ({ ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       deleteProject: (id) =>
-        setState((s) => ({ ...s, projects: s.projects.filter((p) => p.id !== id) })),
+        setState((s) => ({ ...s, projects: s.projects.filter((p) => p.id !== id), resources: (s.resources || []).filter((r) => r.projectId !== id) })),
       // INSTALLMENTS / các đợt của 1 dự án
       addInstallment: (projectId, inst) =>
         setState((s) => ({
@@ -469,6 +472,11 @@ export function DataProvider({ children }) {
       addVaultItems: (arr) => setState((s) => ({ ...s, vault: [...(arr || []).map((v) => ({ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() })), ...(s.vault || [])] })),
       updateVaultItem: (id, patch) => setState((s) => ({ ...s, vault: (s.vault || []).map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) })),
       deleteVaultItem: (id) => setState((s) => ({ ...s, vault: (s.vault || []).filter((x) => x.id !== id) })),
+      // TÀI NGUYÊN / TÀI LIỆU ONLINE (LINK) — {id,title,url,type,projectId,customerId,tags,note,createdAt}
+      addResource: (r) => setState((s) => ({ ...s, resources: [{ id: "r" + uid(), title: (r.title || "").trim(), url: normUrl(r.url), type: r.type || "web", projectId: r.projectId || "", customerId: r.customerId || "", tags: r.tags || [], note: r.note || "", createdAt: Date.now() }, ...(s.resources || [])] })),
+      addResources: (arr) => setState((s) => ({ ...s, resources: [...(arr || []).map((r) => ({ id: "r" + uid(), title: (r.title || "").trim(), url: normUrl(r.url), type: r.type || "web", projectId: r.projectId || "", customerId: r.customerId || "", tags: r.tags || [], note: r.note || "", createdAt: Date.now() })), ...(s.resources || [])] })),
+      updateResource: (id, patch) => setState((s) => ({ ...s, resources: (s.resources || []).map((x) => (x.id === id ? { ...x, ...patch, ...(patch.url != null ? { url: normUrl(patch.url) } : {}) } : x)) })),
+      deleteResource: (id) => setState((s) => ({ ...s, resources: (s.resources || []).filter((x) => x.id !== id) })),
       // BACKUP
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {
