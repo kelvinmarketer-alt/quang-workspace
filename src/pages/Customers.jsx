@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
-import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin } from "lucide-react";
 import { Card, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
 import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
+import { imageToDataUrl } from "../lib/ai.js";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -22,6 +23,8 @@ function zaloLink(phone, zalo) {
 function CustomerModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const logoRef = useRef(null);
+  const pickLogo = async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const logo = await imageToDataUrl(file, 256, 0.85); setF((p) => ({ ...p, logo })); } catch {} e.target.value = ""; };
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -30,40 +33,30 @@ function CustomerModal({ initial, onClose, onSave }) {
           <h3 className="text-lg font-extrabold">{initial.id ? "Sửa khách hàng" : "Thêm khách hàng"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khách hàng *</span><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Anh Nam" /></label>
 
-        <div className="mb-3">
-          <span className="mb-1 block text-sm font-semibold text-slate-600">Kiểu hợp tác</span>
-          <div className="flex gap-2">
-            {Object.entries(TYPES).map(([v, [, l]]) => (
-              <button key={v} type="button" onClick={() => setF({ ...f, type: v })} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-bold ${(f.type || "remote") === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
-            ))}
+        {/* Logo */}
+        <div className="mb-4 flex items-center gap-3">
+          <button type="button" onClick={() => logoRef.current?.click()} className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-slate-400 hover:border-indigo-300">
+            {f.logo ? <img src={f.logo} alt="logo" className="h-full w-full object-cover" /> : <ImagePlus size={22} />}
+          </button>
+          <div className="text-sm">
+            <button type="button" onClick={() => logoRef.current?.click()} className="font-bold text-indigo-600">{f.logo ? "Đổi logo" : "Thêm logo"}</button>
+            {f.logo && <button type="button" onClick={() => setF({ ...f, logo: "" })} className="ml-3 font-semibold text-rose-500">Xoá</button>}
+            <div className="text-[11px] text-slate-400">Ảnh đại diện khách (tuỳ chọn)</div>
           </div>
+          <input ref={logoRef} type="file" accept="image/*" onChange={pickLogo} className="hidden" />
         </div>
 
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số điện thoại</span><input value={f.phone} onChange={set("phone")} className={inputCls} placeholder="0901234567" /></label>
-          {(f.type || "remote") === "fulltime" ? (
-            <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Lương / tháng</span><MoneyInput value={f.monthlySalary} onChange={(v) => setF({ ...f, monthlySalary: v })} className={inputCls} placeholder="15.000.000" /></label>
-          ) : (
-            <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">% phí ADS</span><input value={f.feeRate ?? 20} onChange={set("feeRate")} inputMode="numeric" className={inputCls} placeholder="20" /></label>
-          )}
-        </div>
-
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số Zalo (nếu khác SĐT)</span><input value={f.zalo} onChange={set("zalo")} className={inputCls} placeholder="= SĐT" /></label>
-          {(f.type || "remote") === "fulltime" && (
-            <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">% phí ADS</span><input value={f.feeRate ?? 20} onChange={set("feeRate")} inputMode="numeric" className={inputCls} placeholder="20" /></label>
-          )}
-        </div>
-
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><textarea value={f.note} onChange={set("note")} rows={2} className={inputCls} /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khách hàng *</span><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Anh Nam" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số điện thoại</span><input value={f.phone} onChange={set("phone")} inputMode="tel" className={inputCls} placeholder="0901234567" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Email</span><input value={f.email || ""} onChange={set("email")} inputMode="email" className={inputCls} placeholder="email@congty.com" /></label>
+        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Địa chỉ</span><input value={f.address || ""} onChange={set("address")} className={inputCls} placeholder="Số nhà, đường, quận, tỉnh…" /></label>
 
         <button type="button" onClick={() => setF({ ...f, active: !(f.active ?? true) })} className={`mb-4 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold ${(f.active ?? true) ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-rose-200 bg-rose-50 text-rose-600"}`}>
           <Power size={15} /> {(f.active ?? true) ? "Đang hợp tác (bấm để OFF)" : "Đã OFF (bấm để bật lại)"}
         </button>
 
-        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, feeRate: Number(String(f.feeRate ?? 20).replace(/[^\d]/g, "")) || 20, monthlySalary: Number(String(f.monthlySalary ?? 0).replace(/[^\d]/g, "")) || 0, type: f.type || "remote", active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
+        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, name: f.name.trim(), type: f.type || "remote", feeRate: Number(f.feeRate) || 20, monthlySalary: Number(f.monthlySalary) || 0, active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
       </div>
     </div>
   );
@@ -174,7 +167,7 @@ export default function Customers() {
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
           <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Sparkles size={16} /> AI</button>
-          <button onClick={() => setModal({ name: "", phone: "", zalo: "", note: "", feeRate: 20, type: "remote", monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>
+          <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
@@ -228,7 +221,11 @@ export default function Customers() {
                   </button>
                   <button onClick={() => toggleExp(c.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left sm:gap-3">
                     <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
-                    <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${!c.active ? "from-slate-400 to-slate-500" : AVA[i % AVA.length]} text-sm font-extrabold text-white`}>{c.name.slice(0, 2).toUpperCase()}</div>
+                    {c.logo ? (
+                      <img src={c.logo} alt="" className={`h-10 w-10 shrink-0 rounded-2xl object-cover ${!c.active ? "grayscale" : ""}`} />
+                    ) : (
+                      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br ${!c.active ? "from-slate-400 to-slate-500" : AVA[i % AVA.length]} text-sm font-extrabold text-white`}>{c.name.slice(0, 2).toUpperCase()}</div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-extrabold text-slate-800">{c.name}</span>

@@ -123,8 +123,6 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
         <Field label="Số tiền (phí đợt)"><MoneyInput value={f.amount} onChange={onAmount} className={inputCls} placeholder="10.000.000" /></Field>
       )}
 
-      <Field label="Hoa hồng CTV"><MoneyInput value={f.ctv} onChange={setV("ctv")} className={inputCls} placeholder="0" /></Field>
-
       {/* Chi phí phát sinh dạng danh sách */}
       <div>
         <div className="mb-1 flex items-center justify-between">
