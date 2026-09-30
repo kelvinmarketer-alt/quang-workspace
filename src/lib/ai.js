@@ -120,6 +120,55 @@ SCHEMA: { "resources": [ { "title": "Website admin", "url": "https://site.com/ad
   return { resources };
 }
 
+// Đọc ảnh chứa DANH SÁCH TÀI KHOẢN / THẺ / TK NGÂN HÀNG -> { items: [{type,title,...fields}] } bằng OpenAI Vision.
+export async function aiReadVault({ imageDataUrl, text, apiKey, model }) {
+  const key = (apiKey || "").trim();
+  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
+  if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
+  const sys = `Bạn đọc ảnh/bảng chứa DANH SÁCH TÀI KHOẢN ĐĂNG NHẬP / THẺ NGÂN HÀNG / TÀI KHOẢN NGÂN HÀNG-VÍ. Trích MỌI mục thành JSON. CHỈ trả JSON, không giải thích.
+Mỗi mục có "type":
+- "app" = tài khoản ứng dụng/web (Facebook, Gmail, hosting, CMS…). Trường: title (tên app/dịch vụ), username (tài khoản/email/đăng nhập), password, url (link đăng nhập nếu có), twofa (mã 2FA/khôi phục nếu có), note.
+- "card" = thẻ ngân hàng/Visa/Master. Trường: title (tên thẻ), holder (chủ thẻ), number (số thẻ), expiry (MM/YY), cvv, bank (ngân hàng phát hành), note.
+- "bank" = tài khoản ngân hàng / ví điện tử (Momo, ZaloPay…). Trường: title (tên), holder (chủ tài khoản), number (số tài khoản), bank (ngân hàng/ví), branch (chi nhánh), note.
+QUY TẮC:
+- Chọn type đúng nhất theo dữ liệu của mục. Nếu chỉ là tài khoản đăng nhập app/web → "app".
+- Đọc CHÍNH XÁC từng ký tự password/số thẻ/số tài khoản/cvv (phân biệt hoa-thường, 0-O, 1-l-I).
+- Ghép ĐÚNG các trường vào mục (dòng) của nó. Trường không có để "".
+- title bắt buộc có (nếu trống thì suy từ tên app/ngân hàng). Bỏ mục hoàn toàn trống.
+SCHEMA: { "items": [ { "type":"app", "title":"Facebook", "username":"user@mail.com", "password":"Abc@123", "url":"", "twofa":"", "note":"" } ] }`;
+  const userContent = [{ type: "text", text: (text ? text + "\n" : "") + "Trích tất cả tài khoản/thẻ/tài khoản ngân hàng trong ảnh này." }];
+  if (imageDataUrl) userContent.push({ type: "image_url", image_url: { url: imageDataUrl } });
+  const body = {
+    model: model || "gpt-4o-mini",
+    messages: [{ role: "system", content: sys }, { role: "user", content: userContent }],
+    response_format: { type: "json_object" },
+    temperature: 0,
+  };
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const data = await res.json();
+  const txt = data.choices?.[0]?.message?.content || "{}";
+  let p;
+  try { p = JSON.parse(txt); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const raw = Array.isArray(p.items) ? p.items : (p.title ? [p] : []);
+  const S = (v) => (v == null ? "" : String(v).slice(0, 300));
+  const items = raw
+    .map((r) => {
+      const type = ["app", "card", "bank"].includes(r.type) ? r.type : "app";
+      return { type, title: S(r.title), username: S(r.username), password: S(r.password), url: S(r.url), twofa: S(r.twofa), holder: S(r.holder), number: S(r.number), expiry: S(r.expiry), cvv: S(r.cvv), bank: S(r.bank), branch: S(r.branch), note: S(r.note) };
+    })
+    .filter((r) => r.title || r.username || r.number || r.password);
+  return { items };
+}
+
 // Đọc file ảnh -> data URL base64
 export function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
