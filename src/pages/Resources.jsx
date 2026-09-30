@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, Settings as SettingsIcon } from "lucide-react";
+import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, Settings as SettingsIcon } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
@@ -22,26 +22,53 @@ async function copy(text) {
   } catch { return false; }
 }
 
+// 1 ô: nhãn + giá trị (ẩn nếu bí mật) + hiện + copy
+function CredLine({ label, value, secret }) {
+  const [show, setShow] = useState(false);
+  const [done, setDone] = useState(false);
+  const doCopy = async () => { if (await copy(value)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <span className="w-16 shrink-0 text-[11px] font-semibold text-slate-400">{label}</span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-700">{secret && !show ? "•".repeat(Math.min((value || "").length, 12)) : value}</span>
+      {secret && <button onClick={() => setShow((v) => !v)} className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600">{show ? <EyeOff size={13} /> : <Eye size={13} />}</button>}
+      <button onClick={doCopy} className={`shrink-0 rounded p-1 ${done ? "text-emerald-600" : "text-slate-400 hover:text-indigo-600"}`}>{done ? <Check size={13} /> : <Copy size={13} />}</button>
+    </div>
+  );
+}
+
 // 1 dòng tài nguyên
 export function ResRow({ r, subLabel, canW, onEdit, onDelete }) {
   const [done, setDone] = useState(false);
+  const [open, setOpen] = useState(false);
   const t = RES_TYPES[r.type] || RES_TYPES.web;
+  const hasCred = !!(r.username || r.password);
   const doCopy = async (e) => { e.stopPropagation(); if (await copy(r.url)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
   return (
-    <div className="group flex items-center gap-3 rounded-xl border border-slate-100 p-2.5 hover:border-indigo-200 hover:bg-indigo-50/30">
-      <button onClick={() => openUrl(r.url)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title="Mở link">
-        <t.icon size={16} />
-      </button>
-      <button onClick={() => openUrl(r.url)} className="min-w-0 flex-1 text-left">
-        <div className="truncate text-sm font-bold text-slate-800">{r.title || t.label}</div>
-        <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hostOf(r.url) || r.url}</div>
-      </button>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <button onClick={() => openUrl(r.url)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Mở"><ExternalLink size={14} /></button>
-        <button onClick={doCopy} className={`rounded-lg p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
-        {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
-        {canW && onDelete && <button onClick={() => { if (confirm("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
+    <div className="rounded-xl border border-slate-100 hover:border-indigo-200">
+      <div className="group flex items-center gap-3 p-2.5">
+        <button onClick={() => openUrl(r.url)} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title="Mở link">
+          <t.icon size={16} />
+        </button>
+        <button onClick={() => openUrl(r.url)} className="min-w-0 flex-1 text-left">
+          <div className="flex items-center gap-1.5"><span className="truncate text-sm font-bold text-slate-800">{r.title || t.label}</span>{hasCred && <KeyRound size={12} className="shrink-0 text-amber-500" />}</div>
+          <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hostOf(r.url) || r.url}</div>
+        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {hasCred && <button onClick={() => setOpen((v) => !v)} className={`rounded-lg p-1.5 ${open ? "text-amber-600" : "text-slate-400 hover:bg-white hover:text-amber-600"}`} title="Tài khoản / mật khẩu"><KeyRound size={14} /></button>}
+          <button onClick={() => openUrl(r.url)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Mở"><ExternalLink size={14} /></button>
+          <button onClick={doCopy} className={`rounded-lg p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
+          {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
+          {canW && onDelete && <button onClick={() => { if (confirm("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
+        </div>
       </div>
+      {open && hasCred && (
+        <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-1.5">
+          {r.username && <CredLine label="Tài khoản" value={r.username} secret={false} />}
+          {r.password && <CredLine label="Mật khẩu" value={r.password} secret={true} />}
+          {r.note && <CredLine label="Ghi chú" value={r.note} secret={false} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -79,6 +106,10 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
         </div>
         <div className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Dự án (JOB)</span>
           <Combobox options={projOptions} value={f.projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setF((s) => ({ ...s, projectId: v, customerId: p?.customerId || s.customerId })); }} placeholder="Không gắn / chọn dự án" emptyText="Khách này chưa có dự án" />
+        </div>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tài khoản</span><input value={f.username || ""} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} placeholder="Đăng nhập (nếu có)" autoComplete="off" /></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Mật khẩu</span><input value={f.password || ""} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} placeholder="Mật khẩu (nếu có)" autoComplete="off" /></label>
         </div>
         <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><input value={f.note || ""} onChange={(e) => setF({ ...f, note: e.target.value })} className={inputCls} /></label>
         <button onClick={save} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg">Lưu</button>
