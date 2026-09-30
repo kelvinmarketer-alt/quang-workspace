@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES, SEED_SPEND_CATS } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
+import { ALL_FEATURES } from "./permissions.js";
 
 const KEY = "quang-workspace-v4";
 const Ctx = createContext(null);
@@ -89,12 +90,15 @@ export function DataProvider({ children }) {
   const stateRef = useRef(state);
   const dirty = useRef(false);
   stateRef.current = state;
+  // Chủ workspace: mặc định = chính mình; nếu là THÀNH VIÊN (được chia sẻ) thì = user_id của chủ.
+  const [ownerId, setOwnerId] = useState(null);
+  const ownerRef = useRef(null);
 
   // Đẩy state hiện tại lên Supabase (dùng chung cho debounce / flush / retry)
   const pushCloud = () => {
     if (!user) return;
     setSyncStatus("saving");
-    supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current }).then(({ error }) => {
+    supabase.from(WORKSPACE_TABLE).upsert({ user_id: ownerRef.current || user.id, data: stateRef.current }).then(({ error }) => {
       if (error) {
         console.warn("Lưu Supabase lỗi:", error.message);
         setSyncStatus("error");
@@ -113,20 +117,29 @@ export function DataProvider({ children }) {
     let alive = true;
     setSynced(false);
     (async () => {
-      const { data, error } = await supabase.from(WORKSPACE_TABLE).select("data").eq("user_id", user.id).maybeSingle();
+      // 1) Thử dòng của CHÍNH MÌNH (chủ workspace)
+      const own = await supabase.from(WORKSPACE_TABLE).select("user_id,data").eq("user_id", user.id).maybeSingle();
       if (!alive) return;
-      if (error) {
+      if (own.error) {
         // ĐỌC LỖI (mạng/token/RLS): TUYỆT ĐỐI không ghi gì để tránh đè dữ liệu thật bằng bản local/rỗng.
-        // Giữ local, chặn mọi save (synced vẫn false), tự thử đọc lại sau.
         setSyncStatus("error");
         setTimeout(() => { if (alive) setReloadTick((t) => t + 1); }, 4000);
         return;
       }
-      if (data && data.data && Object.keys(data.data).length > 0) {
+      let owner = user.id, blob = own.data?.data;
+      if (!own.data) {
+        // 2) Không có dòng riêng → có thể là THÀNH VIÊN: RLS cho phép thấy dòng của CHỦ đã chia sẻ cho mình
+        const shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data").neq("user_id", user.id).limit(1);
+        if (!alive) return;
+        if (!shared.error && shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; }
+      }
+      ownerRef.current = owner;
+      setOwnerId(owner);
+      if (blob && Object.keys(blob).length > 0) {
         skipSave.current = true;
-        setState(migrate(data.data));
-      } else {
-        // error=null + không có dòng/dòng rỗng → CHẮC CHẮN lần đầu, tạo dòng an toàn
+        setState(migrate(blob));
+      } else if (owner === user.id) {
+        // CHỈ chủ mới tạo dòng mới (thành viên không có dòng riêng → không tạo, tránh tách dữ liệu)
         skipSave.current = true;
         await supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current });
       }
@@ -436,6 +449,15 @@ export function DataProvider({ children }) {
         }),
       // SETTINGS (cấu hình app — key OpenAI…)
       setSettings: (patch) => setState((s) => ({ ...s, settings: { ...s.settings, ...patch } })),
+      // NGƯỜI DÙNG & PHÂN QUYỀN — thành viên chung workspace, lưu trong data.members=[{email,name,perms:[]}]
+      addMember: (m) => setState((s) => {
+        const email = (m.email || "").trim().toLowerCase();
+        if (!email) return s;
+        const others = (s.members || []).filter((x) => (x.email || "").toLowerCase() !== email);
+        return { ...s, members: [...others, { email, name: (m.name || "").trim(), perms: m.perms || [] }] };
+      }),
+      updateMember: (email, patch) => setState((s) => ({ ...s, members: (s.members || []).map((x) => ((x.email || "").toLowerCase() === (email || "").toLowerCase() ? { ...x, ...patch } : x)) })),
+      removeMember: (email) => setState((s) => ({ ...s, members: (s.members || []).filter((x) => (x.email || "").toLowerCase() !== (email || "").toLowerCase()) })),
       // BACKUP
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {
@@ -455,7 +477,14 @@ export function DataProvider({ children }) {
     };
   }, [state]);
 
-  const value = useMemo(() => ({ ...api, syncStatus }), [api, syncStatus]);
+  const value = useMemo(() => {
+    const email = (user?.email || "").toLowerCase();
+    const isOwner = !!user && !!ownerId && ownerId === user.id;
+    const me = (state.members || []).find((m) => (m.email || "").toLowerCase() === email);
+    // Chưa resolve xong owner → tạm full (tránh chớp menu). Chủ → full. Thành viên → đúng quyền được cấp.
+    const perms = !ownerId ? ALL_FEATURES : isOwner ? ALL_FEATURES : (me?.perms || []);
+    return { ...api, syncStatus, isOwner, perms, myEmail: email, ownerId };
+  }, [api, syncStatus, user?.id, user?.email, ownerId, state.members]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

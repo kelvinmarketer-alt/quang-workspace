@@ -10,11 +10,11 @@ import { generateCalendarEvents } from "../lib/events.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 
 const NAV = [
-  { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true },
-  { to: "/khach-hang", label: "Khách & Dự án", icon: Users },
-  { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator },
+  { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true, feat: "dashboard" },
+  { to: "/khach-hang", label: "Khách & Dự án", icon: Users, feat: "customers" },
+  { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan" },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
-  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks },
+  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
@@ -33,9 +33,11 @@ function Brand() {
 }
 
 function SideNav({ onNavigate }) {
+  const { perms } = useData();
+  const items = NAV.filter((n) => !n.feat || (perms || []).includes(n.feat));
   return (
     <nav className="mt-6 flex flex-col gap-1 px-3">
-      {NAV.map((n) => (
+      {items.map((n) => (
         <NavLink
           key={n.to}
           to={n.to}

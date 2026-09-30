@@ -1,10 +1,68 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send } from "lucide-react";
+import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2 } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
+import { FEATURES, ALL_FEATURES, featLabel } from "../lib/permissions.js";
+
+function MembersCard() {
+  const { members = [], addMember, updateMember, removeMember, myEmail } = useData();
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [perms, setPerms] = useState(ALL_FEATURES);
+  const togNew = (k) => setPerms((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+  const add = () => { const e = email.trim().toLowerCase(); if (!e) return; addMember({ email: e, name: name.trim(), perms }); setEmail(""); setName(""); setPerms(ALL_FEATURES); };
+  const togMember = (m, k) => { const cur = m.perms || []; updateMember(m.email, { perms: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] }); };
+  return (
+    <Card>
+      <SectionTitle action={<Users2 size={18} className="text-indigo-500" />}>Người dùng & phân quyền</SectionTitle>
+      <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700">
+        <ShieldCheck size={15} className="mt-0.5 shrink-0" />
+        <span>Bạn là <b>chủ workspace</b> (toàn quyền). Thêm thành viên bằng <b>email</b> họ dùng đăng nhập app, rồi tick những mục họ được vào. Cùng chung 1 dữ liệu.</span>
+      </div>
+
+      {/* Thêm thành viên */}
+      <div className="rounded-xl border border-slate-200 p-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="Email thành viên *" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên (tuỳ chọn)" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {FEATURES.map(([k, l]) => (
+            <button key={k} type="button" onClick={() => togNew(k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${perms.includes(k) ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
+          ))}
+        </div>
+        <button onClick={add} disabled={!email.trim()} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2 text-sm font-bold text-white disabled:opacity-40"><UserPlus size={15} /> Thêm thành viên</button>
+      </div>
+
+      {/* Danh sách thành viên */}
+      <div className="mt-3 space-y-2">
+        {members.length === 0 && <div className="py-4 text-center text-xs text-slate-400">Chưa có thành viên nào. Chỉ mình bạn dùng app.</div>}
+        {members.map((m) => (
+          <div key={m.email} className="rounded-xl border border-slate-100 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-bold text-slate-800">{m.name || m.email}</div>
+                <div className="truncate text-[11px] text-slate-400">{m.email}</div>
+              </div>
+              <button onClick={() => { if (confirm(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {FEATURES.map(([k, l]) => (
+                <button key={k} type="button" onClick={() => togMember(m, k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${(m.perms || []).includes(k) ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-400"}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-xl bg-amber-50 p-3 text-[11px] text-amber-700">
+        ⚠️ Để thành viên đăng nhập thấy dữ liệu chung, cần bật <b>chia sẻ RLS</b> 1 lần trên Supabase (xem <b>supabase/SETUP-USERS.md</b>) và thành viên tự <b>đăng ký tài khoản</b> đúng email này trên app.
+      </div>
+    </Card>
+  );
+}
 
 function PushCard({ userId }) {
   const [on, setOn] = useState(false);
@@ -59,7 +117,7 @@ function PushCard({ userId }) {
 }
 
 export default function Settings() {
-  const { tasks, family, customerList, projects, exportData, importData, reset } = useData();
+  const { tasks, family, customerList, projects, exportData, importData, reset, isOwner } = useData();
   const { user, signOut, changePassword } = useAuth();
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState(null);
@@ -129,6 +187,8 @@ export default function Settings() {
       </Card>
 
       <PushCard userId={user?.id} />
+
+      {isOwner && <MembersCard />}
 
       <AiImport />
 
