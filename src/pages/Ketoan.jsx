@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search } from "lucide-react";
-import { Card, SectionTitle, Badge, MoneyInput, formatVND, formatShort } from "../components/ui.jsx";
+import { Card, SectionTitle, Badge, MoneyInput, DateField, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
@@ -114,9 +114,9 @@ function KetoanReport() {
           </div>
           {preset === "custom" && (
             <div className="flex w-full items-center gap-2 sm:w-auto">
-              <input type="date" value={cf} onChange={(e) => setCf(e.target.value)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
+              <DateField value={cf} onChange={setCf} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
               <span className="text-slate-400">→</span>
-              <input type="date" value={ct} onChange={(e) => setCt(e.target.value)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
+              <DateField value={ct} onChange={setCt} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
             </div>
           )}
           <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-600 sm:ml-auto">

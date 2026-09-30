@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { Plus, X, Trash2, Pencil, Repeat, Power, CheckSquare, Square, CreditCard, TrendingDown, Layers, CalendarClock, ChevronDown } from "lucide-react";
-import { Card, StatCard, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
+import { Card, StatCard, Badge, formatVND, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { EXPENSE_CATEGORIES } from "../data/seed.js";
 import { monthlyOperatingCost, expensesInRange } from "../lib/selectors.js";
@@ -18,7 +18,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa chi phí" : "Thêm chi phí"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -40,7 +40,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
             </div>
           </div>
           <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">{f.recurring === "once" ? "Ngày chi" : "Bắt đầu từ"}</span>
-            <input type="date" value={f.date} onChange={(e) => set("date", e.target.value)} className={inputCls} /></label>
+            <DateField value={f.date} onChange={(v) => set("date", v)} className={inputCls} /></label>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
           <input value={f.note} onChange={(e) => set("note", e.target.value)} className={inputCls} placeholder="VD: gói năm, dùng cho job VTY…" /></label>
@@ -49,7 +49,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
         </button>
         {f.recurring !== "once" && (
           <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Gia hạn đến <span className="font-normal text-slate-400">· để trống nếu còn dùng</span></span>
-            <input type="date" value={f.endDate || ""} onChange={(e) => set("endDate", e.target.value)} className={inputCls} /></label>
+            <DateField value={f.endDate || ""} onChange={(v) => set("endDate", v)} className={inputCls} placeholder="—" /></label>
         )}
         {initial?.id && f.recurring !== "once" && (
           <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
@@ -60,7 +60,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
                 <div className="text-[11px] font-semibold text-indigo-700">Chốt gói cũ tới hôm nay (giữ nguyên kỳ đã tính), mở gói mới từ:</div>
                 <div className="grid grid-cols-2 gap-2">
                   <label className="block text-xs"><span className="mb-1 block font-semibold text-slate-600">Ngày gia hạn mới</span>
-                    <input type="date" value={plan.date} onChange={(e) => setPlan((p) => ({ ...p, date: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label>
+                    <DateField value={plan.date} onChange={(v) => setPlan((p) => ({ ...p, date: v }))} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" /></label>
                   <label className="block text-xs"><span className="mb-1 block font-semibold text-slate-600">Phí mới</span>
                     <MoneyInput value={plan.amount} onChange={(v) => setPlan((p) => ({ ...p, amount: v }))} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" placeholder="500.000" /></label>
                 </div>
@@ -107,7 +107,7 @@ function ExpenseBatchModal({ onClose, onSave }) {
                 <select value={r.category} onChange={(e) => setRow(r.key, { category: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
                 <select value={r.recurring} onChange={(e) => setRow(r.key, { recurring: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{Object.entries(REC).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}</select>
               </div>
-              <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              <DateField value={r.date} onChange={(v) => setRow(r.key, { date: v })} className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
             </div>
           ))}
           <button onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm dòng</button>

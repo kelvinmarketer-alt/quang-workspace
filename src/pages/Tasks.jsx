@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays } from "lucide-react";
-import { Card, Badge } from "../components/ui.jsx";
+import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
@@ -12,7 +12,7 @@ function TaskModal({ onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm công việc</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -24,7 +24,7 @@ function TaskModal({ onClose, onSave }) {
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="text-sm">
             <span className="mb-1 block font-semibold text-slate-600">Ngày</span>
-            <input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2" />
+            <DateField value={f.date} onChange={(v) => setF({ ...f, date: v })} className="w-full rounded-xl border border-slate-200 px-3 py-2" />
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-semibold text-slate-600">Giờ</span>

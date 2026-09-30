@@ -28,7 +28,7 @@ function CustomerModal({ initial, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial.id ? "Sửa khách hàng" : "Thêm khách hàng"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -71,7 +71,7 @@ function BulkAddModal({ onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm khách hàng số lượng lớn</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>

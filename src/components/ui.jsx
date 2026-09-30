@@ -65,6 +65,19 @@ export function Badge({ children, tone = "slate" }) {
 }
 
 // Ô nhập tiền: hiển thị có dấu chấm (6.000.000), trả về chuỗi số thuần qua onChange(rawDigits)
+// Ô chọn NGÀY gọn: hiển thị "dd/mm/yy", bấm mở lịch native. value/onChange dùng ISO yyyy-mm-dd.
+export function DateField({ value, onChange, className = "", placeholder = "Chọn ngày" }) {
+  const short = value && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? (() => { const [y, m, d] = value.split("-"); return `${d}/${m}/${y.slice(2)}`; })()
+    : placeholder;
+  return (
+    <div className={`relative cursor-pointer ${className}`}>
+      <span className={value ? "" : "text-slate-400"}>{short}</span>
+      <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Chọn ngày" />
+    </div>
+  );
+}
+
 export function MoneyInput({ value, onChange, className = "", placeholder, autoFocus }) {
   const digits = String(value ?? "").replace(/[^\d]/g, "");
   const display = digits ? Number(digits).toLocaleString("vi-VN") : "";

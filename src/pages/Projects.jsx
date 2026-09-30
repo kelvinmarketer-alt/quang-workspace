@@ -3,7 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import {
   Plus, X, Trash2, Pencil, Search, TrendingUp, Wallet, Gift, Receipt, Check, Repeat, CalendarClock, ArrowRight, Sparkles, Copy,
 } from "lucide-react";
-import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
+import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { useData } from "../lib/store.jsx";
@@ -67,7 +67,7 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
       <div className="space-y-3">
         <div className="rounded-xl bg-violet-50/70 p-3">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Tháng (ngày nhận)"><input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} className={inputCls} /></Field>
+            <Field label="Tháng (ngày nhận)"><DateField value={f.date} onChange={(v) => setF({ ...f, date: v })} className={inputCls} /></Field>
             <Field label="Lương thực nhận" hint={salaryBase > 0 ? `Mặc định ${formatVND(salaryBase)}` : "Sửa nếu tháng này khác"}><MoneyInput value={f.amount} onChange={setAmt} className={inputCls} placeholder="15.000.000" /></Field>
           </div>
           {salaryBase > 0 && amt > 0 && amt !== salaryBase && (
@@ -107,7 +107,7 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tên đợt"><input value={f.label} onChange={set("label")} className={inputCls} placeholder={isAds ? "VD: Tháng 6 / Tuần 1" : "VD: Cọc 50%"} /></Field>
-        <Field label="Ngày thu"><input type="date" value={f.date} onChange={set("date")} className={inputCls} /></Field>
+        <Field label="Ngày thu"><DateField value={f.date} onChange={setV("date")} className={inputCls} /></Field>
       </div>
       {isAds ? (
         <div className="rounded-xl bg-rose-50/60 p-3">
@@ -178,7 +178,7 @@ function Modal({ title, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl ${wide ? "max-w-2xl" : "max-w-md"}`}>
+      <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl ${wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -314,7 +314,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-2xl">
+      <div className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
