@@ -131,7 +131,7 @@ export default function Coin() {
             <div className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm font-bold ${up ? "text-emerald-300" : "text-rose-300"}`}>
               {up ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
               {depVnd > 0 ? (
-                <>{pnlVnd >= 0 ? "+" : ""}{fmtVND(pnlVnd)} ({pnlVndPct >= 0 ? "+" : ""}{pnlVndPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· đã nạp {fmtVND(depVnd)}</span></>
+                <>{pnlVnd >= 0 ? "+" : ""}{fmtUSD(pnlVnd / vnd)} · {pnlVnd >= 0 ? "+" : ""}{fmtVND(pnlVnd)} ({pnlVndPct >= 0 ? "+" : ""}{pnlVndPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· đã nạp {fmtUSD(depVnd / vnd)} · {fmtVND(depVnd)}</span></>
               ) : (
                 <>{tot.pnl >= 0 ? "+" : ""}{fmtUSD(tot.pnl)} ({totPct >= 0 ? "+" : ""}{totPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· vốn {fmtUSD(tot.invested)}</span></>
               )}
