@@ -154,7 +154,7 @@ export default function Expenses() {
     for (const e of rows) { const k = e.recurring || "monthly"; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
     return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + monthEquiv(e), 0) }; });
   }, [rows]);
-  const [openRec, setOpenRec] = useState(() => new Set(["monthly", "yearly", "once"]));
+  const [openRec, setOpenRec] = useState(() => new Set()); // mặc định ĐÓNG hết, bấm chu kỳ để xổ
   const toggleRec = (k) => setOpenRec((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const renderCard = (e) => {
