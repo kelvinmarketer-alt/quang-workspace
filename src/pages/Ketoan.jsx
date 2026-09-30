@@ -88,7 +88,7 @@ function KetoanReport() {
     for (const x of list) { const m = (x.date || "").slice(0, 7) || "—"; if (!map.has(m)) map.set(m, []); map.get(m).push(x); }
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([month, items]) => ({ month, items, count: items.length, revenue: items.reduce((a, x) => a + x.revenue, 0), grossProfit: items.reduce((a, x) => a + x.grossProfit, 0), debt: items.reduce((a, x) => a + x.debt, 0) }));
   }, [list]);
-  const [openMonths, setOpenMonths] = useState(() => { const latest = list.reduce((mx, x) => { const m = (x.date || "").slice(0, 7); return m > mx ? m : mx; }, ""); return new Set(latest ? [latest] : []); });
+  const [openMonths, setOpenMonths] = useState(() => new Set()); // mặc định ĐÓNG hết, bấm tháng để xổ
   const toggleMonth = (m) => setOpenMonths((prev) => { const n = new Set(prev); n.has(m) ? n.delete(m) : n.add(m); return n; });
   const prevSum = useMemo(() => sumInstallments(installmentsInRange(projects, prev.from, prev.to)), [projects, prev.from, prev.to]);
   const series = useMemo(() => monthlySeriesInRange(projects, from, to).map((m) => ({ name: "Th" + m.key.slice(5), dt: m.revenue, ln: m.grossProfit })), [projects, from, to]);
