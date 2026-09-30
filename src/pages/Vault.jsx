@@ -216,7 +216,7 @@ function VaultAiModal({ onClose, onAdd }) {
   const analyze = async () => {
     setErr(""); setItems(null); setLoading(true);
     try {
-      const r = await aiReadVault({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: settings.openaiModel });
+      const r = await aiReadVault({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: "gpt-4o" });
       if (!r.items?.length) setErr("AI không đọc được tài khoản nào. Thử ảnh rõ hơn hoặc đổi model gpt-4o.");
       setItems(r.items || []);
     } catch (e) { setErr(e.message || "Lỗi không xác định"); }
@@ -255,7 +255,7 @@ function VaultAiModal({ onClose, onAdd }) {
           <button onClick={analyze} disabled={loading || !hasKey || !img} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40">
             {loading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <><Sparkles size={16} /> Đọc ảnh bằng AI</>}
           </button>
-          <div className="text-center text-[11px] text-slate-400">Mật khẩu/số thẻ đọc từ ảnh — nên đổi model <b>gpt-4o</b> ở Cài đặt & kiểm tra lại trước khi lưu.</div>
+          <div className="text-center text-[11px] text-slate-400">Tự dùng AI mạnh (gpt-4o) để đọc chuẩn — vẫn nên <b>kiểm tra lại mật khẩu/số thẻ</b> trước khi lưu.</div>
           {err && <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{err}</div>}
           {items && items.length > 0 && (
             <div className="rounded-xl border border-slate-100 p-2">

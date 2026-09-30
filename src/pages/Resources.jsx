@@ -196,7 +196,7 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
   const analyze = async () => {
     setErr(""); setItems(null); setLoading(true);
     try {
-      const r = await aiReadResources({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: settings.openaiModel });
+      const r = await aiReadResources({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: "gpt-4o" });
       const list = (r.resources || []).map((x) => ({ ...x, type: RES_TYPES[x.type] ? x.type : detectResType(x.url), title: x.title || guessTitle(x.url) }));
       if (!list.length) setErr("AI không tìm thấy link nào trong ảnh. Thử ảnh rõ hơn hoặc thêm ghi chú.");
       setItems(list);
