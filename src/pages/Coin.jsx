@@ -38,6 +38,7 @@ export default function Coin() {
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
   const [wallet, setWallet] = useState(null);
+  const [deposited, setDeposited] = useState(null);
   const [wErr, setWErr] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [modal, setModal] = useState(null);
@@ -75,6 +76,7 @@ export default function Coin() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setWallet(data.balances || []);
+      setDeposited(data.deposited || null);
     } catch (e) { if (!silent) setWErr("Đồng bộ lỗi: " + (e.message || String(e))); }
     if (!silent) setSyncing(false);
   };
@@ -110,6 +112,12 @@ export default function Coin() {
     return { value, invested, pnl: valueWithCost - invested };
   }, [rows]);
   const totPct = tot.invested > 0 ? (tot.pnl / tot.invested) * 100 : 0;
+  // "Đã nạp" thật bằng VND (P2P + fiat từ Binance) — ưu tiên so sánh theo VND
+  const valueVnd = tot.value * vnd;
+  const depVnd = deposited?.vnd || 0;
+  const pnlVnd = depVnd > 0 ? valueVnd - depVnd : null;
+  const pnlVndPct = depVnd > 0 ? (pnlVnd / depVnd) * 100 : 0;
+  const up = (pnlVnd != null ? pnlVnd : tot.pnl) >= 0;
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -120,10 +128,13 @@ export default function Coin() {
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-200"><Coins size={14} /> Danh mục coin · Binance</div>
             <div className="mt-1 text-3xl font-extrabold sm:text-4xl">{fmtUSD(tot.value)}</div>
             <div className="mt-0.5 text-xs text-amber-100/80">≈ {fmtVND(tot.value * vnd)}</div>
-            <div className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm font-bold ${tot.pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-              {tot.pnl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-              {tot.pnl >= 0 ? "+" : ""}{fmtUSD(tot.pnl)} ({totPct >= 0 ? "+" : ""}{totPct.toFixed(1)}%)
-              <span className="font-medium text-amber-100/70">· vốn {fmtUSD(tot.invested)}</span>
+            <div className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm font-bold ${up ? "text-emerald-300" : "text-rose-300"}`}>
+              {up ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+              {depVnd > 0 ? (
+                <>{pnlVnd >= 0 ? "+" : ""}{fmtVND(pnlVnd)} ({pnlVndPct >= 0 ? "+" : ""}{pnlVndPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· đã nạp {fmtVND(depVnd)}</span></>
+              ) : (
+                <>{tot.pnl >= 0 ? "+" : ""}{fmtUSD(tot.pnl)} ({totPct >= 0 ? "+" : ""}{totPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· vốn {fmtUSD(tot.invested)}</span></>
+              )}
             </div>
           </div>
           <button onClick={() => { syncBinance(); loadPrices(); }} disabled={syncing} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-50"><RefreshCw size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "…" : "Làm mới"}</button>
