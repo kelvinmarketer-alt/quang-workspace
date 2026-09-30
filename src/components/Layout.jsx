@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
@@ -52,6 +52,7 @@ const NAV = [
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks" },
   { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin" },
+  { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
@@ -70,8 +71,8 @@ function Brand() {
 }
 
 function SideNav({ onNavigate }) {
-  const { perms } = useData();
-  const items = NAV.filter((n) => !n.feat || (perms || []).includes(n.feat));
+  const { perms, isOwner } = useData();
+  const items = NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner));
   return (
     <nav className="mt-6 flex flex-col gap-1 px-3">
       {items.map((n) => (

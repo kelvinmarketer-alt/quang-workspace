@@ -27,6 +27,7 @@ function load() {
     fundTx: SEED_FUND_TX, // giao dịch nạp/rút quỹ
     fundSchedules: SEED_FUND_SCHEDULES, // lịch chuyển quỹ định kỳ
     spendCats: SEED_SPEND_CATS, // danh mục chi tiêu
+    vault: [], // kho tài khoản/thẻ/thanh toán (CHỈ chủ) — {id,type,title,...fields}
     settings: { ...SEED_SETTINGS }, // cấu hình app (key OpenAI…) — sẽ đồng bộ DB
   };
 }
@@ -48,6 +49,7 @@ function migrate(s) {
   }
   // Danh mục chi tiêu: lần đầu (chưa có key) → nạp bộ mẫu; đã có → giữ nguyên
   if (!Array.isArray(merged.spendCats)) merged.spendCats = s.spendCats === undefined ? SEED_SPEND_CATS : [];
+  if (!Array.isArray(merged.vault)) merged.vault = [];
   // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
   // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
   if (!merged.catsV5) {
@@ -462,6 +464,10 @@ export function DataProvider({ children }) {
       addCoin: (c) => setState((s) => ({ ...s, coins: [{ id: "co" + uid(), symbol: (c.symbol || "").toUpperCase(), qty: Number(c.qty) || 0, buyPrice: Number(c.buyPrice) || 0, note: c.note || "" }, ...(s.coins || [])] })),
       updateCoin: (id, patch) => setState((s) => ({ ...s, coins: (s.coins || []).map((c) => (c.id === id ? { ...c, ...patch, symbol: ((patch.symbol ?? c.symbol) || "").toUpperCase() } : c)) })),
       deleteCoin: (id) => setState((s) => ({ ...s, coins: (s.coins || []).filter((c) => c.id !== id) })),
+      // KHO TÀI KHOẢN / THẺ / THANH TOÁN (CHỈ CHỦ) — {id,type:"app"|"card"|"bank",title,...fields,note,updatedAt}
+      addVaultItem: (v) => setState((s) => ({ ...s, vault: [{ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() }, ...(s.vault || [])] })),
+      updateVaultItem: (id, patch) => setState((s) => ({ ...s, vault: (s.vault || []).map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) })),
+      deleteVaultItem: (id) => setState((s) => ({ ...s, vault: (s.vault || []).filter((x) => x.id !== id) })),
       // BACKUP
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {

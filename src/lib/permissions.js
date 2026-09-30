@@ -32,7 +32,7 @@ export const FEATURE_WRITES = {
   coin: ["addCoin", "updateCoin", "deleteCoin"],
 };
 // Cài đặt DỮ LIỆU / BẢO MẬT — chỉ CHỦ (admin) được: quản lý user, đổi cấu hình, backup/restore/reset.
-export const OWNER_ONLY_WRITES = ["addMember", "updateMember", "removeMember", "setSettings", "importData", "reset"];
+export const OWNER_ONLY_WRITES = ["addMember", "updateMember", "removeMember", "setSettings", "importData", "reset", "addVaultItem", "updateVaultItem", "deleteVaultItem"];
 
 // Quyền của 1 thành viên theo tính năng: { feat: "none" | "view" | "edit" }. Tương thích ngược schema cũ (perms[]=edit).
 export function memberAccess(member) {

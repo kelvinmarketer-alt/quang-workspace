@@ -6,6 +6,7 @@ import Ketoan from "./pages/Ketoan.jsx";
 import Funds from "./pages/Funds.jsx";
 import Tasks from "./pages/Tasks.jsx";
 import Coin from "./pages/Coin.jsx";
+import Vault from "./pages/Vault.jsx";
 import Settings from "./pages/Settings.jsx";
 import { useData } from "./lib/store.jsx";
 import { ROUTE_FEATURE } from "./lib/permissions.js";
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/cong-viec" element={g("/cong-viec", <Tasks />)} />
         <Route path="/lich" element={g("/lich", <Tasks initialTab="calendar" />)} />
         <Route path="/coin" element={g("/coin", <Coin />)} />
+        <Route path="/tai-khoan" element={<Vault />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
     </Layout>
