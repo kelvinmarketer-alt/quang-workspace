@@ -103,11 +103,11 @@ function ExpenseBatchModal({ onClose, onSave }) {
                 <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} className="w-28 shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-bold" placeholder="Số tiền *" />
                 {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
               </div>
-              <div className="mt-2 flex items-center gap-2">
-                <select value={r.category} onChange={(e) => setRow(r.key, { category: e.target.value })} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
-                <select value={r.recurring} onChange={(e) => setRow(r.key, { recurring: e.target.value })} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{Object.entries(REC).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}</select>
-                <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <select value={r.category} onChange={(e) => setRow(r.key, { category: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+                <select value={r.recurring} onChange={(e) => setRow(r.key, { recurring: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{Object.entries(REC).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}</select>
               </div>
+              <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
             </div>
           ))}
           <button onClick={addRow} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600"><Plus size={15} /> Thêm dòng</button>
