@@ -23,18 +23,30 @@ async function copy(text) {
   } catch { return false; }
 }
 
-// 1 ô: nhãn + giá trị (ẩn nếu bí mật) + hiện + copy
+// 1 ô: nhãn + giá trị (ẩn nếu bí mật) + hiện + nút Copy có chữ
 function CredLine({ label, value, secret }) {
   const [show, setShow] = useState(false);
   const [done, setDone] = useState(false);
-  const doCopy = async () => { if (await copy(value)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
+  const doCopy = async () => { if (await copy(value)) { setDone(true); setTimeout(() => setDone(false), 1400); } };
   return (
     <div className="flex items-center gap-2 py-1">
       <span className="w-16 shrink-0 text-[11px] font-semibold text-slate-400">{label}</span>
       <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-700">{secret && !show ? "•".repeat(Math.min((value || "").length, 12)) : value}</span>
-      {secret && <button onClick={() => setShow((v) => !v)} className="shrink-0 rounded p-1 text-slate-400 hover:text-slate-600">{show ? <EyeOff size={13} /> : <Eye size={13} />}</button>}
-      <button onClick={doCopy} className={`shrink-0 rounded p-1 ${done ? "text-emerald-600" : "text-slate-400 hover:text-indigo-600"}`}>{done ? <Check size={13} /> : <Copy size={13} />}</button>
+      {secret && <button onClick={() => setShow((v) => !v)} className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-700" title={show ? "Ẩn" : "Hiện"}>{show ? <EyeOff size={14} /> : <Eye size={14} />}</button>}
+      <button onClick={doCopy} className={`flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold ${done ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-slate-200 bg-white text-indigo-600 hover:bg-indigo-50"}`}>{done ? <Check size={12} /> : <Copy size={12} />}{done ? "Đã copy" : "Copy"}</button>
     </div>
+  );
+}
+
+// Nút copy gộp tài khoản + mật khẩu (+ tên + link) để gửi nhanh
+function CopyAllCred({ r }) {
+  const [done, setDone] = useState(false);
+  const text = [r.title, r.username ? `Tài khoản: ${r.username}` : "", r.password ? `Mật khẩu: ${r.password}` : "", r.url ? `Link: ${r.url}` : "", r.note ? `Ghi chú: ${r.note}` : ""].filter(Boolean).join("\n");
+  const doCopy = async () => { if (await copy(text)) { setDone(true); setTimeout(() => setDone(false), 1600); } };
+  return (
+    <button onClick={doCopy} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold ${done ? "bg-emerald-500 text-white" : "bg-slate-800 text-white hover:bg-slate-700"}`}>
+      {done ? <Check size={13} /> : <Copy size={13} />} {done ? "Đã copy" : "Copy tài khoản + mật khẩu + link"}
+    </button>
   );
 }
 
@@ -61,7 +73,7 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
           <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hostOf(r.url) || r.url}</div>
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
-          {hasCred && <button onClick={() => setOpen((v) => !v)} className={`rounded-lg p-1.5 ${open ? "text-amber-600" : "text-slate-400 hover:bg-white hover:text-amber-600"}`} title="Tài khoản / mật khẩu"><KeyRound size={14} /></button>}
+          {hasCred && <button onClick={() => setOpen((v) => !v)} className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${open ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`} title="Xem & copy tài khoản / mật khẩu"><KeyRound size={13} /> TK/MK</button>}
           <button onClick={() => openUrl(r.url)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Mở"><ExternalLink size={14} /></button>
           <button onClick={doCopy} className={`rounded-lg p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
           {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
@@ -69,10 +81,11 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
         </div>
       </div>
       {open && hasCred && (
-        <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-1.5">
+        <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2">
           {r.username && <CredLine label="Tài khoản" value={r.username} secret={false} />}
           {r.password && <CredLine label="Mật khẩu" value={r.password} secret={true} />}
           {r.note && <CredLine label="Ghi chú" value={r.note} secret={false} />}
+          <CopyAllCred r={r} />
         </div>
       )}
     </div>
