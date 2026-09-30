@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
-import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, Settings as SettingsIcon } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
+import { aiReadResources, imageToDataUrl } from "../lib/ai.js";
 import { RES_TYPES, RES_TYPE_KEYS, detectResType, guessTitle, hostOf } from "../lib/resources.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
@@ -143,6 +144,94 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
   );
 }
 
+// Modal AI: đọc ẢNH (chụp màn hình link/tài nguyên) → tự bóc + điền + thêm
+export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd }) {
+  const { settings } = useData();
+  const hasKey = !!(settings.openaiKey || "").trim();
+  const fileRef = useRef(null);
+  const [img, setImg] = useState(null);
+  const [note, setNote] = useState("");
+  const [customerId, setCustomerId] = useState(preset.customerId || "");
+  const [projectId, setProjectId] = useState(preset.projectId || "");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [items, setItems] = useState(null); // [{title,url,type}]
+  const projOptions = projects.filter((p) => !customerId || p.customerId === customerId).map((p) => ({ value: p.id, label: p.name, sub: p.customerName }));
+  const pick = async (e) => { const f = e.target.files?.[0]; if (!f) return; try { setImg(await imageToDataUrl(f, 1600, 0.85)); } catch { setErr("Không đọc được ảnh."); } e.target.value = ""; };
+  const analyze = async () => {
+    setErr(""); setItems(null); setLoading(true);
+    try {
+      const r = await aiReadResources({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: settings.openaiModel });
+      const list = (r.resources || []).map((x) => ({ ...x, type: RES_TYPES[x.type] ? x.type : detectResType(x.url), title: x.title || guessTitle(x.url) }));
+      if (!list.length) setErr("AI không tìm thấy link nào trong ảnh. Thử ảnh rõ hơn hoặc thêm ghi chú.");
+      setItems(list);
+    } catch (e) { setErr(e.message || "Lỗi không xác định"); }
+    setLoading(false);
+  };
+  const setItem = (i, patch) => setItems((it) => it.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const removeItem = (i) => setItems((it) => it.filter((_, j) => j !== i));
+  const add = () => { if (items && items.length) { onAdd(items.map((r) => ({ ...r, customerId, projectId }))); onClose(); } };
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 p-4">
+          <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> Thêm bằng AI (đọc ảnh)</h3>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+        </div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {!hasKey && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><SettingsIcon size={15} className="shrink-0" /> Chưa có API key OpenAI — vào <b>Cài đặt</b> để nhập trước.</div>}
+          {!preset.projectId && (
+            <div className="grid grid-cols-2 gap-3">
+              <div><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
+                <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
+              </div>
+              <div><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
+                <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" />
+              </div>
+            </div>
+          )}
+          <button onClick={() => fileRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40">
+            <ImagePlus size={18} /> {img ? "Đổi ảnh khác" : "Chọn ảnh (chụp màn hình chứa các link)"}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" onChange={pick} className="hidden" />
+          {img && (
+            <div className="relative inline-block">
+              <img src={img} alt="preview" className="max-h-44 rounded-xl border border-slate-200" />
+              <button onClick={() => setImg(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
+            </div>
+          )}
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={`${inputCls}`} placeholder="Ghi chú cho AI (tuỳ chọn): vd 'toàn bộ tài liệu dự án web Cao JBL'…" />
+          <button onClick={analyze} disabled={loading || !hasKey || !img} className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40">
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Đang đọc ảnh…</> : <><Sparkles size={16} /> Đọc ảnh bằng AI</>}
+          </button>
+          {err && <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{err}</div>}
+          {items && items.length > 0 && (
+            <div className="rounded-xl border border-slate-100 p-2">
+              <div className="mb-1 px-1 text-[11px] font-bold uppercase text-slate-400">AI bóc được ({items.length}) — sửa/bỏ trước khi thêm</div>
+              <div className="max-h-56 space-y-1.5 overflow-y-auto">
+                {items.map((r, i) => { const t = RES_TYPES[r.type] || RES_TYPES.web; return (
+                  <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
+                    <t.icon size={15} className="shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-slate-700 outline-none" />
+                      <div className="truncate text-[11px] text-slate-400">{hostOf(r.url) || r.url}</div>
+                    </div>
+                    <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>
+                  </div>
+                ); })}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="border-t border-slate-100 p-4">
+          <button onClick={add} disabled={!items || !items.length} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-40"><Check size={16} /> Thêm {items?.length || 0} vào app</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Mục nhúng trong Dự án (ProjectDrawer)
 export function ProjectResources({ projectId, customerId, customerName = "" }) {
   const { resources = [], addResource, addResources, deleteResource, updateResource, canEdit, customerList = [], projects = [] } = useData();
@@ -150,13 +239,19 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
   const list = useMemo(() => (resources || []).filter((r) => r.projectId === projectId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [resources, projectId]);
   const [url, setUrl] = useState("");
   const [batch, setBatch] = useState(false);
+  const [ai, setAi] = useState(false);
   const [edit, setEdit] = useState(null);
   const quickAdd = () => { const u = url.trim(); if (!u) return; addResource({ url: u, type: detectResType(u), title: guessTitle(u), projectId, customerId }); setUrl(""); };
   return (
     <div className="mt-5">
       <div className="mb-2 flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-sm font-bold text-slate-600"><FolderKanban size={15} /> Tài liệu & Tài nguyên ({list.length})</div>
-        {canW && <button onClick={() => setBatch(true)} className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-indigo-100 hover:text-indigo-600"><Plus size={13} /> Hàng loạt</button>}
+        {canW && (
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setAi(true)} className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-1 text-xs font-bold text-white"><Sparkles size={13} /> AI</button>
+            <button onClick={() => setBatch(true)} className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-indigo-100 hover:text-indigo-600"><Plus size={13} /> Hàng loạt</button>
+          </div>
+        )}
       </div>
       {canW && (
         <div className="mb-2 flex gap-2">
@@ -175,6 +270,7 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
         </div>
       )}
       {batch && <ResBatchModal customers={customerList} projects={projects} preset={{ projectId, customerId }} onClose={() => setBatch(false)} onSave={addResources} />}
+      {ai && <ResAiModal customers={customerList} projects={projects} preset={{ projectId, customerId }} onClose={() => setAi(false)} onAdd={addResources} />}
       {edit && <ResModal initial={edit} customers={customerList} projects={projects} onClose={() => setEdit(null)} onSave={(data) => updateResource(edit.id, data)} />}
     </div>
   );
@@ -188,6 +284,7 @@ export default function Resources() {
   const [custF, setCustF] = useState("all");
   const [modal, setModal] = useState(null);
   const [batch, setBatch] = useState(false);
+  const [ai, setAi] = useState(false);
 
   const projName = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
   const custName = useMemo(() => Object.fromEntries(customerList.map((c) => [c.id, c.name])), [customerList]);
@@ -238,7 +335,8 @@ export default function Resources() {
         </select>
         {canW && (
           <div className="flex w-full gap-2 sm:w-auto">
-            <button onClick={() => setModal({})} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Plus size={15} /> Thêm</button>
+            <button onClick={() => setAi(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={15} /> AI</button>
+            <button onClick={() => setModal({})} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex-none"><Plus size={15} /> Thêm</button>
             <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white shadow-lg sm:flex-none"><Plus size={15} /> Hàng loạt</button>
           </div>
         )}
@@ -257,6 +355,7 @@ export default function Resources() {
 
       {modal && <ResModal initial={modal} customers={customerList} projects={projects} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateResource(modal.id, data) : addResource(data))} />}
       {batch && <ResBatchModal customers={customerList} projects={projects} onClose={() => setBatch(false)} onSave={addResources} />}
+      {ai && <ResAiModal customers={customerList} projects={projects} onClose={() => setAi(false)} onAdd={addResources} />}
     </div>
   );
 }

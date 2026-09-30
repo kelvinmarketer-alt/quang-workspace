@@ -76,6 +76,46 @@ export async function aiImport({ text, imageDataUrl, apiKey, model }) {
   };
 }
 
+// Đọc ảnh chụp màn hình chứa CÁC LINK / TÀI NGUYÊN online -> { resources: [{title,url,type}] } bằng OpenAI Vision.
+export async function aiReadResources({ imageDataUrl, text, apiKey, model }) {
+  const key = (apiKey || "").trim();
+  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
+  if (!imageDataUrl && !text) throw new Error("Cần ảnh (hoặc text) để đọc.");
+  const sys = `Bạn đọc ảnh/màn hình chứa CÁC LINK / TÀI NGUYÊN ONLINE (Google Drive/Docs/Sheet/Slide, Figma, Canva, Notion, YouTube, Facebook, thư mục chia sẻ, link web…). Trích MỌI link/tài nguyên nhìn thấy thành danh sách. CHỈ trả JSON, không giải thích.
+QUY TẮC:
+- url = đường link ĐẦY ĐỦ đọc được (kèm "https://"). Nếu 1 mục KHÔNG có link nhìn thấy được thì BỎ QUA mục đó — TUYỆT ĐỐI không bịa/không đoán link.
+- title = tên/nhãn hiển thị của link (tên file, tiêu đề, chữ neo). Không có thì để "".
+- type thuộc đúng danh sách: sheet, doc, slide, drive, figma, canva, notion, youtube, facebook, image, folder, web. Suy ra từ tên miền/biểu tượng; không chắc để "web".
+SCHEMA: { "resources": [ { "title": "Brief thiết kế", "url": "https://figma.com/...", "type": "figma" } ] }`;
+  const userContent = [{ type: "text", text: (text ? text + "\n" : "") + "Trích tất cả link/tài nguyên trong ảnh này." }];
+  if (imageDataUrl) userContent.push({ type: "image_url", image_url: { url: imageDataUrl } });
+  const body = {
+    model: model || "gpt-4o-mini",
+    messages: [{ role: "system", content: sys }, { role: "user", content: userContent }],
+    response_format: { type: "json_object" },
+    temperature: 0,
+  };
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const data = await res.json();
+  const txt = data.choices?.[0]?.message?.content || "{}";
+  let p;
+  try { p = JSON.parse(txt); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const raw = Array.isArray(p.resources) ? p.resources : (p.url ? [p] : []);
+  const resources = raw
+    .map((r) => ({ title: (r.title || "").toString().slice(0, 200), url: (r.url || "").toString().trim(), type: (r.type || "").toString() }))
+    .filter((r) => /\S/.test(r.url));
+  return { resources };
+}
+
 // Đọc file ảnh -> data URL base64
 export function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
