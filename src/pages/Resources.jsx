@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, ChevronDown, Users, Settings as SettingsIcon } from "lucide-react";
+import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, ChevronDown, Users, ListPlus, Settings as SettingsIcon } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
@@ -452,6 +452,13 @@ export default function Resources() {
                     </div>
                     <ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
                   </button>
+                  {canW && !selMode && (() => { const pc = g.cid === "__none__" ? "" : g.cid; return (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button onClick={(e) => { e.stopPropagation(); setAi({ customerId: pc }); }} className="rounded-lg p-1.5 text-indigo-500 hover:bg-indigo-50" title={`AI đọc ảnh → thêm vào ${g.name}`}><Sparkles size={16} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setModal({ customerId: pc }); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title={`Thêm 1 mục vào ${g.name}`}><Plus size={16} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setBatch({ customerId: pc }); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title={`Thêm hàng loạt vào ${g.name}`}><ListPlus size={16} /></button>
+                    </div>
+                  ); })()}
                   {canW && <button onClick={() => deleteGroup(g)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title={`Xoá tất cả tài nguyên của ${g.name}`}><Trash2 size={16} /></button>}
                 </div>
                 {open && (
@@ -466,8 +473,8 @@ export default function Resources() {
       )}
 
       {modal && <ResModal initial={modal} customers={activeCustomers} projects={projects} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateResource(modal.id, data) : addResource(data))} />}
-      {batch && <ResBatchModal customers={activeCustomers} projects={projects} onClose={() => setBatch(false)} onSave={addResources} />}
-      {ai && <ResAiModal customers={activeCustomers} projects={projects} onClose={() => setAi(false)} onAdd={addResources} />}
+      {batch && <ResBatchModal customers={activeCustomers} projects={projects} preset={batch === true ? {} : batch} onClose={() => setBatch(false)} onSave={addResources} />}
+      {ai && <ResAiModal customers={activeCustomers} projects={projects} preset={ai === true ? {} : ai} onClose={() => setAi(false)} onAdd={addResources} />}
     </div>
   );
 }
