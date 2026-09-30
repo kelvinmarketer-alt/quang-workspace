@@ -1,13 +1,49 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
+import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
+
+function PushPrompt() {
+  const { user } = useAuth();
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    (async () => {
+      const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+      if (!pushSupported() || permission() !== "default" || !standalone) return;
+      try { if (sessionStorage.getItem("qws_push_prompt_off")) return; } catch {}
+      const sub = await isSubscribed().catch(() => false);
+      if (alive && !sub) setShow(true);
+    })();
+    return () => { alive = false; };
+  }, [user?.id]);
+  if (!show) return null;
+  const enable = async () => { setBusy(true); try { await enablePush(user.id); setShow(false); } catch {} setBusy(false); };
+  const later = () => { try { sessionStorage.setItem("qws_push_prompt_off", "1"); } catch {} setShow(false); };
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-3.5">
+      <BellRing size={20} className="shrink-0 text-amber-500" />
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="font-bold text-amber-800">Bật thông báo nhắc việc & sự kiện?</div>
+        <div className="text-[12px] text-amber-700">Nhận nhắc quỹ đến hạn, việc, sự kiện & cập nhật thu/chi kể cả khi đóng app.</div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <button onClick={later} className="rounded-xl px-3 py-2 text-sm font-bold text-amber-700 hover:bg-amber-100">Để sau</button>
+        <button onClick={enable} disabled={busy} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50">{busy ? "…" : "Bật ngay"}</button>
+      </div>
+    </div>
+  );
+}
 
 const NAV = [
   { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true, feat: "dashboard" },
@@ -249,7 +285,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">{children}</main>
+        <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6"><PushPrompt />{children}</main>
       </div>
     </div>
   );
