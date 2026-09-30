@@ -251,12 +251,12 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
             <div className="rounded-xl border border-slate-100 p-2">
               <div className="mb-1 px-1 text-[11px] font-bold uppercase text-slate-400">AI bóc được ({items.length}) — sửa/bỏ trước khi thêm</div>
               <div className="max-h-56 space-y-1.5 overflow-y-auto">
-                {items.map((r, i) => { const t = RES_TYPES[r.type] || RES_TYPES.web; return (
+                {items.map((r, i) => { const t = RES_TYPES[r.type] || RES_TYPES.web; const hasCred = !!(r.username || r.password); return (
                   <div key={i} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
                     <t.icon size={15} className="shrink-0 text-slate-400" />
                     <div className="min-w-0 flex-1">
-                      <input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} className="w-full bg-transparent text-sm font-semibold text-slate-700 outline-none" />
-                      <div className="truncate text-[11px] text-slate-400">{hostOf(r.url) || r.url}</div>
+                      <div className="flex items-center gap-1"><input value={r.title} onChange={(e) => setItem(i, { title: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none" />{hasCred && <KeyRound size={12} className="shrink-0 text-amber-500" title="Có tài khoản/mật khẩu" />}</div>
+                      <div className="truncate text-[11px] text-slate-400">{hasCred ? `${r.username || "—"}${r.password ? " · ••••" : ""} · ` : ""}{hostOf(r.url) || r.url}</div>
                     </div>
                     <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>
                   </div>

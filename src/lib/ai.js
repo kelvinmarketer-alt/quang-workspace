@@ -81,12 +81,16 @@ export async function aiReadResources({ imageDataUrl, text, apiKey, model }) {
   const key = (apiKey || "").trim();
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl && !text) throw new Error("Cần ảnh (hoặc text) để đọc.");
-  const sys = `Bạn đọc ảnh/màn hình chứa CÁC LINK / TÀI NGUYÊN ONLINE (Google Drive/Docs/Sheet/Slide, Figma, Canva, Notion, YouTube, Facebook, thư mục chia sẻ, link web…). Trích MỌI link/tài nguyên nhìn thấy thành danh sách. CHỈ trả JSON, không giải thích.
+  const sys = `Bạn đọc ảnh/màn hình/bảng chứa CÁC LINK / TÀI NGUYÊN ONLINE (Google Drive/Docs/Sheet/Slide, Figma, Canva, Notion, YouTube, Facebook, thư mục chia sẻ, link web…) KÈM thông tin ĐĂNG NHẬP nếu có. Trích MỌI mục nhìn thấy thành danh sách. CHỈ trả JSON, không giải thích.
 QUY TẮC:
 - url = đường link ĐẦY ĐỦ đọc được (kèm "https://"). Nếu 1 mục KHÔNG có link nhìn thấy được thì BỎ QUA mục đó — TUYỆT ĐỐI không bịa/không đoán link.
-- title = tên/nhãn hiển thị của link (tên file, tiêu đề, chữ neo). Không có thì để "".
+- title = tên/nhãn hiển thị của mục (tên nền tảng, tên file, tiêu đề, chữ neo). Không có thì để "".
 - type thuộc đúng danh sách: sheet, doc, slide, drive, figma, canva, notion, youtube, facebook, image, folder, web. Suy ra từ tên miền/biểu tượng; không chắc để "web".
-SCHEMA: { "resources": [ { "title": "Brief thiết kế", "url": "https://figma.com/...", "type": "figma" } ] }`;
+- username = tài khoản/email/tên đăng nhập của mục đó nếu ảnh có (cột "Tài khoản", "Đăng nhập", "User", "Email"…). Không có để "".
+- password = mật khẩu của mục đó nếu ảnh có (cột "Mật khẩu", "Password", "Pass"…). Đọc CHÍNH XÁC từng ký tự, phân biệt hoa/thường/số/ký hiệu. Không có để "".
+- note = ghi chú thêm của mục nếu có (cột "Ghi chú", vai trò, mô tả…). Không có để "".
+- Ghép ĐÚNG tài khoản/mật khẩu/ghi chú vào mục (dòng) tương ứng của nó.
+SCHEMA: { "resources": [ { "title": "Website admin", "url": "https://site.com/admin", "type": "web", "username": "admin", "password": "Abc@123", "note": "quản trị toàn hệ thống" } ] }`;
   const userContent = [{ type: "text", text: (text ? text + "\n" : "") + "Trích tất cả link/tài nguyên trong ảnh này." }];
   if (imageDataUrl) userContent.push({ type: "image_url", image_url: { url: imageDataUrl } });
   const body = {
@@ -111,7 +115,7 @@ SCHEMA: { "resources": [ { "title": "Brief thiết kế", "url": "https://figma.
   try { p = JSON.parse(txt); } catch { throw new Error("Không đọc được JSON từ AI."); }
   const raw = Array.isArray(p.resources) ? p.resources : (p.url ? [p] : []);
   const resources = raw
-    .map((r) => ({ title: (r.title || "").toString().slice(0, 200), url: (r.url || "").toString().trim(), type: (r.type || "").toString() }))
+    .map((r) => ({ title: (r.title || "").toString().slice(0, 200), url: (r.url || "").toString().trim(), type: (r.type || "").toString(), username: (r.username || "").toString().slice(0, 200), password: (r.password || "").toString().slice(0, 200), note: (r.note || "").toString().slice(0, 300) }))
     .filter((r) => /\S/.test(r.url));
   return { resources };
 }
