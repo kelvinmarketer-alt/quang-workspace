@@ -4,6 +4,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadResources, imageToDataUrl } from "../lib/ai.js";
+import { usePasteImages } from "../lib/paste.js";
 import { RES_TYPES, RES_TYPE_KEYS, detectResType, guessTitle, hostOf } from "../lib/resources.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
@@ -187,8 +188,11 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [items, setItems] = useState(null); // [{title,url,type}]
+  const [drag, setDrag] = useState(false);
   const projOptions = projects.filter((p) => !customerId || p.customerId === customerId).map((p) => ({ value: p.id, label: p.name, sub: p.customerName }));
-  const pick = async (e) => { const f = e.target.files?.[0]; if (!f) return; try { setImg(await imageToDataUrl(f, 1600, 0.85)); } catch { setErr("Không đọc được ảnh."); } e.target.value = ""; };
+  const handleFiles = async (files) => { const f = files && files[0]; if (!f || !f.type?.startsWith("image/")) return; try { setImg(await imageToDataUrl(f, 1600, 0.85)); setErr(""); } catch { setErr("Không đọc được ảnh."); } };
+  const pick = async (e) => { await handleFiles(e.target.files); e.target.value = ""; };
+  usePasteImages(handleFiles);
   const analyze = async () => {
     setErr(""); setItems(null); setLoading(true);
     try {
@@ -222,8 +226,14 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
               </div>
             </div>
           )}
-          <button onClick={() => fileRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40">
-            <ImagePlus size={18} /> {img ? "Đổi ảnh khác" : "Chọn ảnh (chụp màn hình chứa các link)"}
+          <button
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
+            className={`flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed py-6 text-sm font-bold ${drag ? "border-indigo-400 bg-indigo-50" : "border-slate-200 text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40"}`}>
+            <span className="flex items-center gap-2"><ImagePlus size={18} /> {img ? "Đổi ảnh khác" : "Chọn ảnh (chụp màn hình chứa các link)"}</span>
+            <span className="text-[11px] font-medium text-slate-400">hoặc <b>dán ảnh (Ctrl/Cmd+V)</b> · kéo-thả ảnh vào đây</span>
           </button>
           <input ref={fileRef} type="file" accept="image/*" onChange={pick} className="hidden" />
           {img && (

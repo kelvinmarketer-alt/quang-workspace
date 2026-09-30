@@ -6,6 +6,7 @@ import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.
 import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { imageToDataUrl } from "../lib/ai.js";
+import { usePasteImages } from "../lib/paste.js";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -24,7 +25,9 @@ function CustomerModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const logoRef = useRef(null);
-  const pickLogo = async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const logo = await imageToDataUrl(file, 256, 0.85); setF((p) => ({ ...p, logo })); } catch {} e.target.value = ""; };
+  const handleLogo = async (files) => { const file = files && files[0]; if (!file || !file.type?.startsWith("image/")) return; try { const logo = await imageToDataUrl(file, 256, 0.85); setF((p) => ({ ...p, logo })); } catch {} };
+  const pickLogo = async (e) => { await handleLogo(e.target.files); e.target.value = ""; };
+  usePasteImages(handleLogo);
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
@@ -42,7 +45,7 @@ function CustomerModal({ initial, onClose, onSave }) {
           <div className="text-sm">
             <button type="button" onClick={() => logoRef.current?.click()} className="font-bold text-indigo-600">{f.logo ? "Đổi logo" : "Thêm logo"}</button>
             {f.logo && <button type="button" onClick={() => setF({ ...f, logo: "" })} className="ml-3 font-semibold text-rose-500">Xoá</button>}
-            <div className="text-[11px] text-slate-400">Ảnh đại diện khách (tuỳ chọn)</div>
+            <div className="text-[11px] text-slate-400">Ảnh đại diện · có thể <b>dán ảnh (Ctrl/Cmd+V)</b></div>
           </div>
           <input ref={logoRef} type="file" accept="image/*" onChange={pickLogo} className="hidden" />
         </div>

@@ -3,6 +3,7 @@ import { Sparkles, ImagePlus, MessageSquareText, Key, Save, Loader2, Check, X, T
 import { Card, SectionTitle, Badge, formatVND } from "./ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiImport, fileToDataUrl } from "../lib/ai.js";
+import { usePasteImages } from "../lib/paste.js";
 
 const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -117,7 +118,10 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
 
   const ctxHint = mode === "installment" ? "(Đây là các ĐỢT THU thêm cho 1 dự án đã có. Trích các đợt thu.) " : "";
 
-  const pickImage = async (e) => { const file = e.target.files?.[0]; if (!file) return; setImgData(await fileToDataUrl(file)); e.target.value = ""; };
+  const [drag, setDrag] = useState(false);
+  const handleImages = async (files) => { const file = files && files[0]; if (!file || !file.type?.startsWith("image/")) return; setImgData(await fileToDataUrl(file)); setTab("img"); };
+  const pickImage = async (e) => { await handleImages(e.target.files); e.target.value = ""; };
+  usePasteImages(handleImages);
 
   const analyze = async () => {
     setErr(""); setParsed(null); setDone(""); setLoading(true);
@@ -166,8 +170,14 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
         </div>
       ) : (
         <div className="mt-3 space-y-3">
-          <button onClick={() => fileRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-6 text-sm font-bold text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40">
-            <ImagePlus size={18} /> {imgData ? "Đổi ảnh khác" : "Chọn ảnh (chụp dashboard, hoá đơn, chuyển khoản…)"}
+          <button
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); handleImages(e.dataTransfer.files); }}
+            className={`flex w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed py-6 text-sm font-bold ${drag ? "border-indigo-400 bg-indigo-50" : "border-slate-200 text-slate-500 hover:border-indigo-300 hover:bg-indigo-50/40"}`}>
+            <span className="flex items-center gap-2"><ImagePlus size={18} /> {imgData ? "Đổi ảnh khác" : "Chọn ảnh (chụp dashboard, hoá đơn, chuyển khoản…)"}</span>
+            <span className="text-[11px] font-medium text-slate-400">hoặc <b>dán ảnh (Ctrl/Cmd+V)</b> · kéo-thả ảnh vào đây</span>
           </button>
           <input ref={fileRef} type="file" accept="image/*" onChange={pickImage} className="hidden" />
           {imgData && (

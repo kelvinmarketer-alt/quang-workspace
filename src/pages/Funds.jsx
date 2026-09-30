@@ -7,6 +7,7 @@ import { FUND_COLORS } from "../data/seed.js";
 import { fundBalance, monthlyGrossProfit, monthlyOpex, monthlyFundInflow, grossProfitToDate, debtToDate, projectYears, expensesInRange } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
+import { usePasteImages } from "../lib/paste.js";
 import FundStats from "./FundStats.jsx";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
@@ -432,6 +433,7 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
     }
   };
 
+  usePasteImages((files) => addFiles(files));
   const update = (id, patch) => setItems((p) => p.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   const remove = (id) => setItems((p) => p.filter((it) => it.id !== id));
   const reading = items.some((it) => it.status === "reading");
@@ -474,7 +476,7 @@ function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSav
               <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
             </label>
           </div>
-          <p className="mt-2 text-center text-[11px] text-slate-400">Ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</p>
+          <p className="mt-2 text-center text-[11px] text-slate-400">Có thể <b>dán ảnh (Ctrl/Cmd+V)</b> · ảnh chỉ dùng để đọc số tiền — KHÔNG lưu lên hệ thống</p>
 
           {items.length > 0 && (
             <div className="mt-3 rounded-xl bg-slate-50 p-2.5">
