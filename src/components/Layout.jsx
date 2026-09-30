@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
@@ -51,6 +51,7 @@ const NAV = [
   { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan" },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks" },
+  { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV

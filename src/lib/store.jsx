@@ -458,6 +458,10 @@ export function DataProvider({ children }) {
       }),
       updateMember: (email, patch) => setState((s) => ({ ...s, members: (s.members || []).map((x) => ((x.email || "").toLowerCase() === (email || "").toLowerCase() ? { ...x, ...patch } : x)) })),
       removeMember: (email) => setState((s) => ({ ...s, members: (s.members || []).filter((x) => (x.email || "").toLowerCase() !== (email || "").toLowerCase()) })),
+      // ĐẦU TƯ COIN — danh mục nắm giữ {id, symbol, qty, buyPrice, note}
+      addCoin: (c) => setState((s) => ({ ...s, coins: [{ id: "co" + uid(), symbol: (c.symbol || "").toUpperCase(), qty: Number(c.qty) || 0, buyPrice: Number(c.buyPrice) || 0, note: c.note || "" }, ...(s.coins || [])] })),
+      updateCoin: (id, patch) => setState((s) => ({ ...s, coins: (s.coins || []).map((c) => (c.id === id ? { ...c, ...patch, symbol: ((patch.symbol ?? c.symbol) || "").toUpperCase() } : c)) })),
+      deleteCoin: (id) => setState((s) => ({ ...s, coins: (s.coins || []).filter((c) => c.id !== id) })),
       // BACKUP
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {

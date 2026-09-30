@@ -5,6 +5,7 @@ export const FEATURES = [
   ["customers", "Khách & Dự án"],
   ["ketoan", "Kế toán & Chi phí"],
   ["tasks", "Công việc & Lịch"],
+  ["coin", "Đầu tư Coin"],
 ];
 export const ALL_FEATURES = FEATURES.map(([k]) => k);
 
@@ -18,6 +19,7 @@ export const ROUTE_FEATURE = {
   "/chi-phi": "ketoan",
   "/cong-viec": "tasks",
   "/lich": "tasks",
+  "/coin": "coin",
 };
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];
@@ -27,6 +29,7 @@ export const FEATURE_WRITES = {
   customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed"],
   ketoan: ["addExpense", "addExpensesMany", "updateExpense", "deleteExpense", "deleteExpensesMany", "changeExpensePlan", "addFund", "updateFund", "deleteFund", "addFundTx", "addFundTxMany", "updateFundTx", "deleteFundTx", "categorizeFundTx", "addSpendCat", "updateSpendCat", "deleteSpendCat", "transferFund", "transferFundMany", "allocateFromCompany", "addFundSchedule", "updateFundSchedule", "deleteFundSchedule", "runFundSchedule", "skipFundSchedule"],
   tasks: ["addTask", "updateTask", "deleteTask", "toggleTask", "addFamily", "addFamilyMany", "updateFamily", "updateFamilyMany", "deleteFamily", "deleteFamilyMany"],
+  coin: ["addCoin", "updateCoin", "deleteCoin"],
 };
 // Cài đặt DỮ LIỆU / BẢO MẬT — chỉ CHỦ (admin) được: quản lý user, đổi cấu hình, backup/restore/reset.
 export const OWNER_ONLY_WRITES = ["addMember", "updateMember", "removeMember", "setSettings", "importData", "reset"];
