@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, Settings as SettingsIcon } from "lucide-react";
+import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, ChevronDown, Users, Settings as SettingsIcon } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
@@ -310,9 +310,9 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
           {list.map((r) => <ResRow key={r.id} r={r} canW={canW} onEdit={setEdit} onDelete={deleteResource} />)}
         </div>
       )}
-      {batch && <ResBatchModal customers={customerList} projects={projects} preset={{ projectId, customerId }} onClose={() => setBatch(false)} onSave={addResources} />}
-      {ai && <ResAiModal customers={customerList} projects={projects} preset={{ projectId, customerId }} onClose={() => setAi(false)} onAdd={addResources} />}
-      {edit && <ResModal initial={edit} customers={customerList} projects={projects} onClose={() => setEdit(null)} onSave={(data) => updateResource(edit.id, data)} />}
+      {batch && <ResBatchModal customers={customerList.filter((c) => c.active !== false)} projects={projects} preset={{ projectId, customerId }} onClose={() => setBatch(false)} onSave={addResources} />}
+      {ai && <ResAiModal customers={customerList.filter((c) => c.active !== false)} projects={projects} preset={{ projectId, customerId }} onClose={() => setAi(false)} onAdd={addResources} />}
+      {edit && <ResModal initial={edit} customers={customerList.filter((c) => c.active !== false)} projects={projects} onClose={() => setEdit(null)} onSave={(data) => updateResource(edit.id, data)} />}
     </div>
   );
 }
@@ -326,7 +326,9 @@ export default function Resources() {
   const [modal, setModal] = useState(null);
   const [batch, setBatch] = useState(false);
   const [ai, setAi] = useState(false);
+  const [openGroups, setOpenGroups] = useState(() => new Set());
 
+  const activeCustomers = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
   const projName = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
   const custName = useMemo(() => Object.fromEntries(customerList.map((c) => [c.id, c.name])), [customerList]);
 
@@ -345,7 +347,17 @@ export default function Resources() {
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [resources, q, typeF, custF, custName, projName]);
 
-  const subLabel = (r) => [custName[r.customerId], projName[r.projectId]].filter(Boolean).join(" · ");
+  // Nhóm theo khách hàng (accordion)
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const r of list) { const k = r.customerId || "__none__"; if (!map.has(k)) map.set(k, []); map.get(k).push(r); }
+    const arr = [...map.entries()].map(([cid, items]) => ({ cid, name: cid === "__none__" ? "Chung / chưa gắn khách" : (custName[cid] || "Khách khác"), items }));
+    arr.sort((a, b) => (a.cid === "__none__" ? 1 : 0) - (b.cid === "__none__" ? 1 : 0) || b.items.length - a.items.length || a.name.localeCompare(b.name));
+    return arr;
+  }, [list, custName]);
+  const filtering = !!(q.trim() || typeF !== "all" || custF !== "all"); // đang lọc → mở hết cho dễ thấy
+  const isOpen = (cid) => filtering || openGroups.has(cid);
+  const toggleGroup = (cid) => setOpenGroups((s) => { const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
 
   return (
     <div className="space-y-4">
@@ -372,7 +384,7 @@ export default function Resources() {
         </div>
         <select value={custF} onChange={(e) => setCustF(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
           <option value="all">Tất cả khách</option>
-          {customerList.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         {canW && (
           <div className="flex w-full gap-2 sm:w-auto">
@@ -383,20 +395,37 @@ export default function Resources() {
         )}
       </div>
 
-      {/* Danh sách */}
+      {/* Danh sách — nhóm theo khách (accordion) */}
       {list.length === 0 ? (
         <Card><div className="py-12 text-center"><FolderKanban size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">{resources.length === 0 ? "Chưa có tài nguyên" : "Không tìm thấy"}</div><div className="mt-1 text-xs text-slate-400">Gom link Drive/Figma/Sheet/Canva… về đây để quản lý tập trung.</div></div></Card>
       ) : (
-        <Card className="!p-3">
-          <div className="space-y-1.5">
-            {list.map((r) => <ResRow key={r.id} r={r} subLabel={subLabel(r)} canW={canW} onEdit={setModal} onDelete={deleteResource} />)}
-          </div>
-        </Card>
+        <div className="space-y-2">
+          {groups.map((g) => {
+            const open = isOpen(g.cid);
+            return (
+              <Card key={g.cid} className="!p-0 overflow-hidden">
+                <button onClick={() => toggleGroup(g.cid)} className="flex w-full items-center gap-3 p-3 text-left">
+                  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}><Users size={16} /></div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-extrabold text-slate-800">{g.name}</div>
+                    <div className="text-[11px] text-slate-400">{g.items.length} tài nguyên</div>
+                  </div>
+                  <ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+                </button>
+                {open && (
+                  <div className="space-y-1.5 border-t border-slate-100 p-3">
+                    {g.items.map((r) => <ResRow key={r.id} r={r} subLabel={projName[r.projectId] || ""} canW={canW} onEdit={setModal} onDelete={deleteResource} />)}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
       )}
 
-      {modal && <ResModal initial={modal} customers={customerList} projects={projects} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateResource(modal.id, data) : addResource(data))} />}
-      {batch && <ResBatchModal customers={customerList} projects={projects} onClose={() => setBatch(false)} onSave={addResources} />}
-      {ai && <ResAiModal customers={customerList} projects={projects} onClose={() => setAi(false)} onAdd={addResources} />}
+      {modal && <ResModal initial={modal} customers={activeCustomers} projects={projects} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateResource(modal.id, data) : addResource(data))} />}
+      {batch && <ResBatchModal customers={activeCustomers} projects={projects} onClose={() => setBatch(false)} onSave={addResources} />}
+      {ai && <ResAiModal customers={activeCustomers} projects={projects} onClose={() => setAi(false)} onAdd={addResources} />}
     </div>
   );
 }
