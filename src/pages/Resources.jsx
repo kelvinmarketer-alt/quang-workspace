@@ -330,6 +330,7 @@ export default function Resources() {
 
   const activeCustomers = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
   const projName = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects]);
+  const custById = useMemo(() => Object.fromEntries(customerList.map((c) => [c.id, c])), [customerList]);
   const custName = useMemo(() => Object.fromEntries(customerList.map((c) => [c.id, c.name])), [customerList]);
 
   const typeCounts = useMemo(() => {
@@ -402,10 +403,14 @@ export default function Resources() {
         <div className="space-y-2">
           {groups.map((g) => {
             const open = isOpen(g.cid);
+            const cust = custById[g.cid];
+            const initials = (g.name || "?").trim().split(/\s+/).slice(-2).map((w) => w[0]).join("").toUpperCase();
             return (
               <Card key={g.cid} className="!p-0 overflow-hidden">
                 <button onClick={() => toggleGroup(g.cid)} className="flex w-full items-center gap-3 p-3 text-left">
-                  <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}><Users size={16} /></div>
+                  <div className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[13px] font-extrabold ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}>
+                    {cust?.logo ? <img src={cust.logo} alt="" className="h-full w-full object-cover" /> : g.cid === "__none__" ? <Users size={16} /> : initials}
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-extrabold text-slate-800">{g.name}</div>
                     <div className="text-[11px] text-slate-400">{g.items.length} tài nguyên</div>
