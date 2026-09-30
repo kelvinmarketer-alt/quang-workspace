@@ -81,16 +81,24 @@ export async function aiReadResources({ imageDataUrl, text, apiKey, model }) {
   const key = (apiKey || "").trim();
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl && !text) throw new Error("Cần ảnh (hoặc text) để đọc.");
-  const sys = `Bạn đọc ảnh/màn hình/bảng chứa CÁC LINK / TÀI NGUYÊN ONLINE (Google Drive/Docs/Sheet/Slide, Figma, Canva, Notion, YouTube, Facebook, thư mục chia sẻ, link web…) KÈM thông tin ĐĂNG NHẬP nếu có. Trích MỌI mục nhìn thấy thành danh sách. CHỈ trả JSON, không giải thích.
-QUY TẮC:
-- url = đường link ĐẦY ĐỦ đọc được (kèm "https://"). Nếu 1 mục KHÔNG có link nhìn thấy được thì BỎ QUA mục đó — TUYỆT ĐỐI không bịa/không đoán link.
-- title = tên/nhãn hiển thị của mục (tên nền tảng, tên file, tiêu đề, chữ neo). Không có thì để "".
-- type thuộc đúng danh sách: sheet, doc, slide, drive, figma, canva, notion, youtube, facebook, image, folder, web. Suy ra từ tên miền/biểu tượng; không chắc để "web".
-- username = tài khoản/email/tên đăng nhập của mục đó nếu ảnh có (cột "Tài khoản", "Đăng nhập", "User", "Email"…). Không có để "".
-- password = mật khẩu của mục đó nếu ảnh có (cột "Mật khẩu", "Password", "Pass"…). Đọc CHÍNH XÁC từng ký tự, phân biệt hoa/thường/số/ký hiệu. Không có để "".
-- note = ghi chú thêm của mục nếu có (cột "Ghi chú", vai trò, mô tả…). Không có để "".
-- Ghép ĐÚNG tài khoản/mật khẩu/ghi chú vào mục (dòng) tương ứng của nó.
-SCHEMA: { "resources": [ { "title": "Website admin", "url": "https://site.com/admin", "type": "web", "username": "admin", "password": "Abc@123", "note": "quản trị toàn hệ thống" } ] }`;
+  const sys = `Bạn đọc ảnh chứa TÀI NGUYÊN ONLINE, THƯỜNG LÀ 1 BẢNG (spreadsheet) có hàng tiêu đề + nhiều dòng dữ liệu. Mỗi DÒNG dữ liệu = 1 mục. Trích MỌI dòng thành danh sách. CHỈ trả JSON, không giải thích.
+
+CÁCH ĐỌC BẢNG (QUAN TRỌNG): nhìn HÀNG TIÊU ĐỀ để biết mỗi CỘT là gì, rồi ánh xạ theo cột:
+- Cột "Hạng Mục"/"Tên"/"Tên nguồn"/"Nguồn"/"Mục"/"Nền tảng"  →  title
+- Cột "Tài khoản"/"Đăng nhập"/"User"/"Username"/"Email"/"Account"  →  username
+- Cột "Mật khẩu"/"Mật Khẩu"/"Password"/"Pass"/"MK"  →  password
+- Cột "Link"/"Link Đăng Nhập"/"URL"/"Website"/"Đường dẫn"  →  url
+- Cột "Ghi chú"/"Note"/"Mô tả"/"Vai trò"  →  note
+
+QUY TẮC BẮT BUỘC:
+- title: LẤY ĐÚNG chữ ở cột Hạng Mục/Tên của dòng đó. NẾU cột đó có chữ thì PHẢI dùng đúng nó, TUYỆT ĐỐI KHÔNG tự đặt tên theo link/tên miền. Chỉ khi dòng thật sự trống tên mới để "".
+- username & password: lấy đúng ô của dòng, đọc CHÍNH XÁC TỪNG KÝ TỰ (phân biệt hoa/thường, số, ký hiệu @ # . _, dễ nhầm 0-O, 1-l-I). KHÔNG bỏ trống nếu ô có dữ liệu. Không có thì "".
+- url: link đầy đủ (kèm "https://"). Nếu dòng có tài khoản/mật khẩu nhưng KHÔNG có link thì VẪN trả mục đó với url="" (đừng bỏ dòng). Không bịa link.
+- note: lấy từ cột Ghi chú nếu có.
+- type: sheet, doc, slide, drive, figma, canva, notion, youtube, facebook, image, folder, web — suy từ link; không rõ để "web".
+- Ghép ĐÚNG từng ô theo hàng ngang, KHÔNG lệch dòng.
+Ví dụ 1 dòng (Hạng Mục=Quản trị website, Tài khoản=admin, Mật khẩu=Tuantu@2026, Link=https://site.vn/wp-admin/): { "title":"Quản trị website", "username":"admin", "password":"Tuantu@2026", "url":"https://site.vn/wp-admin/", "type":"web", "note":"" }
+SCHEMA: { "resources": [ { "title":"", "url":"", "type":"web", "username":"", "password":"", "note":"" } ] }`;
   const userContent = [{ type: "text", text: (text ? text + "\n" : "") + "Trích tất cả link/tài nguyên trong ảnh này." }];
   if (imageDataUrl) userContent.push({ type: "image_url", image_url: { url: imageDataUrl } });
   const body = {
@@ -125,7 +133,8 @@ export async function aiReadVault({ imageDataUrl, text, apiKey, model }) {
   const key = (apiKey || "").trim();
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
-  const sys = `Bạn đọc ảnh/bảng chứa DANH SÁCH TÀI KHOẢN ĐĂNG NHẬP / THẺ NGÂN HÀNG / TÀI KHOẢN NGÂN HÀNG-VÍ. Trích MỌI mục thành JSON. CHỈ trả JSON, không giải thích.
+  const sys = `Bạn đọc ảnh chứa DANH SÁCH TÀI KHOẢN ĐĂNG NHẬP / THẺ NGÂN HÀNG / TÀI KHOẢN NGÂN HÀNG-VÍ, THƯỜNG LÀ 1 BẢNG có hàng tiêu đề + nhiều dòng. Mỗi DÒNG = 1 mục. Trích MỌI dòng thành JSON. CHỈ trả JSON, không giải thích.
+NẾU LÀ BẢNG: nhìn hàng tiêu đề để ánh xạ cột → cột "Hạng Mục"/"Tên"/"Nguồn" = title; "Tài khoản"/"Đăng nhập"/"User"/"Email" = username; "Mật khẩu"/"Password"/"Pass" = password; "Link"/"Link Đăng Nhập"/"URL" = url; "Ghi chú"/"Note" = note. LẤY ĐÚNG chữ ở cột tên (KHÔNG tự đặt theo link). Đọc CHÍNH XÁC từng ký tự tài khoản/mật khẩu, ghép đúng theo hàng ngang không lệch dòng.
 Mỗi mục có "type":
 - "app" = tài khoản ứng dụng/web (Facebook, Gmail, hosting, CMS…). Trường: title (tên app/dịch vụ), username (tài khoản/email/đăng nhập), password, url (link đăng nhập nếu có), twofa (mã 2FA/khôi phục nếu có), note.
 - "card" = thẻ ngân hàng/Visa/Master. Trường: title (tên thẻ), holder (chủ thẻ), number (số thẻ), expiry (MM/YY), cvv, bank (ngân hàng phát hành), note.
