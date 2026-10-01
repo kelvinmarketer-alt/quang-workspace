@@ -66,9 +66,10 @@ export default function Coin() {
       setPrices(map);
     } catch { /* giữ giá cũ */ }
   };
-  useEffect(() => { loadPrices(); const t = setInterval(loadPrices, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey]);
+  useEffect(() => { loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey]);
 
-  // Đồng bộ ví Binance (số dư + giá vốn TB) — tự động khi mở + mỗi 60s
+  // Đồng bộ ví Binance (số dư + giá vốn TB + đã nạp) — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm);
+  // giá thị trường vẫn realtime 15s ở trên. Tạm dừng khi tab ẩn để đỡ tốn request.
   const syncBinance = async (silent) => {
     if (!silent) setSyncing(true); setWErr("");
     try {
@@ -83,7 +84,7 @@ export default function Coin() {
   useEffect(() => {
     if (!isOwner) return;
     syncBinance();
-    const t = setInterval(() => syncBinance(true), 60000);
+    const t = setInterval(() => { if (!document.hidden) syncBinance(true); }, 300000);
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [isOwner]);
 
@@ -139,7 +140,7 @@ export default function Coin() {
           </div>
           <button onClick={() => { syncBinance(); loadPrices(); }} disabled={syncing} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-50"><RefreshCw size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "…" : "Làm mới"}</button>
         </div>
-        <div className="mt-3 text-[11px] text-amber-100/70">Tự cập nhật giá mỗi 15s · ví mỗi 60s · tỉ giá {Math.round(vnd).toLocaleString("vi-VN")}đ/$ (tự động)</div>
+        <div className="mt-3 text-[11px] text-amber-100/70">Tự cập nhật giá mỗi 15s · ví mỗi 5 phút · tỉ giá {Math.round(vnd).toLocaleString("vi-VN")}đ/$ (tự động)</div>
       </div>
 
       {wErr && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
