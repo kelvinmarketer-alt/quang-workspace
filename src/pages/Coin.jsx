@@ -165,7 +165,11 @@ export default function Coin() {
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 text-[11px] text-slate-400">{qtyFmt(r.qty)} · TB {r.avgCost != null ? fmtUSD(r.avgCost) : "—"} · giá {r.price != null ? fmtUSD(r.price) : "…"}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="text-slate-400">SL {qtyFmt(r.qty)}</span>
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600">TB {r.avgCost != null ? fmtUSD(r.avgCost) : "—"}</span>
+                    <span className={`rounded-md px-1.5 py-0.5 font-bold ${r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>Giá {r.price != null ? fmtUSD(r.price) : "…"}</span>
+                  </div>
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-sm font-extrabold text-slate-800">{r.value != null ? fmtUSD(r.value) : "…"}</div>
