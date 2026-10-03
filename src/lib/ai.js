@@ -289,3 +289,61 @@ export async function aiAdsAnalysis({ summary, apiKey, model }) {
   const data = await res.json();
   return (data.choices?.[0]?.message?.content || "").trim();
 }
+
+// Phân tích thị trường coin (module Coin → tab Thị trường): khối lượng + động lượng + SMC + price action
+// → JSON có xu hướng, vùng giá quan trọng và KỊCH BẢN giao dịch tham khảo (entry/SL/TP). Số liệu tính sẵn ở lib/ta.js.
+export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {
+  const key = (apiKey || "").trim();
+  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
+  const sys = `Bạn là trader phân tích kỹ thuật crypto, dùng kết hợp: KHỐI LƯỢNG (volume, delta mua/bán chủ động), ĐỘNG LƯỢNG (RSI, MACD, EMA, phân kỳ), SMC (cấu trúc HH/HL/LH/LL, BOS/CHoCH, order block, FVG, thanh khoản/equal highs-lows, premium/discount) và PRICE ACTION (mẫu nến, phản ứng tại vùng giá).
+Dữ liệu là JSON tính sẵn từ nến Binance: "ltf" = khung đang xem, "htf" = khung lớn hơn để lấy bối cảnh, "candles" = các nến gần nhất [open,high,low,close,volume,%mua chủ động] (nến cuối ĐANG CHẠY).
+NGUYÊN TẮC:
+- Ưu tiên thuận xu hướng khung lớn; ngược xu hướng chỉ khi có CHoCH + volume xác nhận, và phải ghi rõ "ngược xu hướng".
+- Entry tại vùng có lý do: OB/FVG chưa lấp, retest mức BOS, vùng discount (cho long) / premium (cho short). Không đuổi giá giữa vùng.
+- Stop loss đặt NGOÀI cấu trúc: long → THẤP HƠN đáy (bottom) của TOÀN BỘ vùng OB/FVG đỡ giá ngay dưới entry và thấp hơn đáy swing gần nhất; short → CAO HƠN đỉnh (top) của vùng OB/FVG cản ngay trên entry và đỉnh swing gần nhất. TUYỆT ĐỐI không đặt SL bên trong một vùng OB/FVG. Cộng thêm đệm ~0.2-0.5 ATR.
+- Take profit tại thanh khoản đối diện (equal highs/lows, đỉnh/đáy swing chưa quét), OB/FVG ngược chiều. TP1 nên có R:R ≥ 1.5.
+- CHỈ dùng các mức giá có trong dữ liệu hoặc suy ra hợp lý từ chúng. Không bịa số. Số phải là number thuần (không dấu phẩy, không đơn vị).
+- Nếu chưa có thiết lập đẹp → setups=[] và nói rõ cần chờ điều kiện gì.
+- Tối đa 2 kịch bản (thường 1 kịch bản chính thuận xu hướng + 1 kịch bản phụ/đảo chiều).
+Viết tiếng Việt, ngắn gọn, đúng thuật ngữ trader. CHỈ trả JSON đúng schema:
+{
+ "bias": "tăng" | "giảm" | "đi ngang",
+ "confidence": 0-100,
+ "headline": "1 câu kết luận",
+ "htf_context": "bối cảnh khung lớn",
+ "volume": "nhận định khối lượng & delta mua/bán",
+ "momentum": "nhận định RSI/MACD/EMA/phân kỳ",
+ "smc": "cấu trúc, BOS/CHoCH, OB, FVG, thanh khoản, premium/discount",
+ "price_action": "mẫu nến & phản ứng giá gần đây",
+ "key_levels": { "support": [number], "resistance": [number] },
+ "setups": [ { "direction": "long" | "short", "label": "chính" | "phụ", "order": "limit" | "stop" | "market", "entry": number, "stop_loss": number, "take_profit": [number, number], "reason": "vì sao vào ở đây", "invalidation": "khi nào kịch bản sai / hủy" } ],
+ "wait_for": "nếu chưa vào: chờ tín hiệu gì",
+ "risk_note": "lưu ý rủi ro (tin tức, biến động, khối lượng mỏng…)"
+}`;
+  const payload = { symbol: symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: model || "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(payload) }] }),
+  });
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const data = await res.json();
+  let p;
+  try { p = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const num = (v) => { const x = Number(String(v ?? "").replace(/[^\d.\-e]/gi, "")); return isFinite(x) && x > 0 ? x : null; };
+  // Kiểm tra logic từng kịch bản (long: SL < entry < TP; short: ngược lại) + tự tính R:R
+  const setups = (Array.isArray(p.setups) ? p.setups : []).map((s) => {
+    const dir = s.direction === "short" ? "short" : "long";
+    const entry = num(s.entry), sl = num(s.stop_loss);
+    const tps = (Array.isArray(s.take_profit) ? s.take_profit : [s.take_profit]).map(num).filter(Boolean);
+    const ok = entry && sl && tps.length && (dir === "long" ? sl < entry && tps.every((t) => t > entry) : sl > entry && tps.every((t) => t < entry));
+    const risk = entry && sl ? Math.abs(entry - sl) : 0;
+    return { ...s, direction: dir, entry, stop_loss: sl, take_profit: tps, valid: !!ok, rr: tps.map((t) => (risk ? Math.abs(t - entry) / risk : null)) };
+  });
+  const arr = (v) => (Array.isArray(v) ? v.map(num).filter(Boolean) : []);
+  return { ...p, confidence: Math.max(0, Math.min(100, Number(p.confidence) || 0)), key_levels: { support: arr(p.key_levels?.support), resistance: arr(p.key_levels?.resistance) }, setups, model: model || "gpt-4o", at: Date.now() };
+}

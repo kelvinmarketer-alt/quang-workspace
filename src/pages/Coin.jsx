@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
@@ -33,7 +33,31 @@ function CoinModal({ initial, onClose, onSave }) {
   );
 }
 
+// Tab "Thị trường" (biểu đồ + AI) tải lười — không làm nặng tab Đầu tư
+const CoinMarket = lazy(() => import("./CoinMarket.jsx"));
+
 export default function Coin() {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
+  const pick = (t) => { setTab(t); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-white/70 p-1 shadow-sm">
+        {[["invest", "Đầu tư", Wallet], ["market", "Thị trường", CandlestickChart]].map(([k, label, Icon]) => (
+          <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-extrabold transition ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
+            <Icon size={16} /> {label}
+          </button>
+        ))}
+      </div>
+      {tab === "invest" ? <CoinInvest /> : (
+        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải biểu đồ…</div>}>
+          <CoinMarket />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function CoinInvest() {
   const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner } = useData();
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
