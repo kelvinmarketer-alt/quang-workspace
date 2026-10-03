@@ -8,11 +8,10 @@ Frontend (`/quang-cao`, `src/pages/Ads.jsx`) đã có sẵn. Cần làm 3 bướ
 Edge Functions → **Deploy a new function** → tên `qws-meta-ads` → dán code `supabase/functions/qws-meta-ads/index.ts` → Deploy.
 Sau khi deploy: vào function → **Details / Settings** → **TẮT "Verify JWT"** (function tự kiểm tra đăng nhập chủ + cron key).
 
-## 2. Đặt secrets — Edge Functions → Secrets → Add new secret
+## 2. (Tuỳ chọn) Secrets — Edge Functions → Secrets
 
 | Tên | Giá trị |
 |---|---|
-| `CRON_KEY` | lấy ở bước 3 (câu SELECT cuối) |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | *(tuỳ chọn)* muốn nhận cảnh báo qua Telegram |
 
 `OWNER_EMAIL` đã có từ module Coin. Cảnh báo luôn đẩy **Web Push** về app; Telegram chỉ gửi khi có 2 secret trên.
@@ -68,8 +67,13 @@ select cron.schedule('qws-ads-daily', '0 23 * * *', $$
     timeout_milliseconds := 60000);
 $$);
 
--- Lấy giá trị để dán vào secret CRON_KEY (bước 2)
-select decrypted_secret from vault.decrypted_secrets where name = 'qws_ads_cron_key';
+-- Function so khớp khoá cron với Vault (chỉ service role gọi được) → không cần secret CRON_KEY
+create or replace function public.qws_ads_check_cron_key(k text) returns boolean
+language sql security definer set search_path = public, vault as $$
+  select exists (select 1 from vault.decrypted_secrets where name = 'qws_ads_cron_key' and decrypted_secret = k);
+$$;
+revoke all on function public.qws_ads_check_cron_key(text) from public, anon, authenticated;
+grant execute on function public.qws_ads_check_cron_key(text) to service_role;
 ```
 
 ## Cảnh báo tự động

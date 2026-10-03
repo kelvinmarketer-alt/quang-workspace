@@ -8,9 +8,9 @@
 //   "watch"  — pg_cron 15 phút/lần: soát số HÔM NAY → cảnh báo (Web Push + Telegram nếu có).
 //   "daily"  — pg_cron 6h sáng: tóm tắt HÔM QUA + cảnh báo tần suất.
 //   "config_list" / "config_discover" / "config_save" / "config_update" / "config_delete" — quản lý TKQC + token (chỉ CHỦ).
-//   watch/daily xác thực bằng header x-cron-key == CRON_KEY.
+//   watch/daily xác thực bằng header x-cron-key, so với khoá trong Vault (RPC qws_ads_check_cron_key).
 //
-// Secrets: OWNER_EMAIL, CRON_KEY, (tuỳ chọn) TELEGRAM_TOKEN, TELEGRAM_CHAT_ID. SUPABASE_URL/ANON/SERVICE_ROLE Supabase tự cấp.
+// Secrets: OWNER_EMAIL, (tuỳ chọn) TELEGRAM_TOKEN, TELEGRAM_CHAT_ID. SUPABASE_URL/ANON/SERVICE_ROLE Supabase tự cấp.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -281,8 +281,9 @@ Deno.serve(async (req) => {
   const mode = body.mode || "report";
 
   if (mode === "watch" || mode === "daily") {
-    const key = Deno.env.get("CRON_KEY");
-    if (!key || req.headers.get("x-cron-key") !== key) return json({ error: "Sai cron key" }, 401);
+    // Khoá cron nằm trong Supabase Vault — so khớp qua RPC (chỉ service role gọi được), không cần secret riêng
+    const { data: ok } = await admin().rpc("qws_ads_check_cron_key", { k: req.headers.get("x-cron-key") || "" });
+    if (ok !== true) return json({ error: "Sai cron key" }, 401);
     try { return json(mode === "watch" ? await watch() : await daily()); }
     catch (e) { return json({ error: String(e) }, 500); }
   }
