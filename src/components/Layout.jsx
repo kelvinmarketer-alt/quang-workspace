@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { lunarInfo } from "../lib/lunar.js";
@@ -10,6 +10,7 @@ import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
+import { OFFICE_URL, useOfficeNotifications, officeAgo } from "../lib/office.js";
 
 function PushPrompt() {
   const { user } = useAuth();
@@ -55,6 +56,7 @@ const NAV = [
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true },
+  { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, ownerOnly: true },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
@@ -77,7 +79,14 @@ function SideNav({ onNavigate }) {
   const items = NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner));
   return (
     <nav className="mt-6 flex flex-col gap-1 px-3">
-      {items.map((n) => (
+      {items.map((n) => n.href ? (
+        <a key={n.href} href={n.href} target="_blank" rel="noopener" onClick={onNavigate}
+          className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900">
+          <n.icon size={18} />
+          {n.label}
+          <ExternalLink size={13} className="ml-auto opacity-50" />
+        </a>
+      ) : (
         <NavLink
           key={n.to}
           to={n.to}
@@ -176,8 +185,11 @@ function SyncBadge() {
   return null;
 }
 
+const OFFICE_TONE = { xong: "bg-emerald-500", can_duyet: "bg-violet-500", loi: "bg-rose-500", tin_nhan: "bg-sky-500", he_thong: "bg-slate-400" };
+
 function Notifications() {
-  const { tasks, family } = useData();
+  const { tasks, family, isOwner } = useData();
+  const office = useOfficeNotifications(!!isOwner);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const today = todayISO();
@@ -201,11 +213,36 @@ function Notifications() {
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:text-indigo-600">
         <Bell size={18} />
-        {items.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
+        {office.unread > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white">{office.unread}</span>
+          : items.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
       </button>
       {open && (
         <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
-          <div className="border-b border-slate-50 px-4 py-3 text-sm font-extrabold text-slate-800">Thông báo · 7 ngày tới</div>
+          {isOwner && (
+            <div className="border-b border-slate-100">
+              <div className="flex items-center gap-2 px-4 py-3">
+                <span className="text-sm font-extrabold text-slate-800">🏢 Văn phòng AI</span>
+                {office.unread > 0 && <button onClick={() => office.markRead(office.rows.filter((r) => !r.read_at).map((r) => r.id))} className="text-[11px] font-bold text-slate-400 hover:text-indigo-600">Đã đọc hết</button>}
+                <a href={OFFICE_URL} target="_blank" rel="noopener" className="ml-auto text-[11px] font-bold text-indigo-600">Mở văn phòng ↗</a>
+              </div>
+              {office.rows.length === 0 && <div className="px-4 pb-3 text-sm text-slate-400">Chưa có thông báo từ đội AI.</div>}
+              <div className="max-h-64 overflow-y-auto">
+                {office.rows.slice(0, 8).map((r) => (
+                  <a key={r.id} href={r.url || OFFICE_URL} target="_blank" rel="noopener" onClick={() => !r.read_at && office.markRead([r.id])}
+                    className={`flex items-start gap-3 border-t border-slate-50 px-4 py-2.5 hover:bg-slate-50 ${r.read_at ? "opacity-60" : ""}`}>
+                    <span className={`mt-0.5 h-8 w-1.5 shrink-0 rounded-full ${OFFICE_TONE[r.kind] || "bg-slate-400"}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className={`truncate text-sm ${r.read_at ? "font-medium text-slate-600" : "font-bold text-slate-800"}`}>{r.title}</div>
+                      {r.body && <div className="truncate text-[11px] text-slate-400">{r.body}</div>}
+                      <div className="text-[10px] text-slate-400">{officeAgo(r.created_at)}</div>
+                    </div>
+                    {!r.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-violet-500" />}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="border-b border-slate-50 px-4 py-3 text-sm font-extrabold text-slate-800">Nhắc nhở · 7 ngày tới</div>
           {items.length === 0 && <div className="p-4 text-sm text-slate-400">Không có nhắc nhở.</div>}
           <div className="max-h-80 overflow-y-auto">
             {items.map((e, i) => {

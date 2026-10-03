@@ -21,6 +21,9 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/";
+  // Link sang trang khác (vd Văn phòng AI office.2bkin.io.vn) → mở cửa sổ mới, không đè app
+  const target = new URL(url, self.location.origin);
+  if (target.origin !== self.location.origin) { event.waitUntil(self.clients.openWindow(target.href)); return; }
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {

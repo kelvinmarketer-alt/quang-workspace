@@ -1,4 +1,5 @@
 import AdsAccounts from "../components/AdsAccounts.jsx";
+import OfficeSettings from "../components/OfficeSettings.jsx";
 import { useEffect, useRef, useState } from "react";
 import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2 } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
@@ -201,6 +202,8 @@ export default function Settings() {
       </Card>
 
       <PushCard userId={user?.id} />
+
+      {isOwner && <OfficeSettings />}
 
       {isOwner && <MembersCard />}
 
