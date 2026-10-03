@@ -132,7 +132,7 @@ async function fetchAccount(acc: any, since: string, until: string, prev: { sinc
   const t = timeArgs(since, until);
   try {
     const [info, tot, daily, camps, ads, bad, prevTot] = await Promise.all([
-      gget(act_, { fields: "name,currency,account_status,disable_reason,amount_spent,spend_cap,balance,timezone_name" }, token),
+      gget(act_, { fields: "name,currency,account_status,disable_reason,amount_spent,spend_cap,balance,timezone_name,is_prepay_account" }, token),
       gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, ...t }, token, 1),
       light ? [] : gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, time_increment: "1", limit: "100", ...t }, token, 4),
       light ? [] : gall(act_ + "/insights", { level: "campaign", fields: "campaign_id,campaign_name," + BASE_FIELDS, limit: "200", ...t }, token, 3),
@@ -151,7 +151,7 @@ async function fetchAccount(acc: any, since: string, until: string, prev: { sinc
     return {
       ...base,
       currency: info.currency, status: info.account_status, disableReason: info.disable_reason,
-      amountSpent: num(info.amount_spent), spendCap: num(info.spend_cap), balance: num(info.balance), timezone: info.timezone_name,
+      amountSpent: num(info.amount_spent), spendCap: num(info.spend_cap), owed: info.is_prepay_account ? 0 : num(info.balance), prepay: !!info.is_prepay_account, timezone: info.timezone_name,
       totals: metrics(tot[0]),
       prev: prevTot ? metrics(prevTot[0]) : null,
       daily: daily.map((d: any) => ({ date: d.date_start, ...metrics(d) })),
@@ -203,14 +203,58 @@ async function notify(title: string, lines: string[]) {
   return sent;
 }
 // Mỗi cảnh báo gửi tối đa 1 lần/ngày (khoá = ngày|tài khoản|loại)
-async function freshKeys(keys: string[]) {
-  if (!keys.length) return [];
+async function freshKeys(found: { key: string; text: string }[]) {
+  if (!found.length) return [];
   const supa = admin();
-  const { data } = await supa.from("qws_ads_alerts").select("key").in("key", keys);
+  const { data } = await supa.from("qws_ads_alerts").select("key").in("key", found.map((f) => f.key));
   const seen = new Set((data || []).map((r: any) => r.key));
-  const fresh = keys.filter((k) => !seen.has(k));
-  if (fresh.length) await supa.from("qws_ads_alerts").upsert(fresh.map((key) => ({ key })));
-  return fresh;
+  const fresh = found.filter((f) => !seen.has(f.key));
+  if (fresh.length) await supa.from("qws_ads_alerts").upsert(fresh.map((f) => ({ key: f.key, text: f.text, account_id: f.key.split("|")[1] || null })));
+  return fresh.map((f) => f.key);
+}
+
+// ---------- Số dư (sổ nạp tiền) ----------
+// Google (TK trả trước) + Meta trả trước KHÔNG có API số dư → chủ nhập "số dư hiện tại" (anchor) + các lần "nạp thêm" (topup).
+// Số dư = anchor + nạp sau anchor − chi phí từ lúc anchor (cost_at = chi phí trong ngày đã có lúc nhập anchor).
+// Google có account budget (ngân sách tài khoản) → dùng số đó thay sổ.
+async function ledgers(ids: string[]) {
+  if (!ids.length) return {} as Record<string, any[]>;
+  const { data } = await admin().from("qws_ads_balance").select("*").in("account_id", ids).order("at");
+  const out: Record<string, any[]> = {};
+  for (const r of data || []) (out[r.account_id] = out[r.account_id] || []).push(r);
+  return out;
+}
+const vnDateOf = (ts: string) => isoOf(new Date(Date.parse(ts) + 7 * 3600000));
+function fromLedger(rows: any[] | undefined, costSince: (d: string) => number) {
+  const anchor = [...(rows || [])].reverse().find((r) => r.kind === "anchor");
+  if (!anchor) return null;
+  const topups = (rows || []).filter((r) => r.kind === "topup" && r.at > anchor.at).reduce((a, r) => a + num(r.amount), 0);
+  const spent = costSince(vnDateOf(anchor.at)) - num(anchor.cost_at);
+  return { balance: num(anchor.amount) + topups - spent, source: "ledger", anchorAt: anchor.at };
+}
+function withDays(b: any, avg7: number) {
+  if (!b) return null;
+  return { ...b, avgDaily: avg7, daysLeft: avg7 > 0 ? b.balance / avg7 : null };
+}
+// Meta: chi phí từ ngày d tới hôm nay + TB 7 ngày (chỉ gọi cho TK có sổ)
+async function metaBalance(acc: any, rows: any[] | undefined) {
+  const anchor = [...(rows || [])].reverse().find((r) => r.kind === "anchor");
+  if (!anchor || !acc.token) return null;
+  const today = isoOf(vnNow());
+  const [since, week] = await Promise.all([
+    gall("act_" + acc.id + "/insights", { level: "account", fields: "spend", time_range: JSON.stringify({ since: vnDateOf(anchor.at), until: today }) }, acc.token, 1),
+    gall("act_" + acc.id + "/insights", { level: "account", fields: "spend", time_range: JSON.stringify({ since: addDays(today, -7), until: addDays(today, -1) }) }, acc.token, 1),
+  ]);
+  const spentSince = num(since[0]?.spend);
+  return withDays(fromLedger(rows, () => spentSince), num(week[0]?.spend) / 7);
+}
+
+function lowBalance(found: { key: string; text: string }[], today: string, id: string, name: string, bal: any) {
+  if (!bal) return;
+  const k = (t: string) => `${today}|${id}|${t}`;
+  if (bal.balance <= 0) found.push({ key: k("balance0"), text: `🛑 ${name}: HẾT tiền quảng cáo (số dư ${fmt(bal.balance)}) — nạp ngay` });
+  else if (bal.daysLeft != null && bal.daysLeft < 2)
+    found.push({ key: k("balance"), text: `💰 ${name}: số dư còn ${fmt(bal.balance)} ≈ ${bal.daysLeft.toFixed(1)} ngày chạy (TB ${fmt(bal.avgDaily)}/ngày) — sắp hết` });
 }
 
 async function watch() {
@@ -229,30 +273,41 @@ async function watch() {
     if (a.status && a.status !== 1) found.push({ key: k("status"), text: `⛔ ${a.name}: tài khoản không hoạt động (mã ${a.status})` });
     if (a.issues?.length) found.push({ key: k("issues"), text: `🚫 ${a.name}: ${a.issues.length} quảng cáo bị từ chối/có vấn đề` });
     if (a.spendCap > 0 && a.amountSpent / a.spendCap > 0.9) found.push({ key: k("cap"), text: `💸 ${a.name}: đã tiêu ${Math.round((a.amountSpent / a.spendCap) * 100)}% giới hạn chi tiêu` });
+    const bm0 = b && !b.error ? b.totals.cpm : 0;
+    if (bm0 && t.cpm && t.spend >= 50000 && t.cpm > bm0 * 1.3)
+      found.push({ key: k("cpm"), text: `📈 ${a.name}: CPM hôm nay ${fmt(t.cpm)} (+${Math.round((t.cpm / bm0 - 1) * 100)}% so với TB 7 ngày ${fmt(bm0)})` });
+    if (a.group === "brand" && b && !b.error && b.totals.frequency > 3)
+      found.push({ key: k("freq"), text: `🔁 ${a.name}: tần suất 7 ngày ${b.totals.frequency.toFixed(2)} (>3) — khách xem lặp, nên đổi mẫu/mở rộng tệp` });
     if (a.group === "conv") {
       if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 tin nhắn/lead` });
       const bc = b && !b.error ? b.totals.cpr : null;
       if (bc && t.cpr && t.spend >= 50000 && t.cpr > bc * 1.3)
         found.push({ key: k("cpr"), text: `📈 ${a.name}: giá/kết quả hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / bc - 1) * 100)}% so với TB 7 ngày ${fmt(bc)})` });
-    } else {
-      const bm = b && !b.error ? b.totals.cpm : 0;
-      if (bm && t.cpm && t.spend >= 50000 && t.cpm > bm * 1.3)
-        found.push({ key: k("cpm"), text: `📈 ${a.name}: CPM hôm nay ${fmt(t.cpm)} (+${Math.round((t.cpm / bm - 1) * 100)}% so với TB 7 ngày ${fmt(bm)})` });
     }
   });
+  // Số dư Meta (TK trả trước có sổ nạp tiền)
+  const mLed = await ledgers(ACCOUNTS.map((a: any) => a.id));
+  for (const acc of ACCOUNTS) {
+    const bal = mLed[acc.id] ? await metaBalance(acc, mLed[acc.id]).catch(() => null) : null;
+    lowBalance(found, today, acc.id, acc.name, bal);
+  }
   // Google: số trong bảng (script đẩy mỗi giờ)
   const [gNow, gBase] = await Promise.all([gadsReport(today, today, null, true), gadsReport(from, to, null, true)]);
   const hourVN = vnNow().getUTCHours();
   gNow.forEach((a: any, i: number) => {
     const t = a.totals, b = gBase[i]?.totals, k = (type: string) => `${today}|${a.id}|${type}`;
     if (a.issues.length) found.push({ key: k("issues"), text: `🚫 ${a.name}: ${a.issues[0].name}` });
+    if (a.status && a.status !== "ENABLED") found.push({ key: k("status"), text: `⛔ ${a.name}: tài khoản Google ở trạng thái ${a.status}` });
+    if (b?.cpc && t.cpc && t.clicks >= 10 && t.cpc > b.cpc * 1.3)
+      found.push({ key: k("cpc"), text: `📈 ${a.name}: CPC hôm nay ${fmt(t.cpc)} (+${Math.round((t.cpc / b.cpc - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpc)})` });
+    lowBalance(found, today, a.id, a.name, a.bal);
     if (hourVN >= 9 && (!a.lastSync || Date.now() - Date.parse(a.lastSync) > 3 * 3600000))
       found.push({ key: k("stale"), text: `⏸ ${a.name}: script Google Ads chưa đẩy số >3 giờ — kiểm tra lịch chạy script` });
     if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 chuyển đổi (Google có thể trễ vài giờ)` });
     if (b?.cpr && t.cpr && t.spend >= 50000 && t.cpr > b.cpr * 1.3)
       found.push({ key: k("cpr"), text: `📈 ${a.name}: CPA hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / b.cpr - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpr)})` });
   });
-  const fresh = new Set(await freshKeys(found.map((f) => f.key)));
+  const fresh = new Set(await freshKeys(found));
   const lines = found.filter((f) => fresh.has(f.key)).map((f) => f.text);
   const sent = lines.length ? await notify("🔔 Cảnh báo Quảng cáo", lines) : [];
   return { checked: now.length + gNow.length, alerts: lines, sent, errors: now.filter((a: any) => a.error).map((a: any) => a.name + ": " + a.error) };
@@ -333,7 +388,13 @@ async function gadsIngest(body: any) {
   if (!cid) throw new Error("Thiếu customer id");
   const supa = admin();
   const { data: ex } = await supa.from("qws_gads_accounts").select("customer_id").eq("customer_id", cid).maybeSingle();
-  const info = { name_meta: String(a.name || cid).slice(0, 120), currency: a.currency || "VND", policy_issues: Number(a.policyIssues) || 0, last_sync: new Date().toISOString() };
+  const info = {
+    name_meta: String(a.name || cid).slice(0, 120), currency: a.currency || "VND", policy_issues: Number(a.policyIssues) || 0, last_sync: new Date().toISOString(),
+    status: a.status || null,
+    budget_remaining: a.budget && a.budget.remaining != null ? num(a.budget.remaining) : null,
+    budget_limit: a.budget && a.budget.limit != null ? num(a.budget.limit) : null,
+    conv_actions: Array.isArray(body.actions) ? body.actions.slice(0, 100) : null,
+  };
   if (ex) {
     const { error } = await supa.from("qws_gads_accounts").update(info).eq("customer_id", cid);
     if (error) throw new Error(error.message);
@@ -351,9 +412,15 @@ async function gadsIngest(body: any) {
     customer_id: cid, date: k.date, ad_group_id: String(k.ag), criterion_id: String(k.id), keyword: k.text, match_type: k.match, campaign_name: k.campaign,
     cost: num(k.cost), impressions: num(k.imp), clicks: num(k.clicks), conversions: num(k.conv),
   }));
+  // chuyển đổi theo TỪNG LOẠI (hành động chuyển đổi đã cài trong Google Ads)
+  const convs = (body.convs || []).map((c: any) => ({
+    customer_id: cid, date: c.date, campaign_id: String(c.id), action_name: String(c.action || "?").slice(0, 200), category: c.cat || null,
+    conversions: num(c.conv), conv_value: num(c.value), all_conversions: num(c.all),
+  }));
   await upsertChunks("qws_gads_daily", camps);
   await upsertChunks("qws_gads_kw_daily", kws);
-  return { ok: true, cid, campaigns: camps.length, keywords: kws.length };
+  await upsertChunks("qws_gads_conv_daily", convs);
+  return { ok: true, cid, campaigns: camps.length, keywords: kws.length, convs: convs.length };
 }
 
 // Gộp dòng ngày → chỉ số cùng "hình dạng" với Meta (results = chuyển đổi, cpr = CPA)
@@ -384,14 +451,28 @@ async function gadsReport(since: string, until: string, prev: { since: string; u
   const from = prev ? prev.since : since;
   const rows = await selectAll(() => admin().from("qws_gads_daily").select("*").in("customer_id", ids).gte("date", from).lte("date", until));
   const kws = light ? [] : await selectAll(() => admin().from("qws_gads_kw_daily").select("*").in("customer_id", ids).gte("date", since).lte("date", until));
+  const convs = light ? [] : await selectAll(() => admin().from("qws_gads_conv_daily").select("*").in("customer_id", ids).gte("date", since).lte("date", until));
+  // Số dư: account budget (nếu có) hoặc sổ nạp tiền; TB chi 7 ngày đủ (không tính hôm nay)
+  const today = isoOf(vnNow());
+  const led = await ledgers(ids.map((c: string) => "g" + c));
+  const anchorDates = Object.values(led).flat().filter((r: any) => r.kind === "anchor").map((r: any) => vnDateOf(r.at));
+  const balFrom = [addDays(today, -7), ...anchorDates].sort()[0];
+  const costRows = await selectAll(() => admin().from("qws_gads_daily").select("customer_id,date,cost").in("customer_id", ids).gte("date", balFrom));
+  const balOf = (a: any) => {
+    const mine = costRows.filter((r: any) => r.customer_id === a.customer_id);
+    const sumFrom = (d: string, to = "9999") => mine.filter((r: any) => r.date >= d && r.date <= to).reduce((x: number, r: any) => x + num(r.cost), 0);
+    const avg7 = sumFrom(addDays(today, -7), addDays(today, -1)) / 7;
+    if (a.budget_remaining != null) return withDays({ balance: num(a.budget_remaining), limit: a.budget_limit, source: "google_budget" }, avg7);
+    return withDays(fromLedger(led["g" + a.customer_id], (d) => sumFrom(d)), avg7);
+  };
   return accs.map((a: any) => {
     const mine = rows.filter((r: any) => r.customer_id === a.customer_id);
     const cur = mine.filter((r: any) => r.date >= since && r.date <= until);
     const pr = prev ? mine.filter((r: any) => r.date >= prev.since && r.date <= prev.until) : null;
     const base = {
       id: "g" + a.customer_id, cid: a.customer_id, platform: "google", name: a.name, group: a.grp, currency: a.currency,
-      lastSync: a.last_sync, issues: a.policy_issues ? [{ name: a.policy_issues + " quảng cáo bị từ chối / hạn chế chính sách", status: "POLICY" }] : [],
-      totals: gMetrics(cur), prev: pr ? gMetrics(pr) : null,
+      lastSync: a.last_sync, status: a.status, issues: a.policy_issues ? [{ name: a.policy_issues + " quảng cáo bị từ chối / hạn chế chính sách", status: "POLICY" }] : [],
+      totals: gMetrics(cur), prev: pr ? gMetrics(pr) : null, bal: balOf(a),
     };
     if (light) return base;
     const daily = Object.entries(groupBy(cur, (r) => r.date)).map(([date, l]) => ({ date, ...gMetrics(l) })).sort((x, y) => x.date.localeCompare(y.date));
@@ -399,7 +480,20 @@ async function gadsReport(since: string, until: string, prev: { since: string; u
     const keywords = Object.entries(groupBy(kws.filter((k: any) => k.customer_id === a.customer_id), (k) => k.ad_group_id + "|" + k.criterion_id))
       .map(([id, l]) => ({ id, name: l[0].keyword, match: l[0].match_type, campaign: l[0].campaign_name, ...gMetrics(l) }))
       .sort((x: any, y: any) => y.spend - x.spend).slice(0, 60);
-    return { ...base, daily, campaigns, keywords };
+    // Chuyển đổi theo loại: gộp theo tên hành động; kèm các hành động đã cài nhưng chưa phát sinh trong kỳ
+    const spend = base.totals.spend;
+    const byAction: Record<string, any> = {};
+    for (const c of convs.filter((x: any) => x.customer_id === a.customer_id)) {
+      const o = (byAction[c.action_name] = byAction[c.action_name] || { name: c.action_name, category: c.category, conversions: 0, allConversions: 0, value: 0 });
+      o.conversions += num(c.conversions); o.allConversions += num(c.all_conversions); o.value += num(c.conv_value);
+    }
+    for (const ca of a.conv_actions || []) {
+      const o = (byAction[ca.name] = byAction[ca.name] || { name: ca.name, category: ca.category, conversions: 0, allConversions: 0, value: 0 });
+      o.primary = !!ca.primary; o.counted = ca.counted !== false;
+    }
+    const convActions = Object.values(byAction).map((o: any) => ({ ...o, cpa: o.conversions > 0 ? spend / o.conversions : null }))
+      .sort((x: any, y: any) => y.allConversions - x.allConversions);
+    return { ...base, daily, campaigns, keywords, convActions };
   });
 }
 
@@ -524,6 +618,40 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (mode === "balance_list") {
+      const { data } = await admin().from("qws_ads_balance").select("*").eq("account_id", String(body.accountId || "")).order("at", { ascending: false }).limit(50);
+      return json({ rows: data || [] });
+    }
+    if (mode === "balance_add") {
+      // kind: "anchor" = số dư hiện tại đang thấy trên Google/Meta · "topup" = vừa nạp thêm
+      const accountId = String(body.accountId || ""), kind = body.kind === "topup" ? "topup" : "anchor", amount = num(body.amount);
+      if (!accountId || !(amount > 0 || (kind === "anchor" && amount === 0))) return json({ error: "Thiếu tài khoản hoặc số tiền" }, 400);
+      let cost_at = 0;
+      if (kind === "anchor") {
+        // chi phí HÔM NAY đã ghi nhận lúc nhập → không trừ trùng
+        const today = isoOf(vnNow());
+        if (accountId.startsWith("g")) {
+          const { data } = await admin().from("qws_gads_daily").select("cost").eq("customer_id", accountId.slice(1)).eq("date", today);
+          cost_at = (data || []).reduce((a: number, r: any) => a + num(r.cost), 0);
+        } else {
+          const acc = (await loadAccounts(true)).find((a: any) => a.id === accountId);
+          if (acc?.token) cost_at = num((await gall("act_" + acc.id + "/insights", { level: "account", fields: "spend", date_preset: "today" }, acc.token, 1))[0]?.spend);
+        }
+      }
+      const { error } = await admin().from("qws_ads_balance").insert({ account_id: accountId, kind, amount, cost_at, note: String(body.note || "").slice(0, 200) });
+      if (error) throw new Error(error.message);
+      return json({ ok: true, cost_at });
+    }
+    if (mode === "balance_delete") {
+      const { error } = await admin().from("qws_ads_balance").delete().eq("id", Number(body.id));
+      if (error) throw new Error(error.message);
+      return json({ ok: true });
+    }
+    if (mode === "alerts_list") {
+      const { data } = await admin().from("qws_ads_alerts").select("key,text,account_id,sent_at").gte("sent_at", new Date(Date.now() - 2 * 86400000).toISOString()).order("sent_at", { ascending: false }).limit(50);
+      return json({ alerts: (data || []).filter((r: any) => r.text) });
+    }
+
     // report
     const ACCOUNTS = await loadAccounts();
     const today = isoOf(vnNow());
@@ -540,7 +668,9 @@ Deno.serve(async (req) => {
       Promise.all(ACCOUNTS.map((a: any) => fetchAccount(a, isToday ? "today" : since, isToday ? "today" : until, prev))),
       gadsReport(since, until, prev).catch((e) => [{ id: "g-error", platform: "google", name: "Google Ads", group: "conv", error: String((e as Error).message || e) }]),
     ]);
-    return json({ since, until, prev, accounts: [...meta.map((a: any) => ({ ...a, platform: "meta" })), ...google], updatedAt: Date.now() });
+    const mLed = await ledgers(ACCOUNTS.map((a: any) => a.id));
+    const mBal = await Promise.all(ACCOUNTS.map((a: any) => (mLed[a.id] ? metaBalance(a, mLed[a.id]).catch(() => null) : null)));
+    return json({ since, until, prev, accounts: [...meta.map((a: any, i: number) => ({ ...a, platform: "meta", bal: mBal[i] })), ...google], updatedAt: Date.now() });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }

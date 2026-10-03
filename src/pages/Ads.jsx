@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown } from "lucide-react";
+import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, StatCard, Badge, DateField, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -119,9 +119,84 @@ function RealResults({ acc, since, until, spend }) {
   );
 }
 
-function AccountCard({ a, since, until }) {
+const invoke = async (body) => {
+  const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+};
+const CONV_CAT = {
+  PHONE_CALL_LEAD: "Gọi điện", CONTACT: "Liên hệ", SUBMIT_LEAD_FORM: "Gửi form", LEAD: "Khách tiềm năng", PURCHASE: "Mua hàng",
+  PAGE_VIEW: "Xem trang", SIGNUP: "Đăng ký", BOOK_APPOINTMENT: "Đặt lịch", GET_DIRECTIONS: "Chỉ đường", ENGAGEMENT: "Tương tác",
+  OUTBOUND_CLICK: "Click ra ngoài", QUALIFIED_LEAD: "KH đủ điều kiện", REQUEST_QUOTE: "Yêu cầu báo giá", DEFAULT: "Khác",
+};
+
+// Số dư tiền quảng cáo: Google account budget (tự động) hoặc sổ nạp tiền (nhập tay số dư + các lần nạp)
+function balTone(b) { return !b ? "slate" : b.balance <= 0 ? "rose" : b.daysLeft != null && b.daysLeft < 2 ? "rose" : b.daysLeft != null && b.daysLeft < 5 ? "amber" : "emerald"; }
+function BalanceBox({ a, onChanged }) {
+  const [rows, setRows] = useState(null);
+  const [f, setF] = useState({ kind: "anchor", amount: "" });
+  const [err, setErr] = useState("");
+  const load = async () => { try { setRows((await invoke({ mode: "balance_list", accountId: a.id })).rows || []); } catch (e) { setErr(e.message || String(e)); } };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [a.id]);
+  const add = async () => {
+    if (!f.amount) return; setErr("");
+    try { await invoke({ mode: "balance_add", accountId: a.id, kind: f.kind, amount: Number(f.amount) }); setF({ ...f, amount: "" }); await load(); onChanged?.(); }
+    catch (e) { setErr(e.message || String(e)); }
+  };
+  const del = async (id) => { try { await invoke({ mode: "balance_delete", id }); await load(); onChanged?.(); } catch (e) { setErr(e.message || String(e)); } };
+  const b = a.bal;
+  return (
+    <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span className="font-extrabold text-sky-800">Số dư quảng cáo</span>
+        {b ? <>
+          <span>Còn: <b className={b.balance <= 0 ? "text-rose-600" : ""}>{vnd(b.balance)}</b></span>
+          <span>TB chi 7 ngày: <b>{vnd(b.avgDaily)}</b>/ngày</span>
+          <span>Đủ chạy: <b className={balTone(b) === "rose" ? "text-rose-600" : ""}>{b.daysLeft != null ? "~" + b.daysLeft.toFixed(1) + " ngày" : "—"}</b></span>
+          <span className="text-slate-400">{b.source === "google_budget" ? "theo ngân sách tài khoản Google" : "ước tính từ sổ nạp tiền"}</span>
+        </> : <span className="text-slate-500">Chưa có — nhập <b>số dư hiện tại</b> đang thấy trên {a.platform === "google" ? "Google Ads (Thanh toán → Tóm tắt)" : "Meta (Thanh toán)"} để app tự trừ chi phí & cảnh báo khi sắp hết.</span>}
+        {a.owed > 0 && <span>Đang nợ (chưa trừ thẻ): <b>{vnd(a.owed)}</b></span>}
+      </div>
+      {b?.source !== "google_budget" && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+            <option value="anchor">Số dư hiện tại</option><option value="topup">Vừa nạp thêm</option>
+          </select>
+          <MoneyInput value={f.amount} onChange={(v) => setF({ ...f, amount: v })} placeholder="Số tiền" className="w-36 rounded-lg border border-slate-200 bg-white px-2 py-1.5" />
+          <button onClick={add} className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1.5 font-bold text-white"><Plus size={13} />Lưu</button>
+        </div>
+      )}
+      {rows?.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">{rows.slice(0, 10).map((r) => (
+          <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] ring-1 ring-sky-100">
+            {new Date(r.at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.kind === "anchor" ? "số dư" : "nạp"} {formatShort(r.amount)}
+            <button onClick={() => del(r.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={11} /></button>
+          </span>
+        ))}</div>
+      )}
+      {err && <div className="mt-1 text-xs text-rose-600">{err}</div>}
+    </div>
+  );
+}
+
+function AlertsPanel({ tick }) {
+  const [list, setList] = useState(null);
+  useEffect(() => { invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch(() => setList([])); }, [tick]);
+  if (!list?.length) return null;
+  return (
+    <Card>
+      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="text-[11px] text-slate-400">(đã đẩy thông báo về app)</span></div>
+      <div className="space-y-1">{list.map((x) => (
+        <div key={x.key} className="flex gap-2 text-xs"><span className="shrink-0 text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><span className="text-slate-700">{x.text}</span></div>
+      ))}</div>
+    </Card>
+  );
+}
+
+function AccountCard({ a, since, until, onChanged }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState(a.services ? "services" : "campaigns");
+  const [tab, setTab] = useState(a.platform === "google" ? "convs" : a.services ? "services" : "campaigns");
   const cols = colsOf(a);
   const isG = a.platform === "google";
   if (a.error) return (
@@ -144,6 +219,8 @@ function AccountCard({ a, since, until }) {
         {a.issues?.length > 0 && <Badge tone="rose">{a.issues.length} QC bị từ chối</Badge>}
         {a.group === "brand" && t.frequency > 3 && <Badge tone="rose">Tần suất cao</Badge>}
         {a.currency && a.currency !== "VND" && <Badge tone="slate">{a.currency}</Badge>}
+        {isG && a.status && a.status !== "ENABLED" && <Badge tone="rose">Google: {a.status}</Badge>}
+        {a.bal && <Badge tone={balTone(a.bal)}>Số dư {formatShort(a.bal.balance)}{a.bal.daysLeft != null ? ` · ~${a.bal.daysLeft.toFixed(1)} ngày` : ""}</Badge>}
       </button>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         {cols.map(([k, l, f, bad]) => <Metric key={k} label={l} value={f(t[k])} delta={p ? <Delta cur={t[k]} prev={p[k]} bad={bad} /> : null} />)}
@@ -167,6 +244,7 @@ function AccountCard({ a, since, until }) {
               </ResponsiveContainer>
             </div>
           )}
+          <BalanceBox a={a} onChanged={onChanged} />
           {a.group === "conv" && <RealResults acc={a} since={since} until={until} spend={t.spend} />}
           {a.issues?.length > 0 && (
             <div className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
@@ -174,13 +252,17 @@ function AccountCard({ a, since, until }) {
             </div>
           )}
           <div className="flex gap-1.5">
-            {(isG ? [["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"]]).filter(Boolean).map(([k, l]) => (
+            {(isG ? [["convs", "Loại chuyển đổi"], ["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"]]).filter(Boolean).map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
           {tab === "services" && <Table rows={a.services} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "campaigns" && <Table rows={a.campaigns.filter((c) => c.spend > 0)} cols={cols} />}
           {tab === "ads" && <Table rows={topAds} cols={cols} sub="campaign" />}
+          {tab === "convs" && (
+            <Table rows={(a.convActions || []).map((c) => ({ ...c, label: (CONV_CAT[c.category] || c.category || "") + (c.counted === false ? " · không tính vào cột Chuyển đổi" : "") }))} sub="label"
+              cols={[["conversions", "Chuyển đổi", dec], ["allConversions", "Tất cả CĐ", dec], ["cpa", "CP/CĐ loại này", vnd], ["value", "Giá trị", vnd]]} />
+          )}
           {tab === "keywords" && <Table rows={a.keywords} cols={cols.filter(([k]) => k !== "budgetLostIS")} sub="campaign" />}
         </div>
       )}
@@ -294,6 +376,8 @@ export default function Ads() {
         {err && <div className="mt-2 rounded-xl bg-rose-50 p-2 text-xs text-rose-700">Lỗi tải số liệu: {err}</div>}
       </Card>
 
+      <AlertsPanel tick={data?.updatedAt} />
+
       <div className="flex gap-2">
         {[["conv", "Chuyển đổi", Target], ["brand", "Thương hiệu", Megaphone]].map(([k, l, I]) => (
           <button key={k} onClick={() => { setGroup(k); setAi({ busy: false, text: "", err: "" }); }} className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold ${group === k ? "bg-white text-slate-900 shadow ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60"}`}><I size={15} />{l}</button>
@@ -324,7 +408,7 @@ export default function Ads() {
 
       {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
       {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
-      {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} />)}
+      {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} onChanged={() => load(true)} />)}
     </div>
   );
 }

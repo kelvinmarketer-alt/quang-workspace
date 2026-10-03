@@ -61,6 +61,46 @@ function collect(earliest) {
     });
   }
 
+  // Chuyển đổi theo TỪNG hành động chuyển đổi đã cài (Gọi hotline, Zalo, Form...)
+  var convs = [];
+  var cr = AdsApp.search(
+    "SELECT segments.date, campaign.id, segments.conversion_action_name, segments.conversion_action_category, " +
+    "metrics.conversions, metrics.conversions_value, metrics.all_conversions FROM campaign " +
+    "WHERE segments.date BETWEEN '" + from + "' AND '" + today + "' AND metrics.all_conversions > 0");
+  while (cr.hasNext()) {
+    var c = cr.next(), cm = c.metrics || {};
+    convs.push({
+      date: c.segments.date, id: String(c.campaign.id), action: c.segments.conversionActionName, cat: c.segments.conversionActionCategory,
+      conv: Number(cm.conversions || 0), value: Number(cm.conversionsValue || 0), all: Number(cm.allConversions || 0),
+    });
+  }
+  // Danh sách hành động chuyển đổi đang bật (để hiện cả loại chưa phát sinh)
+  var actions = [];
+  try {
+    var ar = AdsApp.search("SELECT conversion_action.name, conversion_action.category, conversion_action.primary_for_goal, " +
+      "conversion_action.include_in_conversions_metric FROM conversion_action WHERE conversion_action.status = 'ENABLED'");
+    while (ar.hasNext()) {
+      var ca = ar.next().conversionAction;
+      actions.push({ name: ca.name, category: ca.category, primary: !!ca.primaryForGoal, counted: ca.includeInConversionsMetric !== false });
+    }
+  } catch (e) { Logger.log('conversion_action: ' + e); }
+
+  // Trạng thái tài khoản + ngân sách tài khoản (chỉ có khi TK dùng "ngân sách tài khoản"; TK nạp trước thì không có → nhập sổ trong app)
+  var status = null, budget = null;
+  try { var sr = AdsApp.search("SELECT customer.status FROM customer"); if (sr.hasNext()) status = sr.next().customer.status; } catch (e) {}
+  try {
+    var br = AdsApp.search("SELECT account_budget.amount_served_micros, account_budget.approved_spending_limit_micros, " +
+      "account_budget.approved_spending_limit_type, account_budget.adjusted_spending_limit_micros FROM account_budget " +
+      "WHERE account_budget.status = 'APPROVED'");
+    while (br.hasNext()) {
+      var ab = br.next().accountBudget;
+      var lim = ab.adjustedSpendingLimitMicros != null ? ab.adjustedSpendingLimitMicros : ab.approvedSpendingLimitMicros;
+      if (lim != null && ab.approvedSpendingLimitType !== 'INFINITE') {
+        budget = { limit: Number(lim) / 1e6, remaining: (Number(lim) - Number(ab.amountServedMicros || 0)) / 1e6 };
+      }
+    }
+  } catch (e) {}
+
   var policy = 0;
   var pr = AdsApp.search(
     "SELECT ad_group_ad.ad.id FROM ad_group_ad WHERE ad_group_ad.status = 'ENABLED' AND ad_group.status = 'ENABLED' " +
@@ -69,8 +109,8 @@ function collect(earliest) {
 
   var res = post({
     mode: 'gads_ingest',
-    account: { cid: cid, name: a.getName(), currency: a.getCurrencyCode(), policyIssues: policy },
-    campaigns: camps, keywords: kws,
+    account: { cid: cid, name: a.getName(), currency: a.getCurrencyCode(), policyIssues: policy, status: status, budget: budget },
+    campaigns: camps, keywords: kws, convs: convs, actions: actions,
   });
   Logger.log(cid + ' ' + a.getName() + ': ' + JSON.stringify(res));
 }

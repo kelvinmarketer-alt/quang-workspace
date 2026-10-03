@@ -80,7 +80,9 @@ grant execute on function public.qws_ads_check_cron_key(text) to service_role;
 
 - **Chuyển đổi**: tiêu ≥100k trong ngày mà 0 tin/lead · giá/kết quả hôm nay cao hơn 30% so với TB 7 ngày.
 - **Thương hiệu**: CPM hôm nay cao hơn 30% so với TB 7 ngày · tần suất 7 ngày > 3 (trong bản tóm tắt 6h sáng).
-- **Mọi tài khoản**: tài khoản bị khoá · quảng cáo bị từ chối · đã tiêu >90% giới hạn chi tiêu.
+- **Mọi tài khoản**: tài khoản bị khoá / Google không ở trạng thái ENABLED · quảng cáo bị từ chối/hạn chế · đã tiêu >90% giới hạn chi tiêu
+  · **số dư còn < 2 ngày chạy** hoặc **hết tiền** · CPM tăng >30% · Google: CPC tăng >30%, script ngừng đẩy >3 giờ.
+- Số dư: Google có "ngân sách tài khoản" thì tự đọc; TK nạp trước (Google/Meta) thì nhập **Số dư hiện tại** + **Vừa nạp thêm** trong thẻ tài khoản (mục Quảng cáo) — app tự trừ chi phí.
 
 ## 3b. Bảng Google Ads — SQL Editor → Run
 
@@ -149,6 +151,47 @@ language sql security definer set search_path = public as $$
 $$;
 revoke all on function public.qws_gads_earliest() from public, anon, authenticated;
 grant execute on function public.qws_gads_earliest() to service_role;
+```
+
+## 3c. v2 — chuyển đổi theo loại, số dư, nội dung cảnh báo — SQL Editor → Run
+
+```sql
+-- v2: chuyển đổi theo loại + trạng thái/ngân sách TK Google + sổ nạp tiền + nội dung cảnh báo
+alter table public.qws_gads_accounts
+  add column if not exists status text,
+  add column if not exists budget_remaining numeric,
+  add column if not exists budget_limit numeric,
+  add column if not exists conv_actions jsonb;
+
+create table if not exists public.qws_gads_conv_daily (
+  customer_id text not null,
+  date date not null,
+  campaign_id text not null,
+  action_name text not null,
+  category text,
+  conversions numeric not null default 0,
+  conv_value numeric not null default 0,
+  all_conversions numeric not null default 0,
+  primary key (customer_id, date, campaign_id, action_name)
+);
+alter table public.qws_gads_conv_daily enable row level security;
+
+-- Sổ nạp tiền: anchor = số dư đang thấy trên nền tảng lúc nhập · topup = nạp thêm. account_id = 'g'+cid (Google) hoặc id TKQC Meta
+create table if not exists public.qws_ads_balance (
+  id bigserial primary key,
+  account_id text not null,
+  kind text not null check (kind in ('anchor', 'topup')),
+  amount numeric not null,
+  cost_at numeric not null default 0,
+  note text,
+  at timestamptz not null default now()
+);
+create index if not exists qws_ads_balance_acc_idx on public.qws_ads_balance(account_id, at);
+alter table public.qws_ads_balance enable row level security;
+
+alter table public.qws_ads_alerts
+  add column if not exists text text,
+  add column if not exists account_id text;
 ```
 
 ## 4. Thêm tài khoản — trong app
