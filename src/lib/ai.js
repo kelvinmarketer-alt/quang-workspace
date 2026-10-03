@@ -271,6 +271,7 @@ export async function aiAdsAnalysis({ summary, apiKey, model }) {
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   const sys = `Bạn là chuyên gia tối ưu quảng cáo Facebook cho doanh nghiệp nhỏ ở Việt Nam. Đọc số liệu JSON và viết phân tích NGẮN GỌN bằng tiếng Việt.
 - Nhóm "conv" (chuyển đổi): đánh giá theo giá/kết quả (tin nhắn + lead), CTR, CPM; chỉ ra chiến dịch/quảng cáo/dịch vụ đang rẻ nhất và đắt nhất.
+- platform "google": kết quả = chuyển đổi Google, cpr = CPA; budgetLostIS = % hiển thị bị mất do thiếu ngân sách (cao + CPA tốt → nên tăng ngân sách); xem thêm từ khoá đắt mà ít chuyển đổi.
 - Nhóm "brand" (thương hiệu): đánh giá theo tiếp cận, CPM, tần suất (>3 là khách xem lặp, quảng cáo mệt), ThruPlay, tương tác. KHÔNG đòi chuyển đổi.
 - Có "prev" thì so sánh với kỳ trước (tăng/giảm %).
 - Có "real" (khách chốt/doanh thu nhập tay) thì tính giá mỗi khách thật và ROAS.

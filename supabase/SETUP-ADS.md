@@ -82,7 +82,80 @@ grant execute on function public.qws_ads_check_cron_key(text) to service_role;
 - **Thương hiệu**: CPM hôm nay cao hơn 30% so với TB 7 ngày · tần suất 7 ngày > 3 (trong bản tóm tắt 6h sáng).
 - **Mọi tài khoản**: tài khoản bị khoá · quảng cáo bị từ chối · đã tiêu >90% giới hạn chi tiêu.
 
+## 3b. Bảng Google Ads — SQL Editor → Run
+
+```sql
+-- GOOGLE ADS: số liệu do Google Ads Script đẩy về mỗi giờ. Không policy = chỉ service role (edge fn).
+create table if not exists public.qws_ads_kv (
+  k text primary key,
+  v text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.qws_ads_kv enable row level security;
+
+create table if not exists public.qws_gads_accounts (
+  customer_id text primary key,          -- 10 số, không gạch
+  name text not null,                    -- tên hiển thị (sửa trong app)
+  name_meta text,                        -- tên trên Google Ads
+  currency text default 'VND',
+  grp text not null default 'conv' check (grp in ('conv', 'brand')),
+  active boolean not null default true,
+  policy_issues int not null default 0,
+  last_sync timestamptz,
+  sort int not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table public.qws_gads_accounts enable row level security;
+
+create table if not exists public.qws_gads_daily (
+  customer_id text not null,
+  date date not null,
+  campaign_id text not null,
+  campaign_name text,
+  campaign_status text,
+  channel text,
+  cost numeric not null default 0,
+  impressions bigint not null default 0,
+  clicks bigint not null default 0,
+  conversions numeric not null default 0,
+  conv_value numeric not null default 0,
+  search_is numeric,
+  budget_lost_is numeric,
+  updated_at timestamptz not null default now(),
+  primary key (customer_id, date, campaign_id)
+);
+alter table public.qws_gads_daily enable row level security;
+
+create table if not exists public.qws_gads_kw_daily (
+  customer_id text not null,
+  date date not null,
+  ad_group_id text not null,
+  criterion_id text not null,
+  keyword text,
+  match_type text,
+  campaign_name text,
+  cost numeric not null default 0,
+  impressions bigint not null default 0,
+  clicks bigint not null default 0,
+  conversions numeric not null default 0,
+  primary key (customer_id, date, ad_group_id, criterion_id)
+);
+alter table public.qws_gads_kw_daily enable row level security;
+
+-- Ngày sớm nhất đã có của từng tài khoản (script dùng để quyết định nạp lùi 120 ngày lần đầu)
+create or replace function public.qws_gads_earliest() returns table (customer_id text, earliest date)
+language sql security definer set search_path = public as $$
+  select customer_id, min(date) from public.qws_gads_daily group by customer_id;
+$$;
+revoke all on function public.qws_gads_earliest() from public, anon, authenticated;
+grant execute on function public.qws_gads_earliest() to service_role;
+```
+
 ## 4. Thêm tài khoản — trong app
 
 **Cài đặt → Quảng cáo — tài khoản & token Meta** → dán token System User của 1 BM → **Lấy danh sách TKQC** →
 tick tài khoản, đặt tên + nhóm (Chuyển đổi / Thương hiệu) → **Lưu**. BM mới sau này làm y hệt, không cần deploy lại.
+
+**Google Ads**: Cài đặt → **Lấy script Google Ads** → Copy → dán vào Google Ads **MCC 2BKIN** (Công cụ → Hành động hàng loạt → Tập lệnh)
+và trong tài khoản lẻ **VUADONGGOI** → Uỷ quyền → Lưu → Tần suất **Hằng giờ**. Lần chạy đầu tự nạp lùi 120 ngày.
+Tài khoản loại trừ sửa ở mảng `EXCLUDE` đầu script (đang loại FPT-HPG).

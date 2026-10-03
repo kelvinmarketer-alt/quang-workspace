@@ -39,7 +39,13 @@ const COLS = {
     ["spend", "Chi phí", vnd], ["reach", "Tiếp cận", int], ["impressions", "Hiển thị", int], ["frequency", "Tần suất", dec, "bad"],
     ["cpm", "CPM", vnd, "bad"], ["thruplay", "ThruPlay", int], ["video3s", "Video 3s", int], ["engagement", "Tương tác", int], ["pageLikes", "Theo dõi", int],
   ],
+  // Google Ads (mọi TK Google xếp nhóm Chuyển đổi): kết quả = chuyển đổi, Giá/KQ = CPA
+  gads: [
+    ["spend", "Chi phí", vnd], ["results", "Chuyển đổi", dec], ["cpr", "CPA", vnd, "bad"], ["clicks", "Click", int],
+    ["ctr", "CTR", pct], ["cpc", "CPC", vnd, "bad"], ["cpm", "CPM", vnd, "bad"], ["budgetLostIS", "Mất do NS", pct, "bad"],
+  ],
 };
+const colsOf = (a) => (a.platform === "google" ? COLS.gads : COLS[a.group]);
 
 function Delta({ cur, prev, bad }) {
   if (prev == null || cur == null || !prev) return null;
@@ -116,7 +122,8 @@ function RealResults({ acc, since, until, spend }) {
 function AccountCard({ a, since, until }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(a.services ? "services" : "campaigns");
-  const cols = COLS[a.group];
+  const cols = colsOf(a);
+  const isG = a.platform === "google";
   if (a.error) return (
     <Card><div className="flex items-center gap-2 text-sm"><AlertTriangle size={16} className="text-rose-500" /><b>{a.name}</b><span className="text-rose-600">{a.error}</span></div></Card>
   );
@@ -130,7 +137,9 @@ function AccountCard({ a, since, until }) {
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left">
         {open ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
         <span className="text-base font-extrabold">{a.name}</span>
+        <Badge tone={isG ? "emerald" : "sky"}>{isG ? "Google" : "Meta"}</Badge>
         <Badge tone={a.group === "conv" ? "indigo" : "amber"}>{a.group === "conv" ? "Chuyển đổi" : "Thương hiệu"}</Badge>
+        {isG && a.lastSync && <span className="text-[11px] text-slate-400">số đến {new Date(a.lastSync).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}
         {a.status && a.status !== 1 && <Badge tone="rose">Tài khoản không hoạt động</Badge>}
         {a.issues?.length > 0 && <Badge tone="rose">{a.issues.length} QC bị từ chối</Badge>}
         {a.group === "brand" && t.frequency > 3 && <Badge tone="rose">Tần suất cao</Badge>}
@@ -152,7 +161,7 @@ function AccountCard({ a, since, until }) {
                   <Tooltip formatter={(v, n) => (n === "Chi phí" || n === "CPM" ? vnd(v) : int(v))} />
                   <Bar yAxisId="l" dataKey="spend" name="Chi phí" fill="#818cf8" radius={[4, 4, 0, 0]} />
                   {a.group === "conv"
-                    ? <Line yAxisId="r" dataKey="results" name="Kết quả" stroke="#10b981" strokeWidth={2} dot={false} />
+                    ? <Line yAxisId="r" dataKey="results" name={isG ? "Chuyển đổi" : "Kết quả"} stroke="#10b981" strokeWidth={2} dot={false} />
                     : <Line yAxisId="r" dataKey="reach" name="Tiếp cận" stroke="#f59e0b" strokeWidth={2} dot={false} />}
                 </ComposedChart>
               </ResponsiveContainer>
@@ -161,17 +170,18 @@ function AccountCard({ a, since, until }) {
           {a.group === "conv" && <RealResults acc={a} since={since} until={until} spend={t.spend} />}
           {a.issues?.length > 0 && (
             <div className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
-              <b>Quảng cáo có vấn đề:</b> {a.issues.map((x) => `${x.name} (${x.status === "DISAPPROVED" ? "bị từ chối" : "có vấn đề"})`).join(" · ")}
+              <b>Quảng cáo có vấn đề:</b> {a.issues.map((x) => (x.status === "POLICY" ? x.name : `${x.name} (${x.status === "DISAPPROVED" ? "bị từ chối" : "có vấn đề"})`)).join(" · ")}
             </div>
           )}
           <div className="flex gap-1.5">
-            {[a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"]].filter(Boolean).map(([k, l]) => (
+            {(isG ? [["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"]]).filter(Boolean).map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
           {tab === "services" && <Table rows={a.services} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "campaigns" && <Table rows={a.campaigns.filter((c) => c.spend > 0)} cols={cols} />}
           {tab === "ads" && <Table rows={topAds} cols={cols} sub="campaign" />}
+          {tab === "keywords" && <Table rows={a.keywords} cols={cols.filter(([k]) => k !== "budgetLostIS")} sub="campaign" />}
         </div>
       )}
     </Card>
@@ -180,8 +190,11 @@ function AccountCard({ a, since, until }) {
 
 function sumGroup(list) {
   const ok = list.filter((a) => !a.error && (!a.currency || a.currency === "VND"));
-  const s = { spend: 0, results: 0, impressions: 0, reach: 0, msgs: 0, leads: 0 };
-  for (const a of ok) for (const k of Object.keys(s)) s[k] += a.totals[k] || 0;
+  const s = { spend: 0, results: 0, impressions: 0, reach: 0, msgs: 0, leads: 0, gconv: 0 };
+  for (const a of ok) {
+    for (const k of ["spend", "results", "impressions", "reach", "msgs", "leads"]) s[k] += a.totals[k] || 0;
+    if (a.platform === "google") s.gconv += a.totals.results || 0;
+  }
   s.cpr = s.results ? s.spend / s.results : null;
   s.cpm = s.impressions ? (s.spend / s.impressions) * 1000 : null;
   return s;
@@ -232,13 +245,14 @@ export default function Ads() {
   const runAi = async () => {
     setAi({ busy: true, text: "", err: "" });
     try {
-      const pick = (m) => m && Object.fromEntries(["spend", "results", "msgs", "leads", "cpr", "cpm", "ctr", "cpc", "reach", "impressions", "frequency", "thruplay", "engagement", "pageLikes"].map((k) => [k, m[k] == null ? null : Math.round(m[k] * 100) / 100]));
+      const pick = (m) => m && Object.fromEntries(["spend", "results", "msgs", "leads", "cpr", "cpm", "ctr", "cpc", "reach", "impressions", "frequency", "thruplay", "engagement", "pageLikes", "budgetLostIS", "searchIS", "roas"].map((k) => [k, m[k] == null ? null : Math.round(m[k] * 100) / 100]));
       const summary = {
         period: { since, until, prev: data?.prev },
         accounts: accounts.filter((a) => !a.error).map((a) => {
           const real = adsResults.filter((r) => r.accountId === a.id && r.date >= since && r.date <= until);
           return {
-            name: a.name, group: a.group, totals: pick(a.totals), prev: pick(a.prev),
+            name: a.name, platform: a.platform, group: a.group, totals: pick(a.totals), prev: pick(a.prev),
+            keywords: a.keywords?.slice(0, 15).map((x) => ({ name: x.name, ...pick(x) })),
             services: a.services?.map((s) => ({ name: s.name, ...pick(s) })),
             campaigns: a.campaigns.filter((c) => c.spend > 0).slice(0, 10).map((c) => ({ name: c.name, ...pick(c) })),
             ads: (a.ads || []).filter((x) => x.spend > 0).slice(0, 12).map((x) => ({ name: x.name, ...pick(x) })),
@@ -289,7 +303,7 @@ export default function Ads() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={Wallet} label="Chi phí" value={tot.spend} sub={prevTot ? "Kỳ trước " + vnd(prevTot.spend) : null} tone="indigo" />
         {group === "conv" ? <>
-          <StatCard icon={MessageCircle} label="Kết quả (tin + lead)" value={int(tot.results)} money={false} sub={`${int(tot.msgs)} tin · ${int(tot.leads)} lead`} tone="emerald" />
+          <StatCard icon={MessageCircle} label="Kết quả (tin + lead + CĐ)" value={int(tot.results)} money={false} sub={`${int(tot.msgs)} tin · ${int(tot.leads)} lead · ${dec(tot.gconv)} CĐ Google`} tone="emerald" />
           <StatCard icon={Target} label="Giá / kết quả" value={vnd(tot.cpr)} money={false} sub={prevTot ? "Kỳ trước " + vnd(prevTot.cpr) : null} tone="rose" />
         </> : <>
           <StatCard icon={Eye} label="Tiếp cận (cộng các TK)" value={int(tot.reach)} money={false} sub={`${int(tot.impressions)} lượt hiển thị`} tone="amber" />
@@ -309,7 +323,7 @@ export default function Ads() {
       </Card>
 
       {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
-      {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản & token Meta</b> để dán token và chọn tài khoản.</div></Card>}
+      {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
       {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} />)}
     </div>
   );

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Megaphone, Trash2, KeyRound, Search, Save, RefreshCw } from "lucide-react";
+import { Megaphone, Trash2, KeyRound, Search, Save, RefreshCw, Copy, Check } from "lucide-react";
 import { Card, Badge } from "./ui.jsx";
 import { supabase } from "../lib/supabase.js";
+import GADS_SCRIPT from "../../supabase/gads-script.js?raw";
 
 // Quản lý TKQC Meta cho module Quảng cáo (CHỈ CHỦ). Token gửi thẳng lên edge fn qws-meta-ads,
 // lưu ở bảng qws_ads_accounts (chỉ service role đọc) — app không bao giờ nhận lại token, chỉ 6 ký tự cuối.
@@ -19,6 +20,69 @@ function GroupSelect({ value, onChange }) {
     <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
       {GROUPS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
     </select>
+  );
+}
+
+// Google Ads: số liệu do Google Ads Script đẩy về mỗi giờ. Chủ lấy script (đã gắn khoá) để dán vào MCC / tài khoản lẻ.
+function GoogleSection() {
+  const [list, setList] = useState([]);
+  const [script, setScript] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState("");
+  const refresh = async () => {
+    try { setList((await call({ mode: "gads_list" })).accounts || []); } catch (e) { setErr(e.message || String(e)); }
+  };
+  useEffect(() => { refresh(); }, []);
+  const getScript = async (rotate) => {
+    if (rotate && !window.confirm("Tạo khoá mới? Các script đang chạy sẽ ngừng đẩy số cho tới khi dán lại script mới.")) return;
+    setErr("");
+    try { const { key } = await call({ mode: "gads_key", rotate: !!rotate }); setScript(GADS_SCRIPT.replace("__INGEST_KEY__", key)); setCopied(false); }
+    catch (e) { setErr(e.message || String(e)); }
+  };
+  const copy = async () => { try { await navigator.clipboard.writeText(script); setCopied(true); } catch { setErr("Không copy được — bôi đen ô script rồi Ctrl/Cmd+C"); } };
+  const update = async (cid, patch) => { try { await call({ mode: "gads_update", cid, patch }); await refresh(); } catch (e) { setErr(e.message || String(e)); } };
+  const remove = async (a) => {
+    if (!window.confirm(`Xoá "${a.name}" và toàn bộ số liệu Google đã lưu của tài khoản này?`)) return;
+    try { await call({ mode: "gads_delete", cid: a.customer_id }); await refresh(); } catch (e) { setErr(e.message || String(e)); }
+  };
+  const ago = (t) => { if (!t) return "chưa đồng bộ"; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 60 ? `${m} phút trước` : `${Math.round(m / 60)} giờ trước`; };
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-sm font-extrabold">Google Ads</span>
+        <span className="text-[11px] text-slate-400">script tự đẩy số mỗi giờ</span>
+        <button onClick={refresh} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" title="Tải lại"><RefreshCw size={14} /></button>
+      </div>
+      <div className="space-y-2">
+        {list.map((a) => (
+          <div key={a.customer_id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 ${a.active ? "border-slate-100" : "border-dashed border-slate-200 opacity-60"}`}>
+            <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.customer_id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
+            <GroupSelect value={a.grp} onChange={(v) => update(a.customer_id, { group: v })} />
+            <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.customer_id, { active: e.target.checked })} />Đang dùng</label>
+            <span className="text-[11px] text-slate-400">{String(a.customer_id).replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")} · {ago(a.last_sync)}</span>
+            {a.policy_issues > 0 && <Badge tone="rose">{a.policy_issues} QC bị hạn chế</Badge>}
+            <button onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
+          </div>
+        ))}
+        {!list.length && <div className="text-xs text-slate-400">Chưa có số liệu Google. Lấy script bên dưới, dán vào MCC 2BKIN và tài khoản VUADONGGOI.</div>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button onClick={() => getScript(false)} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Lấy script Google Ads</button>
+        {script && <button onClick={copy} className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? "Đã copy" : "Copy script"}</button>}
+        <button onClick={() => getScript(true)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-400 hover:bg-slate-100">Tạo khoá mới</button>
+      </div>
+      {script && (
+        <>
+          <textarea readOnly value={script} onFocus={(e) => e.target.select()} className="mt-2 h-28 w-full rounded-lg border border-slate-200 bg-slate-50 p-2 font-mono text-[10px]" />
+          <ol className="mt-1 list-decimal pl-5 text-[11px] text-slate-500">
+            <li>Google Ads (MCC 2BKIN) → Công cụ → Hành động hàng loạt → <b>Tập lệnh</b> → nút <b>+</b> → xoá mẫu, dán script.</li>
+            <li>Bấm <b>Uỷ quyền</b> → <b>Xem trước</b> (thấy log tên tài khoản là chạy được) → <b>Lưu</b>.</li>
+            <li>Ở danh sách tập lệnh, cột Tần suất chọn <b>Hằng giờ</b>. Làm lại y hệt trong tài khoản VUADONGGOI (mkt.vuadonggoi).</li>
+          </ol>
+        </>
+      )}
+      {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{err}</div>}
+    </div>
   );
 }
 
@@ -71,7 +135,7 @@ export default function AdsAccounts() {
     <Card>
       <div className="mb-3 flex items-center gap-2">
         <Megaphone size={18} className="text-indigo-500" />
-        <h3 className="text-base font-extrabold">Quảng cáo — tài khoản & token Meta</h3>
+        <h3 className="text-base font-extrabold">Quảng cáo — tài khoản Meta & Google</h3>
         <button onClick={refresh} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" title="Tải lại"><RefreshCw size={14} /></button>
       </div>
 
@@ -122,6 +186,7 @@ export default function AdsAccounts() {
       </div>
       {msg && <div className="mt-2 text-xs font-semibold text-emerald-600">{msg}</div>}
       {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">{err}</div>}
+      <GoogleSection />
     </Card>
   );
 }

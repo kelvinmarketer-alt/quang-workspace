@@ -1,4 +1,4 @@
-// Edge Function: qws-meta-ads — số liệu Meta Ads (Facebook) LIVE cho module "Quảng cáo".
+// Edge Function: qws-meta-ads — số liệu Meta Ads (LIVE) + Google Ads (script đẩy mỗi giờ) cho module "Quảng cáo".
 // Đọc trực tiếp Marketing API bằng token System User của TỪNG BM (không cần BM mẹ).
 // Danh sách TKQC + token lưu ở bảng qws_ads_accounts (chỉ service role đọc) — chủ thêm/sửa trong app (Cài đặt).
 //
@@ -240,10 +240,22 @@ async function watch() {
         found.push({ key: k("cpm"), text: `📈 ${a.name}: CPM hôm nay ${fmt(t.cpm)} (+${Math.round((t.cpm / bm - 1) * 100)}% so với TB 7 ngày ${fmt(bm)})` });
     }
   });
+  // Google: số trong bảng (script đẩy mỗi giờ)
+  const [gNow, gBase] = await Promise.all([gadsReport(today, today, null, true), gadsReport(from, to, null, true)]);
+  const hourVN = vnNow().getUTCHours();
+  gNow.forEach((a: any, i: number) => {
+    const t = a.totals, b = gBase[i]?.totals, k = (type: string) => `${today}|${a.id}|${type}`;
+    if (a.issues.length) found.push({ key: k("issues"), text: `🚫 ${a.name}: ${a.issues[0].name}` });
+    if (hourVN >= 9 && (!a.lastSync || Date.now() - Date.parse(a.lastSync) > 3 * 3600000))
+      found.push({ key: k("stale"), text: `⏸ ${a.name}: script Google Ads chưa đẩy số >3 giờ — kiểm tra lịch chạy script` });
+    if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 chuyển đổi (Google có thể trễ vài giờ)` });
+    if (b?.cpr && t.cpr && t.spend >= 50000 && t.cpr > b.cpr * 1.3)
+      found.push({ key: k("cpr"), text: `📈 ${a.name}: CPA hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / b.cpr - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpr)})` });
+  });
   const fresh = new Set(await freshKeys(found.map((f) => f.key)));
   const lines = found.filter((f) => fresh.has(f.key)).map((f) => f.text);
   const sent = lines.length ? await notify("🔔 Cảnh báo Quảng cáo", lines) : [];
-  return { checked: now.length, alerts: lines, sent, errors: now.filter((a: any) => a.error).map((a: any) => a.name + ": " + a.error) };
+  return { checked: now.length + gNow.length, alerts: lines, sent, errors: now.filter((a: any) => a.error).map((a: any) => a.name + ": " + a.error) };
 }
 
 async function daily() {
@@ -253,10 +265,15 @@ async function daily() {
     Promise.all(ACCOUNTS.map((a) => fetchAccount(a, y, y, null, true))),
     Promise.all(ACCOUNTS.map((a) => fetchAccount(a, addDays(y, -6), y, null, true))),
   ]);
+  const gDay = await gadsReport(y, y, null, true);
   const [dd, mm] = [y.slice(8, 10), y.slice(5, 7)];
   const lines: string[] = [];
   for (const group of ["conv", "brand"]) {
     lines.push(group === "conv" ? "🎯 CHUYỂN ĐỔI" : "📣 THƯƠNG HIỆU");
+    for (const g of gDay) if (g.group === group) {
+      const t = g.totals;
+      lines.push(`• ${g.name} (Google): ${fmt(t.spend)} · ${Math.round(t.results * 10) / 10} CĐ · ${t.cpr ? fmt(t.cpr) + "/CĐ" : "—"} · CPC ${fmt(t.cpc)}`);
+    }
     day.forEach((a: any, i: number) => {
       if (a.group !== group) return;
       if (a.error) { lines.push(`• ${a.name}: lỗi — ${a.error}`); return; }
@@ -274,6 +291,118 @@ async function daily() {
   return { date: y, sent };
 }
 
+// ================= GOOGLE ADS =================
+// Google Ads Script (supabase/gads-script.js) đặt ở MCC 2BKIN + tài khoản lẻ VUADONGGOI, chạy MỖI GIỜ,
+// đẩy số liệu chiến dịch/từ khoá theo ngày về đây (mode gads_ingest, header x-ingest-key) → bảng qws_gads_*.
+const G_KNOWN: Record<string, { name: string; grp: string; active?: boolean }> = {
+  "2705036143": { name: "Vạn Thiên Ý", grp: "conv" },
+  "2314718894": { name: "Nhậu Phi Trường · Google", grp: "conv" },
+  "3874613096": { name: "XKLD A Thanh", grp: "conv" },
+  "9181366094": { name: "Vua Đóng Gói · Google", grp: "conv" },
+  "4056318580": { name: "FPT-HPG", grp: "conv", active: false },
+};
+const cidOf = (v: unknown) => String(v || "").replace(/\D/g, "");
+async function kvGet(k: string) {
+  const { data } = await admin().from("qws_ads_kv").select("v").eq("k", k).maybeSingle();
+  return data?.v || null;
+}
+async function kvSet(k: string, v: string) {
+  const { error } = await admin().from("qws_ads_kv").upsert({ k, v, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
+async function selectAll(build: () => any) {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build().range(from, from + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+async function upsertChunks(table: string, rows: any[]) {
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await admin().from(table).upsert(rows.slice(i, i + 500));
+    if (error) throw new Error(table + ": " + error.message);
+  }
+}
+
+async function gadsIngest(body: any) {
+  const a = body.account || {};
+  const cid = cidOf(a.cid);
+  if (!cid) throw new Error("Thiếu customer id");
+  const supa = admin();
+  const { data: ex } = await supa.from("qws_gads_accounts").select("customer_id").eq("customer_id", cid).maybeSingle();
+  const info = { name_meta: String(a.name || cid).slice(0, 120), currency: a.currency || "VND", policy_issues: Number(a.policyIssues) || 0, last_sync: new Date().toISOString() };
+  if (ex) {
+    const { error } = await supa.from("qws_gads_accounts").update(info).eq("customer_id", cid);
+    if (error) throw new Error(error.message);
+  } else {
+    const k = G_KNOWN[cid];
+    const { error } = await supa.from("qws_gads_accounts").insert({ customer_id: cid, name: k?.name || info.name_meta, grp: k?.grp || "conv", active: k?.active ?? true, ...info });
+    if (error) throw new Error(error.message);
+  }
+  const camps = (body.campaigns || []).map((c: any) => ({
+    customer_id: cid, date: c.date, campaign_id: String(c.id), campaign_name: c.name, campaign_status: c.status, channel: c.channel,
+    cost: num(c.cost), impressions: num(c.imp), clicks: num(c.clicks), conversions: num(c.conv), conv_value: num(c.value),
+    search_is: c.sis == null ? null : num(c.sis), budget_lost_is: c.blis == null ? null : num(c.blis), updated_at: new Date().toISOString(),
+  }));
+  const kws = (body.keywords || []).map((k: any) => ({
+    customer_id: cid, date: k.date, ad_group_id: String(k.ag), criterion_id: String(k.id), keyword: k.text, match_type: k.match, campaign_name: k.campaign,
+    cost: num(k.cost), impressions: num(k.imp), clicks: num(k.clicks), conversions: num(k.conv),
+  }));
+  await upsertChunks("qws_gads_daily", camps);
+  await upsertChunks("qws_gads_kw_daily", kws);
+  return { ok: true, cid, campaigns: camps.length, keywords: kws.length };
+}
+
+// Gộp dòng ngày → chỉ số cùng "hình dạng" với Meta (results = chuyển đổi, cpr = CPA)
+function gMetrics(rows: any[]) {
+  let spend = 0, impressions = 0, clicks = 0, conv = 0, value = 0, sisW = 0, sisImp = 0, blW = 0, blImp = 0;
+  for (const r of rows) {
+    const imp = num(r.impressions);
+    spend += num(r.cost); impressions += imp; clicks += num(r.clicks); conv += num(r.conversions); value += num(r.conv_value);
+    if (r.search_is != null) { sisW += num(r.search_is) * imp; sisImp += imp; }
+    if (r.budget_lost_is != null) { blW += num(r.budget_lost_is) * imp; blImp += imp; }
+  }
+  return {
+    spend, impressions, clicks, results: conv, convValue: value,
+    cpr: conv > 0 ? spend / conv : null, roas: spend > 0 && value > 0 ? value / spend : null,
+    ctr: impressions ? (clicks / impressions) * 100 : 0, cpc: clicks ? spend / clicks : 0, cpm: impressions ? (spend / impressions) * 1000 : 0,
+    searchIS: sisImp ? (sisW / sisImp) * 100 : null, budgetLostIS: blImp ? (blW / blImp) * 100 : null,
+  };
+}
+function groupBy(rows: any[], key: (r: any) => string) {
+  const g: Record<string, any[]> = {};
+  for (const r of rows) (g[key(r)] = g[key(r)] || []).push(r);
+  return g;
+}
+async function gadsReport(since: string, until: string, prev: { since: string; until: string } | null, light = false) {
+  const accs = await selectAll(() => admin().from("qws_gads_accounts").select("*").eq("active", true).order("sort").order("created_at"));
+  if (!accs.length) return [];
+  const ids = accs.map((a: any) => a.customer_id);
+  const from = prev ? prev.since : since;
+  const rows = await selectAll(() => admin().from("qws_gads_daily").select("*").in("customer_id", ids).gte("date", from).lte("date", until));
+  const kws = light ? [] : await selectAll(() => admin().from("qws_gads_kw_daily").select("*").in("customer_id", ids).gte("date", since).lte("date", until));
+  return accs.map((a: any) => {
+    const mine = rows.filter((r: any) => r.customer_id === a.customer_id);
+    const cur = mine.filter((r: any) => r.date >= since && r.date <= until);
+    const pr = prev ? mine.filter((r: any) => r.date >= prev.since && r.date <= prev.until) : null;
+    const base = {
+      id: "g" + a.customer_id, cid: a.customer_id, platform: "google", name: a.name, group: a.grp, currency: a.currency,
+      lastSync: a.last_sync, issues: a.policy_issues ? [{ name: a.policy_issues + " quảng cáo bị từ chối / hạn chế chính sách", status: "POLICY" }] : [],
+      totals: gMetrics(cur), prev: pr ? gMetrics(pr) : null,
+    };
+    if (light) return base;
+    const daily = Object.entries(groupBy(cur, (r) => r.date)).map(([date, l]) => ({ date, ...gMetrics(l) })).sort((x, y) => x.date.localeCompare(y.date));
+    const campaigns = Object.entries(groupBy(cur, (r) => r.campaign_id)).map(([id, l]) => ({ id, name: l[0].campaign_name, status: l[l.length - 1].campaign_status, ...gMetrics(l) })).sort((x: any, y: any) => y.spend - x.spend);
+    const keywords = Object.entries(groupBy(kws.filter((k: any) => k.customer_id === a.customer_id), (k) => k.ad_group_id + "|" + k.criterion_id))
+      .map(([id, l]) => ({ id, name: l[0].keyword, match: l[0].match_type, campaign: l[0].campaign_name, ...gMetrics(l) }))
+      .sort((x: any, y: any) => y.spend - x.spend).slice(0, 60);
+    return { ...base, daily, campaigns, keywords };
+  });
+}
+
 // ---------- Entry ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -286,6 +415,20 @@ Deno.serve(async (req) => {
     if (ok !== true) return json({ error: "Sai cron key" }, 401);
     try { return json(mode === "watch" ? await watch() : await daily()); }
     catch (e) { return json({ error: String(e) }, 500); }
+  }
+
+  if (mode === "gads_ingest" || mode === "gads_status") {
+    // Google Ads Script → xác thực bằng khoá ingest (chủ tạo trong Cài đặt, gắn sẵn vào script)
+    const key = await kvGet("gads_ingest_key");
+    if (!key || req.headers.get("x-ingest-key") !== key) return json({ error: "Sai ingest key" }, 401);
+    try {
+      if (mode === "gads_ingest") return json(await gadsIngest(body));
+      // ngày sớm nhất đã có của từng tài khoản → script quyết định có cần nạp lùi 120 ngày không
+      const { data } = await admin().rpc("qws_gads_earliest");
+      const earliest: Record<string, string> = {};
+      for (const r of data || []) earliest[r.customer_id] = r.earliest;
+      return json({ earliest });
+    } catch (e) { return json({ error: String((e as Error).message || e) }, 500); }
   }
 
   // Các chế độ còn lại — chỉ chủ workspace
@@ -353,6 +496,34 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (mode === "gads_key") {
+      // Khoá cho Google Ads Script — tạo 1 lần (rotate = tạo lại, script cũ phải dán lại)
+      let key = await kvGet("gads_ingest_key");
+      if (!key || body.rotate) { key = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, ""); await kvSet("gads_ingest_key", key); }
+      return json({ key });
+    }
+    if (mode === "gads_list") {
+      const accs = await selectAll(() => admin().from("qws_gads_accounts").select("customer_id,name,name_meta,grp,active,policy_issues,last_sync,currency").order("sort").order("created_at"));
+      return json({ accounts: accs });
+    }
+    if (mode === "gads_update") {
+      const p = body.patch || {}, patch: any = {};
+      if (p.name != null) patch.name = String(p.name).slice(0, 80);
+      if (p.group != null) patch.grp = p.group === "brand" ? "brand" : "conv";
+      if (p.active != null) patch.active = !!p.active;
+      const { error } = await admin().from("qws_gads_accounts").update(patch).eq("customer_id", cidOf(body.cid));
+      if (error) throw new Error(error.message);
+      return json({ ok: true });
+    }
+    if (mode === "gads_delete") {
+      const cid = cidOf(body.cid);
+      for (const t of ["qws_gads_kw_daily", "qws_gads_daily", "qws_gads_accounts"]) {
+        const { error } = await admin().from(t).delete().eq("customer_id", cid);
+        if (error) throw new Error(error.message);
+      }
+      return json({ ok: true });
+    }
+
     // report
     const ACCOUNTS = await loadAccounts();
     const today = isoOf(vnNow());
@@ -365,8 +536,11 @@ Deno.serve(async (req) => {
       const days = Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1;
       prev = { since: addDays(since, -days), until: addDays(since, -1) };
     }
-    const accounts = await Promise.all(ACCOUNTS.map((a: any) => fetchAccount(a, isToday ? "today" : since, isToday ? "today" : until, prev)));
-    return json({ since, until, prev, accounts, updatedAt: Date.now() });
+    const [meta, google] = await Promise.all([
+      Promise.all(ACCOUNTS.map((a: any) => fetchAccount(a, isToday ? "today" : since, isToday ? "today" : until, prev))),
+      gadsReport(since, until, prev).catch((e) => [{ id: "g-error", platform: "google", name: "Google Ads", group: "conv", error: String((e as Error).message || e) }]),
+    ]);
+    return json({ since, until, prev, accounts: [...meta.map((a: any) => ({ ...a, platform: "meta" })), ...google], updatedAt: Date.now() });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }
