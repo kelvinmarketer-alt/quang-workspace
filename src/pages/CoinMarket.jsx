@@ -19,7 +19,7 @@ function CandleChart({ candles, e20, e50, events, lines, precision, fitKey }) {
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true,
-      layout: { background: { color: "transparent" }, textColor: "#64748b", fontSize: 11 },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#64748b", fontSize: 11 },
       grid: { vertLines: { color: "rgba(148,163,184,0.12)" }, horzLines: { color: "rgba(148,163,184,0.12)" } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8 },
