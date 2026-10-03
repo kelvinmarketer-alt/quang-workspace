@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X } from "lucide-react";
+import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { TF, fetchKlines, analyze, htfContext, compactCandles } from "../lib/ta.js";
 import { aiMarketAnalysis } from "../lib/ai.js";
+import { KNOWLEDGE, KNOWLEDGE_SOURCES } from "../lib/tradeKnowledge.js";
 
 const DEFAULT_WATCH = ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "LTC", "DOGE"];
 const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
@@ -71,22 +72,60 @@ function SetupCard({ s, prec }) {
   const row = (label, v, extra, tone) => (
     <div className="flex items-center justify-between gap-2 py-1 text-sm">
       <span className="text-[12px] font-semibold text-slate-500">{label}</span>
-      <span className={`font-mono font-extrabold ${tone}`}>{fmtP(v, prec)} <span className="text-[11px] font-bold opacity-70">{extra}</span></span>
+      <span className={`font-mono font-extrabold ${tone}`}>{v != null && fmtP(v, prec)} <span className={v != null ? "text-[11px] font-bold opacity-70" : ""}>{extra}</span></span>
     </div>
   );
   return (
     <div className={`rounded-2xl border-2 p-3 ${long ? "border-emerald-200 bg-emerald-50/40" : "border-rose-200 bg-rose-50/40"}`}>
-      <div className="mb-1 flex items-center gap-1.5">
+      <div className="mb-1 flex flex-wrap items-center gap-1.5">
         <span className={`rounded-lg px-2 py-0.5 text-[12px] font-extrabold text-white ${long ? "bg-emerald-500" : "bg-rose-500"}`}>{long ? "LONG" : "SHORT"}</span>
+        {s.setup_type && <Badge tone="violet">{s.setup_type}</Badge>}
         {s.label && <Badge tone="slate">{s.label}</Badge>}
         {s.order && <Badge tone="indigo">{s.order}</Badge>}
       </div>
       {!s.valid && <div className="mb-1 flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={12} /> Mức giá AI đưa ra không hợp lý (SL/TP sai phía) — đừng dùng kịch bản này.</div>}
+      {s.tooFar && <div className="mb-1 flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={12} /> SL cách entry {s.slAtr?.toFixed(1)} ATR (&gt; 4 ATR) — theo EA phải HUỶ lệnh, tránh đuổi giá.</div>}
+      {s.entry_zone && row("Vùng chờ", null, `${fmtP(s.entry_zone[0], prec)} – ${fmtP(s.entry_zone[1], prec)}`, "text-indigo-500")}
       {row("Điểm vào", s.entry, "", "text-indigo-600")}
-      {row("Cắt lỗ", s.stop_loss, fmtPct(pct(s.stop_loss, s.entry)), "text-rose-600")}
+      {row("Cắt lỗ", s.stop_loss, `${fmtPct(pct(s.stop_loss, s.entry))}${s.slAtr ? ` · ${s.slAtr.toFixed(1)} ATR` : ""}`, "text-rose-600")}
       {s.take_profit.map((t, i) => row(`Chốt lời ${i + 1}`, t, `${fmtPct(pct(t, s.entry))}${s.rr[i] ? ` · R:R 1:${s.rr[i].toFixed(1)}` : ""}`, "text-emerald-600"))}
+      {s.trigger && <div className="mt-1.5 rounded-lg bg-indigo-50 px-2 py-1.5 text-[12px] text-indigo-800"><b>Kích hoạt khi:</b> {s.trigger}</div>}
+      {s.checklist?.length > 0 && (
+        <div className="mt-1.5 space-y-0.5">
+          {s.checklist.map((c, i) => <div key={i} className={`flex items-start gap-1.5 text-[12px] ${c.ok ? "text-emerald-700" : "text-slate-500"}`}><span className="font-extrabold">{c.ok ? "✓" : "✗"}</span><span>{c.item}</span></div>)}
+        </div>
+      )}
       {s.reason && <div className="mt-1.5 text-[12px] text-slate-600"><b>Lý do:</b> {s.reason}</div>}
       {s.invalidation && <div className="mt-1 text-[12px] text-slate-500"><b>Huỷ kịch bản khi:</b> {s.invalidation}</div>}
+      {s.management && <div className="mt-1 text-[12px] text-slate-500"><b>Quản lý lệnh:</b> {s.management}</div>}
+    </div>
+  );
+}
+
+// Bộ kiến thức AI đang dùng (tổng hợp từ tài liệu EA + 86 slide VSA trên Drive)
+function KnowledgePanel() {
+  const [open, setOpen] = useState(false);
+  const [sec, setSec] = useState(null);
+  return (
+    <div className="mt-3 rounded-xl border border-slate-100">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+        <BookOpen size={15} className="text-indigo-500" />
+        <span className="flex-1 text-[13px] font-extrabold text-slate-700">Bộ kiến thức AI đang dùng · {KNOWLEDGE.reduce((n, k) => n + k.rules.length, 0)} quy tắc</span>
+        <ChevronDown size={16} className={`text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="space-y-1.5 border-t border-slate-100 p-3">
+          <div className="text-[11px] text-slate-400">Nguồn: {KNOWLEDGE_SOURCES.join(" · ")}</div>
+          {KNOWLEDGE.map((k) => (
+            <div key={k.key} className="rounded-lg bg-slate-50">
+              <button onClick={() => setSec(sec === k.key ? null : k.key)} className="flex w-full items-center justify-between px-2.5 py-1.5 text-left text-[12px] font-bold text-slate-700">
+                {k.title} <span className="text-slate-400">{k.rules.length} {sec === k.key ? "▲" : "▼"}</span>
+              </button>
+              {sec === k.key && <ul className="space-y-1 px-3 pb-2 text-[12px] text-slate-600">{k.rules.map((r, i) => <li key={i} className="list-disc ml-3">{r}</li>)}</ul>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -138,7 +177,7 @@ export default function CoinMarket() {
 
   // Đường Entry/SL/TP của AI vẽ lên biểu đồ
   const lines = useMemo(() => {
-    const out = [];
+    const out = (ta?.series.levels || []).map((l) => ({ price: l.price, color: l.color, title: l.title, style: 1, width: 1 }));
     (ai?.setups || []).filter((x) => x.valid).forEach((x, i) => {
       const L = x.direction === "long" ? "L" : "S", style = i === 0 ? 0 : 2;
       out.push({ price: x.entry, color: "#6366f1", title: `${L} Entry`, style, width: 2 });
@@ -146,7 +185,7 @@ export default function CoinMarket() {
       x.take_profit.forEach((tp, j) => out.push({ price: tp, color: "#10b981", title: `${L} TP${j + 1}`, style }));
     });
     return out;
-  }, [ai]);
+  }, [ai, ta]);
 
   const pickSym = (v) => {
     const x = (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
@@ -220,7 +259,7 @@ export default function CoinMarket() {
           <div className="mt-2">
             <CandleChart candles={data.ltf} e20={ta?.series.e20 || []} e50={ta?.series.e50 || []} events={ta?.series.events || []} lines={lines} precision={prec} fitKey={data.key} />
             <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-semibold text-slate-400">
-              <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span>
+              <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span><span><span className="text-yellow-500">┅</span> Key Volume</span><span><span className="text-rose-400">┅</span>/<span className="text-emerald-400">┅</span> Protected H/L</span><span><span className="text-slate-400">┅</span> POC</span>
               {lines.length > 0 && <span><span className="text-indigo-500">━</span> Entry <span className="text-rose-500">━</span> SL <span className="text-emerald-500">━</span> TP</span>}
             </div>
           </div>
@@ -238,15 +277,39 @@ export default function CoinMarket() {
           <Stat label="Biến động ATR" value={`${s.volatility.atrPct?.toFixed(2)}%`} sub={fmtP(s.volatility.atr, prec)} />
           <Stat label="Vùng giá" value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} sub={s.range100.position.split("(")[1]?.replace(")", "")} />
           <Stat label="OB / FVG gần" value={`${s.orderBlocks.length} / ${s.fvg.length}`} tone="indigo" sub={s.patterns[0]?.name || "không có mẫu nến đặc biệt"} />
+          <Stat label="Bộ lọc EA" value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${s.trendFilter.adx?.toFixed(0) ?? "—"}${s.trendFilter.adxOk ? " ✓" : " (yếu)"} · ${s.sideway.isSideway ? "SIDEWAY" : "có xu hướng"}`} />
+          <Stat label="Key Volume" value={s.keyVolume.maxVolume100 ? `${s.keyVolume.maxVolume100.volX?.toFixed(1)}x TB` : "—"} tone="amber" sub={s.keyVolume.maxVolume100 ? `${fmtP(s.keyVolume.maxVolume100.bottom, prec)}–${fmtP(s.keyVolume.maxVolume100.top, prec)}${s.keyVolume.maxVolume100.defended ? " · đã được bảo vệ" : ""}` : ""} />
+          <Stat label="Protected H / L" value={`${fmtP(s.protected.protectedHigh?.price, prec)} / ${fmtP(s.protected.protectedLow?.price, prec)}`} tone="indigo" sub={s.protected.protectedLow?.broken ? "đã thủng đáy bảo vệ!" : s.protected.protectedHigh?.broken ? "đã vượt đỉnh bảo vệ!" : "chưa bị phá"} />
+          <Stat label="Volume Profile" value={`POC ${fmtP(s.volumeProfile?.poc, prec)}`} sub={s.volumeProfile?.hvn?.[0] ? `HVN gần: ${fmtP(s.volumeProfile.hvn[0].bottom, prec)}–${fmtP(s.volumeProfile.hvn[0].top, prec)}` : ""} />
         </div>
       )}
+
+      {/* Tín hiệu phát hiện tự động theo bộ kiến thức (nến đã đóng) */}
+      {s && (() => {
+        const sig = [
+          ...s.vsa.flatMap((b) => b.tags.map((t) => ({ t: `VSA · ${b.barsAgo} nến trước: ${t}`, tone: /CLIMAX|UPTHRUST|NO DEMAND|SOW|STOPPING VOLUME khi tăng|PHÂN KỲ/.test(t) ? "rose" : "emerald" }))),
+          ...s.sfp.map((x) => ({ t: `SFP ${x.dir} tại ${fmtP(x.level, prec)} · ${x.barsAgo} nến trước · vol ${x.volRel}x → ${x.valid}`, tone: x.dir.startsWith("tăng") ? "emerald" : "rose" })),
+          ...(s.sideway.fakeout ? [{ t: `Sideway fakeout: ${s.sideway.fakeout}`, tone: "amber" }] : []),
+          ...s.volumeDivergence.map((t) => ({ t, tone: t.includes("ÂM") ? "rose" : "emerald" })),
+          ...s.momentum.divergence.map((t) => ({ t, tone: t.includes("âm") ? "rose" : "emerald" })),
+          ...s.patterns.map((x) => ({ t: `Nến · ${x.ago} nến trước: ${x.name}`, tone: /TĂNG|Bullish|dưới|tăng/.test(x.name) ? "emerald" : /GIẢM|Bearish|trên|giảm/.test(x.name) ? "rose" : "slate" })),
+        ];
+        return (
+          <Card className="!p-3">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-extrabold uppercase tracking-wide text-slate-500"><Radar size={14} /> Tín hiệu theo bộ kiến thức ({sig.length})</div>
+            {sig.length ? (
+              <div className="space-y-1">{sig.map((x, i) => <div key={i} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ${{ rose: "bg-rose-50 text-rose-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-50 text-slate-600" }[x.tone]}`}>{x.t}</div>)}</div>
+            ) : <div className="text-[12px] text-slate-400">Chưa có tín hiệu VSA/SFP/mẫu nến đặc biệt ở các nến đã đóng gần nhất.</div>}
+          </Card>
+        );
+      })()}
 
       {/* AI */}
       <Card className="!p-3 sm:!p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5 font-extrabold text-slate-800"><Sparkles size={16} className="text-indigo-500" /> AI phân tích {sym} · {TF[tf].label}</div>
-            <div className="text-[11px] text-slate-400">Khối lượng + động lượng + SMC + price action · bối cảnh khung {TF[tf].htf.toUpperCase()}{ai ? ` · ${ago(ai.at)} (giá lúc đó ${fmtP(ai.priceAt, prec)})` : ""}</div>
+            <div className="text-[11px] text-slate-400">Theo bộ kiến thức của bạn (EA SMC + Key Volume + VSA/Wyckoff) · bối cảnh khung {TF[tf].htf.toUpperCase()}{ai ? ` · ${ago(ai.at)} (giá lúc đó ${fmtP(ai.priceAt, prec)})` : ""}</div>
           </div>
           <button onClick={runAI} disabled={aiBusy || !hasKey || !s} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-40">
             {aiBusy ? <><Loader2 size={15} className="animate-spin" /> Đang phân tích…</> : <><Sparkles size={15} /> {ai ? "Phân tích lại" : "Phân tích"}</>}
@@ -282,13 +345,14 @@ export default function CoinMarket() {
             )}
 
             <div className="grid gap-2 sm:grid-cols-2">
-              {[["Khung lớn", ai.htf_context], ["Khối lượng", ai.volume], ["Động lượng", ai.momentum], ["SMC", ai.smc], ["Price action", ai.price_action]].filter(([, v]) => v).map(([t, v]) => (
+              {[["Wyckoff", ai.wyckoff_phase], ["Khung lớn", ai.htf_context], ["Bộ lọc xu hướng", ai.trend_filter], ["Khối lượng", ai.volume], ["VSA", ai.vsa], ["Động lượng", ai.momentum], ["SMC", ai.smc], ["Thanh khoản", ai.liquidity], ["Price action", ai.price_action]].filter(([, v]) => v).map(([t, v]) => (
                 <div key={t} className="rounded-xl bg-slate-50 px-3 py-2"><div className="text-[11px] font-extrabold uppercase text-slate-400">{t}</div><div className="text-[13px] text-slate-700">{v}</div></div>
               ))}
             </div>
             {ai.risk_note && <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-800"><ShieldAlert size={14} className="mt-0.5 shrink-0" /> {ai.risk_note}</div>}
           </div>
         )}
+        <KnowledgePanel />
         <div className="mt-3 text-center text-[11px] text-slate-400">Kịch bản do AI tổng hợp từ chỉ báo kỹ thuật — chỉ để tham khảo, KHÔNG phải tư vấn đầu tư. Luôn tự kiểm tra & quản lý vốn.</div>
       </Card>
     </div>

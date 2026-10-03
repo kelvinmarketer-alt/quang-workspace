@@ -290,35 +290,43 @@ export async function aiAdsAnalysis({ summary, apiKey, model }) {
   return (data.choices?.[0]?.message?.content || "").trim();
 }
 
-// Phân tích thị trường coin (module Coin → tab Thị trường): khối lượng + động lượng + SMC + price action
-// → JSON có xu hướng, vùng giá quan trọng và KỊCH BẢN giao dịch tham khảo (entry/SL/TP). Số liệu tính sẵn ở lib/ta.js.
+// Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
+// EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
 export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {
   const key = (apiKey || "").trim();
   if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
-  const sys = `Bạn là trader phân tích kỹ thuật crypto, dùng kết hợp: KHỐI LƯỢNG (volume, delta mua/bán chủ động), ĐỘNG LƯỢNG (RSI, MACD, EMA, phân kỳ), SMC (cấu trúc HH/HL/LH/LL, BOS/CHoCH, order block, FVG, thanh khoản/equal highs-lows, premium/discount) và PRICE ACTION (mẫu nến, phản ứng tại vùng giá).
-Dữ liệu là JSON tính sẵn từ nến Binance: "ltf" = khung đang xem, "htf" = khung lớn hơn để lấy bối cảnh, "candles" = các nến gần nhất [open,high,low,close,volume,%mua chủ động] (nến cuối ĐANG CHẠY).
-NGUYÊN TẮC:
-- Ưu tiên thuận xu hướng khung lớn; ngược xu hướng chỉ khi có CHoCH + volume xác nhận, và phải ghi rõ "ngược xu hướng".
-- Entry tại vùng có lý do: OB/FVG chưa lấp, retest mức BOS, vùng discount (cho long) / premium (cho short). Không đuổi giá giữa vùng.
-- Stop loss đặt NGOÀI cấu trúc: long → THẤP HƠN đáy (bottom) của TOÀN BỘ vùng OB/FVG đỡ giá ngay dưới entry và thấp hơn đáy swing gần nhất; short → CAO HƠN đỉnh (top) của vùng OB/FVG cản ngay trên entry và đỉnh swing gần nhất. TUYỆT ĐỐI không đặt SL bên trong một vùng OB/FVG. Cộng thêm đệm ~0.2-0.5 ATR.
-- Take profit tại thanh khoản đối diện (equal highs/lows, đỉnh/đáy swing chưa quét), OB/FVG ngược chiều. TP1 nên có R:R ≥ 1.5.
-- CHỈ dùng các mức giá có trong dữ liệu hoặc suy ra hợp lý từ chúng. Không bịa số. Số phải là number thuần (không dấu phẩy, không đơn vị).
-- Nếu chưa có thiết lập đẹp → setups=[] và nói rõ cần chờ điều kiện gì.
-- Tối đa 2 kịch bản (thường 1 kịch bản chính thuận xu hướng + 1 kịch bản phụ/đảo chiều).
-Viết tiếng Việt, ngắn gọn, đúng thuật ngữ trader. CHỈ trả JSON đúng schema:
+  const { PLAYBOOK_TEXT, SETUP_TYPES } = await import("./tradeKnowledge.js");
+  const sys = `Bạn là trader chuyên nghiệp phân tích crypto THEO ĐÚNG BỘ KIẾN THỨC/CHIẾN LƯỢC dưới đây (của chính người dùng — ưu tiên tuyệt đối hơn kiến thức chung). Mọi nhận định, setup, entry, SL, TP phải bám các quy tắc này.
+
+===== BỘ KIẾN THỨC =====
+${PLAYBOOK_TEXT}
+===== HẾT BỘ KIẾN THỨC =====
+
+DỮ LIỆU (JSON, tính sẵn từ nến Binance; "ltf" = khung đang xem, "htf" = khung lớn hơn; nến cuối trong "candles" ĐANG CHẠY, các trường volume/vsa/sfp/patterns đã tính trên nến ĐÃ ĐÓNG):
+- trendFilter: EMA200, độ dốc EMA89 (bps/5 nến), ADX/DI → bộ lọc xu hướng & sideway.
+- protected: Protected High/Low (major pivot 20/5) và đã bị thủng chưa.
+- keyVolume: nến volume lớn nhất 100 nến + các nến volume >2.5× TB (vùng, số lần retest, đã được BẢO VỆ chưa).
+- structure (swing HH/HL/LH/LL, BOS/CHoCH), orderBlocks, fvg, liquidity (equal highs/lows, đỉnh/đáy chưa quét), range100 (premium/discount).
+- sfp (kèm volRel & "valid"), sideway (hộp 20 nến, fakeout), volumeProfile (POC, HVN, LVN gần giá), vsa (nhãn VSA từng nến đã đóng), volumeDivergence, patterns, momentum, volume.
+
+YÊU CẦU:
+- Đánh giá đủ: bối cảnh khung lớn → xu hướng/bộ lọc → vùng (Key Volume/OB/SDz/HVN) → thanh khoản đã bị lấy chưa → tín hiệu VSA/nến xác nhận.
+- Chỉ đề xuất setup khi khớp 1 setup trong bộ kiến thức (setup_type thuộc: ${SETUP_TYPES.join(", ")}). Ghi rõ điều kiện KÍCH HOẠT còn phải chờ (trigger) — vì người dùng ưu tiên confirm entry, KHÔNG khuyến khích Limit chặn tàu.
+- entry = giá tham chiếu dự kiến (thường là mép vùng hoặc giá đóng nến xác nhận); entry_zone = vùng chờ [thấp, cao]. SL theo cấu trúc + đệm ~0.2 ATR, KHÔNG nằm trong vùng OB/FVG; |entry−SL| ≤ 4×ATR. TP tại thanh khoản/OB/HVN đối diện, R:R TP1 ≥ ~1:2 nếu có thể.
+- checklist: liệt kê các điều kiện của setup đó theo bộ kiến thức và cái nào ĐÃ đạt (ok=true) / CHƯA đạt (ok=false) dựa vào dữ liệu.
+- Không có setup đạt chuẩn → setups=[] và nói rõ cần chờ gì. Tối đa 2 setup. Không bịa số; số là number thuần.
+Viết tiếng Việt ngắn gọn, đúng thuật ngữ. CHỈ trả JSON:
 {
  "bias": "tăng" | "giảm" | "đi ngang",
  "confidence": 0-100,
  "headline": "1 câu kết luận",
- "htf_context": "bối cảnh khung lớn",
- "volume": "nhận định khối lượng & delta mua/bán",
- "momentum": "nhận định RSI/MACD/EMA/phân kỳ",
- "smc": "cấu trúc, BOS/CHoCH, OB, FVG, thanh khoản, premium/discount",
- "price_action": "mẫu nến & phản ứng giá gần đây",
+ "wyckoff_phase": "tích lũy/markup/phân phối/markdown/không rõ + lý do ngắn",
+ "htf_context": "...", "trend_filter": "EMA200/ADX/EMA89 cho phép BUY hay SELL hay đứng ngoài",
+ "volume": "...", "vsa": "đọc VSA các nến gần nhất (climax/upthrust/no supply/phân kỳ...)",
+ "momentum": "...", "smc": "...", "liquidity": "thanh khoản ở đâu, đã bị quét chưa", "price_action": "...",
  "key_levels": { "support": [number], "resistance": [number] },
- "setups": [ { "direction": "long" | "short", "label": "chính" | "phụ", "order": "limit" | "stop" | "market", "entry": number, "stop_loss": number, "take_profit": [number, number], "reason": "vì sao vào ở đây", "invalidation": "khi nào kịch bản sai / hủy" } ],
- "wait_for": "nếu chưa vào: chờ tín hiệu gì",
- "risk_note": "lưu ý rủi ro (tin tức, biến động, khối lượng mỏng…)"
+ "setups": [ { "setup_type": "...", "direction": "long" | "short", "label": "chính" | "phụ", "entry_zone": [number, number], "entry": number, "trigger": "điều kiện xác nhận cần thấy trước khi vào", "stop_loss": number, "take_profit": [number, number], "checklist": [ { "item": "...", "ok": true } ], "reason": "...", "invalidation": "...", "management": "dời BE/trailing/thoát sớm theo bộ kiến thức" } ],
+ "wait_for": "...", "risk_note": "..."
 }`;
   const payload = { symbol: symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -335,15 +343,19 @@ Viết tiếng Việt, ngắn gọn, đúng thuật ngữ trader. CHỈ trả JS
   let p;
   try { p = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
   const num = (v) => { const x = Number(String(v ?? "").replace(/[^\d.\-e]/gi, "")); return isFinite(x) && x > 0 ? x : null; };
-  // Kiểm tra logic từng kịch bản (long: SL < entry < TP; short: ngược lại) + tự tính R:R
+  const atrV = Number(summary?.volatility?.atr) || null;
+  // Kiểm tra logic từng kịch bản (long: SL < entry < TP; short: ngược lại) + R:R + bộ lọc khoảng cách SL ≤ 4 ATR (theo EA)
   const setups = (Array.isArray(p.setups) ? p.setups : []).map((s) => {
     const dir = s.direction === "short" ? "short" : "long";
     const entry = num(s.entry), sl = num(s.stop_loss);
     const tps = (Array.isArray(s.take_profit) ? s.take_profit : [s.take_profit]).map(num).filter(Boolean);
     const ok = entry && sl && tps.length && (dir === "long" ? sl < entry && tps.every((t) => t > entry) : sl > entry && tps.every((t) => t < entry));
     const risk = entry && sl ? Math.abs(entry - sl) : 0;
-    return { ...s, direction: dir, entry, stop_loss: sl, take_profit: tps, valid: !!ok, rr: tps.map((t) => (risk ? Math.abs(t - entry) / risk : null)) };
+    const slAtr = atrV && risk ? risk / atrV : null;
+    const zone = Array.isArray(s.entry_zone) ? s.entry_zone.map(num).filter(Boolean).sort((a, b) => a - b) : [];
+    const checklist = (Array.isArray(s.checklist) ? s.checklist : []).map((c) => ({ item: String(c.item || ""), ok: !!c.ok })).filter((c) => c.item);
+    return { ...s, direction: dir, entry, stop_loss: sl, take_profit: tps, entry_zone: zone.length === 2 ? zone : null, checklist, valid: !!ok, slAtr, tooFar: slAtr != null && slAtr > 4, rr: tps.map((t) => (risk ? Math.abs(t - entry) / risk : null)) };
   });
   const arr = (v) => (Array.isArray(v) ? v.map(num).filter(Boolean) : []);
-  return { ...p, confidence: Math.max(0, Math.min(100, Number(p.confidence) || 0)), key_levels: { support: arr(p.key_levels?.support), resistance: arr(p.key_levels?.resistance) }, setups, model: model || "gpt-4o", at: Date.now() };
+  return { ...p, confidence: Math.max(0, Math.min(100, Number(p.confidence) || 0)), key_levels: { support: arr(p.key_levels?.support), resistance: arr(p.key_levels?.resistance) }, setups, model: model || "gpt-4o", at: Date.now(), kb: true };
 }

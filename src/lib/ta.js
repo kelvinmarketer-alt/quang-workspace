@@ -126,19 +126,174 @@ export function fvgs(c) {
   return out;
 }
 
-// Mẫu nến price action ở 3 nến cuối
+// Mẫu nến price action — CHỈ xét nến ĐÃ ĐÓNG (tài liệu EA: "chỉ khi đóng nến mới xác nhận tín hiệu")
 export function candlePatterns(c) {
-  const out = []; const L = c.length;
-  for (let i = Math.max(1, L - 3); i < L; i++) {
-    const x = c[i], p = c[i - 1], body = Math.abs(x.close - x.open), range = x.high - x.low || 1e-12;
+  const out = []; const L = c.length, lastClosed = L - 2;
+  for (let i = Math.max(2, lastClosed - 2); i <= lastClosed; i++) {
+    const x = c[i], p = c[i - 1], pp = c[i - 2], body = Math.abs(x.close - x.open), range = x.high - x.low || 1e-12;
     const up = x.high - Math.max(x.open, x.close), dn = Math.min(x.open, x.close) - x.low, ago = L - 1 - i;
-    if (x.close > x.open && p.close < p.open && x.close >= p.open && x.open <= p.close) out.push({ ago, name: "Bullish engulfing" });
-    if (x.close < x.open && p.close > p.open && x.close <= p.open && x.open >= p.close) out.push({ ago, name: "Bearish engulfing" });
+    const volUp = x.volume > p.volume;
+    if (x.close > x.open && p.close < p.open && x.close >= p.open && x.open <= p.close) out.push({ ago, name: `Bullish engulfing${volUp ? " + volume lớn hơn nến trước (chuẩn EA)" : " (volume chưa xác nhận)"}` });
+    if (x.close < x.open && p.close > p.open && x.close <= p.open && x.open >= p.close) out.push({ ago, name: `Bearish engulfing${volUp ? " + volume lớn hơn nến trước (chuẩn EA)" : " (volume chưa xác nhận)"}` });
     if (dn > body * 2 && up < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Pin bar đuôi dưới (từ chối giá thấp)" });
     if (up > body * 2 && dn < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Pin bar đuôi trên (từ chối giá cao)" });
     if (body / range < 0.1) out.push({ ago, name: "Doji (lưỡng lự)" });
+    if (body / range > 0.85) out.push({ ago, name: `Marubozu ${x.close > x.open ? "tăng" : "giảm"} (thân dài râu ngắn — nến xác nhận mạnh)` });
     if (x.high < p.high && x.low > p.low) out.push({ ago, name: "Inside bar (nén giá)" });
+    // 3-Bar Reversal: nến 2 quét râu qua nến 1, nến 3 đóng vượt cả nến 1 & 2
+    if (p.low < pp.low && x.close > Math.max(pp.high, p.high)) out.push({ ago, name: "3-Bar Reversal TĂNG (quét đáy rồi đóng vượt đỉnh 2 nến trước)" });
+    if (p.high > pp.high && x.close < Math.min(pp.low, p.low)) out.push({ ago, name: "3-Bar Reversal GIẢM (quét đỉnh rồi đóng thủng đáy 2 nến trước)" });
+    // Mother bar breakout: nến mẹ pp, nến con p nằm trong, nến x phá
+    if (p.high <= pp.high && p.low >= pp.low) {
+      if (pp.close < pp.open && x.close > pp.open) out.push({ ago, name: "Mother Bar Breakout TĂNG (đóng trên giá mở nến mẹ)" });
+      if (pp.close > pp.open && x.close < pp.open) out.push({ ago, name: "Mother Bar Breakout GIẢM (đóng dưới giá mở nến mẹ)" });
+    }
   }
+  return out;
+}
+
+// ADX (Wilder) — sức mạnh xu hướng (tài liệu EA v17: ADX > 20 mới giao dịch)
+export function adx(c, p = 14) {
+  const L = c.length, out = new Array(L).fill(null);
+  if (L < p * 2 + 2) return out;
+  let trS = 0, pS = 0, mS = 0, a = null; const dx = [];
+  for (let i = 1; i < L; i++) {
+    const upM = c[i].high - c[i - 1].high, dnM = c[i - 1].low - c[i].low;
+    const pdm = upM > dnM && upM > 0 ? upM : 0, mdm = dnM > upM && dnM > 0 ? dnM : 0;
+    const tr = Math.max(c[i].high - c[i].low, Math.abs(c[i].high - c[i - 1].close), Math.abs(c[i].low - c[i - 1].close));
+    if (i <= p) { trS += tr; pS += pdm; mS += mdm; if (i < p) continue; }
+    else { trS = trS - trS / p + tr; pS = pS - pS / p + pdm; mS = mS - mS / p + mdm; }
+    const pdi = trS ? (100 * pS) / trS : 0, mdi = trS ? (100 * mS) / trS : 0;
+    dx.push({ i, d: pdi + mdi ? (100 * Math.abs(pdi - mdi)) / (pdi + mdi) : 0, pdi, mdi });
+  }
+  for (let k = p - 1; k < dx.length; k++) {
+    a = a == null ? dx.slice(0, p).reduce((s, x) => s + x.d, 0) / p : (a * (p - 1) + dx[k].d) / p;
+    out[dx[k].i] = { adx: a, pdi: dx[k].pdi, mdi: dx[k].mdi };
+  }
+  return out;
+}
+
+// Pivot trái/phải khác nhau (Major pivot của EA: left 20, right 5)
+function pivots(c, left, right) {
+  const out = [];
+  for (let i = left; i < c.length - right; i++) {
+    let H = true, Lo = true;
+    for (let j = i - left; j <= i + right; j++) { if (j === i) continue; if (c[j].high >= c[i].high) H = false; if (c[j].low <= c[i].low) Lo = false; }
+    if (H) out.push({ i, type: "H", price: c[i].high });
+    if (Lo) out.push({ i, type: "L", price: c[i].low });
+  }
+  return out;
+}
+
+// Protected High/Low: đáy tạo ra đỉnh cao nhất mới (uptrend) / đỉnh tạo ra đáy thấp nhất mới (downtrend). Thủng = xu hướng có thể kết thúc.
+export function protectedLevels(c) {
+  const pv = pivots(c, 20, 5);
+  const lastH = [...pv].reverse().find((s) => s.type === "H"), lastL = [...pv].reverse().find((s) => s.type === "L");
+  const pLow = lastH ? [...pv].reverse().find((s) => s.type === "L" && s.i < lastH.i) : null;
+  const pHigh = lastL ? [...pv].reverse().find((s) => s.type === "H" && s.i < lastL.i) : null;
+  return { protectedLow: pLow ? { price: pLow.price, i: pLow.i } : null, protectedHigh: pHigh ? { price: pHigh.price, i: pHigh.i } : null, majorHigh: lastH, majorLow: lastL };
+}
+
+// Key Volume ("dấu chân cá mập"): nến volume lớn nhất 100 nến + các nến volume > 2.5× TB100; xem đã retest / được BẢO VỆ (retest kèm volume lớn, đóng ngược lại) chưa
+export function keyVolume(c) {
+  const L = c.length, end = L - 1, start = Math.max(0, end - 100); // bỏ nến đang chạy
+  const win = c.slice(start, end), avg = win.reduce((s, x) => s + x.volume, 0) / Math.max(1, win.length);
+  const mk = (i) => {
+    const x = c[i], dir = x.close >= x.open ? "tăng" : "giảm", top = x.high, bottom = x.low;
+    let retest = 0, defended = false;
+    for (let k = i + 2; k < end; k++) {
+      if (c[k].low <= top && c[k].high >= bottom) {
+        retest++;
+        if (c[k].volume > avg * 1.5 && ((dir === "tăng" && c[k].close > (top + bottom) / 2) || (dir === "giảm" && c[k].close < (top + bottom) / 2))) defended = true;
+      }
+    }
+    return { i, dir, top, bottom, bodyTop: Math.max(x.open, x.close), bodyBottom: Math.min(x.open, x.close), volX: x.volume / (avg || 1), retest, defended };
+  };
+  let maxI = start; for (let i = start; i < end; i++) if (c[i].volume > c[maxI].volume) maxI = i;
+  const spikes = []; for (let i = start; i < end; i++) if (c[i].volume > avg * 2.5) spikes.push(i);
+  return { max: L > 10 ? mk(maxI) : null, spikes: spikes.slice(-5).map(mk), avg100: avg };
+}
+
+// SFP (Swing Failure Pattern): râu chọc qua đỉnh/đáy swing cũ nhưng ĐÓNG CỬA quay lại bên trong (quét thanh khoản)
+export function sfpSignals(c, sw, n = 3) {
+  const out = [], L = c.length;
+  for (let k = Math.max(1, L - 4); k <= L - 2; k++) {
+    const prior = sw.filter((s) => s.i + n < k);
+    const h = [...prior].reverse().find((s) => s.type === "H"), l = [...prior].reverse().find((s) => s.type === "L");
+    const pv = c.slice(Math.max(0, k - 20), k), avgV = pv.reduce((s2, y) => s2 + y.volume, 0) / (pv.length || 1), volRel = c[k].volume / (avgV || 1);
+    const valid = volRel >= 1.5 ? "HỢP LỆ (volume cao – SM tham gia)" : "YẾU (volume thấp – VSA: chưa coi là stop hunt)";
+    if (h && c[k].high > h.price && c[k].close < h.price) out.push({ dir: "giảm (bearish SFP – quét đỉnh)", level: rp(h.price), barsAgo: L - 1 - k, wick: rp(c[k].high), volRel: rp(volRel), valid });
+    if (l && c[k].low < l.price && c[k].close > l.price) out.push({ dir: "tăng (bullish SFP – quét đáy)", level: rp(l.price), barsAgo: L - 1 - k, wick: rp(c[k].low), volRel: rp(volRel), valid });
+  }
+  return out;
+}
+
+// Vùng nén / sideway (Darvas box 20 nến, biên độ < 2.5 ATR) + fakeout khỏi hộp
+export function compression(c, atrNow) {
+  const L = c.length, box = c.slice(Math.max(0, L - 21), L - 1);
+  const hi = Math.max(...box.map((x) => x.high)), lo = Math.min(...box.map((x) => x.low));
+  const sideway = hi - lo < atrNow * 2.5;
+  const last = c[L - 2]; let fakeout = null;
+  const prev = c.slice(Math.max(0, L - 22), L - 2), ph = Math.max(...prev.map((x) => x.high)), pl = Math.min(...prev.map((x) => x.low));
+  if (last && last.low < pl && last.close > pl) fakeout = "quét đáy hộp rồi đóng lại vào trong (tín hiệu BUY theo EA)";
+  if (last && last.high > ph && last.close < ph) fakeout = "quét đỉnh hộp rồi đóng lại vào trong (tín hiệu SELL theo EA)";
+  return { sideway, boxHigh: hi, boxLow: lo, widthAtr: (hi - lo) / (atrNow || 1), fakeout };
+}
+
+// Volume Profile 100 nến × 50 ngăn: POC, HVN (>1.5×TB, vùng thanh khoản dày), LVN (<0.5×TB, giá trượt nhanh)
+export function volumeProfile(c, lookback = 100, bins = 50) {
+  const win = c.slice(Math.max(0, c.length - 1 - lookback), c.length - 1); if (win.length < 20) return null;
+  const mx = Math.max(...win.map((x) => x.high)), mn = Math.min(...win.map((x) => x.low)), size = (mx - mn) / bins || 1e-12;
+  const v = new Array(bins).fill(0);
+  for (const x of win) {
+    const a = Math.max(0, Math.floor((x.low - mn) / size)), b = Math.min(bins - 1, Math.floor((x.high - mn) / size)), share = x.volume / (b - a + 1);
+    for (let k = a; k <= b; k++) v[k] += share;
+  }
+  const avg = v.reduce((s, x) => s + x, 0) / bins;
+  const zones = (test) => { const z = []; let cur = null; v.forEach((val, k) => { if (test(val)) { if (!cur) cur = { from: k, to: k }; else cur.to = k; } else if (cur) { z.push(cur); cur = null; } }); if (cur) z.push(cur); return z.map((q) => ({ bottom: mn + q.from * size, top: mn + (q.to + 1) * size })); };
+  const poc = v.indexOf(Math.max(...v));
+  return { poc: mn + (poc + 0.5) * size, hvn: zones((x) => x > avg * 1.5), lvn: zones((x) => x < avg * 0.5) };
+}
+
+// VSA: phân loại 5 nến ĐÃ ĐÓNG gần nhất theo 4 yếu tố (Volume, Spread, Close, Bối cảnh)
+export function vsaBars(c, e20, e50) {
+  const L = c.length, out = [];
+  for (let k = Math.max(12, L - 6); k <= L - 2; k++) {
+    const x = c[k], prev = c.slice(Math.max(0, k - 20), k);
+    const avgV = prev.reduce((s, y) => s + y.volume, 0) / (prev.length || 1), avgS = prev.reduce((s, y) => s + (y.high - y.low), 0) / (prev.length || 1);
+    const range = x.high - x.low || 1e-12, volRel = x.volume / (avgV || 1), spreadRel = range / (avgS || 1e-12), closePos = (x.close - x.low) / range;
+    const upBar = x.close > c[k - 1].close, upper = x.high - Math.max(x.open, x.close), lower = Math.min(x.open, x.close) - x.low;
+    const trendUp = e20[k - 1] != null && e50[k - 1] != null && c[k - 1].close > e50[k - 1] && e20[k - 1] > (e20[k - 11] ?? e20[k - 1]);
+    const trendDn = e20[k - 1] != null && e50[k - 1] != null && c[k - 1].close < e50[k - 1] && e20[k - 1] < (e20[k - 11] ?? e20[k - 1]);
+    const hi10 = Math.max(...c.slice(k - 10, k).map((y) => y.high)), lo10 = Math.min(...c.slice(k - 10, k).map((y) => y.low));
+    const lowerVolThan2 = x.volume < c[k - 1].volume && x.volume < c[k - 2].volume;
+    const tags = [];
+    if (trendUp && volRel >= 2 && (upper >= range * 0.45 || spreadRel < 0.8) && closePos < 0.6) tags.push("BUYING CLIMAX (cao trào mua – SM có thể đang bán)");
+    if (trendDn && volRel >= 2 && (lower >= range * 0.45 || spreadRel < 0.8) && closePos > 0.4) tags.push("SELLING CLIMAX (cao trào bán – SM có thể đang gom)");
+    if (x.high > hi10 && closePos < 0.35 && volRel >= 1.2) tags.push("UPTHRUST (phá đỉnh rồi đóng thấp – bẫy mua)");
+    if (x.low < lo10 && closePos > 0.65 && volRel >= 1.2) tags.push("DOWNTHRUST / SPRING (phá đáy rồi đóng cao – bẫy bán)");
+    if (upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("NO DEMAND (tăng yếu, volume thấp – không có cầu)");
+    if (!upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("NO SUPPLY (giảm yếu, volume thấp – cung cạn)");
+    if (volRel >= 1.8 && spreadRel < 0.8) tags.push("PHÂN KỲ: NỖ LỰC KHÔNG KẾT QUẢ (volume cao, biên độ hẹp – SM chặn đà/hấp thụ)");
+    if (spreadRel > 1.3 && volRel < 0.8) tags.push("PHÂN KỲ: biên độ rộng nhưng volume thấp (thiếu thanh khoản – di chuyển không bền)");
+    // Stopping volume dạng phân phối: 3 nến cùng chiều, volume tăng dần, biên độ ngắn dần (≈ nêm)
+    const b1 = c[k - 2], b2 = c[k - 1], s = (y) => y.high - y.low;
+    if (b1.volume < b2.volume && b2.volume < x.volume && s(b1) > s(b2) && s(b2) > s(x)) tags.push(upBar ? "STOPPING VOLUME khi tăng (vol tăng dần, biên độ ngắn dần – cảnh báo phân phối)" : "STOPPING VOLUME khi giảm (vol tăng dần, biên độ ngắn dần – cảnh báo gom hàng)");
+    if (trendDn && !upBar && volRel >= 2 && closePos > 0.5) tags.push("STOPPING VOLUME (đỡ giá khi giảm)");
+    if (upBar && spreadRel > 1.3 && closePos > 0.7 && volRel >= 1.5) tags.push("SOS – dấu hiệu sức mạnh (tăng rộng, close đỉnh, vol cao)");
+    if (!upBar && spreadRel > 1.3 && closePos < 0.3 && volRel >= 1.5) tags.push("SOW – dấu hiệu yếu (giảm rộng, close đáy, vol cao)");
+    if (!upBar && x.low < c[k - 1].low && closePos > 0.6 && volRel < 0.8) tags.push("TEST cung (thử đáy, volume thấp – tốt)");
+    out.push({ barsAgo: L - 1 - k, dir: x.close >= x.open ? "tăng" : "giảm", volRel: rp(volRel), spreadRel: rp(spreadRel), close: closePos > 0.66 ? "đóng gần đỉnh" : closePos < 0.33 ? "đóng gần đáy" : "đóng giữa nến", tags });
+  }
+  return out;
+}
+
+// Phân kỳ VOLUME tại 2 đỉnh/đáy swing gần nhất (VSA: giá đỉnh cao hơn nhưng volume thấp hơn = lực mua yếu)
+function volumeDivergence(c, sw) {
+  const v = (i) => Math.max(c[i - 1]?.volume || 0, c[i].volume, c[i + 1]?.volume || 0);
+  const hs = sw.filter((s) => s.type === "H").slice(-2), ls = sw.filter((s) => s.type === "L").slice(-2), out = [];
+  if (hs.length === 2 && hs[1].price > hs[0].price && v(hs[1].i) < v(hs[0].i) * 0.85) out.push("Phân kỳ volume ÂM: đỉnh sau cao hơn nhưng volume thấp hơn → lực mua suy yếu, cẩn trọng breakout giả");
+  if (ls.length === 2 && ls[1].price < ls[0].price && v(ls[1].i) < v(ls[0].i) * 0.85) out.push("Phân kỳ volume DƯƠNG: đáy sau thấp hơn nhưng volume thấp hơn → lực bán cạn dần");
   return out;
 }
 
@@ -158,6 +313,12 @@ export function analyze(c) {
   const r = rsi(closes), m = macd(closes), a = atr(c);
   const sw = swings(c), st = structure(c, sw), obs = orderBlocks(c, st.events), gaps = fvgs(c);
   const atrNow = a[L - 1] || (last.high - last.low);
+  // Bộ phát hiện theo tài liệu EA + VSA
+  const e89 = ema(closes, 89), dmi = adx(c), prot = protectedLevels(c), kv = keyVolume(c), sfp = sfpSignals(c, sw), comp = compression(c, atrNow), vp = volumeProfile(c), vsa = vsaBars(c, e20, e50), volDiv = volumeDivergence(c, sw);
+  const slope89 = e89[L - 2] && e89[L - 7] ? ((e89[L - 2] - e89[L - 7]) / e89[L - 7]) * 10000 : null;
+  const adxNow = dmi[L - 2]?.adx;
+  const nearZones = (arr, n = 3) => [...arr].sort((x, y) => Math.abs((x.top + x.bottom) / 2 - price) - Math.abs((y.top + y.bottom) / 2 - price)).slice(0, n).map((z) => ({ top: rp(z.top), bottom: rp(z.bottom), vsPrice: z.bottom > price ? "phía trên giá" : z.top < price ? "phía dưới giá" : "giá đang nằm trong" }));
+  const kvOut = (k) => (k ? { dir: `nến ${k.dir}`, top: rp(k.top), bottom: rp(k.bottom), bodyTop: rp(k.bodyTop), bodyBottom: rp(k.bodyBottom), volX: rp(k.volX), barsAgo: ago(k.i), retests: k.retest, defended: k.defended } : null);
   const ago = (i) => L - 1 - i;
 
   // Khối lượng & delta mua/bán (taker buy)
@@ -208,6 +369,21 @@ export function analyze(c) {
     liquidity: { equalHighs: eqHighs.slice(0, 3), equalLows: eqLows.slice(0, 3), nearestHighsAbove: highsAbove.slice(0, 3).map(rp), nearestLowsBelow: lowsBelow.slice(0, 3).map(rp) },
     range100: { high: rp(hi), low: rp(lo), equilibrium: rp((hi + lo) / 2), position: `${Math.round(pos * 100)}% (${pos > 0.55 ? "vùng premium – đắt" : pos < 0.45 ? "vùng discount – rẻ" : "quanh cân bằng"})` },
     patterns: candlePatterns(c),
+    trendFilter: {
+      ema200: rp(e200[L - 1]), priceVsEma200: e200[L - 1] ? (price > e200[L - 1] ? "trên EMA200 (chỉ ưu tiên BUY)" : "dưới EMA200 (chỉ ưu tiên SELL)") : "chưa đủ 200 nến",
+      ema89SlopeBps: rp(slope89), ema89Flat: slope89 != null && Math.abs(slope89) <= 2,
+      adx: rp(adxNow), adxOk: adxNow != null && adxNow > 20, diPlus: rp(dmi[L - 2]?.pdi), diMinus: rp(dmi[L - 2]?.mdi),
+    },
+    protected: {
+      protectedLow: prot.protectedLow ? { price: rp(prot.protectedLow.price), barsAgo: ago(prot.protectedLow.i), broken: price < prot.protectedLow.price } : null,
+      protectedHigh: prot.protectedHigh ? { price: rp(prot.protectedHigh.price), barsAgo: ago(prot.protectedHigh.i), broken: price > prot.protectedHigh.price } : null,
+    },
+    keyVolume: { maxVolume100: kvOut(kv.max), spikes: kv.spikes.map(kvOut) },
+    sfp,
+    sideway: { isSideway: comp.sideway || (adxNow != null && adxNow <= 20) || (slope89 != null && Math.abs(slope89) <= 2), boxHigh: rp(comp.boxHigh), boxLow: rp(comp.boxLow), widthAtr: rp(comp.widthAtr), fakeout: comp.fakeout },
+    volumeProfile: vp ? { poc: rp(vp.poc), hvn: nearZones(vp.hvn), lvn: nearZones(vp.lvn) } : null,
+    vsa: vsa.filter((b) => b.tags.length || b.barsAgo <= 2),
+    volumeDivergence: volDiv,
   };
 
   return {
@@ -216,6 +392,12 @@ export function analyze(c) {
       e20: c.map((x, i) => (e20[i] != null ? { time: x.time, value: e20[i] } : null)).filter(Boolean),
       e50: c.map((x, i) => (e50[i] != null ? { time: x.time, value: e50[i] } : null)).filter(Boolean),
       events: st.events.slice(-6),
+      levels: [
+        kv.max && { price: kv.max.top, title: "KeyVol↑", color: "#eab308" }, kv.max && { price: kv.max.bottom, title: "KeyVol↓", color: "#eab308" },
+        prot.protectedHigh && { price: prot.protectedHigh.price, title: "Protected H", color: "#fb7185" },
+        prot.protectedLow && { price: prot.protectedLow.price, title: "Protected L", color: "#34d399" },
+        vp && { price: vp.poc, title: "POC", color: "#94a3b8" },
+      ].filter(Boolean),
     },
     rsiNow: r[L - 1],
   };
