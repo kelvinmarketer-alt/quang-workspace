@@ -52,6 +52,7 @@ function migrate(s) {
   if (!Array.isArray(merged.spendCats)) merged.spendCats = s.spendCats === undefined ? SEED_SPEND_CATS : [];
   if (!Array.isArray(merged.vault)) merged.vault = [];
   if (!Array.isArray(merged.resources)) merged.resources = [];
+  if (!Array.isArray(merged.adsResults)) merged.adsResults = [];
   // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
   // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
   if (!merged.catsV5) {
@@ -467,6 +468,9 @@ export function DataProvider({ children }) {
       addCoin: (c) => setState((s) => ({ ...s, coins: [{ id: "co" + uid(), symbol: (c.symbol || "").toUpperCase(), qty: Number(c.qty) || 0, buyPrice: Number(c.buyPrice) || 0, note: c.note || "" }, ...(s.coins || [])] })),
       updateCoin: (id, patch) => setState((s) => ({ ...s, coins: (s.coins || []).map((c) => (c.id === id ? { ...c, ...patch, symbol: ((patch.symbol ?? c.symbol) || "").toUpperCase() } : c)) })),
       deleteCoin: (id) => setState((s) => ({ ...s, coins: (s.coins || []).filter((c) => c.id !== id) })),
+      // QUẢNG CÁO — kết quả kinh doanh THẬT nhập tay theo tài khoản QC {id, accountId, date, customers, revenue, note}
+      addAdsResult: (r) => setState((s) => ({ ...s, adsResults: [{ id: "ar" + uid(), accountId: r.accountId, date: r.date, customers: Number(r.customers) || 0, revenue: Number(r.revenue) || 0, note: r.note || "" }, ...(s.adsResults || [])] })),
+      deleteAdsResult: (id) => setState((s) => ({ ...s, adsResults: (s.adsResults || []).filter((x) => x.id !== id) })),
       // KHO TÀI KHOẢN / THẺ / THANH TOÁN (CHỈ CHỦ) — {id,type:"app"|"card"|"bank",title,...fields,note,updatedAt}
       addVaultItem: (v) => setState((s) => ({ ...s, vault: [{ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() }, ...(s.vault || [])] })),
       addVaultItems: (arr) => setState((s) => ({ ...s, vault: [...(arr || []).map((v) => ({ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() })), ...(s.vault || [])] })),

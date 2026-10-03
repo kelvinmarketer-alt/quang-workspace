@@ -264,3 +264,27 @@ SCHEMA: { "transactions": [ { "amount": 42000, "type": "out", "date": "${today}"
     .filter((t) => t.amount > 0);
   return { transactions };
 }
+
+// Phân tích số liệu Quảng cáo (module /quang-cao) → nhận xét + đề xuất bằng tiếng Việt (text thuần).
+export async function aiAdsAnalysis({ summary, apiKey, model }) {
+  const key = (apiKey || "").trim();
+  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
+  const sys = `Bạn là chuyên gia tối ưu quảng cáo Facebook cho doanh nghiệp nhỏ ở Việt Nam. Đọc số liệu JSON và viết phân tích NGẮN GỌN bằng tiếng Việt.
+- Nhóm "conv" (chuyển đổi): đánh giá theo giá/kết quả (tin nhắn + lead), CTR, CPM; chỉ ra chiến dịch/quảng cáo/dịch vụ đang rẻ nhất và đắt nhất.
+- Nhóm "brand" (thương hiệu): đánh giá theo tiếp cận, CPM, tần suất (>3 là khách xem lặp, quảng cáo mệt), ThruPlay, tương tác. KHÔNG đòi chuyển đổi.
+- Có "prev" thì so sánh với kỳ trước (tăng/giảm %).
+- Có "real" (khách chốt/doanh thu nhập tay) thì tính giá mỗi khách thật và ROAS.
+Định dạng: với mỗi tài khoản 1 đoạn 2-3 dòng "Tên: nhận xét"; cuối cùng mục "ĐỀ XUẤT" gồm 3-5 hành động cụ thể (tắt/tăng/giảm ngân sách, đổi mẫu quảng cáo...). Tiền viết dạng 45k, 1,2tr. Không bịa số ngoài dữ liệu.`;
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: model || "gpt-4o-mini", temperature: 0.3, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(summary) }] }),
+  });
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const data = await res.json();
+  return (data.choices?.[0]?.message?.content || "").trim();
+}

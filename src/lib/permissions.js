@@ -6,6 +6,7 @@ export const FEATURES = [
   ["ketoan", "Kế toán & Chi phí"],
   ["tasks", "Công việc & Lịch"],
   ["coin", "Đầu tư Coin"],
+  ["ads", "Quảng cáo"],
 ];
 export const ALL_FEATURES = FEATURES.map(([k]) => k);
 
@@ -20,6 +21,7 @@ export const ROUTE_FEATURE = {
   "/cong-viec": "tasks",
   "/lich": "tasks",
   "/coin": "coin",
+  "/quang-cao": "ads",
   "/tai-nguyen": "customers",
 };
 
@@ -31,6 +33,7 @@ export const FEATURE_WRITES = {
   ketoan: ["addExpense", "addExpensesMany", "updateExpense", "deleteExpense", "deleteExpensesMany", "changeExpensePlan", "addFund", "updateFund", "deleteFund", "addFundTx", "addFundTxMany", "updateFundTx", "deleteFundTx", "categorizeFundTx", "addSpendCat", "updateSpendCat", "deleteSpendCat", "transferFund", "transferFundMany", "allocateFromCompany", "addFundSchedule", "updateFundSchedule", "deleteFundSchedule", "runFundSchedule", "skipFundSchedule"],
   tasks: ["addTask", "updateTask", "deleteTask", "toggleTask", "addFamily", "addFamilyMany", "updateFamily", "updateFamilyMany", "deleteFamily", "deleteFamilyMany"],
   coin: ["addCoin", "updateCoin", "deleteCoin"],
+  ads: ["addAdsResult", "deleteAdsResult"],
 };
 // Cài đặt DỮ LIỆU / BẢO MẬT — chỉ CHỦ (admin) được: quản lý user, đổi cấu hình, backup/restore/reset.
 export const OWNER_ONLY_WRITES = ["addMember", "updateMember", "removeMember", "setSettings", "importData", "reset", "addVaultItem", "addVaultItems", "updateVaultItem", "deleteVaultItem"];
