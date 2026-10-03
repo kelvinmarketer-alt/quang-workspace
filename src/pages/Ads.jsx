@@ -309,6 +309,7 @@ export default function Ads() {
       </Card>
 
       {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
+      {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản & token Meta</b> để dán token và chọn tài khoản.</div></Card>}
       {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} />)}
     </div>
   );

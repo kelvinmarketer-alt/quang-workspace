@@ -1,15 +1,16 @@
 // Edge Function: qws-meta-ads — số liệu Meta Ads (Facebook) LIVE cho module "Quảng cáo".
 // Đọc trực tiếp Marketing API bằng token System User của TỪNG BM (không cần BM mẹ).
+// Danh sách TKQC + token lưu ở bảng qws_ads_accounts (chỉ service role đọc) — chủ thêm/sửa trong app (Cài đặt).
 //
 // 3 chế độ (body.mode):
 //   "report" (mặc định) — app gọi khi mở module: { since, until, compare } → số liệu từng tài khoản.
 //                         Chỉ CHỦ workspace (email == OWNER_EMAIL).
 //   "watch"  — pg_cron 15 phút/lần: soát số HÔM NAY → cảnh báo (Web Push + Telegram nếu có).
 //   "daily"  — pg_cron 6h sáng: tóm tắt HÔM QUA + cảnh báo tần suất.
+//   "config_list" / "config_discover" / "config_save" / "config_update" / "config_delete" — quản lý TKQC + token (chỉ CHỦ).
 //   watch/daily xác thực bằng header x-cron-key == CRON_KEY.
 //
-// Secrets: META_TOKEN_NSTT, META_TOKEN_TMV, META_TOKEN_MICAY, META_TOKEN_PHITRUONG, OWNER_EMAIL, CRON_KEY,
-//          (tuỳ chọn) TELEGRAM_TOKEN, TELEGRAM_CHAT_ID. SUPABASE_URL/ANON/SERVICE_ROLE Supabase tự cấp.
+// Secrets: OWNER_EMAIL, CRON_KEY, (tuỳ chọn) TELEGRAM_TOKEN, TELEGRAM_CHAT_ID. SUPABASE_URL/ANON/SERVICE_ROLE Supabase tự cấp.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -25,14 +26,24 @@ const GRAPH = "https://graph.facebook.com/v21.0/";
 
 // group: "brand" = chạy thương hiệu (đo độ phủ) · "conv" = chuyển đổi (đo tin nhắn/lead)
 // services: true = gom chiến dịch theo dịch vụ TMV (xăm mày/môi nam-nữ, đào tạo)
-const ACCOUNTS = [
-  { id: "2275948969610920", name: "Nhậu Phi Trường", brand: "Phi Trường", group: "brand", token: "META_TOKEN_PHITRUONG" },
-  { id: "1117093690651938", name: "Mì Cay Busansan", brand: "Mì Cay", group: "brand", token: "META_TOKEN_MICAY" },
-  { id: "1998481310677042", name: "NSTT · Sản phẩm", brand: "Nông sản Tuấn Tú", group: "conv", token: "META_TOKEN_NSTT" },
-  { id: "1945007079637982", name: "NSTT · Tuyển dụng", brand: "Nông sản Tuấn Tú", group: "conv", token: "META_TOKEN_NSTT" },
-  { id: "3035383220140594", name: "Hebrow (Aera)", brand: "TMV", group: "conv", token: "META_TOKEN_TMV", services: true },
-  { id: "2056663328284029", name: "Lina Trương", brand: "TMV", group: "conv", token: "META_TOKEN_TMV", services: true },
-];
+// KNOWN = gợi ý mặc định khi "Lấy danh sách TKQC" từ token (tên/nhóm đã chốt với user).
+const KNOWN: Record<string, { name: string; brand: string; grp: string; services?: boolean }> = {
+  "2275948969610920": { name: "Nhậu Phi Trường", brand: "Phi Trường", grp: "brand" },
+  "1117093690651938": { name: "Mì Cay Busansan", brand: "Mì Cay", grp: "brand" },
+  "1998481310677042": { name: "NSTT · Sản phẩm", brand: "Nông sản Tuấn Tú", grp: "conv" },
+  "1945007079637982": { name: "NSTT · Tuyển dụng", brand: "Nông sản Tuấn Tú", grp: "conv" },
+  "3035383220140594": { name: "Hebrow (Aera)", brand: "TMV", grp: "conv", services: true },
+  "2056663328284029": { name: "Lina Trương", brand: "TMV", grp: "conv", services: true },
+};
+const TABLE = "qws_ads_accounts";
+async function loadAccounts(all = false) {
+  let q = admin().from(TABLE).select("*").order("sort").order("created_at");
+  if (!all) q = q.eq("active", true);
+  const { data, error } = await q;
+  if (error) throw new Error("Đọc bảng " + TABLE + ": " + error.message);
+  return (data || []).map((r: any) => ({ id: r.id, name: r.name, brand: r.brand, group: r.grp, services: r.services, active: r.active, sort: r.sort, token: r.token }));
+}
+const safe = (a: any) => ({ id: a.id, name: a.name, brand: a.brand, group: a.group, services: a.services, active: a.active, sort: a.sort, tokenTail: a.token ? "…" + String(a.token).slice(-6) : "" });
 
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
 const BASE_FIELDS = "spend,impressions,reach,frequency,cpm,ctr,cpc,clicks,actions,video_thruplay_watched_actions";
@@ -114,9 +125,9 @@ function sumMetrics(list: any[]) {
 // ---------- Lấy 1 tài khoản ----------
 // light = chỉ tổng + trạng thái (cho cron soát 15 phút) — bỏ daily/chiến dịch/quảng cáo cho đỡ tốn lượt gọi API
 async function fetchAccount(acc: any, since: string, until: string, prev: { since: string; until: string } | null, light = false) {
-  const token = Deno.env.get(acc.token) || "";
+  const token = acc.token || "";
   const base = { id: acc.id, name: acc.name, brand: acc.brand, group: acc.group, services: !!acc.services };
-  if (!token) return { ...base, error: "Chưa cấu hình token " + acc.token };
+  if (!token) return { ...base, error: "Chưa có token" };
   const act_ = "act_" + acc.id;
   const t = timeArgs(since, until);
   try {
@@ -203,6 +214,7 @@ async function freshKeys(keys: string[]) {
 }
 
 async function watch() {
+  const ACCOUNTS = await loadAccounts();
   const today = isoOf(vnNow());
   const from = addDays(today, -7), to = addDays(today, -1);
   const [now, base] = await Promise.all([
@@ -210,7 +222,7 @@ async function watch() {
     Promise.all(ACCOUNTS.map((a) => fetchAccount(a, from, to, null, true))),
   ]);
   const found: { key: string; text: string }[] = [];
-  now.forEach((a: any, i) => {
+  now.forEach((a: any, i: number) => {
     if (a.error) return;
     const b: any = base[i];
     const t = a.totals, k = (type: string) => `${today}|${a.id}|${type}`;
@@ -235,6 +247,7 @@ async function watch() {
 }
 
 async function daily() {
+  const ACCOUNTS = await loadAccounts();
   const y = addDays(isoOf(vnNow()), -1);
   const [day, week] = await Promise.all([
     Promise.all(ACCOUNTS.map((a) => fetchAccount(a, y, y, null, true))),
@@ -244,7 +257,7 @@ async function daily() {
   const lines: string[] = [];
   for (const group of ["conv", "brand"]) {
     lines.push(group === "conv" ? "🎯 CHUYỂN ĐỔI" : "📣 THƯƠNG HIỆU");
-    day.forEach((a: any, i) => {
+    day.forEach((a: any, i: number) => {
       if (a.group !== group) return;
       if (a.error) { lines.push(`• ${a.name}: lỗi — ${a.error}`); return; }
       const t = a.totals;
@@ -274,7 +287,7 @@ Deno.serve(async (req) => {
     catch (e) { return json({ error: String(e) }, 500); }
   }
 
-  // report — chỉ chủ workspace
+  // Các chế độ còn lại — chỉ chủ workspace
   const OWNER = (Deno.env.get("OWNER_EMAIL") || "").toLowerCase();
   const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
@@ -282,18 +295,78 @@ Deno.serve(async (req) => {
   const { data: u } = await supa.auth.getUser();
   const email = ((u && u.user && u.user.email) || "").toLowerCase();
   if (!email) return json({ error: "Chưa đăng nhập" }, 401);
-  if (OWNER && email !== OWNER) return json({ error: "Chỉ chủ workspace xem được số liệu quảng cáo" }, 403);
+  if (!OWNER || email !== OWNER) return json({ error: "Chỉ chủ workspace dùng được module Quảng cáo" }, 403);
 
-  const today = isoOf(vnNow());
-  const since = /^\d{4}-\d{2}-\d{2}$/.test(body.since || "") ? body.since : today;
-  const until = /^\d{4}-\d{2}-\d{2}$/.test(body.until || "") ? body.until : since;
-  const isToday = since === today && until === today;
-  // Kỳ trước = cùng độ dài, ngay trước kỳ đang xem
-  let prev = null;
-  if (body.compare) {
-    const days = Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1;
-    prev = { since: addDays(since, -days), until: addDays(since, -1) };
+  try {
+    if (mode === "config_list") return json({ accounts: (await loadAccounts(true)).map(safe) });
+
+    if (mode === "config_discover") {
+      // Token → danh sách TKQC mà token đó đọc được (để tick chọn)
+      const token = String(body.token || "").trim();
+      if (!token) return json({ error: "Thiếu token" }, 400);
+      const list = await gall("me/adaccounts", { fields: "account_id,name,currency,account_status", limit: "100" }, token, 3);
+      const have = new Set((await loadAccounts(true)).map((a: any) => a.id));
+      return json({
+        accounts: list.map((a: any) => {
+          const k = KNOWN[a.account_id];
+          return { id: a.account_id, metaName: a.name, currency: a.currency, status: a.account_status,
+            name: k?.name || a.name, brand: k?.brand || "", group: k?.grp || "conv", services: !!k?.services, added: have.has(a.account_id) };
+        }),
+      });
+    }
+
+    if (mode === "config_save") {
+      // Thêm/cập nhật nhiều TKQC dùng chung 1 token (1 BM)
+      const token = String(body.token || "").trim();
+      const accs = Array.isArray(body.accounts) ? body.accounts : [];
+      if (!token || !accs.length) return json({ error: "Thiếu token hoặc chưa chọn tài khoản" }, 400);
+      const rows = accs.map((a: any, i: number) => ({
+        id: String(a.id).replace(/^act_/, ""), name: String(a.name || a.id).slice(0, 80), brand: String(a.brand || "").slice(0, 80),
+        grp: a.group === "brand" ? "brand" : "conv", services: !!a.services, token, active: true, sort: Number(a.sort) || i,
+      }));
+      const { error } = await admin().from(TABLE).upsert(rows);
+      if (error) throw new Error(error.message);
+      return json({ ok: true, saved: rows.length });
+    }
+
+    if (mode === "config_update") {
+      // Sửa tên/nhóm/bật-tắt/thứ tự; token chỉ đổi khi gửi kèm token mới
+      const id = String(body.id || "");
+      const p = body.patch || {};
+      const patch: any = {};
+      if (p.name != null) patch.name = String(p.name).slice(0, 80);
+      if (p.brand != null) patch.brand = String(p.brand).slice(0, 80);
+      if (p.group != null) patch.grp = p.group === "brand" ? "brand" : "conv";
+      if (p.services != null) patch.services = !!p.services;
+      if (p.active != null) patch.active = !!p.active;
+      if (p.sort != null) patch.sort = Number(p.sort) || 0;
+      if (p.token) patch.token = String(p.token).trim();
+      const { error } = await admin().from(TABLE).update(patch).eq("id", id);
+      if (error) throw new Error(error.message);
+      return json({ ok: true });
+    }
+
+    if (mode === "config_delete") {
+      const { error } = await admin().from(TABLE).delete().eq("id", String(body.id || ""));
+      if (error) throw new Error(error.message);
+      return json({ ok: true });
+    }
+
+    // report
+    const ACCOUNTS = await loadAccounts();
+    const today = isoOf(vnNow());
+    const since = /^\d{4}-\d{2}-\d{2}$/.test(body.since || "") ? body.since : today;
+    const until = /^\d{4}-\d{2}-\d{2}$/.test(body.until || "") ? body.until : since;
+    const isToday = since === today && until === today;
+    // Kỳ trước = cùng độ dài, ngay trước kỳ đang xem
+    let prev = null;
+    if (body.compare) {
+      const days = Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1;
+      prev = { since: addDays(since, -days), until: addDays(since, -1) };
+    }
+    const accounts = await Promise.all(ACCOUNTS.map((a: any) => fetchAccount(a, isToday ? "today" : since, isToday ? "today" : until, prev)));
+    return json({ since, until, prev, accounts, updatedAt: Date.now() });
+  } catch (e) {
+    return json({ error: String((e as Error).message || e) }, 500);
   }
-  const accounts = await Promise.all(ACCOUNTS.map((a) => fetchAccount(a, isToday ? "today" : since, isToday ? "today" : until, prev)));
-  return json({ since, until, prev, accounts, updatedAt: Date.now() });
 });

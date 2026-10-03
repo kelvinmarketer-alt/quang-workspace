@@ -12,18 +12,28 @@ Sau khi deploy: vào function → **Details / Settings** → **TẮT "Verify JWT
 
 | Tên | Giá trị |
 |---|---|
-| `META_TOKEN_NSTT` | token System User BM Nông sản Tuấn Tú (TKQC 2 + 3) |
-| `META_TOKEN_TMV` | token report-bot BM TMV Philippine (Hebrow + Lina) |
-| `META_TOKEN_MICAY` | token report-bot BM Mì Cay Busansan |
-| `META_TOKEN_PHITRUONG` | token report-bot BM Phi Trường |
 | `CRON_KEY` | lấy ở bước 3 (câu SELECT cuối) |
 | `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` | *(tuỳ chọn)* muốn nhận cảnh báo qua Telegram |
 
 `OWNER_EMAIL` đã có từ module Coin. Cảnh báo luôn đẩy **Web Push** về app; Telegram chỉ gửi khi có 2 secret trên.
 
-## 3. Bảng chống trùng cảnh báo + lịch chạy — SQL Editor → Run
+## 3. Bảng tài khoản/token + chống trùng cảnh báo + lịch chạy — SQL Editor → Run
 
 ```sql
+-- TKQC + token (thêm/sửa trong app: Cài đặt → Quảng cáo). Không policy = chỉ service role (edge fn) đọc được token.
+create table if not exists public.qws_ads_accounts (
+  id text primary key,                 -- ID tài khoản QC (không có act_)
+  name text not null,
+  brand text,
+  grp text not null default 'conv' check (grp in ('conv', 'brand')),
+  services boolean not null default false,
+  token text not null,
+  active boolean not null default true,
+  sort int not null default 0,
+  created_at timestamptz not null default now()
+);
+alter table public.qws_ads_accounts enable row level security;
+
 -- Bảng nhớ cảnh báo đã gửi (mỗi loại 1 lần/ngày). Không policy = chỉ service role đọc/ghi.
 create table if not exists public.qws_ads_alerts (
   key text primary key,
@@ -68,6 +78,7 @@ select decrypted_secret from vault.decrypted_secrets where name = 'qws_ads_cron_
 - **Thương hiệu**: CPM hôm nay cao hơn 30% so với TB 7 ngày · tần suất 7 ngày > 3 (trong bản tóm tắt 6h sáng).
 - **Mọi tài khoản**: tài khoản bị khoá · quảng cáo bị từ chối · đã tiêu >90% giới hạn chi tiêu.
 
-## Thêm / bớt tài khoản
+## 4. Thêm tài khoản — trong app
 
-Sửa mảng `ACCOUNTS` đầu file function (id TKQC, tên, nhóm `brand`/`conv`, tên secret token) rồi deploy lại.
+**Cài đặt → Quảng cáo — tài khoản & token Meta** → dán token System User của 1 BM → **Lấy danh sách TKQC** →
+tick tài khoản, đặt tên + nhóm (Chuyển đổi / Thương hiệu) → **Lưu**. BM mới sau này làm y hệt, không cần deploy lại.
