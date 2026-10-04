@@ -21,7 +21,7 @@ export default function OfficeMembers({ ownerId }) {
     const e = (em || "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(e)) return setMsg({ t: "err", m: "Email không hợp lệ" });
     if ((rows || []).some((r) => r.email === e)) return setMsg({ t: "err", m: "Email này đã có trong danh sách" });
-    try { await saveOfficeMember(ownerId, { email: e, name, perms: DEFAULT_MEMBER_PERMS, active: true }); setEmail(""); reload(); setMsg({ t: "ok", m: `✓ Đã thêm ${e}. Người đó đăng nhập office.2bkin.io.vn bằng đúng email này.` }); }
+    try { await saveOfficeMember(ownerId, { email: e, name, perms: DEFAULT_MEMBER_PERMS, active: true }); setEmail(""); reload(); setMsg({ t: "ok", m: `✓ Đã thêm ${e}. Gửi người đó link office.2bkin.io.vn → "Được mời? Tạo tài khoản" để tự đặt mật khẩu.` }); }
     catch (err) { setMsg({ t: "err", m: err.message }); }
   };
   const remove = async (m) => {
@@ -33,7 +33,7 @@ export default function OfficeMembers({ ownerId }) {
   return (
     <div className="mt-5 border-t border-slate-100 pt-4">
       <div className="mb-1 text-sm font-extrabold text-slate-800">Thành viên dùng Văn phòng AI</div>
-      <div className="mb-3 text-[11px] text-slate-400">Tài khoản phụ đăng nhập office.2bkin.io.vn bằng email được thêm. Mặc định: giao việc cho mọi NV, được nhắn tin, KHÔNG duyệt, KHÔNG xem chi phí, chỉ thấy việc mình giao.</div>
+      <div className="mb-3 text-[11px] text-slate-400">Thêm email → gửi người đó link <b>office.2bkin.io.vn</b> → bấm <b>"Được mời? Tạo tài khoản"</b> và TỰ đặt mật khẩu (sếp không cần biết mật khẩu). Quên mật khẩu thì tự đặt lại qua email. Mặc định: giao việc cho mọi NV, được nhắn tin, KHÔNG duyệt, KHÔNG xem chi phí, chỉ thấy việc mình giao.</div>
 
       <div className="flex flex-wrap items-center gap-2">
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email tài khoản phụ" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
