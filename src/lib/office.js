@@ -15,6 +15,7 @@ export const OFFICE_AGENTS = [
   { id: "10-chien-luoc", name: "NV Chiến lược", emoji: "🧭" },
   { id: "08-sang-tao", name: "NV Sáng tạo", emoji: "💡" },
   { id: "09-phan-tich", name: "NV Phân tích TT", emoji: "📉" },
+  { id: "11-chien-luoc-mkt", name: "NV Chiến lược MKT", emoji: "🎯" },
 ];
 export const OFFICE_KINDS = [
   { k: "can_duyet", label: "Việc cần sếp duyệt", emoji: "🟡" },
