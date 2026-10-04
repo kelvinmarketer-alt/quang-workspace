@@ -32,14 +32,52 @@ export const DEFAULT_OFFICE_PREFS = {
   quiet: { on: false, from: "22:00", to: "07:00" },
 };
 
-export function useOfficeNotifications(enabled) {
+// Ai được vào Văn phòng AI: chủ, hoặc tài khoản phụ đã được chủ thêm (bảng office_members)
+export function useOfficeAccess(isOwner) {
+  const [ok, setOk] = useState(!!isOwner);
+  useEffect(() => {
+    if (isOwner) { setOk(true); return; }
+    let alive = true;
+    supabase.rpc("office_my_membership").then(({ data }) => { if (alive) setOk(!!data?.length); });
+    return () => { alive = false; };
+  }, [isOwner]);
+  return ok;
+}
+
+export const DEFAULT_MEMBER_PERMS = { agents: [], approve: false, chat: true, view_costs: false, see_all: false };
+export const MEMBER_FLAGS = [
+  { k: "chat", label: "Được nhắn tin riêng với nhân viên" },
+  { k: "approve", label: "Được bấm Duyệt đề xuất" },
+  { k: "see_all", label: "Thấy toàn bộ việc của văn phòng" },
+  { k: "view_costs", label: "Xem trang Hiệu suất & chi phí" },
+];
+export async function loadOfficeMembers() {
+  const { data, error } = await supabase.from("office_members").select("*").order("created_at");
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+export async function saveOfficeMember(ownerId, m) {
+  const { error } = await supabase.from("office_members").upsert({
+    owner_id: ownerId, email: m.email.trim().toLowerCase(), name: m.name || null,
+    perms: { ...DEFAULT_MEMBER_PERMS, ...(m.perms || {}) }, active: m.active !== false,
+  }, { onConflict: "owner_id,email" });
+  if (error) throw new Error(error.message);
+}
+export async function deleteOfficeMember(ownerId, email) {
+  const { error } = await supabase.from("office_members").delete().eq("owner_id", ownerId).eq("email", email);
+  if (error) throw new Error(error.message);
+}
+
+export function useOfficeNotifications(enabled, ownerView = true) {
   const [rows, setRows] = useState([]);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
     const load = async () => {
-      const { data } = await supabase.from("office_notifications")
+      let q = supabase.from("office_notifications")
         .select("id,kind,title,body,url,read_at,created_at,agent_id").order("created_at", { ascending: false }).limit(15);
+      if (ownerView) q = q.is("target_uid", null); // bản sao gửi riêng tài khoản phụ không hiện lặp ở chuông của chủ
+      const { data } = await q;
       if (alive) setRows(data || []);
     };
     load();
@@ -47,7 +85,7 @@ export function useOfficeNotifications(enabled) {
       .on("postgres_changes", { event: "*", schema: "public", table: "office_notifications" }, load)
       .subscribe();
     return () => { alive = false; supabase.removeChannel(ch); };
-  }, [enabled]);
+  }, [enabled, ownerView]);
   const markRead = async (ids) => {
     if (!ids.length) return;
     const at = new Date().toISOString();

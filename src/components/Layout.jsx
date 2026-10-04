@@ -10,7 +10,7 @@ import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
-import { OFFICE_URL, useOfficeNotifications, officeAgo } from "../lib/office.js";
+import { OFFICE_URL, useOfficeNotifications, useOfficeAccess, officeAgo } from "../lib/office.js";
 
 function PushPrompt() {
   const { user } = useAuth();
@@ -56,7 +56,7 @@ const NAV = [
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true },
-  { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, ownerOnly: true },
+  { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
 ];
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
@@ -76,7 +76,8 @@ function Brand() {
 
 function SideNav({ onNavigate }) {
   const { perms, isOwner } = useData();
-  const items = NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner));
+  const officeOk = useOfficeAccess(isOwner);
+  const items = NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner) && (!n.office || officeOk));
   return (
     <nav className="mt-6 flex flex-col gap-1 px-3">
       {items.map((n) => n.href ? (
@@ -189,7 +190,8 @@ const OFFICE_TONE = { xong: "bg-emerald-500", can_duyet: "bg-violet-500", loi: "
 
 function Notifications() {
   const { tasks, family, isOwner } = useData();
-  const office = useOfficeNotifications(!!isOwner);
+  const officeOk = useOfficeAccess(isOwner);
+  const office = useOfficeNotifications(officeOk, !!isOwner);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const today = todayISO();
@@ -218,7 +220,7 @@ function Notifications() {
       </button>
       {open && (
         <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
-          {isOwner && (
+          {officeOk && (
             <div className="border-b border-slate-100">
               <div className="flex items-center gap-2 px-4 py-3">
                 <span className="text-sm font-extrabold text-slate-800">🏢 Văn phòng AI</span>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Building2, ExternalLink } from "lucide-react";
 import { Card, SectionTitle } from "./ui.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import OfficeMembers from "./OfficeMembers.jsx";
 import { OFFICE_URL, OFFICE_AGENTS, OFFICE_KINDS, loadOfficePrefs, saveOfficePrefs, loadOfficeRunner, officeAgo } from "../lib/office.js";
 
 export default function OfficeSettings() {
@@ -79,6 +80,8 @@ export default function OfficeSettings() {
         <button onClick={save} disabled={busy} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black disabled:opacity-50">{busy ? "Đang lưu…" : "Lưu cài đặt"}</button>
         {msg && <span className={`text-xs font-semibold ${msg.t === "err" ? "text-rose-600" : "text-emerald-600"}`}>{msg.m}</span>}
       </div>
+
+      <OfficeMembers ownerId={user.id} />
     </Card>
   );
 }
