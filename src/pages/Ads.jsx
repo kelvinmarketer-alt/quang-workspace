@@ -505,7 +505,7 @@ export default function Ads() {
 
       <AlertsPanel tick={data?.updatedAt} />
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 px-3 sm:px-0">
         {[["conv", "Chuyển đổi", Target], ["brand", "Thương hiệu", Megaphone]].map(([k, l, I]) => (
           <button key={k} onClick={() => { setGroup(k); setAi({ busy: false, text: "", err: "" }); }} className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold ${group === k ? "bg-white text-slate-900 shadow ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60"}`}><I size={15} />{l}</button>
         ))}
