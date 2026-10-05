@@ -351,6 +351,47 @@ uu_tien tối đa 6 việc, sắp theo tác động lớn nhất.`;
   };
 }
 
+// Phân tích HIỆU QUẢ FANPAGE (module /fanpage): số insights + bài đăng đã TÍNH SẴN (lib/fbPages.js) → AI ra việc cần làm, trả JSON.
+export async function aiPageAnalysis({ data, apiKey }) {
+  const key = (apiKey || "").trim();
+  const sys = `Bạn là chuyên gia vận hành fanpage Facebook cho doanh nghiệp nhỏ ở Việt Nam. Nhận JSON số liệu 1 page (kỳ này + kỳ trước, "d_" = % thay đổi đã tính sẵn, dương = tăng) và danh sách bài đăng kèm chỉ số. Viết báo cáo HÀNH ĐỘNG, tiếng Việt, ngắn, thẳng.
+LUẬT:
+- KHÔNG tự tính lại %. Dùng đúng số đã cho.
+- "tiep_can" = số người xem nội dung (cộng theo ngày), "luot_xem" = lượt xem nội dung, "tuong_tac" = tương tác bài, "tin_nhan_moi" = cuộc trò chuyện mới (khách nhắn page), "theo_doi_moi/bo_theo_doi".
+- Phân tích bài: loại bài nào (ảnh/video/link) và khung giờ/thứ nào tiếp cận + tương tác tốt nhất (dùng theo_loai, theo_gio, theo_thu); bài top & bài kém — vì sao (đọc nội dung bài).
+- Tần suất đăng (bai_moi_tuan) có hợp lý không.
+- Mỗi việc phải CỤ THỂ: đăng loại gì, giờ nào, mấy bài/tuần, chủ đề/kiểu tiêu đề nào (dựa trên bài top), cách tăng tin nhắn (CTA, nút nhắn tin, ghim bài), có nên chạy QC tăng tương tác cho bài nào.
+- Page ít dữ liệu (ít bài/ít tiếp cận) thì nói rõ, không kết luận mạnh.
+- Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
+Trả JSON:
+{
+ "tong_quan": "2-3 câu",
+ "uu_tien": [ { "viec": "...", "chi_tiet": "...", "tac_dong": "..." } ],
+ "noi_dung": ["nhận định + ý tưởng nội dung cụ thể dựa trên bài tốt"],
+ "lich_dang": ["giờ/thứ/tần suất nên đăng"],
+ "tin_nhan_ban_hang": ["nhận định tin nhắn, theo dõi, chuyển đổi"],
+ "can_them_du_lieu": ["..."]
+}
+uu_tien tối đa 6 việc.`;
+  const res = await chat({ model: "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(data) }] }, key, "fanpage");
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const out = await res.json();
+  let p;
+  try { p = JSON.parse(out.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const clean = (v) => String(v ?? "").replace(/[*#]+/g, "").trim();
+  const arr = (v) => (Array.isArray(v) ? v.map(clean).filter(Boolean) : []);
+  return {
+    overview: clean(p.tong_quan),
+    priorities: (Array.isArray(p.uu_tien) ? p.uu_tien : []).map((x) => ({ what: clean(x.viec), how: clean(x.chi_tiet), impact: clean(x.tac_dong) })).filter((x) => x.what),
+    seo: arr(p.noi_dung), content: arr(p.lich_dang), conversion: arr(p.tin_nhan_ban_hang), needData: arr(p.can_them_du_lieu),
+    at: Date.now(),
+  };
+}
+
 // Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
 // EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
 export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {

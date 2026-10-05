@@ -4,7 +4,7 @@ import { Card, SectionTitle } from "./ui.jsx";
 import { supabase } from "../lib/supabase.js";
 
 // Chi phí AI (OpenAI) theo tháng — ghi bởi edge function qws-ai mỗi lần gọi. Chỉ chủ xem.
-const FEAT = { import: "Nhập khách/dự án", resources: "Đọc tài nguyên", vault: "Đọc tài khoản/thẻ", expense: "Đọc hoá đơn chi", ads: "Phân tích quảng cáo", market: "Phân tích coin", web: "Phân tích website" };
+const FEAT = { import: "Nhập khách/dự án", resources: "Đọc tài nguyên", vault: "Đọc tài khoản/thẻ", expense: "Đọc hoá đơn chi", ads: "Phân tích quảng cáo", market: "Phân tích coin", web: "Phân tích website", fanpage: "Phân tích fanpage" };
 
 export default function AiUsage({ vnd = 26000 }) {
   const [rows, setRows] = useState(null);

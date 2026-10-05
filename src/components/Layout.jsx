@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
@@ -57,13 +57,14 @@ const NAV = [
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers", group: "biz" },
   { to: "/website", label: "Hiệu quả Website", icon: Globe, ownerOnly: true, group: "biz" },
+  { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, ownerOnly: true, group: "biz" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "sys" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
 ];
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
-  { id: "biz", label: "Kinh doanh", order: ["/", "/khach-hang", "/tai-nguyen", "/quang-cao", "/website"] },
+  { id: "biz", label: "Kinh doanh", order: ["/", "/khach-hang", "/tai-nguyen", "/quang-cao", "/website", "/fanpage"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
   { id: "me", label: "Cá nhân", order: ["/cong-viec", "/tai-khoan"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },

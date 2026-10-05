@@ -8,16 +8,16 @@ import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 
 // ---------- định dạng ----------
-const int = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN"));
-const k = (v) => (v == null ? "—" : v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1).replace(".", ",") + "k" : Math.round(v).toLocaleString("vi-VN"));
-const pct1 = (v) => (v == null ? "—" : Number(v).toFixed(1).replace(".", ",") + "%");
+export const int = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN"));
+export const k = (v) => (v == null ? "—" : v >= 10000 ? (v / 1000).toFixed(v >= 100000 ? 0 : 1).replace(".", ",") + "k" : Math.round(v).toLocaleString("vi-VN"));
+export const pct1 = (v) => (v == null ? "—" : Number(v).toFixed(1).replace(".", ",") + "%");
 const pos1 = (v) => (v == null ? "—" : Number(v).toFixed(1).replace(".", ","));
 const dur = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}p${String(Math.round(s % 60)).padStart(2, "0")}` : `${Math.round(s)}s`);
-const dm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "");
-const PRESETS = [[7, "7 ngày"], [28, "28 ngày"], [90, "3 tháng"]];
+export const dm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "");
+export const PRESETS = [[7, "7 ngày"], [28, "28 ngày"], [90, "3 tháng"]];
 
 // Mũi tên % thay đổi. lowerBetter: vị trí (giảm = tốt). abs: so chênh lệch tuyệt đối (vị trí).
-function Delta({ cur, prev, lowerBetter, abs }) {
+export function Delta({ cur, prev, lowerBetter, abs }) {
   if (cur == null || prev == null || (!abs && !prev)) return null;
   const d = abs ? cur - prev : pctChange(cur, prev);
   if (d == null || !isFinite(d) || Math.abs(d) < (abs ? 0.05 : 0.5)) return <span className="text-[10.5px] font-bold text-slate-400">0</span>;
@@ -26,7 +26,7 @@ function Delta({ cur, prev, lowerBetter, abs }) {
   return <span className={`inline-flex items-center gap-0.5 text-[10.5px] font-bold ${good ? "text-emerald-600" : "text-rose-600"}`}><I size={11} />{abs ? Math.abs(d).toFixed(1).replace(".", ",") : Math.abs(d).toFixed(0) + "%"}</span>;
 }
 
-function Spark({ data, field = "clicks" }) {
+export function Spark({ data, field = "clicks" }) {
   if (!data?.length || data.length < 3) return null;
   const v = data.map((d) => d[field] || 0), max = Math.max(...v, 1), W = 120, H = 28;
   const pts = v.map((x, i) => `${(i / (v.length - 1)) * W},${H - (x / max) * (H - 2) - 1}`).join(" ");
@@ -95,7 +95,7 @@ function SiteCard({ site, sum, onOpen }) {
   );
 }
 
-function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ" }) {
+export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ" }) {
   if (!rows?.length) return <div className="py-4 text-center text-xs text-slate-400">{empty}</div>;
   return (
     <div className="overflow-x-auto">
@@ -113,7 +113,7 @@ const Name = ({ t, href }) => (
   <div className="flex min-w-0 items-center gap-1"><span className="truncate font-semibold text-slate-700" title={t}>{t}</span>{href && <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="shrink-0 text-slate-300 hover:text-indigo-600"><ExternalLink size={11} /></a>}</div>
 );
 
-function AiBox({ r }) {
+export function AiBox({ r, titles = ["SEO & thứ hạng", "Ý tưởng nội dung", "Nguồn khách & chuyển đổi"] }) {
   if (!r) return null;
   const List = ({ title, items, icon: I, tone }) => items?.length ? (
     <div><div className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{title}</div>{items.map((t) => <div key={t} className={`mt-1 flex gap-1.5 text-[12.5px] leading-snug ${tone}`}><I size={13} className="mt-0.5 shrink-0" />{t}</div>)}</div>
@@ -132,9 +132,9 @@ function AiBox({ r }) {
         </ol>
       )}
       <div className="grid gap-3 md:grid-cols-3">
-        <List title="SEO & thứ hạng" items={r.seo} icon={Search} tone="text-slate-700" />
-        <List title="Ý tưởng nội dung" items={r.content} icon={Lightbulb} tone="text-indigo-700" />
-        <List title="Nguồn khách & chuyển đổi" items={r.conversion} icon={Target} tone="text-slate-700" />
+        <List title={titles[0]} items={r.seo} icon={Search} tone="text-slate-700" />
+        <List title={titles[1]} items={r.content} icon={Lightbulb} tone="text-indigo-700" />
+        <List title={titles[2]} items={r.conversion} icon={Target} tone="text-slate-700" />
       </div>
       {r.needData?.length > 0 && <div className="rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-500"><b>Để đánh giá chuẩn hơn:</b> {r.needData.join(" · ")}</div>}
     </div>
