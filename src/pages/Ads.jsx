@@ -345,7 +345,7 @@ function AccountCard({ a, since, until, onChanged }) {
     : ads.sort((x, y) => y.spend - x.spend).slice(0, 8);
   return (
     <Card>
-      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left">
+      <button onClick={() => setOpen(!open)} className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-left">
         {open ? <ChevronDown size={18} className="text-slate-400" /> : <ChevronRight size={18} className="text-slate-400" />}
         <span className="text-base font-extrabold">{a.name}</span>
         <Badge tone={isG ? "emerald" : "sky"}>{isG ? "Google" : "Meta"}</Badge>
