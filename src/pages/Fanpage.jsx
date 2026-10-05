@@ -246,7 +246,7 @@ export default function Fanpage() {
           <span className="text-[11px] text-slate-400">so với {days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
-        <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới.</div>
+        <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
@@ -260,7 +260,7 @@ export default function Fanpage() {
           ))}
         </div>
         {!pages ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : shown.length === 0 ? (
-          <Card><div className="py-8 text-center text-sm text-slate-500">Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</div></Card>
+          <Card><div className="py-8 text-center text-sm text-slate-500">{meta.offCount ? <>Có {meta.offCount} page nhưng đang <b>tắt</b> bên Văn phòng AI. Vào <b>Văn phòng AI → Kết nối → Facebook</b> bật công tắc page cần theo dõi.</> : <>Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</>}</div></Card>
         ) : (
           <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
             {shown.map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => setSel(p.page_id)} />)}

@@ -51,7 +51,8 @@ export async function listGoogleProps() {
     supabase.from("office_google").select("sa_email,last_sync_at,last_error").maybeSingle(),
   ]);
   if (error) throw new Error(error.message);
-  return { props: props || [], conn: conn || null };
+  // Chỉ lấy web/property đang BẬT bên Văn phòng AI (tắt công tắc ở đó = app cũng không hiện)
+  return { props: (props || []).filter((p) => p.enabled), conn: conn || null };
 }
 
 // ---- Search Console ----
@@ -79,5 +80,8 @@ export async function gaReport(prop, { ranges, metrics, dims = [], limit = 1000,
 
 // Tên miền chuẩn để ghép web GSC ↔ property GA4
 export function domainOf(s) {
-  return String(s || "").toLowerCase().replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "").trim();
+  const t = String(s || "").toLowerCase().replace(/^sc-domain:/, "").replace(/^https?:\/\//, "").replace(/^www\./, "").trim();
+  // Tên property kiểu "vuadonggoi.com - GA4" → lấy đúng phần tên miền
+  const m = t.match(/(?:[a-z0-9-]+\.)+[a-z]{2,}/);
+  return m ? m[0] : t.replace(/\/.*$/, "");
 }

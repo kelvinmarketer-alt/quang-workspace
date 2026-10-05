@@ -29,13 +29,14 @@ async function fbGet(path, params, token) {
 
 export async function listPages() {
   const [{ data: pages, error }, { data: conns, error: e2 }] = await Promise.all([
-    supabase.from("office_fb_pages").select("page_id,name,category,fans,fb_id,updated_at").order("fans", { ascending: false, nullsFirst: false }),
+    supabase.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").order("fans", { ascending: false, nullsFirst: false }),
     supabase.from("office_fb").select("id,token,name,updated_at"),
   ]);
   if (error || e2) throw new Error((error || e2).message);
   sysTokens = new Map((conns || []).map((c) => [c.id, c.token]));
   const lastSync = (conns || []).map((c) => c.updated_at).sort().pop() || null;
-  return { pages: pages || [], lastSync, conns: (conns || []).length };
+  // Chỉ page đang BẬT bên Văn phòng AI (tắt ở đó = app cũng không hiện)
+  return { pages: (pages || []).filter((p) => p.enabled), lastSync, conns: (conns || []).length, offCount: (pages || []).filter((p) => !p.enabled).length };
 }
 
 async function pageToken(p) {

@@ -110,7 +110,11 @@ export async function loadSites({ hidden = [], gaOverride = {} } = {}) {
   const used = new Set();
   for (const s of map.values()) {
     const over = gaOverride[s.domain];
-    const hit = over ? ga.find((g) => g.prop_id === over) : ga.find((g) => domainOf(g.name) === s.domain || domainOf(g.name).replace(/\.[a-z.]+$/, "") === s.domain.replace(/\.[a-z.]+$/, ""));
+    const free = ga.filter((g) => !used.has(g.prop_id));
+    const bare = (x) => x.replace(/\.[a-z.]+$/, "");
+    // Ưu tiên trùng ĐÚNG tên miền; không có mới so phần tên (vd property "vtylogistics" ↔ vtylogistics.com) — chỉ khi property không có đuôi tên miền
+    const hit = over ? ga.find((g) => g.prop_id === over)
+      : free.find((g) => domainOf(g.name) === s.domain) || free.find((g) => !/\./.test(domainOf(g.name)) && domainOf(g.name) === bare(s.domain));
     if (hit) { s.ga = hit.prop_id; s.gaName = hit.name; used.add(hit.prop_id); }
   }
   // Property GA4 không ghép được web GSC nào → dòng riêng (chỉ GA)

@@ -425,7 +425,7 @@ export default function Web() {
           <span className="text-[11px] text-slate-400">so với {days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
-        {meta.conn && <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Google của Văn phòng AI · đồng bộ danh sách web lúc {meta.conn.last_sync_at ? new Date(meta.conn.last_sync_at).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}{meta.conn.last_error ? ` · lỗi: ${meta.conn.last_error}` : ""}. <b>Thêm web mới:</b> thêm email robot vào Search Console/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới.</div>}
+        {meta.conn && <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Google của Văn phòng AI · đồng bộ danh sách web lúc {meta.conn.last_sync_at ? new Date(meta.conn.last_sync_at).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}{meta.conn.last_error ? ` · lỗi: ${meta.conn.last_error}` : ""}. Chỉ hiện web/property đang <b>bật</b> bên Văn phòng AI. <b>Thêm web mới:</b> thêm email robot vào Search Console/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới → bật công tắc.</div>}
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
