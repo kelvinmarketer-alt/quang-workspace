@@ -309,6 +309,47 @@ uu_tien tối đa 5 việc, sắp theo tác động lớn nhất. Bỏ qua tài 
   };
 }
 
+// Phân tích HIỆU QUẢ WEBSITE (module /website): số GSC + GA4 + cơ hội SEO đã TÍNH SẴN bằng code (lib/webData.js) → AI diễn giải + việc cần làm, trả JSON.
+export async function aiWebAnalysis({ data, apiKey }) {
+  const key = (apiKey || "").trim();
+  const sys = `Bạn là chuyên gia SEO + tăng trưởng website (Google Search Console + GA4) cho doanh nghiệp nhỏ ở Việt Nam. Nhận JSON số liệu 1 website (kỳ này + kỳ trước, % thay đổi đã tính sẵn) và viết báo cáo HÀNH ĐỘNG, tiếng Việt, ngắn, thẳng.
+LUẬT:
+- KHÔNG tự tính lại %: dùng đúng số đã cho ("d_" = % thay đổi so kỳ trước, dương = tăng). Vị trí TB GIẢM là TỐT (lên hạng).
+- Mỗi việc phải CỤ THỂ: nêu đúng từ khoá / URL trang, làm gì (sửa title/meta, thêm đoạn trả lời câu hỏi, thêm FAQ, gắn link nội bộ từ trang X, viết bài mới cho cụm từ khoá Y, sửa trang đích có tỉ lệ tương tác thấp, gắn nút gọi/Zalo…), và kỳ vọng (vd +40 click/tháng — dùng trường "gain" đã tính).
+- "co_hoi.near" = từ khoá đang ở vị trí 4–20 nhiều hiển thị (đẩy lên top 3); "co_hoi.lowCtr" = đã top 3 mà CTR thấp (sửa tiêu đề/mô tả cho hút click).
+- "trang_tut" = trang mất click so kỳ trước → nêu nguyên nhân khả dĩ + cách xử lý.
+- Nguồn truy cập/chuyển đổi (GA4): chỉ ra kênh mang khách chất lượng (tỉ lệ tương tác, sự kiện chính) và kênh yếu.
+- Số liệu ít (click < 30) thì nói rõ là ít dữ liệu, không kết luận mạnh.
+- Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
+Trả JSON đúng schema:
+{
+ "tong_quan": "2-3 câu: web đang tăng hay giảm, vì sao, điều quan trọng nhất",
+ "uu_tien": [ { "viec": "...", "chi_tiet": "...", "tac_dong": "..." } ],
+ "seo": ["nhận định về từ khoá / thứ hạng / CTR"],
+ "noi_dung": ["ý tưởng bài viết / trang mới cụ thể dựa trên từ khoá có hiển thị"],
+ "chuyen_doi": ["nhận định về nguồn khách, trang đích, sự kiện chuyển đổi"],
+ "can_them_du_lieu": ["..."]
+}
+uu_tien tối đa 6 việc, sắp theo tác động lớn nhất.`;
+  const res = await chat({ model: "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(data) }] }, key, "web");
+  if (!res.ok) {
+    let msg = res.status + "";
+    try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
+    throw new Error("OpenAI lỗi: " + msg);
+  }
+  const out = await res.json();
+  let p;
+  try { p = JSON.parse(out.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const clean = (v) => String(v ?? "").replace(/[*#]+/g, "").trim();
+  const arr = (v) => (Array.isArray(v) ? v.map(clean).filter(Boolean) : []);
+  return {
+    overview: clean(p.tong_quan),
+    priorities: (Array.isArray(p.uu_tien) ? p.uu_tien : []).map((x) => ({ what: clean(x.viec), how: clean(x.chi_tiet), impact: clean(x.tac_dong) })).filter((x) => x.what),
+    seo: arr(p.seo), content: arr(p.noi_dung), conversion: arr(p.chuyen_doi), needData: arr(p.can_them_du_lieu),
+    at: Date.now(),
+  };
+}
+
 // Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
 // EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
 export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {

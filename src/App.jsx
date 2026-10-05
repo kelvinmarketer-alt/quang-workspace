@@ -12,6 +12,7 @@ const Ads = lazy(() => import("./pages/Ads.jsx"));
 const Vault = lazy(() => import("./pages/Vault.jsx"));
 const Resources = lazy(() => import("./pages/Resources.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
+const Web = lazy(() => import("./pages/Web.jsx"));
 
 const PageLoading = () => (
   <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/coin" element={g("/coin", <Coin />)} />
         <Route path="/quang-cao" element={g("/quang-cao", <Ads />)} />
         <Route path="/tai-nguyen" element={g("/tai-nguyen", <Resources />)} />
+        <Route path="/website" element={<Web />} />
         <Route path="/tai-khoan" element={<Vault />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
