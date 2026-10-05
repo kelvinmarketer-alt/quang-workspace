@@ -46,15 +46,15 @@ export default function App() {
         <Route path="/don-hang" element={g("/don-hang", <Customers />)} />
         <Route path="/ke-toan" element={g("/ke-toan", <Ketoan />)} />
         <Route path="/chi-phi" element={g("/chi-phi", <Ketoan initialTab="expenses" />)} />
-        <Route path="/quy" element={g("/ke-toan", <Funds />)} />
-        <Route path="/quy-thong-ke" element={g("/ke-toan", <Funds initialTab="stats" />)} />
+        <Route path="/quy" element={g("/quy", <Funds />)} />
+        <Route path="/quy-thong-ke" element={g("/quy-thong-ke", <Funds initialTab="stats" />)} />
         <Route path="/cong-viec" element={g("/cong-viec", <Tasks />)} />
         <Route path="/lich" element={g("/lich", <Tasks initialTab="calendar" />)} />
         <Route path="/coin" element={g("/coin", <Coin />)} />
         <Route path="/quang-cao" element={g("/quang-cao", <Ads />)} />
         <Route path="/tai-nguyen" element={g("/tai-nguyen", <Resources />)} />
-        <Route path="/website" element={<Web />} />
-        <Route path="/fanpage" element={<Fanpage />} />
+        <Route path="/website" element={g("/website", <Web />)} />
+        <Route path="/fanpage" element={g("/fanpage", <Fanpage />)} />
         <Route path="/tai-khoan" element={<Vault />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>

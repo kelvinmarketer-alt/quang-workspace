@@ -108,7 +108,6 @@ export function diagnose(accounts, { targets = {}, adsResults = [], since, until
 
     // Cờ chẩn đoán (luật cố định)
     const notes = [];
-    if (days < 3) notes.push(`Kỳ chỉ ${days} ngày — số ít, dễ nhiễu; nên xem 7 ngày trở lên trước khi tắt/bật.`);
     if (!kpi.cpr) notes.push(`Chưa đặt KPI giá/kết quả → đang so với ${bl ? bl.label + " (" + Math.round(target).toLocaleString("vi-VN") + "đ)" : "không có mốc"}.`);
     if (!isG && t.impressions >= 2000 && t.ctr < 0.8) notes.push(`CTR ${t.ctr.toFixed(2)}% thấp (<0,8%) — mẫu quảng cáo chưa đủ hút.`);
     if (!isG && t.frequency > 2.5) notes.push(`Tần suất ${t.frequency.toFixed(1)} — tệp nhỏ/khách xem lặp, giá dễ đội.`);

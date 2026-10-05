@@ -113,7 +113,8 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
             sub: [p.customerName, total ? formatVND(total) : ""].filter(Boolean).join(" · "), run: go("/du-an"),
           };
         }) });
-
+    }
+    if (has("resources")) {
       const res = (data.resources || []).filter((r) => match(r.title, r.url, r.username, r.note, custName(r.customerId)));
       if (res.length)
         out.push({ label: "Tài nguyên", items: take(res, (r) => r.title).map((r) => {

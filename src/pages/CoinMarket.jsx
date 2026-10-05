@@ -25,6 +25,8 @@ function CandleChart({ candles, e20, e50, events, lines, precision, fitKey }) {
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8 },
       crosshair: { mode: 0 },
+      // Điện thoại: vuốt dọc = cuộn trang (không bị biểu đồ "nuốt"), vuốt ngang = kéo nến, 2 ngón = phóng to
+      handleScroll: { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
     });
     const candle = chart.addSeries(CandlestickSeries, { upColor: "#10b981", downColor: "#f43f5e", borderVisible: false, wickUpColor: "#10b981", wickDownColor: "#f43f5e" });
     const vol = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });

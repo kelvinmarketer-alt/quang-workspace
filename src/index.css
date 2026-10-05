@@ -68,3 +68,6 @@ body {
   border-radius: 0;
   box-shadow: none;
 }
+
+/* Lưới không bị phình theo chữ dài (truncate) → hết tràn ngang trên điện thoại */
+.qws-full .grid > * { min-width: 0; }

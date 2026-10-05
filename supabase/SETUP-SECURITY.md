@@ -14,6 +14,12 @@ Code app đã sẵn sàng: chưa làm bước dưới thì app vẫn chạy ki�
 2. Tên function: `qws-ai`. Xoá code mẫu, dán toàn bộ `supabase/functions/qws-ai/index.ts` → **Deploy function**.
 3. Giữ nguyên "Verify JWT" (BẬT). Không cần thêm secret nào — key OpenAI lấy từ kho riêng của chủ.
 
+## Bước 2b — Cho tài khoản phụ xem Quảng cáo / Website / Fanpage (chỉ cần khi có tài khoản phụ)
+1. Edge Functions → **Deploy a new function** → tên `qws-proxy` → dán `supabase/functions/qws-proxy/index.ts` → Deploy (giữ Verify JWT BẬT).
+   Hàm này đọc khoá Google / token Facebook ở máy chủ và chỉ trả SỐ LIỆU cho tài khoản phụ được cấp quyền "Hiệu quả Website"/"Hiệu quả Fanpage" — khoá không bao giờ về trình duyệt của họ.
+2. Edge Functions → `qws-meta-ads` → Code → dán lại toàn bộ `supabase/functions/qws-meta-ads/index.ts` → Deploy.
+   (Bản mới: tài khoản phụ có quyền "Quảng cáo" được xem số liệu; thêm/sửa token, số dư vẫn chỉ chủ. Kèm dữ liệu mới: nhóm QC, tuổi/giới, vị trí, chất lượng QC.)
+
 ## Bước 3 — Mở lại app
 Tải lại boss.2bkin.io.vn (tài khoản chủ). App tự:
 - chuyển Tài khoản & Thẻ + OpenAI key sang kho riêng, gỡ khỏi khối dữ liệu chung;

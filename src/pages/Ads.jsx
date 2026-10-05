@@ -184,14 +184,16 @@ function BalanceBox({ a, onChanged }) {
 
 function AlertsPanel({ tick }) {
   const [list, setList] = useState(null);
+  const [all, setAll] = useState(false);
   useEffect(() => { invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch(() => setList([])); }, [tick]);
   if (!list?.length) return null;
   return (
     <Card>
-      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="text-[11px] text-slate-400">(đã đẩy thông báo về app)</span></div>
-      <div className="space-y-1">{list.map((x) => (
+      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="hidden text-[11px] text-slate-400 sm:inline">(đã đẩy thông báo về app)</span><span className="ml-auto rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">{list.length}</span></div>
+      <div className="space-y-1">{(all ? list : list.slice(0, 3)).map((x) => (
         <div key={x.key} className="flex gap-2 text-xs"><span className="shrink-0 text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><span className="text-slate-700">{x.text}</span></div>
       ))}</div>
+      {list.length > 3 && <button onClick={() => setAll((v) => !v)} className="mt-1.5 text-[12px] font-bold text-indigo-600">{all ? "Thu gọn" : `Xem thêm ${list.length - 3} cảnh báo`}</button>}
     </Card>
   );
 }
@@ -325,7 +327,7 @@ function AiReport({ r }) {
 function AccountCard({ a, since, until, onChanged }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(a.platform === "google" ? "convs" : a.services ? "services" : "campaigns");
-  const { settings = {}, setSettings } = useData();
+  const { settings = {}, setSettings, isOwner } = useData();
   const kpi = (settings.adsTargets || {})[a.id];
   const bl = a.group === "conv" ? baselineOf(a, kpi) : null;
   // dòng con: KPI nếu có, không thì TB tài khoản kỳ này (xếp hạng trong tài khoản) — giống adsDiagnose
@@ -379,8 +381,8 @@ function AccountCard({ a, since, until, onChanged }) {
               </ResponsiveContainer>
             </div>
           )}
-          {a.group === "conv" && <KpiBox a={a} kpi={kpi} onSave={(v) => setSettings({ adsTargets: { ...(settings.adsTargets || {}), [a.id]: v } })} />}
-          <BalanceBox a={a} onChanged={onChanged} />
+          {isOwner && a.group === "conv" && <KpiBox a={a} kpi={kpi} onSave={(v) => setSettings({ adsTargets: { ...(settings.adsTargets || {}), [a.id]: v } })} />}
+          {isOwner && <BalanceBox a={a} onChanged={onChanged} />}
           {a.group === "conv" && <RealResults acc={a} since={since} until={until} spend={t.spend} />}
           {a.issues?.length > 0 && (
             <div className="rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
@@ -422,7 +424,8 @@ function sumGroup(list) {
 }
 
 export default function Ads() {
-  const { isOwner, settings = {}, adsResults = [] } = useData();
+  const { isOwner, ownerId, perms = [], settings = {}, adsResults = [] } = useData();
+  const canView = isOwner || (!!ownerId && perms.includes("ads")); // tài khoản phụ có quyền Quảng cáo: xem số liệu (máy chủ chỉ cho chế độ đọc)
   const [preset, setPreset] = useState("today");
   const [range, setRange] = useState(presetRange("today"));
   const [compare, setCompare] = useState(true);
@@ -444,13 +447,13 @@ export default function Ads() {
     } catch (e) { if (!silent) setErr(e.message || String(e)); }
     if (!silent) setLoading(false);
   };
-  useEffect(() => { if (isOwner) load(); /* eslint-disable-next-line */ }, [since, until, compare, isOwner]);
+  useEffect(() => { if (canView) load(); /* eslint-disable-next-line */ }, [since, until, compare, canView]);
   // Kỳ có HÔM NAY → tự làm mới 5 phút/lần khi tab đang mở (Meta trễ ~15-30 phút so với thực tế)
   useEffect(() => {
-    if (!isOwner || !live) return;
+    if (!canView || !live) return;
     const t = setInterval(() => { if (!document.hidden) load(true); }, 300000);
     return () => clearInterval(t); /* eslint-disable-next-line */
-  }, [since, until, compare, isOwner, live]);
+  }, [since, until, compare, canView, live]);
 
   const accounts = (data?.accounts || []).filter((a) => a.group === group);
   const tot = useMemo(() => sumGroup(accounts), [data, group]);
@@ -472,7 +475,7 @@ export default function Ads() {
       setAi({ busy: false, text, err: "" });
     } catch (e) { setAi({ busy: false, text: "", err: e.message || String(e) }); }
   };
-  if (!isOwner) return <Card><div className="text-sm text-slate-500">Chỉ chủ workspace xem được số liệu quảng cáo.</div></Card>;
+  if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Quảng cáo.</div></Card>;
 
   return (
     <div className="space-y-4">

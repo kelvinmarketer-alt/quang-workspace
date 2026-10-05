@@ -9,27 +9,48 @@ import AiImport from "../components/AiImport.jsx";
 import CloudBackups from "../components/CloudBackups.jsx";
 import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
-import { FEATURES, memberAccess } from "../lib/permissions.js";
+import { FEATURES, FEATURE_HINT, memberAccess } from "../lib/permissions.js";
 
 const accBadge = (v) => (v === "edit" ? "bg-emerald-500 text-white" : v === "view" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400");
-const accLbl = (v) => (v === "edit" ? "Sửa" : v === "view" ? "Xem" : "—");
-const cycleAcc = (v) => (v === "none" || !v ? "view" : v === "view" ? "edit" : "none");
 const allAccess = (val) => Object.fromEntries(FEATURES.map(([k]) => [k, val]));
+
+// Bảng quyền: mỗi tính năng 1 dòng (tên + mô tả) + nút chọn Không / Xem / Sửa
+function AccessGrid({ access, onSet }) {
+  const opts = [["none", "Không", "bg-slate-200 text-slate-600"], ["view", "Xem", "bg-sky-500 text-white"], ["edit", "Sửa", "bg-emerald-500 text-white"]];
+  return (
+    <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+      {FEATURES.map(([k, l]) => (
+        <div key={k} className="flex items-center gap-2 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-bold text-slate-700">{l}</div>
+            <div className="text-[11px] leading-snug text-slate-400">{FEATURE_HINT[k]}</div>
+          </div>
+          <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
+            {opts.map(([v, t, on]) => (
+              <button key={v} type="button" onClick={() => onSet(k, v)} className={`min-w-[44px] rounded-md px-2 py-1.5 text-[11px] font-bold ${(access[k] || "none") === v ? on : "text-slate-400"}`}>{t}</button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function MembersCard() {
   const { members = [], addMember, updateMember, removeMember } = useData();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [access, setAccess] = useState(() => allAccess("view")); // mặc định: chỉ Xem tất cả
-  const setNew = (k) => setAccess((a) => ({ ...a, [k]: cycleAcc(a[k]) }));
+  const setNew = (k, v) => setAccess((a) => ({ ...a, [k]: v }));
+  const [openM, setOpenM] = useState(null);
   const add = () => { const e = email.trim().toLowerCase(); if (!e) return; addMember({ email: e, name: name.trim(), access }); setEmail(""); setName(""); setAccess(allAccess("view")); };
-  const setMember = (m, k) => { const cur = memberAccess(m); updateMember(m.email, { access: { ...cur, [k]: cycleAcc(cur[k]) } }); };
+  const setMember = (m, k, v) => { const cur = memberAccess(m); updateMember(m.email, { access: { ...cur, [k]: v } }); };
   return (
     <Card>
       <SectionTitle action={<Users2 size={18} className="text-indigo-500" />}>Người dùng & phân quyền</SectionTitle>
       <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700">
         <ShieldCheck size={15} className="mt-0.5 shrink-0" />
-        <span>Bạn là <b>chủ (admin)</b> — toàn quyền + là người duy nhất sửa cài đặt dữ liệu/bảo mật. Thêm thành viên bằng <b>email</b>, mỗi tính năng bấm để chọn <b className="text-slate-500">—</b> (không) → <b className="text-sky-600">Xem</b> → <b className="text-emerald-600">Sửa</b>.</span>
+        <span>Bạn là <b>chủ (admin)</b> — toàn quyền. Thêm thành viên bằng <b>email</b>, mỗi mục chọn <b className="text-slate-500">Không</b> / <b className="text-sky-600">Xem</b> / <b className="text-emerald-600">Sửa</b>. <b>Chỉ chủ</b> (không cấp được): Tài khoản &amp; Thẻ, ví Binance, cấu hình token/kết nối, sao lưu – khôi phục, quản lý người dùng.</span>
       </div>
 
       {/* Thêm thành viên */}
@@ -38,11 +59,7 @@ function MembersCard() {
           <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="Email thành viên *" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên (tuỳ chọn)" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
         </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {FEATURES.map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setNew(k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${accBadge(access[k])}`}>{l}: {accLbl(access[k])}</button>
-          ))}
-        </div>
+        <div className="mt-2"><AccessGrid access={access} onSet={setNew} /></div>
         <div className="mt-2 flex flex-wrap gap-3 text-[11px]">
           <button type="button" onClick={() => setAccess(allAccess("view"))} className="font-bold text-sky-600">Chỉ xem tất cả</button>
           <button type="button" onClick={() => setAccess(allAccess("edit"))} className="font-bold text-emerald-600">Toàn quyền sửa</button>
@@ -65,11 +82,12 @@ function MembersCard() {
                 </div>
                 <button onClick={() => { if (confirm(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {FEATURES.map(([k, l]) => (
-                  <button key={k} type="button" onClick={() => setMember(m, k)} className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${accBadge(a[k])}`}>{l}: {accLbl(a[k])}</button>
-                ))}
-              </div>
+              <button type="button" onClick={() => setOpenM(openM === m.email ? null : m.email)} className="mt-2 flex w-full flex-wrap items-center gap-1 text-left">
+                {FEATURES.filter(([k]) => a[k] !== "none").map(([k, l]) => <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${accBadge(a[k])}`}>{l}{a[k] === "edit" ? " ✎" : ""}</span>)}
+                {FEATURES.every(([k]) => a[k] === "none") && <span className="text-[11px] text-slate-400">Chưa có quyền nào</span>}
+                <span className="ml-auto text-[11px] font-bold text-indigo-600">{openM === m.email ? "Thu gọn" : "Sửa quyền"}</span>
+              </button>
+              {openM === m.email && <div className="mt-2"><AccessGrid access={a} onSet={(k, v) => setMember(m, k, v)} /></div>}
             </div>
           );
         })}

@@ -592,7 +592,14 @@ Deno.serve(async (req) => {
   const { data: u } = await supa.auth.getUser();
   const email = ((u && u.user && u.user.email) || "").toLowerCase();
   if (!email) return json({ error: "Chưa đăng nhập" }, 401);
-  if (!OWNER || email !== OWNER) return json({ error: "Chỉ chủ workspace dùng được module Quảng cáo" }, 403);
+  if (!OWNER || email !== OWNER) {
+    // Thành viên được chủ cấp quyền "Quảng cáo" (Xem/Sửa trong Cài đặt → Người dùng) → CHỈ các chế độ ĐỌC số liệu
+    const READ_MODES = ["report", "alerts_list", "balance_list"];
+    const { data: rows } = await admin().from("qws_workspaces").select("members:data->members");
+    const mem = (rows || []).flatMap((r: any) => (Array.isArray(r.members) ? r.members : [])).find((m: any) => String(m?.email || "").toLowerCase() === email);
+    const acc = mem ? (mem.access?.ads ?? ((mem.perms || []).includes("ads") ? "edit" : "none")) : "none";
+    if (acc === "none" || !READ_MODES.includes(mode)) return json({ error: "Chỉ chủ workspace (hoặc thành viên được cấp quyền Quảng cáo — chỉ xem số liệu) dùng được" }, 403);
+  }
 
   try {
     if (mode === "config_list") return json({ accounts: (await loadAccounts(true)).map(safe) });

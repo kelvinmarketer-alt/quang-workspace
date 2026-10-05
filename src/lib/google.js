@@ -5,6 +5,15 @@ import { supabase } from "./supabase.js";
 
 const SCOPES = "https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly";
 let cached = null; // { token, exp }
+// Tài khoản phụ (được cấp quyền "Hiệu quả Website") không đọc được khoá → gọi qua edge fn qws-proxy (khoá ở máy chủ)
+let viaProxy = false;
+export const setGoogleProxy = (v) => { viaProxy = !!v; };
+async function proxy(body) {
+  const { data, error } = await supabase.functions.invoke("qws-proxy", { body });
+  if (error) { let m = error.message; try { m = (await error.context?.json?.())?.error || m; } catch { /* bỏ qua */ } throw new Error(/Failed to send|not found|404/i.test(m) ? "Máy chủ chưa bật hàm qws-proxy (chủ cần deploy)" : m); }
+  if (data?.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "Lỗi");
+  return data;
+}
 
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const b64urlJson = (o) => b64url(new TextEncoder().encode(JSON.stringify(o)));
@@ -37,6 +46,7 @@ export async function googleToken() {
 }
 
 async function gapi(url, body) {
+  if (viaProxy) return proxy({ action: "google", url, body });
   const tok = await googleToken();
   const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
@@ -46,6 +56,7 @@ async function gapi(url, body) {
 
 // Danh sách web/property đã đồng bộ bên Văn phòng AI
 export async function listGoogleProps() {
+  if (viaProxy) { const d = await proxy({ action: "google_props" }); return { props: d.props || [], conn: d.conn || null }; }
   const [{ data: props, error }, { data: conn }] = await Promise.all([
     supabase.from("office_google_props").select("kind,prop_id,name,extra,enabled,updated_at").order("name"),
     supabase.from("office_google").select("sa_email,last_sync_at,last_error").maybeSingle(),

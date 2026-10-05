@@ -21,19 +21,42 @@ export function fbRanges(period) {
 }
 
 let sysTokens = null;
+// Tài khoản phụ (được cấp quyền "Hiệu quả Fanpage"): không đọc được token → gọi qua edge fn qws-proxy
+let viaProxy = false;
+export const setFbProxy = (v) => { viaProxy = !!v; };
+async function proxy(body) {
+  const { data, error } = await supabase.functions.invoke("qws-proxy", { body });
+  if (error) { let m = error.message; try { m = (await error.context?.json?.())?.error || m; } catch { /* bỏ qua */ } throw new Error(/Failed to send|not found|404/i.test(m) ? "Máy chủ chưa bật hàm qws-proxy (chủ cần deploy)" : m); }
+  if (data?.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "Facebook lỗi");
+  return data;
+}
+// GET 1 edge của page (chủ: token page trực tiếp · tài khoản phụ: qua máy chủ)
+async function pageGet(p, path, params) {
+  if (viaProxy) return proxy({ action: "fb", page_id: p.page_id, path, params });
+  return fbGet(path, params, await pageToken(p));
+}
+const pageNext = (p, next) => (viaProxy ? proxy({ action: "fb", page_id: p.page_id, next }) : fbGet(next));
 const pageTokens = new Map();
 
-async function fbGet(path, params, token) {
+async function fbGet(path, params, token, tries = 3) {
   const u = new URL(path.startsWith("http") ? path : G + path);
   for (const [k, v] of Object.entries(params || {})) u.searchParams.set(k, v);
   if (token) u.searchParams.set("access_token", token);
   const r = await fetch(u);
   const j = await r.json().catch(() => ({}));
-  if (j.error) throw new Error(j.error.message || "Facebook lỗi");
+  if (j.error) {
+    // Lỗi tạm thời của Facebook (code 1/2, "unexpected error", quá tải) → đợi rồi thử lại
+    if (tries > 1 && (j.error.is_transient || [1, 2, 4, 17, 32, 613].includes(j.error.code))) {
+      await new Promise((ok) => setTimeout(ok, 1200 * (4 - tries)));
+      return fbGet(path, params, token, tries - 1);
+    }
+    throw new Error(j.error.message || "Facebook lỗi");
+  }
   return j;
 }
 
 export async function listPages() {
+  if (viaProxy) { const d = await proxy({ action: "fb_pages" }); return { pages: d.pages || [], lastSync: null, conns: 0, offCount: 0 }; }
   const [{ data: pages, error }, { data: conns, error: e2 }] = await Promise.all([
     supabase.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").order("fans", { ascending: false, nullsFirst: false }),
     supabase.from("office_fb").select("id,token,name,updated_at"),
@@ -60,12 +83,11 @@ async function pageToken(p) {
 const PAGE_METRICS = ["page_total_media_view_unique", "page_media_view", "page_post_engagements", "page_daily_follows_unique", "page_daily_unfollows_unique", "page_views_total", "page_video_views", "page_messages_new_conversations_unique", "page_actions_post_reactions_total", "page_follows"];
 
 async function pageInsights(p, [since, until]) {
-  const tok = await pageToken(p);
   // Facebook giới hạn ~93 ngày / lần gọi → chia khúc 90 ngày rồi nối lại
   const by = {};
   for (let s = since; s <= until; s = addDays(s, 90)) {
     const e = addDays(s, 89) < until ? addDays(s, 89) : until;
-    const j = await fbGet(`${p.page_id}/insights`, { metric: PAGE_METRICS.join(","), period: "day", since: s, until: addDays(e, 1) }, tok);
+    const j = await pageGet(p, `${p.page_id}/insights`, { metric: PAGE_METRICS.join(","), period: "day", since: s, until: addDays(e, 1) });
     for (const m of j.data || []) by[m.name] = [...(by[m.name] || []), ...(m.values || []).map((v) => ({ date: (v.end_time || "").slice(0, 10), value: v.value }))];
   }
   const sum = (k) => (by[k] || []).reduce((s, v) => s + (typeof v.value === "number" ? v.value : 0), 0);
@@ -112,13 +134,12 @@ const val = (ins, name) => { const m = (ins?.data || []).find((x) => x.name === 
 
 // Bài đăng trong kỳ + chỉ số từng bài; phân tích theo loại bài, giờ đăng, thứ
 export async function loadPagePosts(p, R) {
-  const tok = await pageToken(p);
-  let j = await fbGet(`${p.page_id}/published_posts`, {
+  let j = await pageGet(p, `${p.page_id}/published_posts`, {
     fields: "id,message,created_time,permalink_url,full_picture,status_type,shares,reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),insights.metric(post_total_media_view_unique,post_media_view,post_clicks,post_video_views)",
     since: R.cur[0], until: addDays(R.cur[1], 1), limit: 100,
-  }, tok);
+  });
   let rows = j.data || [];
-  for (let i = 0; i < 3 && j.paging?.next; i++) { j = await fbGet(j.paging.next); rows = rows.concat(j.data || []); }
+  for (let i = 0; i < 3 && j.paging?.next; i++) { j = await pageNext(p, j.paging.next); rows = rows.concat(j.data || []); }
   const posts = rows.map((x) => {
     const reach = val(x.insights, "post_total_media_view_unique"), react = x.reactions?.summary?.total_count || 0, cmt = x.comments?.summary?.total_count || 0, share = x.shares?.count || 0;
     const d = new Date(x.created_time);

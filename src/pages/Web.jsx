@@ -4,6 +4,7 @@ import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, C
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { loadSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
+import { setGoogleProxy } from "../lib/google.js";
 import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 
@@ -133,10 +134,10 @@ export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ" 
   if (!rows?.length) return <div className="py-4 text-center text-xs text-slate-400">{empty}</div>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[620px] text-[12px]">
-        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{cols.map((c) => <th key={c.h} className={`py-2 pr-3 ${c.right ? "text-right" : ""}`}>{c.h}</th>)}</tr></thead>
+      <table className="w-full text-[12px] sm:min-w-[620px]">
+        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{cols.map((c, i) => <th key={i} className={`py-2 pr-3 ${c.right ? "text-right" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => (
-          <tr key={i} className="border-b border-slate-50 align-top">{cols.map((c) => <td key={c.h} className={`py-1.5 pr-3 ${c.right ? "text-right tabular-nums" : ""} ${c.wide ? "max-w-[360px]" : ""}`}>{c.v(r)}</td>)}</tr>
+          <tr key={i} className="border-b border-slate-50 align-top">{cols.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${c.right ? "text-right tabular-nums" : ""} ${c.wide ? "max-w-[180px] sm:max-w-[360px]" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.v(r)}</td>)}</tr>
         ))}</tbody>
       </table>
     </div>
@@ -195,7 +196,7 @@ function aiPayload(site, sum, det, R) {
   };
 }
 
-function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiState, setAiState, apiKey, aiReady }) {
+function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiState, setAiState, apiKey, aiReady }) {
   const [det, setDet] = useState(null);
   const [err, setErr] = useState("");
   const [tab, setTab] = useState(site.ga ? "sources" : "opp");
@@ -231,8 +232,8 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
   const qCols = [
     { h: "Từ khoá", v: (q) => <Name t={q.name} />, wide: true },
     { h: "Click", right: true, v: (q) => <span>{int(q.clicks)} {q.prev ? <Delta cur={q.clicks} prev={q.prev.clicks} /> : <Badge tone="indigo">mới</Badge>}</span> },
-    { h: "Hiển thị", right: true, v: (q) => int(q.impressions) },
-    { h: "CTR", right: true, v: (q) => pct1(q.ctr) },
+    { h: "Hiển thị", right: true, sm: true, v: (q) => int(q.impressions) },
+    { h: "CTR", right: true, sm: true, v: (q) => pct1(q.ctr) },
     { h: "Vị trí", right: true, v: (q) => <span>{pos1(q.position)} {q.prev && <Delta cur={q.position} prev={q.prev.position} lowerBetter abs />}</span> },
   ];
 
@@ -243,14 +244,14 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
           <button onClick={onBack} className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-200"><ArrowLeft size={14} /> Tất cả web</button>
           <a href={`https://${site.domain}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-lg font-extrabold text-slate-900 hover:text-indigo-600">{site.domain} <ExternalLink size={14} className="text-slate-300" /></a>
           {sum?.verdict && <Badge tone={sum.verdict.tone}>{sum.verdict.label}</Badge>}
-          <div className="ml-auto flex flex-wrap items-center gap-1.5 text-[12px]">
+          {owner && <div className="ml-auto flex flex-wrap items-center gap-1.5 text-[12px]">
             <span className="text-slate-400">GA4:</span>
-            <select value={gaOverride[site.domain] || site.ga || ""} onChange={(e) => onGa(e.target.value)} className="max-w-[200px] rounded-lg border border-slate-200 bg-white px-2 py-1">
+            <select value={gaOverride[site.domain] || site.ga || ""} onChange={(e) => onGa(e.target.value)} className="max-w-[170px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px]">
               <option value="">— không ghép —</option>
               {gaProps.map((p) => <option key={p.prop_id} value={p.prop_id}>{p.name}</option>)}
             </select>
             <button onClick={onHide} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 font-bold text-slate-500 hover:text-rose-600"><EyeOff size={13} /> Ẩn web</button>
-          </div>
+          </div>}
         </div>
         <div className="mt-1 text-[11px] text-slate-400">Search Console {dm(R.gsc.cur[0])}→{dm(R.gsc.cur[1])} (Google trễ ~2-3 ngày) · GA4 {dm(R.ga.cur[0])}→{dm(R.ga.cur[1])} · so với {R.days} ngày liền trước</div>
       </Card>
@@ -268,7 +269,7 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
 
       {(det?.sources || sum?.sources) && (
         <Card className="!p-3">
-          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Khách đến từ đâu <span className="font-semibold normal-case tracking-normal">· theo phiên truy cập GA4</span>
+          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Khách đến từ đâu <span className="hidden font-semibold normal-case tracking-normal sm:inline">· theo phiên truy cập GA4</span>
             <button onClick={() => setTab("sources")} className="ml-auto font-bold normal-case tracking-normal text-indigo-600">Xem chi tiết →</button>
           </div>
           <SourceBar groups={det?.sources || sum.sources} max={10} big />
@@ -343,28 +344,28 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
           )}
           {tab === "queries" && <Table rows={det.queries?.slice(0, 100)} cols={qCols} />}
           {tab === "pages" && <Table rows={det.pages?.slice(0, 100)} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} /> }, ...qCols.slice(1)]} />}
-          {tab === "channels" && <Table rows={det.channels} cols={[{ h: "Kênh", v: (c) => <b className="text-slate-700">{c.name}</b> }, { h: "Phiên", right: true, v: (c) => <span>{int(c.cur.sessions)} <Delta cur={c.cur.sessions} prev={c.prev.sessions} /></span> }, { h: "Người dùng", right: true, v: (c) => int(c.cur.activeUsers) }, { h: "Tương tác", right: true, v: (c) => (c.cur.engagementRate != null ? pct1(c.cur.engagementRate * 100) : "—") }, { h: "Chuyển đổi", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span> }]} />}
-          {tab === "landing" && <Table rows={det.landing} cols={[{ h: "Trang đích", wide: true, v: (l) => <Name t={l.landingPagePlusQueryString} href={`https://${site.domain}${l.landingPagePlusQueryString}`} /> }, { h: "Phiên", right: true, v: (l) => int(l.sessions) }, { h: "Tương tác", right: true, v: (l) => <span className={l.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}>{pct1(l.engagementRate * 100)}</span> }, { h: "TG TB", right: true, v: (l) => dur(l.averageSessionDuration) }, { h: "Chuyển đổi", right: true, v: (l) => int(l.keyEvents) }]} />}
+          {tab === "channels" && <Table rows={det.channels} cols={[{ h: "Kênh", v: (c) => <b className="text-slate-700">{c.name}</b> }, { h: "Phiên", right: true, v: (c) => <span>{int(c.cur.sessions)} <Delta cur={c.cur.sessions} prev={c.prev.sessions} /></span> }, { h: "Người dùng", right: true, sm: true, v: (c) => int(c.cur.activeUsers) }, { h: "Tương tác", right: true, v: (c) => (c.cur.engagementRate != null ? pct1(c.cur.engagementRate * 100) : "—") }, { h: "Chuyển đổi", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span> }]} />}
+          {tab === "landing" && <Table rows={det.landing} cols={[{ h: "Trang đích", wide: true, v: (l) => <Name t={l.landingPagePlusQueryString} href={`https://${site.domain}${l.landingPagePlusQueryString}`} /> }, { h: "Phiên", right: true, v: (l) => int(l.sessions) }, { h: "Tương tác", right: true, v: (l) => <span className={l.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}>{pct1(l.engagementRate * 100)}</span> }, { h: "TG TB", right: true, sm: true, v: (l) => dur(l.averageSessionDuration) }, { h: "Chuyển đổi", right: true, v: (l) => int(l.keyEvents) }]} />}
           {tab === "sources" && (
             <div>
               <div className="mb-2 text-[11px] text-slate-400">Bấm 1 dòng để xem nguồn gốc chi tiết (nguồn / phương tiện GA4). Tương tác thấp (&lt;40%) = khách vào rồi thoát nhanh.</div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-[12px]">
-                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Nguồn</th><th className="py-2 pr-3 text-right">Phiên</th><th className="py-2 pr-3 text-right">Tỉ trọng</th><th className="py-2 pr-3 text-right">Người dùng</th><th className="py-2 pr-3 text-right">Tương tác</th><th className="py-2 pr-3 text-right">Chuyển đổi</th></tr></thead>
+                <table className="w-full text-[12px] sm:min-w-[640px]">
+                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Nguồn</th><th className="py-2 pr-3 text-right">Phiên</th><th className="hidden py-2 pr-3 text-right sm:table-cell">Tỉ trọng</th><th className="hidden py-2 pr-3 text-right sm:table-cell">Người dùng</th><th className="py-2 pr-3 text-right">Tương tác</th><th className="py-2 pr-3 text-right">Chuyển đổi</th></tr></thead>
                   <tbody>{(det.sources || []).map((g) => (<Fragment key={g.key}>
                     <tr onClick={() => setOpenSrc(openSrc === g.key ? null : g.key)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50">
                       <td className="py-1.5 pr-3"><span className="flex items-center gap-1.5 font-bold text-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />{g.label}<span className="text-[10px] font-semibold text-slate-400">{openSrc === g.key ? "▾" : "▸"} {g.items.length}</span></span></td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.sessions)} <Delta cur={g.cur.sessions} prev={g.prev.sessions} /></td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums">{pct1(g.share)}</td>
-                      <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.activeUsers)}</td>
+                      <td className="hidden py-1.5 pr-3 text-right tabular-nums sm:table-cell">{pct1(g.share)}</td>
+                      <td className="hidden py-1.5 pr-3 text-right tabular-nums sm:table-cell">{int(g.cur.activeUsers)}</td>
                       <td className={`py-1.5 pr-3 text-right tabular-nums ${g.cur.engagementRate != null && g.cur.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}`}>{g.cur.engagementRate != null ? pct1(g.cur.engagementRate * 100) : "—"}</td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.keyEvents)} <Delta cur={g.cur.keyEvents} prev={g.prev.keyEvents} /></td>
                     </tr>
                     {openSrc === g.key && g.items.slice(0, 30).map((it) => (
                       <tr key={g.key + it.src + it.med} className="border-b border-slate-50 bg-slate-50/60 text-slate-500">
-                        <td className="py-1 pl-6 pr-3">{it.src} <span className="text-slate-400">/ {it.med}</span></td>
-                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.sessions)}</td><td />
-                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.activeUsers)}</td>
+                        <td className="break-all py-1 pl-6 pr-3">{it.src} <span className="text-slate-400">/ {it.med}</span></td>
+                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.sessions)}</td><td className="hidden sm:table-cell" />
+                        <td className="hidden py-1 pr-3 text-right tabular-nums sm:table-cell">{int(it.cur.activeUsers)}</td>
                         <td className="py-1 pr-3 text-right tabular-nums">{it.cur.engagementRate != null ? pct1(it.cur.engagementRate * 100) : "—"}</td>
                         <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.keyEvents)}</td>
                       </tr>
@@ -386,8 +387,8 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
                   { h: "Sự kiện", wide: true, v: (e) => <div className="min-w-0"><div className="flex items-center gap-1 font-bold text-slate-700">{e.key && <Star size={12} className="shrink-0 fill-amber-400 text-amber-500" />}{e.label || e.name}{e.auto && <span className="text-[10px] font-semibold text-slate-400">tự động</span>}</div>{e.label && <div className="text-[10.5px] text-slate-400">{e.name}</div>}</div> },
                   { h: "Số lần", right: true, v: (e) => <span>{int(e.cur.eventCount)} <Delta cur={e.cur.eventCount} prev={e.prev.eventCount} /></span> },
                   { h: "Số người", right: true, v: (e) => int(e.cur.totalUsers) },
-                  { h: "Lần/người", right: true, v: (e) => (e.cur.totalUsers ? (e.cur.eventCount / e.cur.totalUsers).toFixed(1).replace(".", ",") : "—") },
-                  { h: "Kỳ trước", right: true, v: (e) => int(e.prev.eventCount) },
+                  { h: "Lần/người", right: true, sm: true, v: (e) => (e.cur.totalUsers ? (e.cur.eventCount / e.cur.totalUsers).toFixed(1).replace(".", ",") : "—") },
+                  { h: "Kỳ trước", right: true, sm: true, v: (e) => int(e.prev.eventCount) },
                 ]} />
                 {(det.events || []).some((e) => e.name === "form_submit" && e.key && (e.cur.eventCount || 0) > (e.cur.totalUsers || 0) * 2) && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[11.5px] text-amber-800">⚠ "Gửi form" đang là sự kiện chính nhưng mỗi người gửi trung bình nhiều lần → có thể GA4 đếm cả ô tìm kiếm/form phụ. Nên kiểm tra lại cấu hình sự kiện chính.</div>}
               </div>
@@ -407,7 +408,9 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
 }
 
 export default function Web() {
-  const { isOwner, settings = {}, setSettings } = useData();
+  const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
+  const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ khoá)
+  const canView = isOwner || perms.includes("web");
   const [days, setDays] = useState(28); // số ngày hoặc { since, until }
   const [sites, setSites] = useState(null);
   const [meta, setMeta] = useState({ hiddenSites: [], gaProps: [], conn: null });
@@ -422,12 +425,13 @@ export default function Web() {
   const R = useMemo(() => rangesOf(days), [days]);
 
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canView || !ownerId) return;
+    setGoogleProxy(member); CACHE.clear();
     let alive = true; setErr("");
     loadSites({ hidden, gaOverride }).then((r) => { if (!alive) return; setSites(r.sites); setMeta(r); }).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOwner, tick, JSON.stringify(hidden), JSON.stringify(gaOverride)]);
+  }, [canView, member, ownerId, tick, JSON.stringify(hidden), JSON.stringify(gaOverride)]);
 
   useEffect(() => {
     if (!sites) return;
@@ -436,6 +440,8 @@ export default function Web() {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, R.key, tick]);
+
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [sel]);
 
   const tot = useMemo(() => {
     const t = { clicks: 0, pClicks: 0, users: 0, pUsers: 0, conv: 0, pConv: 0 };
@@ -447,7 +453,7 @@ export default function Web() {
     return t;
   }, [sums]);
 
-  if (!isOwner) return <Card><div className="text-sm text-slate-500">Chỉ chủ workspace xem được hiệu quả website.</div></Card>;
+  if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Hiệu quả Website.</div></Card>;
   const site = sel && sites?.find((s) => s.domain === sel);
   const setHidden = (list) => setSettings({ webHidden: list });
 
@@ -459,12 +465,12 @@ export default function Web() {
           <span className="text-[11px] text-slate-400">{R.custom ? `${dm(R.ga.cur[0])}/${R.ga.cur[0].slice(2, 4)} → ${dm(R.ga.cur[1])}/${R.ga.cur[1].slice(2, 4)} · ` : ""}so với {R.days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
-        {meta.conn && <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Google của Văn phòng AI · đồng bộ danh sách web lúc {meta.conn.last_sync_at ? new Date(meta.conn.last_sync_at).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}{meta.conn.last_error ? ` · lỗi: ${meta.conn.last_error}` : ""}. Chỉ hiện web/property đang <b>bật</b> bên Văn phòng AI. <b>Thêm web mới:</b> thêm email robot vào Search Console/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới → bật công tắc.</div>}
+        {meta.conn && <div className="mt-1.5 hidden text-[11px] text-slate-400 sm:block">Dùng kết nối Google của Văn phòng AI · đồng bộ danh sách web lúc {meta.conn.last_sync_at ? new Date(meta.conn.last_sync_at).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}{meta.conn.last_error ? ` · lỗi: ${meta.conn.last_error}` : ""}. Chỉ hiện web/property đang <b>bật</b> bên Văn phòng AI. <b>Thêm web mới:</b> thêm email robot vào Search Console/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới → bật công tắc.</div>}
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
       {site ? (
-        <Detail site={site} sum={sums[site.domain]} R={R} gaProps={meta.gaProps} gaOverride={gaOverride} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
+        <Detail owner={isOwner} site={site} sum={sums[site.domain]} R={R} gaProps={meta.gaProps} gaOverride={gaOverride} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
           onGa={(v) => { setSettings({ webGa: { ...gaOverride, [site.domain]: v } }); CACHE.clear(); }}
           onHide={() => { setHidden([...hidden, site.domain]); setSel(null); }} onBack={() => setSel(null)} aiState={aiState} setAiState={setAiState} />
       ) : (<>

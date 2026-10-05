@@ -3,7 +3,7 @@ import { RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, EyeOff, Eye, Ex
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { listPages, loadPageSummary, loadPagePosts, fbRanges, pageVerdict } from "../lib/fbPages.js";
+import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy } from "../lib/fbPages.js";
 import { aiPageAnalysis } from "../lib/ai.js";
 import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker } from "./Web.jsx";
 
@@ -68,7 +68,7 @@ function aiPayload(p, sum, det, R) {
   };
 }
 
-function Detail({ p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiReady }) {
+function Detail({ owner, p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiReady }) {
   const [det, setDet] = useState(null);
   const [err, setErr] = useState("");
   const [sort, setSort] = useState("reach");
@@ -98,9 +98,9 @@ function Detail({ p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiRead
           <img src={avatar(p.page_id)} alt="" className="h-8 w-8 rounded-full bg-slate-100" />
           <a href={`https://facebook.com/${p.page_id}`} target="_blank" rel="noreferrer" className="flex min-w-0 items-center gap-1 text-lg font-extrabold text-slate-900 hover:text-indigo-600"><span className="truncate">{p.name}</span> <ExternalLink size={14} className="shrink-0 text-slate-300" /></a>
           {sum?.verdict && <Badge tone={sum.verdict.tone}>{sum.verdict.label}</Badge>}
-          <button onClick={onHide} className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[12px] font-bold text-slate-500 hover:text-rose-600"><EyeOff size={13} /> Ẩn page</button>
+          {owner && <button onClick={onHide} className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[12px] font-bold text-slate-500 hover:text-rose-600"><EyeOff size={13} /> Ẩn page</button>}
         </div>
-        <div className="mt-1 text-[11px] text-slate-400">{dm(R.cur[0])} → {dm(R.cur[1])} · so với {R.days} ngày liền trước · "Tiếp cận" = số người xem nội dung cộng theo ngày (chỉ số mới của Facebook)</div>
+        <div className="mt-1 text-[11px] text-slate-400">{dm(R.cur[0])} → {dm(R.cur[1])} · so với {R.days} ngày liền trước<span className="hidden sm:inline"> · "Tiếp cận" = số người xem nội dung cộng theo ngày (chỉ số mới của Facebook)</span></div>
       </Card>
 
       {c && (
@@ -184,11 +184,11 @@ function Detail({ p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiRead
               </a>
             ) },
             { h: "Tiếp cận", right: true, v: (x) => <span className={x.reach >= (det.avgReach || 0) * 1.5 ? "font-bold text-emerald-600" : ""}>{int(x.reach)}</span> },
-            { h: "Lượt xem", right: true, v: (x) => int(x.views) },
-            { h: "Click", right: true, v: (x) => int(x.clicks) },
+            { h: "Lượt xem", right: true, sm: true, v: (x) => int(x.views) },
+            { h: "Click", right: true, sm: true, v: (x) => int(x.clicks) },
             { h: <ThumbsUp size={11} className="ml-auto" />, right: true, v: (x) => int(x.reactions) },
-            { h: "Bình luận", right: true, v: (x) => int(x.comments) },
-            { h: "Chia sẻ", right: true, v: (x) => int(x.shares) },
+            { h: "Bình luận", right: true, sm: true, v: (x) => int(x.comments) },
+            { h: "Chia sẻ", right: true, sm: true, v: (x) => int(x.shares) },
             { h: "Tỉ lệ TT", right: true, v: (x) => (x.er != null ? pct1(x.er) : "—") },
           ]} />
         </>)}
@@ -198,7 +198,9 @@ function Detail({ p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiRead
 }
 
 export default function Fanpage() {
-  const { isOwner, settings = {}, setSettings } = useData();
+  const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
+  const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ token)
+  const canView = isOwner || perms.includes("fanpage");
   const [days, setDays] = useState(28);
   const [pages, setPages] = useState(null);
   const [meta, setMeta] = useState({});
@@ -212,11 +214,12 @@ export default function Fanpage() {
   const R = useMemo(() => fbRanges(days), [days]);
 
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canView || !ownerId) return;
+    setFbProxy(member); CACHE.clear();
     let alive = true; setErr("");
     listPages().then((r) => { if (!alive) return; setPages(r.pages); setMeta(r); }).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
-  }, [isOwner, tick]);
+  }, [canView, member, ownerId, tick]);
   const shown = (pages || []).filter((p) => !hidden.includes(p.page_id));
   const hid = (pages || []).filter((p) => hidden.includes(p.page_id));
 
@@ -228,13 +231,15 @@ export default function Fanpage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, R.key, tick, hidden.join(",")]);
 
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [sel]);
+
   const tot = useMemo(() => {
     const t = { reach: 0, pReach: 0, eng: 0, pEng: 0, msg: 0, pMsg: 0 };
     for (const s of Object.values(sums)) if (s.cur) { t.reach += s.cur.reach; t.pReach += s.prev.reach; t.eng += s.cur.engagement; t.pEng += s.prev.engagement; t.msg += s.cur.messages; t.pMsg += s.prev.messages; }
     return t;
   }, [sums]);
 
-  if (!isOwner) return <Card><div className="text-sm text-slate-500">Chỉ chủ workspace xem được hiệu quả fanpage.</div></Card>;
+  if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Hiệu quả Fanpage.</div></Card>;
   const page = sel && pages?.find((p) => p.page_id === sel);
   const setHidden = (l) => setSettings({ fbHidden: l });
 
@@ -246,12 +251,12 @@ export default function Fanpage() {
           <span className="text-[11px] text-slate-400">{R.custom ? `${dm(R.cur[0])}/${R.cur[0].slice(2, 4)} → ${dm(R.cur[1])}/${R.cur[1].slice(2, 4)} · ` : ""}so với {R.days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
-        <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>
+        <div className="mt-1.5 hidden text-[11px] text-slate-400 sm:block">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
       {page ? (
-        <Detail p={page} sum={sums[page.page_id]} R={R} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
+        <Detail owner={isOwner} p={page} sum={sums[page.page_id]} R={R} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
           onBack={() => setSel(null)} onHide={() => { setHidden([...hidden, page.page_id]); setSel(null); }} aiState={aiState} setAiState={setAiState} />
       ) : (<>
         <div className="grid grid-cols-3 gap-px bg-slate-100">

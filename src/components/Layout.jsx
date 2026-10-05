@@ -55,9 +55,9 @@ const NAV = [
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "me" },
   { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin", group: "fin" },
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
-  { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers", group: "biz" },
-  { to: "/website", label: "Hiệu quả Website", icon: Globe, ownerOnly: true, group: "biz" },
-  { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, ownerOnly: true, group: "biz" },
+  { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "resources", group: "biz" },
+  { to: "/website", label: "Hiệu quả Website", icon: Globe, feat: "web", group: "biz" },
+  { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, feat: "fanpage", group: "biz" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "sys" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
@@ -103,7 +103,7 @@ function useNavPins() {
   return [pins, toggle];
 }
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
-const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án" };
+const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Quỹ & Dòng tiền", "/quy-thong-ke": "Quỹ & Dòng tiền" };
 
 function Brand() {
   return (
