@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, CheckCircle2, Lightbulb, Search, MousePointerClick, Users, Target, Info } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Card, Badge } from "../components/ui.jsx";
+import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { loadSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
 import { Star, Bot } from "lucide-react";
@@ -15,6 +15,40 @@ const pos1 = (v) => (v == null ? "—" : Number(v).toFixed(1).replace(".", ","))
 const dur = (s) => (s == null ? "—" : s >= 60 ? `${Math.floor(s / 60)}p${String(Math.round(s % 60)).padStart(2, "0")}` : `${Math.round(s)}s`);
 export const dm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "");
 export const PRESETS = [[7, "7 ngày"], [28, "28 ngày"], [90, "3 tháng"]];
+
+// Chọn kỳ: 7 / 28 / 90 ngày hoặc Tuỳ chọn (từ ngày → đến ngày). value = số ngày | { since, until }
+export function RangePicker({ value, onChange, maxDate }) {
+  const custom = value && typeof value === "object";
+  const yIso = maxDate || todayIso();
+  const [draft, setDraft] = useState(custom ? value : { since: shiftIso(yIso, -27), until: yIso });
+  const today = new Date();
+  const ym = (y, m) => `${y}-${String(m + 1).padStart(2, "0")}`;
+  const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
+  const quick = [
+    ["Tháng này", { since: ym(today.getFullYear(), today.getMonth()) + "-01", until: yIso }],
+    ["Tháng trước", (() => { const d = new Date(today.getFullYear(), today.getMonth() - 1, 1); return { since: ym(d.getFullYear(), d.getMonth()) + "-01", until: ym(d.getFullYear(), d.getMonth()) + "-" + lastDay(d.getFullYear(), d.getMonth()) }; })()],
+    ["Năm nay", { since: today.getFullYear() + "-01-01", until: yIso }],
+  ];
+  const btn = (on) => `rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
+  const [open, setOpen] = useState(custom);
+  return (
+    <>
+      {PRESETS.map(([d, l]) => <button key={d} onClick={() => { setOpen(false); onChange(d); }} className={btn(!custom && !open && value === d)}>{l}</button>)}
+      <button onClick={() => setOpen(true)} className={btn(custom || open)}>Tuỳ chọn</button>
+      {open && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+          <DateField value={draft.since} onChange={(v) => setDraft((d) => ({ since: v, until: d.until < v ? v : d.until }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5" />
+          <span className="text-slate-400">→</span>
+          <DateField value={draft.until} onChange={(v) => setDraft((d) => ({ since: d.since > v ? v : d.since, until: v }))} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5" />
+          <button onClick={() => onChange({ ...draft })} className="rounded-lg bg-slate-900 px-3 py-1.5 font-bold text-white">Xem</button>
+          {quick.map(([l, r]) => <button key={l} onClick={() => { setDraft(r); onChange(r); }} className="rounded-md px-2 py-1 font-semibold text-indigo-600 hover:bg-indigo-50">{l}</button>)}
+        </div>
+      )}
+    </>
+  );
+}
+const shiftIso = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
 // Mũi tên % thay đổi. lowerBetter: vị trí (giảm = tốt). abs: so chênh lệch tuyệt đối (vị trí).
 export function Delta({ cur, prev, lowerBetter, abs }) {
@@ -169,9 +203,9 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
   const [showAuto, setShowAuto] = useState(false);
   useEffect(() => {
     let alive = true; setDet(null); setErr("");
-    cached(`d|${site.domain}|${site.gsc}|${site.ga}|${R.days}`, () => loadSiteDetail(site, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
+    cached(`d|${site.domain}|${site.gsc}|${site.ga}|${R.key}`, () => loadSiteDetail(site, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
-  }, [site.domain, site.gsc, site.ga, R.days]);
+  }, [site.domain, site.gsc, site.ga, R.key]);
   const g = sum?.gsc, a = sum?.ga;
   const chart = useMemo(() => {
     const m = new Map();
@@ -179,9 +213,9 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
     for (const x of det?.gaDaily || []) m.set(x.date, { ...(m.get(x.date) || { date: x.date }), users: x.activeUsers, keyEvents: x.keyEvents });
     return [...m.values()].sort((x, y) => x.date.localeCompare(y.date)).map((x) => ({ ...x, day: dm(x.date) }));
   }, [g, det]);
-  const ai = aiState[`${site.domain}|${R.days}`];
+  const ai = aiState[`${site.domain}|${R.key}`];
   const runAi = async () => {
-    const key = `${site.domain}|${R.days}`;
+    const key = `${site.domain}|${R.key}`;
     setAiState((s) => ({ ...s, [key]: { busy: true } }));
     try { const r = await aiWebAnalysis({ data: aiPayload(site, sum, det, R), apiKey }); setAiState((s) => ({ ...s, [key]: { r } })); }
     catch (e) { setAiState((s) => ({ ...s, [key]: { err: e.message || String(e) } })); }
@@ -374,7 +408,7 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
 
 export default function Web() {
   const { isOwner, settings = {}, setSettings } = useData();
-  const [days, setDays] = useState(28);
+  const [days, setDays] = useState(28); // số ngày hoặc { since, until }
   const [sites, setSites] = useState(null);
   const [meta, setMeta] = useState({ hiddenSites: [], gaProps: [], conn: null });
   const [sums, setSums] = useState({});
@@ -398,10 +432,10 @@ export default function Web() {
   useEffect(() => {
     if (!sites) return;
     let alive = true; setSums({});
-    sites.forEach((s) => cached(`s|${s.domain}|${s.gsc}|${s.ga}|${days}|${tick}`, () => loadSiteSummary(s, R)).then((v) => alive && setSums((o) => ({ ...o, [s.domain]: v }))));
+    sites.forEach((s) => cached(`s|${s.domain}|${s.gsc}|${s.ga}|${R.key}|${tick}`, () => loadSiteSummary(s, R)).then((v) => alive && setSums((o) => ({ ...o, [s.domain]: v }))));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sites, days, tick]);
+  }, [sites, R.key, tick]);
 
   const tot = useMemo(() => {
     const t = { clicks: 0, pClicks: 0, users: 0, pUsers: 0, conv: 0, pConv: 0 };
@@ -421,8 +455,8 @@ export default function Web() {
     <div className="space-y-3">
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {PRESETS.map(([d, l]) => <button key={d} onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-[12px] font-bold ${days === d ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}</button>)}
-          <span className="text-[11px] text-slate-400">so với {days} ngày liền trước</span>
+          <RangePicker value={days} onChange={setDays} />
+          <span className="text-[11px] text-slate-400">{R.custom ? `${dm(R.ga.cur[0])}/${R.ga.cur[0].slice(2, 4)} → ${dm(R.ga.cur[1])}/${R.ga.cur[1].slice(2, 4)} · ` : ""}so với {R.days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
         {meta.conn && <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Google của Văn phòng AI · đồng bộ danh sách web lúc {meta.conn.last_sync_at ? new Date(meta.conn.last_sync_at).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "—"}{meta.conn.last_error ? ` · lỗi: ${meta.conn.last_error}` : ""}. Chỉ hiện web/property đang <b>bật</b> bên Văn phòng AI. <b>Thêm web mới:</b> thêm email robot vào Search Console/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới → bật công tắc.</div>}

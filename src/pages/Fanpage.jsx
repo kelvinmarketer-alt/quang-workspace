@@ -5,7 +5,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { listPages, loadPageSummary, loadPagePosts, fbRanges, pageVerdict } from "../lib/fbPages.js";
 import { aiPageAnalysis } from "../lib/ai.js";
-import { int, k, pct1, dm, Delta, Spark, Table, AiBox, PRESETS } from "./Web.jsx";
+import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker } from "./Web.jsx";
 
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
 const CACHE = new Map();
@@ -74,11 +74,11 @@ function Detail({ p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiRead
   const [sort, setSort] = useState("reach");
   useEffect(() => {
     let alive = true; setDet(null); setErr("");
-    cached(`posts|${p.page_id}|${R.days}`, () => loadPagePosts(p, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
+    cached(`posts|${p.page_id}|${R.key}`, () => loadPagePosts(p, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
-  }, [p.page_id, R.days]);
+  }, [p.page_id, R.key]);
   const c = sum?.cur, v = sum?.prev;
-  const key = `${p.page_id}|${R.days}`, ai = aiState[key];
+  const key = `${p.page_id}|${R.key}`, ai = aiState[key];
   const runAi = async () => {
     setAiState((s) => ({ ...s, [key]: { busy: true } }));
     try { const r = await aiPageAnalysis({ data: aiPayload(p, sum, det, R), apiKey }); setAiState((s) => ({ ...s, [key]: { r } })); }
@@ -223,10 +223,10 @@ export default function Fanpage() {
   useEffect(() => {
     if (!pages) return;
     let alive = true; setSums({});
-    shown.forEach((p) => cached(`sum|${p.page_id}|${days}|${tick}`, () => loadPageSummary(p, R)).then((v) => alive && setSums((o) => ({ ...o, [p.page_id]: v }))));
+    shown.forEach((p) => cached(`sum|${p.page_id}|${R.key}|${tick}`, () => loadPageSummary(p, R)).then((v) => alive && setSums((o) => ({ ...o, [p.page_id]: v }))));
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages, days, tick, hidden.join(",")]);
+  }, [pages, R.key, tick, hidden.join(",")]);
 
   const tot = useMemo(() => {
     const t = { reach: 0, pReach: 0, eng: 0, pEng: 0, msg: 0, pMsg: 0 };
@@ -242,8 +242,8 @@ export default function Fanpage() {
     <div className="space-y-3">
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
-          {PRESETS.map(([d, l]) => <button key={d} onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-[12px] font-bold ${days === d ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}</button>)}
-          <span className="text-[11px] text-slate-400">so với {days} ngày liền trước</span>
+          <RangePicker value={days} onChange={setDays} />
+          <span className="text-[11px] text-slate-400">{R.custom ? `${dm(R.cur[0])}/${R.cur[0].slice(2, 4)} → ${dm(R.cur[1])}/${R.cur[1].slice(2, 4)} · ` : ""}so với {R.days} ngày liền trước</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
         <div className="mt-1.5 text-[11px] text-slate-400">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>

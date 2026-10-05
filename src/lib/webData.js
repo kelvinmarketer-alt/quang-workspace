@@ -6,13 +6,22 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 export const todayIso = () => iso(new Date());
 
 // GSC trễ ~2-3 ngày → kết thúc ở hôm-3; GA4 kết thúc hôm qua. Kỳ trước = cùng độ dài liền trước.
-export function rangesOf(days) {
+// period: số ngày (7/28/90) hoặc { since, until } tuỳ chọn. Kỳ trước = cùng độ dài liền trước.
+export const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00") - Date.parse(a + "T00:00:00")) / 86400000) + 1;
+const win = (start, end) => { const n = daysBetween(start, end); return { cur: [start, end], prev: [addDays(start, -n), addDays(start, -1)] }; };
+export function rangesOf(period) {
   const t = todayIso();
-  const gEnd = addDays(t, -3), aEnd = addDays(t, -1);
+  const gMax = addDays(t, -3), aMax = addDays(t, -1);
+  if (period && typeof period === "object") {
+    const until = period.until > aMax ? aMax : period.until, since = period.since > until ? until : period.since;
+    const gEnd = until > gMax ? gMax : until, gStart = since > gEnd ? gEnd : since;
+    return { days: daysBetween(since, until), custom: true, key: `${since}_${until}`, ga: win(since, until), gsc: win(gStart, gEnd) };
+  }
+  const days = period;
   return {
-    days,
-    gsc: { cur: [addDays(gEnd, -(days - 1)), gEnd], prev: [addDays(gEnd, -(2 * days - 1)), addDays(gEnd, -days)] },
-    ga: { cur: [addDays(aEnd, -(days - 1)), aEnd], prev: [addDays(aEnd, -(2 * days - 1)), addDays(aEnd, -days)] },
+    days, key: String(days),
+    gsc: { cur: [addDays(gMax, -(days - 1)), gMax], prev: [addDays(gMax, -(2 * days - 1)), addDays(gMax, -days)] },
+    ga: { cur: [addDays(aMax, -(days - 1)), aMax], prev: [addDays(aMax, -(2 * days - 1)), addDays(aMax, -days)] },
   };
 }
 

@@ -9,9 +9,15 @@ const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.get
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
 
 // Kỳ: kết thúc hôm qua; FB insights `until` là mốc đầu ngày (không tính) → dùng until = ngày kế tiếp
-export function fbRanges(days) {
+export function fbRanges(period) {
   const t = iso(new Date()), end = addDays(t, -1);
-  return { days, cur: [addDays(end, -(days - 1)), end], prev: [addDays(end, -(2 * days - 1)), addDays(end, -days)] };
+  if (period && typeof period === "object") {
+    const until = period.until > end ? end : period.until, since = period.since > until ? until : period.since;
+    const n = Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1;
+    return { days: n, custom: true, key: `${since}_${until}`, cur: [since, until], prev: [addDays(since, -n), addDays(since, -1)] };
+  }
+  const days = period;
+  return { days, key: String(days), cur: [addDays(end, -(days - 1)), end], prev: [addDays(end, -(2 * days - 1)), addDays(end, -days)] };
 }
 
 let sysTokens = null;
@@ -55,9 +61,13 @@ const PAGE_METRICS = ["page_total_media_view_unique", "page_media_view", "page_p
 
 async function pageInsights(p, [since, until]) {
   const tok = await pageToken(p);
-  const j = await fbGet(`${p.page_id}/insights`, { metric: PAGE_METRICS.join(","), period: "day", since, until: addDays(until, 1) }, tok);
+  // Facebook giới hạn ~93 ngày / lần gọi → chia khúc 90 ngày rồi nối lại
   const by = {};
-  for (const m of j.data || []) by[m.name] = (m.values || []).map((v) => ({ date: (v.end_time || "").slice(0, 10), value: v.value }));
+  for (let s = since; s <= until; s = addDays(s, 90)) {
+    const e = addDays(s, 89) < until ? addDays(s, 89) : until;
+    const j = await fbGet(`${p.page_id}/insights`, { metric: PAGE_METRICS.join(","), period: "day", since: s, until: addDays(e, 1) }, tok);
+    for (const m of j.data || []) by[m.name] = [...(by[m.name] || []), ...(m.values || []).map((v) => ({ date: (v.end_time || "").slice(0, 10), value: v.value }))];
+  }
   const sum = (k) => (by[k] || []).reduce((s, v) => s + (typeof v.value === "number" ? v.value : 0), 0);
   const reactions = (by.page_actions_post_reactions_total || []).reduce((s, v) => s + (v.value && typeof v.value === "object" ? Object.values(v.value).reduce((a, b) => a + b, 0) : 0), 0);
   const fl = by.page_follows || [];
