@@ -20,7 +20,7 @@ const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 
 function Field({ label, children, hint }) {
   return (
-    <label className="block text-sm">
+    <label className="block min-w-0 text-sm">
       <span className="mb-1 block font-semibold text-slate-600">{label}</span>
       {children}
       {hint && <span className="mt-0.5 block text-[11px] text-slate-400">{hint}</span>}
@@ -134,9 +134,9 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
         <div className="space-y-2">
           {costs.map((c, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input value={c.label} onChange={(e) => setCost(i, "label", e.target.value)} placeholder="Tên khoản (hosting…)" className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-              <MoneyInput value={c.amount} onChange={(v) => setCost(i, "amount", v)} placeholder="0" className="w-32 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-              <button type="button" onClick={() => delCost(i)} className="rounded-lg p-1.5 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+              <input value={c.label} onChange={(e) => setCost(i, "label", e.target.value)} placeholder="Tên khoản (hosting…)" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <MoneyInput value={c.amount} onChange={(v) => setCost(i, "amount", v)} placeholder="0" className="w-28 shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:w-32" />
+              <button type="button" onClick={() => delCost(i)} className="shrink-0 rounded-lg p-2 sm:p-1.5 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
             </div>
           ))}
         </div>
@@ -177,9 +177,9 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
 
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
+    <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl ${wide ? "max-w-2xl" : "max-w-md"}`}>
+      <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5 ${wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{title}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -272,6 +272,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
         )}
       </div>
 
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 border-t border-slate-100 bg-white px-4 pb-4 pt-3 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0">
       <button
         onClick={() => {
           if (!f.name.trim() || !f.customerId) return;
@@ -283,9 +284,10 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
           }
           onClose();
         }}
-        className="mt-4 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
+        className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
         {editing ? "Lưu" : "Tạo dự án"}
       </button>
+      </div>
     </Modal>
   );
 }
@@ -309,10 +311,10 @@ function InstModal({ isAds, isSalary, salaryBase = 0, initial, dup = false, defa
       {added > 0 && <div className="mb-3 flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-600"><Check size={14} /> Đã thêm <b>{added}</b> {isSalary ? "tháng" : "đợt"} — nhập tiếp hoặc bấm "Xong".</div>}
       <InstallmentFields f={f} setF={setF} isAds={isAds} isSalary={isSalary} salaryBase={salaryBase} />
       {editing ? (
-        <button onClick={saveClose} className="mt-4 w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
+        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 border-t border-slate-100 bg-white px-4 pb-4 pt-3 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0"><button onClick={saveClose} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button></div>
       ) : (
-        <div className="mt-4 flex gap-2">
-          <button onClick={saveMore} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Plus size={15} /> Lưu & thêm tiếp</button>
+        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 border-t border-slate-100 bg-white px-4 pb-4 pt-3 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0 flex gap-2">
+          <button onClick={saveMore} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border-2 border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Plus size={15} className="shrink-0" /> <span className="truncate">Lưu & thêm tiếp</span></button>
           <button onClick={() => { if (num(f.amount)) saveClose(); else onClose(); }} className="flex flex-1 items-center justify-center rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{added > 0 ? "Xong" : dup ? "Tạo đợt mới" : isSalary ? "Ghi lương" : "Lưu đợt"}</button>
         </div>
       )}
@@ -333,28 +335,28 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-2xl">
-        <div className="flex items-start justify-between">
-          <div>
+      <div className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-4 shadow-2xl sm:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Badge tone={CAT_TONE[project.category] || "slate"}>{project.category}</Badge>
               <Badge tone={stone}>{slabel}</Badge>
             </div>
-            <h3 className="mt-2 text-lg font-extrabold text-slate-900">{project.name}</h3>
+            <h3 className="mt-2 break-words text-lg font-extrabold text-slate-900">{project.name}</h3>
             <div className="text-sm text-slate-400">{project.customerName}</div>
           </div>
-          <div className="flex items-center gap-1">
-            <button onClick={onEdit} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
-            <button onClick={() => { if (confirm("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button onClick={onEdit} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
+            <button onClick={() => { if (confirm("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
+            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 sm:p-1.5"><X size={18} /></button>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-indigo-50 p-3"><div className="text-[11px] font-bold uppercase text-indigo-400">Doanh thu</div><div className="text-lg font-extrabold text-indigo-700">{formatVND(m.revenue)}</div></div>
-          <div className="rounded-xl bg-emerald-50 p-3"><div className="text-[11px] font-bold uppercase text-emerald-400">Lợi nhuận gộp</div><div className="text-lg font-extrabold text-emerald-700">{formatVND(m.grossProfit)}</div></div>
-          {isAds && <div className="rounded-xl bg-sky-50 p-3"><div className="text-[11px] font-bold uppercase text-sky-400">Chiết khấu nền tảng</div><div className="text-lg font-extrabold text-sky-700">{formatVND(m.platformDiscount)}</div></div>}
-          <div className={`rounded-xl p-3 ${m.debt > 0 ? "bg-rose-50" : "bg-slate-50"}`}><div className={`text-[11px] font-bold uppercase ${m.debt > 0 ? "text-rose-400" : "text-slate-400"}`}>Công nợ</div><div className={`text-lg font-extrabold ${m.debt > 0 ? "text-rose-700" : "text-slate-500"}`}>{formatVND(m.debt)}</div></div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
+          <div className="min-w-0 rounded-xl bg-indigo-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-indigo-400">Doanh thu</div><div className="break-words text-base font-extrabold text-indigo-700 sm:text-lg">{formatVND(m.revenue)}</div></div>
+          <div className="min-w-0 rounded-xl bg-emerald-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-emerald-400">Lợi nhuận gộp</div><div className="break-words text-base font-extrabold text-emerald-700 sm:text-lg">{formatVND(m.grossProfit)}</div></div>
+          {isAds && <div className="min-w-0 rounded-xl bg-sky-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-sky-400">Chiết khấu nền tảng</div><div className="break-words text-base font-extrabold text-sky-700 sm:text-lg">{formatVND(m.platformDiscount)}</div></div>}
+          <div className={`min-w-0 rounded-xl p-3 ${m.debt > 0 ? "bg-rose-50" : "bg-slate-50"}`}><div className={`truncate text-[11px] font-bold uppercase ${m.debt > 0 ? "text-rose-400" : "text-slate-400"}`}>Công nợ</div><div className={`break-words text-base font-extrabold sm:text-lg ${m.debt > 0 ? "text-rose-700" : "text-slate-500"}`}>{formatVND(m.debt)}</div></div>
         </div>
         <div className="mt-2 text-center text-[11px] text-slate-400">Đã thu {formatVND(m.collected)} / {formatVND(m.contractValue)}</div>
 
@@ -372,13 +374,13 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
             const full = im.debt <= 0;
             return (
               <div key={x.id} className="group rounded-xl border border-slate-100 p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800">{x.label}{x.carried && <Badge tone="sky">nối</Badge>}</div>
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-slate-800"><span className="truncate">{x.label}</span>{x.carried && <Badge tone="sky">nối</Badge>}</div>
+                  <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                     <span className="text-[11px] text-slate-400">{x.date ? fmtDateVI(x.date) : ""}</span>
-                    <button title="Nhân bản (đổi ngày)" onClick={() => setInstModal({ dup: { ...instToForm(x), id: undefined, carried: false, date: addMonthISO(x.date) } })} className="rounded p-1 text-slate-300 hover:text-violet-600"><Copy size={13} /></button>
-                    <button title="Sửa" onClick={() => setInstModal({ edit: instToForm(x) })} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                    <button title="Xoá" onClick={() => deleteInstallment(project.id, x.id)} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
+                    <button title="Nhân bản (đổi ngày)" onClick={() => setInstModal({ dup: { ...instToForm(x), id: undefined, carried: false, date: addMonthISO(x.date) } })} className="-my-1 rounded p-2 text-slate-300 hover:text-violet-600 sm:my-0 sm:p-1"><Copy size={13} /></button>
+                    <button title="Sửa" onClick={() => setInstModal({ edit: instToForm(x) })} className="-my-1 rounded p-2 text-slate-300 hover:text-indigo-600 sm:my-0 sm:p-1"><Pencil size={13} /></button>
+                    <button title="Xoá" onClick={() => deleteInstallment(project.id, x.id)} className="-my-1 rounded p-2 text-slate-300 hover:text-rose-600 sm:my-0 sm:p-1"><Trash2 size={13} /></button>
                   </div>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
@@ -391,11 +393,11 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                   <span>DT <b className="text-indigo-600">{formatShort(im.revenue)}</b></span>
                   <span>LN <b className="text-emerald-600">{formatShort(im.grossProfit)}</b></span>
                 </div>
-                <div className="mt-2 flex items-center justify-between">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <span className={`text-[11px] font-bold ${full ? "text-emerald-600" : "text-rose-600"}`}>
                     {full ? "Đã thu đủ" : `Còn nợ ${formatVND(im.debt)}`} · thu {formatShort(im.collected)}/{formatShort(im.contractValue)}
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="ml-auto flex items-center gap-1.5">
                     {im.carry > 0 && (
                       <button onClick={() => addInstallment(project.id, { label: "Tiếp nối " + x.label, date: todayISO(), amount: im.carry, serviceFee: 0, spend: 0, refund: 0, carry: 0, ctv: 0, otherCost: 0, collected: im.carry, carried: true })} className="flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-600 hover:bg-amber-100"><ArrowRight size={12} /> Tạo đợt nối</button>
                     )}

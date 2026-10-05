@@ -101,9 +101,9 @@ function KetoanReport() {
     <div className="space-y-4 sm:space-y-5">
       {/* Bộ lọc kỳ */}
       <Card>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* MOBILE: dropdown kỳ */}
-          <select value={preset} onChange={(e) => setPreset(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold sm:hidden">
+          <select value={preset} onChange={(e) => setPreset(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 sm:hidden">
             {PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {/* DESKTOP: chips kỳ */}
@@ -114,9 +114,9 @@ function KetoanReport() {
           </div>
           {preset === "custom" && (
             <div className="flex w-full items-center gap-2 sm:w-auto">
-              <DateField value={cf} onChange={setCf} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
+              <DateField value={cf} onChange={setCf} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
               <span className="text-slate-400">→</span>
-              <DateField value={ct} onChange={setCt} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
+              <DateField value={ct} onChange={setCt} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:flex-none" />
             </div>
           )}
           <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-600 sm:ml-auto">
@@ -124,9 +124,10 @@ function KetoanReport() {
             So sánh kỳ trước
           </label>
         </div>
-        <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-          <Calendar size={13} /> {fmtDateVI(from)} → {fmtDateVI(to)}
-          {compare && <span>· so với {fmtDateVI(prev.from)} → {fmtDateVI(prev.to)}</span>}
+        {/* MOBILE: 2 dòng gọn (kỳ này / so với); DESKTOP: 1 dòng */}
+        <div className="mt-2 flex flex-col gap-0.5 text-xs text-slate-400 sm:flex-row sm:items-center sm:gap-2">
+          <span className="flex items-center gap-2 whitespace-nowrap"><Calendar size={13} className="shrink-0" /> {fmtDateVI(from)} → {fmtDateVI(to)}</span>
+          {compare && <span className="whitespace-nowrap pl-[21px] sm:pl-0"><span className="hidden sm:inline">· </span>so với {fmtDateVI(prev.from)} → {fmtDateVI(prev.to)}</span>}
         </div>
       </Card>
 
@@ -179,9 +180,9 @@ function KetoanReport() {
       {/* Chỉ số phụ */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[["Số tiền nhận", cur.received], ["Chiết khấu nền tảng", cur.discount], ["Phí chạy (ADS)", cur.serviceFee], ["Tiền chạy thực tế", cur.spend]].map(([l, v]) => (
-          <div key={l} className="rounded-xl bg-white p-3 shadow-sm">
-            <div className="text-[11px] font-semibold uppercase text-slate-400">{l}</div>
-            <div className="text-base font-extrabold text-slate-800">{formatVND(v)}</div>
+          <div key={l} className="min-w-0 rounded-xl bg-white p-3 shadow-sm">
+            <div className="truncate text-[11px] font-semibold uppercase text-slate-400">{l}</div>
+            <div className="break-words text-base font-extrabold text-slate-800">{formatVND(v)}</div>
           </div>
         ))}
       </div>
@@ -209,7 +210,7 @@ function KetoanReport() {
 
       {/* Bảng chi tiết các phiếu thu trong kỳ */}
       <Card className="!p-0 overflow-hidden">
-        <div className="flex items-center justify-between p-5 pb-3">
+        <div className="flex items-center justify-between p-4 pb-3 sm:p-5 sm:pb-3">
           <h2 className="text-base font-extrabold text-slate-900">Chi tiết phiếu thu</h2>
           <Badge tone="slate">{cur.count} đợt</Badge>
         </div>
@@ -393,22 +394,22 @@ function DebtPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 p-4 text-white shadow-lg shadow-rose-500/20">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Tổng công nợ</div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="min-w-0 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 p-3 sm:p-4 text-white shadow-lg shadow-rose-500/20">
+          <div className="truncate text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Tổng công nợ</div>
           <div className="mt-1 text-lg font-extrabold sm:text-2xl"><span className="sm:hidden">{formatShort(totalDebt)}</span><span className="hidden sm:inline">{formatVND(totalDebt)}</span></div>
         </div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm"><div className="text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Khách đang nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
-        <div className="rounded-2xl bg-white p-4 shadow-sm"><div className="text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>
+        <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Khách đang nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
+        <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>
       </div>
 
-      <div className="rounded-xl bg-indigo-50 px-3.5 py-2.5 text-[12px] text-indigo-700">💡 Thu nợ chỉ cập nhật <b>Đã thu</b> / giảm <b>công nợ</b>. Quỹ công ty không đổi vì lợi nhuận đã được ghi nhận từ khi có job.</div>
+      <div className="mx-3 rounded-xl bg-indigo-50 px-3.5 py-2.5 text-[12px] text-indigo-700 sm:mx-0">💡 Thu nợ chỉ cập nhật <b>Đã thu</b> / giảm <b>công nợ</b>. Quỹ công ty không đổi vì lợi nhuận đã được ghi nhận từ khi có job.</div>
 
       {outstanding.length === 0 ? (
         <Card><div className="py-12 text-center"><div className="text-3xl">🎉</div><div className="mt-2 text-sm font-bold text-slate-500">Không còn công nợ nào — tất cả đã thu đủ!</div></div></Card>
       ) : (
         <>
-          <div className="relative">
+          <div className="relative mx-3 sm:mx-0">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm khách / dự án…" className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-indigo-400" />
           </div>
@@ -416,7 +417,7 @@ function DebtPanel() {
             {groups.map((g) => {
               const open = !closed.has(g.key);
               return (
-                <div key={g.key} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <div key={g.key} className="overflow-hidden rounded-none border-y border-slate-100 bg-white shadow-sm sm:rounded-2xl sm:border">
                   <button onClick={() => toggle(g.key)} className={`flex w-full items-center gap-2.5 px-4 py-3 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
                     <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                     <span className="truncate text-sm font-extrabold text-slate-800">{g.name}</span>
@@ -426,7 +427,7 @@ function DebtPanel() {
                   {open && (
                     <div className="divide-y divide-slate-50 border-t border-slate-100">
                       {g.items.map((x) => (
-                        <div key={x.id} className="flex items-center gap-3 px-4 py-3">
+                        <div key={x.id} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
                             <div className="truncate text-[11px] text-slate-400">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}</div>
@@ -434,8 +435,8 @@ function DebtPanel() {
                           <div className="shrink-0 text-right">
                             <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
                             <div className="mt-1 flex justify-end gap-1.5">
-                              <button onClick={() => { if (confirm(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
-                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-indigo-700">Thu…</button>
+                              <button onClick={() => { if (confirm(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
+                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu…</button>
                             </div>
                           </div>
                         </div>

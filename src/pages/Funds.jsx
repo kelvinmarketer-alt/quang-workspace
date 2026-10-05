@@ -579,8 +579,8 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
         </div>
         {t.synthetic ? <span className="w-7 shrink-0" /> : (
           <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-            <button onClick={() => onEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-            <button onClick={() => onDelTx(t.id)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+            <button onClick={() => onEditTx(t)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+            <button onClick={() => onDelTx(t.id)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
           </span>
         )}
       </div>
@@ -725,7 +725,7 @@ function FundsMain() {
     <div className="space-y-4 sm:space-y-5">
       {/* Banner: lịch chuyển đã đến hạn (chờ xác nhận) */}
       {due.length > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
+        <div className="rounded-none border-y border-amber-200 sm:rounded-2xl sm:border bg-gradient-to-r from-amber-50 to-orange-50 p-4">
           <div className="mb-2.5 flex items-center gap-2 text-sm font-extrabold text-amber-700"><BellRing size={16} /> Lịch chuyển đến hạn ({due.reduce((a, d) => a + d.occs.length, 0)})</div>
           <div className="space-y-2">
             {due.map(({ sc, occs }) => {
@@ -754,17 +754,17 @@ function FundsMain() {
 
       {/* Thanh năm */}
       <Card>
-        <div className="flex flex-wrap items-center gap-3">
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-bold sm:py-2">
             {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
           </select>
-          <div className="text-sm font-semibold text-slate-400">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
+          <div className="min-w-0 text-xs font-semibold leading-relaxed text-slate-400 sm:text-sm">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
         </div>
       </Card>
 
       {/* QUỸ CÔNG TY — nguồn = Lợi nhuận gộp, người dùng điều phối ra các quỹ */}
       {companyFund && (
-        <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-5 text-white shadow-xl">
+        <div className="overflow-hidden rounded-none sm:rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-5 text-white shadow-xl">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><PiggyBank size={14} /> Quỹ công ty · nguồn Lợi nhuận gộp</div>
@@ -800,8 +800,8 @@ function FundsMain() {
 
       {/* Lưới quỹ cá nhân */}
       <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-extrabold text-slate-900">Các quỹ cá nhân <span className="text-slate-400">({personalWithBal.length})</span> · Tổng <span className="text-indigo-600">{formatShort(totalPersonal)}</span></h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-0">
+          <h2 className="min-w-0 text-base font-extrabold text-slate-900">Các quỹ cá nhân <span className="text-slate-400">({personalWithBal.length})</span> · Tổng <span className="text-indigo-600">{formatShort(totalPersonal)}</span></h2>
           <div className="flex flex-wrap items-center gap-2">
             {pctTotal !== 100 && personalWithBal.length > 0 && <Badge tone={pctTotal > 100 ? "rose" : "amber"}>Tổng % = {pctTotal}</Badge>}
             {allWithBal.length >= 2 && <button onClick={() => setTransferInit({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ArrowLeftRight size={15} /> Chuyển quỹ</button>}
@@ -816,8 +816,8 @@ function FundsMain() {
             {personalWithBal.map((f) => (
               <div key={f.id} className="card group relative flex flex-col p-4">
                 <span className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                  <button onClick={() => setFundModal(f)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
-                  <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                  <button onClick={() => setFundModal(f)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                  <button onClick={() => { if (confirm(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                 </span>
                 <button onClick={() => setDetailId(f.id)} className="flex flex-col text-left">
                   <div className="flex items-center gap-2.5">
@@ -875,9 +875,9 @@ function FundsMain() {
                     </div>
                   </div>
                   <span className="flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                    <button onClick={() => updateFundSchedule(sc.id, { active: off })} title={off ? "Bật lại" : "Tạm tắt"} className={`rounded-lg p-1.5 ${off ? "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-emerald-50"}`}><Power size={15} /></button>
-                    <button onClick={() => setSchedModal(sc)} className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
-                    <button onClick={() => { if (confirm("Xoá lịch chuyển này?")) deleteFundSchedule(sc.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                    <button onClick={() => updateFundSchedule(sc.id, { active: off })} title={off ? "Bật lại" : "Tạm tắt"} className={`rounded-lg p-2 sm:p-1.5 ${off ? "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-emerald-50"}`}><Power size={15} /></button>
+                    <button onClick={() => setSchedModal(sc)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                    <button onClick={() => { if (confirm("Xoá lịch chuyển này?")) deleteFundSchedule(sc.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                   </span>
                 </div>
               );
@@ -1023,8 +1023,8 @@ function FundsMain() {
                             </div>
                             <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
                             <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-                              <button onClick={() => setEditTx(t)} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-                              <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                              <button onClick={() => setEditTx(t)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+                              <button onClick={() => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
                             </span>
                           </div>
                         );

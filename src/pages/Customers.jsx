@@ -31,7 +31,7 @@ function CustomerModal({ initial, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial.id ? "Sửa khách hàng" : "Thêm khách hàng"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -74,7 +74,7 @@ function BulkAddModal({ onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm khách hàng số lượng lớn</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -165,26 +165,34 @@ export default function Customers() {
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card>
-        <div className="flex items-center gap-2">
-          <div className="mr-auto min-w-0">
+        {/* MOBILE: dòng 1 = tiêu đề; dòng 2 = 1 hàng nút gọn; dòng 3 = ô tìm full width. DESKTOP giữ bố cục cũ. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full min-w-0 sm:mr-auto sm:w-auto">
             <div className="text-sm font-bold text-slate-800">{counts.active} khách · {projects.length} dự án</div>
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
-          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100"><Sparkles size={16} /> AI</button>}
-          {canW && <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm khách</button>}
-          {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>}
-        </div>
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
-          <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-            <Search size={16} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / SĐT…" className="w-full text-sm outline-none" />
-          </div>
+          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
+          {canW && <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
+          {/* MOBILE: Chọn + Hàng loạt nằm cùng hàng nút */}
           {canW && rows.length > 0 && (
-            <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+            <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
               {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
             </button>
           )}
-          {canW && <button onClick={() => setBulk(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><ListPlus size={16} /> Hàng loạt</button>}
+          {canW && <button onClick={() => setBulk(true)} className={`${rows.length > 0 ? "" : "ml-auto "}flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden`}><ListPlus size={16} /> Hàng loạt</button>}
+          {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>}
+        </div>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 sm:min-w-[150px]">
+            <Search size={16} className="shrink-0 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / SĐT…" className="w-full min-w-0 text-sm outline-none" />
+          </div>
+          {canW && rows.length > 0 && (
+            <button onClick={toggleAll} className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex">
+              {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
+            </button>
+          )}
+          {canW && <button onClick={() => setBulk(true)} className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex"><ListPlus size={16} /> Hàng loạt</button>}
         </div>
         {/* MOBILE: dropdown lọc */}
         <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
@@ -199,9 +207,9 @@ export default function Customers() {
           ))}
         </div>
         {picked.size > 0 && (
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-indigo-50 px-4 py-2.5">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-indigo-50 px-3 py-2.5 sm:px-4">
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size} khách</span>
-            <div className="flex gap-2">
+            <div className="ml-auto flex gap-2">
               <button onClick={() => setPicked(new Set())} className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-white">Bỏ chọn</button>
               <button onClick={() => { if (confirm(`Xoá ${picked.size} khách đã chọn? Toàn bộ dự án của các khách này cũng bị xoá theo.`)) { deleteCustomers([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
             </div>
@@ -222,7 +230,7 @@ export default function Customers() {
                 {/* DÒNG KHÁCH */}
                 <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-3.5">
                   {canW && (
-                    <button onClick={() => toggle(c.id)} className="shrink-0 text-slate-300 hover:text-indigo-600">
+                    <button onClick={() => toggle(c.id)} className="-m-1.5 shrink-0 p-1.5 text-slate-300 hover:text-indigo-600 sm:m-0 sm:p-0">
                       {isPicked ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
                     </button>
                   )}
@@ -236,10 +244,20 @@ export default function Customers() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-extrabold text-slate-800">{c.name}</span>
-                        <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
-                        {!c.active && <Badge tone="rose">OFF</Badge>}
+                        {/* DESKTOP: badge cạnh tên */}
+                        <span className="hidden shrink-0 items-center gap-1.5 sm:inline-flex">
+                          <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
+                          {!c.active && <Badge tone="rose">OFF</Badge>}
+                        </span>
                       </div>
-                      <div className="text-[11px] text-slate-400">{c.projectCount} dự án</div>
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400 sm:mt-0">
+                        {/* MOBILE: badge xuống dòng 2 để tên đủ chỗ */}
+                        <span className="inline-flex shrink-0 items-center gap-1 sm:hidden">
+                          <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
+                          {!c.active && <Badge tone="rose">OFF</Badge>}
+                        </span>
+                        <span className="truncate">{c.projectCount} dự án</span>
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>
@@ -252,10 +270,10 @@ export default function Customers() {
                 {open && (
                   <div className="space-y-2 border-t border-slate-100 bg-slate-50/50 p-3">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {canW && <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>}
-                      {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-1.5 text-[11px] font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
-                      {canW && <button onClick={() => { const nP = c.projectCount; if (confirm(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
-                      {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[11px] font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
+                      {canW && <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>}
+                      {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
+                      {canW && <button onClick={() => { const nP = c.projectCount; if (confirm(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
+                      {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
                     {c.projects.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>

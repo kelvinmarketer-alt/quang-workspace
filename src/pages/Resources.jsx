@@ -59,9 +59,9 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
   const doCopy = async (e) => { e.stopPropagation(); if (await copy(r.url)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
   return (
     <div className={`rounded-xl border ${checked ? "border-indigo-300 bg-indigo-50/40" : "border-slate-100 hover:border-indigo-200"}`}>
-      <div className="group flex items-center gap-3 p-2.5">
+      <div className="group flex items-center gap-2 p-2 sm:gap-3 sm:p-2.5">
         {select && (
-          <button onClick={() => onCheck && onCheck(r.id)} className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${checked ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}>
+          <button onClick={() => onCheck && onCheck(r.id)} className={`grid h-8 w-8 shrink-0 place-items-center rounded-md border sm:h-6 sm:w-6 ${checked ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}>
             <Check size={14} />
           </button>
         )}
@@ -73,11 +73,11 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
           <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hostOf(r.url) || r.url}</div>
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
-          {hasCred && <button onClick={() => setOpen((v) => !v)} className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold ${open ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`} title="Xem & copy tài khoản / mật khẩu"><KeyRound size={13} /> TK/MK</button>}
-          <button onClick={() => openUrl(r.url)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Mở"><ExternalLink size={14} /></button>
-          <button onClick={doCopy} className={`rounded-lg p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
-          {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
-          {canW && onDelete && <button onClick={() => { if (confirm("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
+          {hasCred && <button onClick={() => setOpen((v) => !v)} className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold sm:py-1 ${open ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`} title="Xem & copy tài khoản / mật khẩu"><KeyRound size={13} /><span className="hidden sm:inline"> TK/MK</span></button>}
+          <button onClick={() => openUrl(r.url)} className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 sm:block" title="Mở"><ExternalLink size={14} /></button>
+          <button onClick={doCopy} className={`rounded-lg p-2 sm:p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
+          {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
+          {canW && onDelete && <button onClick={() => { if (confirm("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
         </div>
       </div>
       {open && hasCred && (
@@ -106,7 +106,7 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa tài nguyên" : "Thêm tài nguyên"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -114,12 +114,12 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Link *</span><input value={f.url} onChange={(e) => onUrl(e.target.value)} autoFocus className={inputCls} placeholder="Dán link Drive / Figma / Sheet…" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên gọi</span><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={inputCls} placeholder={f.url ? guessTitle(f.url) : "Tự đặt theo link nếu bỏ trống"} /></label>
         <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Loại</span>
+          <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Loại</span>
             <select value={f.type} onChange={(e) => { setTypeTouched(true); setF({ ...f, type: e.target.value }); }} className={inputCls}>
               {RES_TYPE_KEYS.map((k) => <option key={k} value={k}>{RES_TYPES[k].label}</option>)}
             </select>
           </label>
-          <div className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Khách</span>
+          <div className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Khách</span>
             <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={f.customerId} onChange={(v) => setF({ ...f, customerId: v, projectId: "" })} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
           </div>
         </div>
@@ -127,8 +127,8 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
           <Combobox options={projOptions} value={f.projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setF((s) => ({ ...s, projectId: v, customerId: p?.customerId || s.customerId })); }} placeholder="Không gắn / chọn dự án" emptyText="Khách này chưa có dự án" />
         </div>
         <div className="mb-3 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tài khoản</span><input value={f.username || ""} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} placeholder="Đăng nhập (nếu có)" autoComplete="off" /></label>
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Mật khẩu</span><input value={f.password || ""} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} placeholder="Mật khẩu (nếu có)" autoComplete="off" /></label>
+          <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Tài khoản</span><input value={f.username || ""} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} placeholder="Đăng nhập (nếu có)" autoComplete="off" /></label>
+          <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Mật khẩu</span><input value={f.password || ""} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} placeholder="Mật khẩu (nếu có)" autoComplete="off" /></label>
         </div>
         <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><input value={f.note || ""} onChange={(e) => setF({ ...f, note: e.target.value })} className={inputCls} /></label>
         <button onClick={save} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg">Lưu</button>
@@ -161,11 +161,11 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {!preset.projectId && (
-            <div className="grid grid-cols-2 gap-3">
-              <div><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
                 <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
               </div>
-              <div><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
+              <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
                 <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" />
               </div>
             </div>
@@ -235,11 +235,11 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {!hasKey && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><SettingsIcon size={15} className="shrink-0" /> Chưa có API key OpenAI — vào <b>Cài đặt</b> để nhập trước.</div>}
           {!preset.projectId && (
-            <div className="grid grid-cols-2 gap-3">
-              <div><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
                 <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
               </div>
-              <div><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
+              <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
                 <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" />
               </div>
             </div>
@@ -302,7 +302,7 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
 // Mục nhúng trong Dự án (ProjectDrawer)
 export function ProjectResources({ projectId, customerId, customerName = "" }) {
   const { resources = [], addResource, addResources, deleteResource, updateResource, canEdit, customerList = [], projects = [] } = useData();
-  const canW = canEdit ? canEdit("customers") : true;
+  const canW = canEdit ? canEdit("resources") : true;
   const list = useMemo(() => (resources || []).filter((r) => r.projectId === projectId).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), [resources, projectId]);
   const [url, setUrl] = useState("");
   const [batch, setBatch] = useState(false);
@@ -322,7 +322,7 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
       </div>
       {canW && (
         <div className="mb-2 flex gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <Link2 size={15} className="shrink-0 text-slate-400" />
             <input value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") quickAdd(); }} placeholder="Dán link Drive / Figma / Sheet… rồi Enter" className="w-full text-sm outline-none" />
           </div>
@@ -345,7 +345,7 @@ export function ProjectResources({ projectId, customerId, customerName = "" }) {
 
 export default function Resources() {
   const { resources = [], customerList = [], projects = [], addResource, addResources, updateResource, deleteResource, deleteResources, canEdit } = useData();
-  const canW = canEdit ? canEdit("customers") : true;
+  const canW = canEdit ? canEdit("resources") : true;
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("all");
   const [custF, setCustF] = useState("all");
@@ -396,14 +396,14 @@ export default function Resources() {
   return (
     <div className="space-y-4">
       {/* Hero */}
-      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white shadow-xl sm:p-5">
+      <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white shadow-xl sm:rounded-2xl sm:p-5">
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><FolderKanban size={14} /> Tài nguyên & Tài liệu</div>
         <div className="mt-1 text-3xl font-extrabold">{resources.length}</div>
         <div className="mt-0.5 text-xs text-indigo-100/80">link tài liệu online của mọi dự án · bấm để mở / copy</div>
       </div>
 
       {/* Bộ lọc loại */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">
         <button onClick={() => setTypeF("all")} className={`rounded-lg px-3 py-1.5 text-[12px] font-bold ${typeF === "all" ? "bg-indigo-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>Tất cả {typeCounts.all || 0}</button>
         {typesPresent.map((k) => (
           <button key={k} onClick={() => setTypeF(k)} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-bold ${typeF === k ? "bg-indigo-500 text-white" : "bg-white text-slate-500 hover:bg-slate-100"}`}>{RES_TYPES[k].label} {typeCounts[k]}</button>
@@ -411,28 +411,28 @@ export default function Resources() {
       </div>
 
       {/* Tìm + lọc khách + thêm */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 px-3 sm:px-0">
         <div className="flex min-w-[160px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
           <Search size={16} className="shrink-0 text-slate-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / link / khách / dự án…" className="w-full text-sm outline-none" />
         </div>
-        <select value={custF} onChange={(e) => setCustF(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
+        <select value={custF} onChange={(e) => setCustF(e.target.value)} className="max-w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
           <option value="all">Tất cả khách</option>
           {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         {canW && (
-          <div className="flex w-full gap-2 sm:w-auto">
-            <button onClick={() => setAi(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={15} /> AI</button>
-            <button onClick={() => setModal({})} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex-none"><Plus size={15} /> Thêm</button>
-            <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white shadow-lg sm:flex-none"><Plus size={15} /> Hàng loạt</button>
-            <button onClick={() => { setSelMode((v) => !v); clearSel(); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold sm:flex-none ${selMode ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}><Check size={15} /> {selMode ? "Xong" : "Chọn"}</button>
+          <div className="flex w-full gap-1.5 sm:w-auto sm:gap-2">
+            <button onClick={() => setAi(true)} className="flex flex-auto items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-2 text-xs font-bold sm:gap-1.5 sm:px-3 sm:text-sm text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={15} /> AI</button>
+            <button onClick={() => setModal({})} className="flex flex-auto items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold sm:gap-1.5 sm:px-3 sm:text-sm text-slate-600 hover:bg-slate-50 sm:flex-none"><Plus size={15} /> Thêm</button>
+            <button onClick={() => setBatch(true)} className="flex flex-auto items-center justify-center gap-1 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2 py-2 text-xs font-bold sm:gap-1.5 sm:px-3 sm:text-sm text-white shadow-lg sm:flex-none"><Plus size={15} /> Hàng loạt</button>
+            <button onClick={() => { setSelMode((v) => !v); clearSel(); }} className={`flex flex-auto items-center justify-center gap-1 whitespace-nowrap rounded-xl border px-2 py-2 text-xs font-bold sm:gap-1.5 sm:px-3 sm:text-sm sm:flex-none ${selMode ? "border-rose-300 bg-rose-50 text-rose-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}><Check size={15} /> {selMode ? "Xong" : "Chọn"}</button>
           </div>
         )}
       </div>
 
       {/* Thanh chọn hàng loạt */}
       {canW && selMode && (
-        <div className="flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+        <div className="mx-3 flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 sm:mx-0">
           <span className="text-sm font-bold text-indigo-700">Đã chọn {sel.size}</span>
           <button onClick={clearSel} className="ml-auto rounded-lg px-3 py-1.5 text-sm font-bold text-slate-600 hover:bg-white">Bỏ chọn</button>
           <button onClick={deleteSelected} disabled={!sel.size} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-40"><Trash2 size={14} /> Xoá đã chọn</button>
@@ -453,7 +453,7 @@ export default function Resources() {
               <Card key={g.cid} className="!p-0 overflow-hidden">
                 <div className="flex w-full items-center gap-3 p-3">
                   {selMode && canW && (
-                    <button onClick={() => toggleGroupSel(g)} className={`grid h-6 w-6 shrink-0 place-items-center rounded-md border ${allSel ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}><Check size={14} /></button>
+                    <button onClick={() => toggleGroupSel(g)} className={`grid h-8 w-8 shrink-0 sm:h-6 sm:w-6 place-items-center rounded-md border ${allSel ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-300 text-transparent"}`}><Check size={14} /></button>
                   )}
                   <button onClick={() => toggleGroup(g.cid)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                     <div className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl text-[13px] font-extrabold ${g.cid === "__none__" ? "bg-slate-200 text-slate-500" : "bg-gradient-to-br from-indigo-500 to-sky-500 text-white"}`}>
@@ -465,17 +465,26 @@ export default function Resources() {
                     </div>
                     <ChevronDown size={18} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
                   </button>
+                  {/* DESKTOP: thao tác nhóm trên header; MOBILE: chuyển xuống phần xổ để tên khách đủ chỗ */}
                   {canW && !selMode && (() => { const pc = g.cid === "__none__" ? "" : g.cid; return (
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
                       <button onClick={(e) => { e.stopPropagation(); setAi({ customerId: pc }); }} className="rounded-lg p-1.5 text-indigo-500 hover:bg-indigo-50" title={`AI đọc ảnh → thêm vào ${g.name}`}><Sparkles size={16} /></button>
                       <button onClick={(e) => { e.stopPropagation(); setModal({ customerId: pc }); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title={`Thêm 1 mục vào ${g.name}`}><Plus size={16} /></button>
                       <button onClick={(e) => { e.stopPropagation(); setBatch({ customerId: pc }); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600" title={`Thêm hàng loạt vào ${g.name}`}><ListPlus size={16} /></button>
                     </div>
                   ); })()}
-                  {canW && <button onClick={() => deleteGroup(g)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title={`Xoá tất cả tài nguyên của ${g.name}`}><Trash2 size={16} /></button>}
+                  {canW && <button onClick={() => deleteGroup(g)} className="hidden shrink-0 rounded-lg p-1.5 text-slate-300 sm:block hover:bg-rose-50 hover:text-rose-600" title={`Xoá tất cả tài nguyên của ${g.name}`}><Trash2 size={16} /></button>}
                 </div>
                 {open && (
                   <div className="space-y-1.5 border-t border-slate-100 p-3">
+                    {canW && !selMode && (() => { const pc = g.cid === "__none__" ? "" : g.cid; return (
+                      <div className="flex flex-wrap items-center gap-1.5 pb-1 sm:hidden">
+                        <button onClick={() => setAi({ customerId: pc })} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-[11px] font-bold text-indigo-600"><Sparkles size={13} /> AI</button>
+                        <button onClick={() => setModal({ customerId: pc })} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-bold text-slate-600"><Plus size={13} /> Thêm</button>
+                        <button onClick={() => setBatch({ customerId: pc })} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-bold text-slate-600"><ListPlus size={13} /> Hàng loạt</button>
+                        <button onClick={() => deleteGroup(g)} className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-bold text-slate-400 hover:text-rose-600"><Trash2 size={13} /> Xoá nhóm</button>
+                      </div>
+                    ); })()}
                     {g.items.map((r) => <ResRow key={r.id} r={r} subLabel={projName[r.projectId] || ""} canW={canW} onEdit={setModal} onDelete={deleteResource} select={selMode} checked={sel.has(r.id)} onCheck={toggleSel} />)}
                   </div>
                 )}

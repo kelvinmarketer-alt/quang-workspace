@@ -41,7 +41,7 @@ export default function Coin() {
   const pick = (t) => { setTab(t); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-white/70 p-1 shadow-sm">
+      <div className="grid grid-cols-2 gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl">
         {[["invest", "Đầu tư", Wallet], ["market", "Thị trường", CandlestickChart]].map(([k, label, Icon]) => (
           <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-extrabold transition ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} /> {label}
@@ -147,7 +147,7 @@ function CoinInvest() {
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Tổng quan danh mục */}
-      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-amber-900/80 p-4 text-white shadow-xl sm:p-5">
+      <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-amber-900/80 sm:rounded-2xl p-4 text-white shadow-xl sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-200"><Coins size={14} /> Danh mục coin · Binance</div>
@@ -167,7 +167,7 @@ function CoinInvest() {
         <div className="mt-3 text-[11px] text-amber-100/70">Tự cập nhật giá mỗi 15s · ví mỗi 5 phút · tỉ giá {Math.round(vnd).toLocaleString("vi-VN")}đ/$ (tự động)</div>
       </div>
 
-      {wErr && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
+      {wErr && <div className="mx-3 flex items-center gap-2 rounded-xl bg-amber-50 sm:mx-0 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
 
       {/* Danh sách coin */}
       {rows.length === 0 ? (
@@ -176,7 +176,50 @@ function CoinInvest() {
         <div className="space-y-2">
           {rows.map((r) => (
             <Card key={r.key} className="!p-3">
-              <div className="flex items-center gap-3">
+              {/* MOBILE: dòng 1 = logo + mã + 24h … Hiện có + lãi/lỗ; dòng 2 = lưới 3 cột Đã đầu tư / Giá TB / Giá hiện tại */}
+              <div className="sm:hidden">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-[12px] font-extrabold text-white">{(r.symbol || "?").slice(0, 4)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-extrabold text-slate-800">{r.symbol}</span>
+                      {r.manual && <Badge tone="slate">tay</Badge>}
+                      {r.chg != null && <Badge tone={r.chg >= 0 ? "emerald" : "rose"}>{r.chg >= 0 ? "+" : ""}{r.chg.toFixed(1)}%</Badge>}
+                    </div>
+                    <div className="flex items-center gap-0.5 text-[11px] text-slate-400">
+                      <span className="truncate">SL {qtyFmt(r.qty)}</span>
+                      {r.manual && canW && (
+                        <>
+                          <button onClick={() => setModal(r)} className="-my-1.5 ml-1 shrink-0 rounded-lg p-2 text-slate-300 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+                          <button onClick={() => { if (confirm(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-1.5 shrink-0 rounded-lg p-2 text-slate-300 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-[10px] font-semibold uppercase text-slate-400">Hiện có</div>
+                    <div className="text-sm font-extrabold text-slate-800">{r.value != null ? fmtUSD(r.value) : "…"}</div>
+                    {r.pnl != null && <div className={`text-[11px] font-bold ${r.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{r.pnl >= 0 ? "+" : ""}{fmtUSD(r.pnl)}{r.invested > 0 ? ` (${r.pnl >= 0 ? "+" : ""}${((r.pnl / r.invested) * 100).toFixed(1)}%)` : ""}</div>}
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  <div className="min-w-0 rounded-lg bg-indigo-50 px-2 py-1.5">
+                    <div className="truncate text-[10px] font-semibold text-indigo-500">Đã đầu tư</div>
+                    <div className="truncate text-[12px] font-bold text-indigo-700">{r.invested != null ? fmtUSD(r.invested) : "—"}</div>
+                    {r.invested != null && <div className="truncate text-[10px] font-semibold text-indigo-500">≈ {fmtVND(r.invested * vnd)}</div>}
+                  </div>
+                  <div className="min-w-0 rounded-lg bg-slate-100 px-2 py-1.5">
+                    <div className="truncate text-[10px] font-semibold text-slate-400">Giá TB</div>
+                    <div className="truncate text-[12px] font-bold text-slate-600">{r.avgCost != null ? fmtUSD(r.avgCost) : "—"}</div>
+                  </div>
+                  <div className={`min-w-0 rounded-lg px-2 py-1.5 ${r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    <div className="truncate text-[10px] font-semibold opacity-70">Giá hiện tại</div>
+                    <div className="truncate text-[12px] font-bold">{r.price != null ? fmtUSD(r.price) : "…"}</div>
+                  </div>
+                </div>
+              </div>
+              {/* DESKTOP: giữ bố cục cũ */}
+              <div className="hidden items-center gap-3 sm:flex">
                 <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-[13px] font-extrabold text-white">{(r.symbol || "?").slice(0, 4)}</div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
@@ -209,9 +252,9 @@ function CoinInvest() {
       )}
 
       {canW && (
-        <button onClick={() => setModal({ symbol: "", qty: "", buyPrice: "" })} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-amber-300 hover:text-amber-600"><Plus size={15} /> Thêm coin thủ công (ngoài Binance)</button>
+        <div className="px-3 sm:px-0"><button onClick={() => setModal({ symbol: "", qty: "", buyPrice: "" })} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-amber-300 hover:text-amber-600"><Plus size={15} /> Thêm coin thủ công (ngoài Binance)</button></div>
       )}
-      <div className="text-center text-[11px] text-slate-400">Giá & tỉ giá realtime từ Binance/thị trường. Ví thật đồng bộ qua API key read-only (bảo mật server-side, chỉ chủ).</div>
+      <div className="px-3 text-center text-[11px] text-slate-400 sm:px-0">Giá & tỉ giá realtime từ Binance/thị trường. Ví thật đồng bộ qua API key read-only (bảo mật server-side, chỉ chủ).</div>
 
       {modal && <CoinModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateCoin(modal.id, data) : addCoin(data))} />}
     </div>
