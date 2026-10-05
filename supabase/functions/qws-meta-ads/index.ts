@@ -46,7 +46,10 @@ async function loadAccounts(all = false) {
 const safe = (a: any) => ({ id: a.id, name: a.name, brand: a.brand, group: a.group, services: a.services, active: a.active, sort: a.sort, tokenTail: a.token ? "…" + String(a.token).slice(-6) : "" });
 
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
-const BASE_FIELDS = "spend,impressions,reach,frequency,cpm,ctr,cpc,clicks,actions,video_thruplay_watched_actions";
+const BASE_FIELDS = "spend,impressions,reach,frequency,cpm,ctr,cpc,clicks,actions,action_values,video_thruplay_watched_actions";
+const PURCHASE = ["purchase", "offsite_conversion.fb_pixel_purchase", "onsite_web_purchase", "omni_purchase"];
+// Tiền tệ "offset 1" của Meta (ngân sách trả về số nguyên, không phải xu) — còn lại chia 100
+const ZERO_DEC = new Set(["VND", "JPY", "KRW", "IDR", "CLP", "COP", "CRC", "HUF", "ISK", "PYG", "TWD"]);
 
 // ---------- Graph helpers ----------
 async function gget(path: string, params: Record<string, string>, token: string) {
@@ -76,6 +79,29 @@ function act(row: any, type: string) {
   const a = (row.actions || []).find((x: any) => x.action_type === type);
   return a ? num(a.value) : 0;
 }
+// giá trị khác 0 đầu tiên theo thứ tự loại hành động (tránh cộng trùng purchase/omni_purchase)
+function firstOf(list: any[] | undefined, types: string[]) {
+  for (const t of types) {
+    const a = (list || []).find((x: any) => x.action_type === t);
+    const v = a ? num(a.value) : 0;
+    if (v) return v;
+  }
+  return 0;
+}
+// Chỉ số dẫn xuất (dùng chung metrics + sumMetrics). results = tin nhắn + lead (KHÔNG đổi).
+function derive(m: any) {
+  const results = m.msgs + m.leads;
+  const out: any = {
+    ...m, results, cpr: results > 0 ? m.spend / results : null,
+    replyRate: m.msgs > 0 ? (m.firstReply / m.msgs) * 100 : null,
+    clickToResult: m.linkClicks > 0 ? (results / m.linkClicks) * 100 : null,
+  };
+  if (m.purchases > 0) {
+    out.cpp = m.spend / m.purchases;
+    out.roas = m.spend > 0 ? m.purchaseValue / m.spend : null;
+  }
+  return out;
+}
 function metrics(row: any) {
   if (!row) row = {};
   const leads = act(row, "lead") || act(row, "onsite_conversion.lead_grouped");
@@ -86,9 +112,11 @@ function metrics(row: any) {
     linkClicks: act(row, "link_click"), engagement: act(row, "post_engagement"),
     video3s: act(row, "video_view"), pageLikes: act(row, "like"),
     thruplay: num((row.video_thruplay_watched_actions || [])[0]?.value),
+    firstReply: act(row, "onsite_conversion.messaging_first_reply"),
+    purchases: firstOf(row.actions, PURCHASE), purchaseValue: firstOf(row.action_values, PURCHASE),
+    landingViews: act(row, "landing_page_view"),
   };
-  const results = m.msgs + m.leads;
-  return { ...m, results, cpr: results > 0 ? m.spend / results : null };
+  return derive(m);
 }
 
 // Tên chiến dịch → dịch vụ TMV (port từ lina-fb-bot/fb_report.py map_service)
@@ -111,11 +139,11 @@ function mapService(name: string) {
   return (name || "").replace(/\s*[-–|]?\s*(b[aả]n sao|copy)\s*\d*\s*$/i, "").trim() || name;
 }
 function sumMetrics(list: any[]) {
-  const keys = ["spend", "impressions", "clicks", "msgs", "leads", "linkClicks", "engagement", "video3s", "pageLikes", "thruplay"];
-  const s: any = {};
-  for (const k of keys) s[k] = list.reduce((a, x) => a + (x[k] || 0), 0);
-  s.results = s.msgs + s.leads;
-  s.cpr = s.results > 0 ? s.spend / s.results : null;
+  const keys = ["spend", "impressions", "clicks", "msgs", "leads", "linkClicks", "engagement", "video3s", "pageLikes", "thruplay",
+    "firstReply", "purchases", "purchaseValue", "landingViews"];
+  const s0: any = {};
+  for (const k of keys) s0[k] = list.reduce((a, x) => a + (x[k] || 0), 0);
+  const s: any = derive(s0);
   s.cpm = s.impressions > 0 ? (s.spend / s.impressions) * 1000 : 0;
   s.ctr = s.impressions > 0 ? (s.clicks / s.impressions) * 100 : 0;
   s.cpc = s.clicks > 0 ? s.spend / s.clicks : 0;
@@ -130,23 +158,45 @@ async function fetchAccount(acc: any, since: string, until: string, prev: { sinc
   if (!token) return { ...base, error: "Chưa có token" };
   const act_ = "act_" + acc.id;
   const t = timeArgs(since, until);
+  const conv = !light && acc.group === "conv";
   try {
-    const [info, tot, daily, camps, ads, bad, prevTot] = await Promise.all([
+    const [info, tot, daily, camps, ads, bad, prevTot, campMeta, adsets, byAG, byPl] = await Promise.all([
       gget(act_, { fields: "name,currency,account_status,disable_reason,amount_spent,spend_cap,balance,timezone_name,is_prepay_account" }, token),
       gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, ...t }, token, 1),
       light ? [] : gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, time_increment: "1", limit: "100", ...t }, token, 4),
       light ? [] : gall(act_ + "/insights", { level: "campaign", fields: "campaign_id,campaign_name," + BASE_FIELDS, limit: "200", ...t }, token, 3),
-      light ? [] : gall(act_ + "/insights", { level: "ad", fields: "ad_id,ad_name,campaign_name," + BASE_FIELDS, limit: "200", sort: "spend_descending", ...t }, token, 2),
+      light ? [] : gall(act_ + "/insights", { level: "ad", fields: "ad_id,ad_name,adset_name,campaign_name,quality_ranking,engagement_rate_ranking,conversion_rate_ranking," + BASE_FIELDS, limit: "200", sort: "spend_descending", ...t }, token, 2),
       gall(act_ + "/ads", { fields: "name,effective_status", effective_status: JSON.stringify(["DISAPPROVED", "WITH_ISSUES"]), limit: "50" }, token, 1).catch(() => []),
       prev ? gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, ...timeArgs(prev.since, prev.until) }, token, 1) : Promise.resolve(null),
+      // ---- mới (chỉ khi !light; lỗi quyền/breakdown không làm hỏng cả tài khoản) ----
+      light ? [] : gall(act_ + "/campaigns", { fields: "id,name,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,start_time", limit: "200" }, token, 2).catch(() => []),
+      conv ? gall(act_ + "/insights", { level: "adset", fields: "adset_id,adset_name,campaign_name," + BASE_FIELDS, limit: "200", ...t }, token, 2).catch(() => []) : [],
+      conv ? gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, breakdowns: "age,gender", limit: "200", ...t }, token, 2).catch(() => []) : [],
+      conv ? gall(act_ + "/insights", { level: "account", fields: BASE_FIELDS, breakdowns: "publisher_platform,platform_position", limit: "200", ...t }, token, 2).catch(() => []) : [],
     ]);
-    const campaigns = camps.map((c: any) => ({ id: c.campaign_id, name: c.campaign_name, service: acc.services ? mapService(c.campaign_name) : null, ...metrics(c) }))
-      .sort((a: any, b: any) => b.spend - a.spend);
+    const bySpend = (a: any, b: any) => b.spend - a.spend;
+    const campaigns: any[] = camps.map((c: any) => ({ id: c.campaign_id, name: c.campaign_name, service: acc.services ? mapService(c.campaign_name) : null, ...metrics(c) }))
+      .sort(bySpend);
     let services = null;
     if (acc.services) {
       const g: Record<string, any[]> = {};
       for (const c of campaigns) (g[c.service] = g[c.service] || []).push(c);
-      services = Object.entries(g).map(([name, list]) => ({ name, ...sumMetrics(list) })).sort((a: any, b: any) => b.spend - a.spend);
+      services = Object.entries(g).map(([name, list]) => ({ name, ...sumMetrics(list) })).sort(bySpend);
+    }
+    // Gắn trạng thái/mục tiêu/ngân sách chiến dịch; thêm chiến dịch ĐANG BẬT mà không tiêu trong kỳ (số 0)
+    const div = ZERO_DEC.has(String(info.currency || "").toUpperCase()) ? 1 : 100;
+    const budget = (v: unknown) => (v == null || v === "" ? null : num(v) / div);
+    const metaById: Record<string, any> = {};
+    for (const c of campMeta || []) metaById[c.id] = c;
+    const withMeta = (row: any, c: any) => (c ? {
+      ...row, status: c.effective_status, objective: c.objective, dailyBudget: budget(c.daily_budget), lifetimeBudget: budget(c.lifetime_budget),
+      bidStrategy: c.bid_strategy || null, startTime: c.start_time || null,
+    } : row);
+    for (let i = 0; i < campaigns.length; i++) campaigns[i] = withMeta(campaigns[i], metaById[campaigns[i].id]);
+    const seen = new Set(campaigns.map((c: any) => c.id));
+    for (const c of campMeta || []) {
+      if (c.effective_status !== "ACTIVE" || seen.has(c.id)) continue;
+      campaigns.push(withMeta({ id: c.id, name: c.name, service: acc.services ? mapService(c.name) : null, idle: true, ...metrics(null) }, c));
     }
     return {
       ...base,
@@ -156,8 +206,17 @@ async function fetchAccount(acc: any, since: string, until: string, prev: { sinc
       prev: prevTot ? metrics(prevTot[0]) : null,
       daily: daily.map((d: any) => ({ date: d.date_start, ...metrics(d) })),
       campaigns, services,
-      ads: ads.map((a: any) => ({ id: a.ad_id, name: a.ad_name, campaign: a.campaign_name, ...metrics(a) })),
+      ads: ads.map((a: any) => ({
+        id: a.ad_id, name: a.ad_name, campaign: a.campaign_name, adset: a.adset_name || null,
+        quality: a.quality_ranking || null, engRank: a.engagement_rate_ranking || null, convRank: a.conversion_rate_ranking || null,
+        ...metrics(a),
+      })),
       issues: (bad || []).map((a: any) => ({ name: a.name, status: a.effective_status })),
+      ...(conv ? {
+        adsets: (adsets || []).map((s: any) => ({ id: s.adset_id, name: s.adset_name, campaign: s.campaign_name, ...metrics(s) })).sort(bySpend),
+        byAgeGender: (byAG || []).map((r: any) => ({ age: r.age, gender: r.gender, ...metrics(r) })).filter((r: any) => r.spend > 0).sort(bySpend),
+        byPlacement: (byPl || []).map((r: any) => ({ platform: r.publisher_platform, position: r.platform_position, ...metrics(r) })).filter((r: any) => r.spend > 0).sort(bySpend),
+      } : {}),
     };
   } catch (e) {
     return { ...base, error: String((e as Error).message || e) };

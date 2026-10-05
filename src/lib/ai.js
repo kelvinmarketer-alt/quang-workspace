@@ -268,24 +268,45 @@ SCHEMA: { "transactions": [ { "amount": 42000, "type": "out", "date": "${today}"
   return { transactions };
 }
 
-// Phân tích số liệu Quảng cáo (module /quang-cao) → nhận xét + đề xuất bằng tiếng Việt (text thuần).
-export async function aiAdsAnalysis({ summary, apiKey, model }) {
+// Phân tích Quảng cáo (module /quang-cao). Số liệu + chấm điểm đã TÍNH SẴN bằng code (lib/adsDiagnose.js) →
+// AI chỉ diễn giải + ra hành động cụ thể, trả JSON (app tự trình bày, không còn markdown **).
+export async function aiAdsAnalysis({ diagnosis, group, apiKey }) {
   const key = (apiKey || "").trim();
-  const sys = `Bạn là chuyên gia tối ưu quảng cáo Facebook cho doanh nghiệp nhỏ ở Việt Nam. Đọc số liệu JSON và viết phân tích NGẮN GỌN bằng tiếng Việt.
-- Nhóm "conv" (chuyển đổi): đánh giá theo giá/kết quả (tin nhắn + lead), CTR, CPM; chỉ ra chiến dịch/quảng cáo/dịch vụ đang rẻ nhất và đắt nhất.
-- platform "google": kết quả = chuyển đổi Google, cpr = CPA; budgetLostIS = % hiển thị bị mất do thiếu ngân sách (cao + CPA tốt → nên tăng ngân sách); xem thêm từ khoá đắt mà ít chuyển đổi.
-- Nhóm "brand" (thương hiệu): đánh giá theo tiếp cận, CPM, tần suất (>3 là khách xem lặp, quảng cáo mệt), ThruPlay, tương tác. KHÔNG đòi chuyển đổi.
-- Có "prev" thì so sánh với kỳ trước (tăng/giảm %).
-- Có "real" (khách chốt/doanh thu nhập tay) thì tính giá mỗi khách thật và ROAS.
-Định dạng: với mỗi tài khoản 1 đoạn 2-3 dòng "Tên: nhận xét"; cuối cùng mục "ĐỀ XUẤT" gồm 3-5 hành động cụ thể (tắt/tăng/giảm ngân sách, đổi mẫu quảng cáo...). Tiền viết dạng 45k, 1,2tr. Không bịa số ngoài dữ liệu.`;
-  const res = await chat({ model: model || "gpt-4o-mini", temperature: 0.3, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(summary) }] }, key, "ads");
+  const sys = `Bạn là trưởng phòng performance marketing (Facebook + Google Ads) cho doanh nghiệp nhỏ ở Việt Nam. Nhận JSON "chẩn đoán" đã tính sẵn và viết báo cáo hành động, tiếng Việt, ngắn gọn, thẳng thắn.
+LUẬT BẮT BUỘC:
+- KHÔNG tự tính lại hay suy ra % thay đổi: chỉ dùng số có sẵn (deltas = % thay đổi so với kỳ trước, dương = tăng). Giá/KQ, CPM, CPC TĂNG là XẤU; kết quả, CTR TĂNG là TỐT.
+- "verdict" của từng tài khoản/chiến dịch đã được chấm theo mốc (KPI/kỳ trước/TB). Tôn trọng verdict, giải thích VÌ SAO bằng số.
+- Mỗi hành động phải CỤ THỂ: nêu đúng tên chiến dịch/quảng cáo/từ khoá, làm gì (tắt / giảm NS x% / tăng NS x% / đổi mẫu / thu hẹp hoặc mở rộng đối tượng / thêm từ khoá phủ định / sửa kịch bản inbox), và con số kỳ vọng.
+- Mục có "Ít dữ liệu" hoặc kỳ < 3 ngày: KHÔNG khuyên tắt, chỉ khuyên theo dõi tiếp.
+- Nhóm thương hiệu: đánh giá theo tiếp cận, CPM, tần suất, ThruPlay, tương tác — không đòi tin nhắn.
+- Có "real" (khách chốt/doanh thu nhập tay) thì ưu tiên đánh giá theo giá/khách và ROAS.
+- Tiền viết dạng 45k, 1,2tr. Không dùng markdown, không ký tự * hay #.
+Trả về JSON đúng schema:
+{
+ "tong_quan": "2-3 câu: tình hình chung + điều quan trọng nhất",
+ "uu_tien": [ { "viec": "hành động ngắn", "chi_tiet": "làm cụ thể thế nào", "tac_dong": "kỳ vọng (vd: tiết kiệm ~300k/tuần)" } ],
+ "tai_khoan": [ { "ten": "đúng tên tài khoản", "nhan_dinh": "1-2 câu", "diem_tot": ["..."], "van_de": ["..."], "hanh_dong": ["..."] } ],
+ "can_them_du_lieu": ["dữ liệu nên bổ sung để đánh giá chuẩn hơn (vd: đặt KPI giá/kết quả, nhập khách chốt)"]
+}
+uu_tien tối đa 5 việc, sắp theo tác động lớn nhất. Bỏ qua tài khoản "Không chạy" trong tai_khoan (chỉ nhắc 1 câu trong tong_quan nếu cần).`;
+  const res = await chat({ model: "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify({ nhom: group === "brand" ? "Thương hiệu" : "Chuyển đổi", ...diagnosis }) }] }, key, "ads");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
     throw new Error("OpenAI lỗi: " + msg);
   }
   const data = await res.json();
-  return (data.choices?.[0]?.message?.content || "").trim();
+  let p;
+  try { p = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const clean = (v) => String(v ?? "").replace(/[*#]+/g, "").trim();
+  const arr = (v) => (Array.isArray(v) ? v.map(clean).filter(Boolean) : []);
+  return {
+    overview: clean(p.tong_quan),
+    priorities: (Array.isArray(p.uu_tien) ? p.uu_tien : []).map((x) => ({ what: clean(x.viec), how: clean(x.chi_tiet), impact: clean(x.tac_dong) })).filter((x) => x.what),
+    accounts: (Array.isArray(p.tai_khoan) ? p.tai_khoan : []).map((x) => ({ name: clean(x.ten), summary: clean(x.nhan_dinh), good: arr(x.diem_tot), issues: arr(x.van_de), actions: arr(x.hanh_dong) })),
+    needData: arr(p.can_them_du_lieu),
+    at: Date.now(),
+  };
 }
 
 // Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
