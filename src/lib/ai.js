@@ -318,7 +318,8 @@ LUẬT:
 - Mỗi việc phải CỤ THỂ: nêu đúng từ khoá / URL trang, làm gì (sửa title/meta, thêm đoạn trả lời câu hỏi, thêm FAQ, gắn link nội bộ từ trang X, viết bài mới cho cụm từ khoá Y, sửa trang đích có tỉ lệ tương tác thấp, gắn nút gọi/Zalo…), và kỳ vọng (vd +40 click/tháng — dùng trường "gain" đã tính).
 - "co_hoi.near" = từ khoá đang ở vị trí 4–20 nhiều hiển thị (đẩy lên top 3); "co_hoi.lowCtr" = đã top 3 mà CTR thấp (sửa tiêu đề/mô tả cho hút click).
 - "trang_tut" = trang mất click so kỳ trước → nêu nguyên nhân khả dĩ + cách xử lý.
-- Nguồn truy cập/chuyển đổi (GA4): chỉ ra kênh mang khách chất lượng (tỉ lệ tương tác, sự kiện chính) và kênh yếu.
+- "nguon" = khách đến từ nền tảng nào (Google tìm kiếm, Google Ads, Facebook, Instagram, Zalo, TikTok, AI như ChatGPT/Gemini…): chỉ ra nguồn mang khách CHẤT LƯỢNG (tương tác, chuyển đổi) và nguồn yếu; nhận xét riêng lượng khách từ AI (đang có/tăng không, nên làm gì để được AI trích dẫn nhiều hơn).
+- "su_kien" = hành động khách trên web (bấm gọi, bấm Zalo, gửi form, thêm giỏ, đặt bàn…; la_chuyen_doi = GA4 đang tính là chuyển đổi): đánh giá tỉ lệ hành động/người dùng, sự kiện quan trọng nào CHƯA được đánh dấu chuyển đổi, sự kiện nào có dấu hiệu đếm ảo (số lần/người quá cao).
 - Số liệu ít (click < 30) thì nói rõ là ít dữ liệu, không kết luận mạnh.
 - Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
 Trả JSON đúng schema:

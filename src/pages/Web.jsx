@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, CheckCircle2, Lightbulb, Search, MousePointerClick, Users, Target, Info } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { loadSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
+import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 
 // ---------- định dạng ----------
@@ -42,6 +43,23 @@ const cached = async (key, fn) => {
   return v;
 };
 
+// Thanh tỉ lệ nguồn truy cập (theo phiên) + chú thích
+function SourceBar({ groups, max = 5, big }) {
+  if (!groups?.length) return null;
+  const ai = groups.find((g) => g.key === "ai");
+  return (
+    <div>
+      <div className={`flex w-full overflow-hidden rounded-full bg-slate-100 ${big ? "h-3" : "h-2"}`}>
+        {groups.filter((g) => g.share >= 0.5).map((g) => <div key={g.key} title={`${g.label}: ${int(g.cur.sessions)} phiên (${pct1(g.share)})`} style={{ width: g.share + "%", background: g.color }} />)}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px] text-slate-500">
+        {groups.slice(0, max).map((g) => <span key={g.key} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: g.color }} />{g.label.replace(/ \(.*\)/, "")} <b className="text-slate-700">{pct1(g.share)}</b></span>)}
+        {ai && groups.indexOf(ai) >= max && <span className="flex items-center gap-1 font-bold text-violet-600"><Bot size={11} />AI {pct1(ai.share)}</span>}
+      </div>
+    </div>
+  );
+}
+
 function SiteCard({ site, sum, onOpen }) {
   const g = sum?.gsc, a = sum?.ga;
   const M = ({ label, v, d }) => (
@@ -69,6 +87,7 @@ function SiteCard({ site, sum, onOpen }) {
             <M label="Chuyển đổi" v={k(a?.cur.keyEvents)} d={a && <Delta cur={a.cur.keyEvents} prev={a.prev.keyEvents} />} />
           </div>
           {g?.daily && <div className="mt-2"><Spark data={g.daily} /></div>}
+          {sum.sources?.length > 0 && <div className="mt-2 border-t border-slate-100 pt-2"><div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Nguồn truy cập</div><SourceBar groups={sum.sources} max={4} /></div>}
           {sum.errors.length > 0 && <div className="mt-1 truncate text-[10.5px] font-semibold text-amber-600" title={sum.errors.join("\n")}>⚠ {sum.errors[0]}</div>}
         </>
       )}
@@ -136,6 +155,8 @@ function aiPayload(site, sum, det, R) {
     kenh: det.channels?.slice(0, 8).map((c) => ({ kenh: c.name, sessions: c.cur.sessions || 0, d_sessions: d(c.cur.sessions, c.prev.sessions), engagement: c.cur.engagementRate != null ? +(c.cur.engagementRate * 100).toFixed(0) : null, key_events: c.cur.keyEvents || 0 })),
     trang_dich: det.landing?.slice(0, 10).map((l) => ({ url: l.landingPagePlusQueryString, sessions: l.sessions, engagement: +(l.engagementRate * 100).toFixed(0), key_events: l.keyEvents })),
     chuyen_doi: det.conversions?.map((c) => ({ su_kien: c.name, ky_nay: c.cur.keyEvents || 0, ky_truoc: c.prev.keyEvents || 0 })),
+    nguon: det.sources?.map((g) => ({ nguon: g.label, phien: g.cur.sessions, ty_trong: +g.share.toFixed(1), d_phien: d(g.cur.sessions, g.prev.sessions), tuong_tac: g.cur.engagementRate != null ? +(g.cur.engagementRate * 100).toFixed(0) : null, chuyen_doi: g.cur.keyEvents, chi_tiet: g.items.slice(0, 4).map((i) => `${i.src}/${i.med}=${i.cur.sessions || 0}`) })),
+    su_kien: det.events?.filter((e) => !e.auto).slice(0, 25).map((e) => ({ su_kien: e.name, ten: e.label || null, la_chuyen_doi: e.key, so_lan: e.cur.eventCount || 0, so_nguoi: e.cur.totalUsers || 0, ky_truoc: e.prev.eventCount || 0 })),
     thiet_bi: det.gaDevices?.map((x) => ({ thiet_bi: x.deviceCategory, sessions: x.sessions, engagement: +(x.engagementRate * 100).toFixed(0), key_events: x.keyEvents })),
   };
 }
@@ -143,7 +164,9 @@ function aiPayload(site, sum, det, R) {
 function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiState, setAiState, apiKey, aiReady }) {
   const [det, setDet] = useState(null);
   const [err, setErr] = useState("");
-  const [tab, setTab] = useState(site.gsc ? "opp" : "channels");
+  const [tab, setTab] = useState(site.ga ? "sources" : "opp");
+  const [openSrc, setOpenSrc] = useState(null);
+  const [showAuto, setShowAuto] = useState(false);
   useEffect(() => {
     let alive = true; setDet(null); setErr("");
     cached(`d|${site.domain}|${site.gsc}|${site.ga}|${R.days}`, () => loadSiteDetail(site, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
@@ -168,8 +191,8 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
     <div className="bg-white px-3 py-2"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{I && <I size={11} />}{label}</div><div className="flex items-baseline gap-1.5"><span className="text-lg font-extrabold tabular-nums text-slate-900">{v}</span>{d}</div></div>
   );
   const TABS = [
-    site.gsc && ["opp", "Cơ hội SEO"], site.gsc && ["queries", "Từ khoá"], site.gsc && ["pages", "Trang (Google)"],
-    site.ga && ["channels", "Nguồn truy cập"], site.ga && ["landing", "Trang đích"], site.ga && ["conv", "Chuyển đổi"], ["device", "Thiết bị & khu vực"],
+    site.ga && ["sources", "Nguồn truy cập"], site.ga && ["events", "Sự kiện"],
+    site.gsc && ["opp", "Cơ hội SEO"], site.gsc && ["queries", "Từ khoá"], site.gsc && ["pages", "Trang (Google)"], site.ga && ["channels", "Nhóm kênh GA4"], site.ga && ["landing", "Trang đích"], ["device", "Thiết bị & khu vực"],
   ].filter(Boolean);
   const qCols = [
     { h: "Từ khoá", v: (q) => <Name t={q.name} />, wide: true },
@@ -208,6 +231,15 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
         <KPI label="Tỉ lệ tương tác" v={a?.cur.engagementRate != null ? pct1(a.cur.engagementRate * 100) : "—"} d={a && <Delta cur={a.cur.engagementRate} prev={a.prev.engagementRate} />} />
         <KPI icon={Target} label="Chuyển đổi" v={k(a?.cur.keyEvents)} d={a && <Delta cur={a.cur.keyEvents} prev={a.prev.keyEvents} />} />
       </div>
+
+      {(det?.sources || sum?.sources) && (
+        <Card className="!p-3">
+          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Khách đến từ đâu <span className="font-semibold normal-case tracking-normal">· theo phiên truy cập GA4</span>
+            <button onClick={() => setTab("sources")} className="ml-auto font-bold normal-case tracking-normal text-indigo-600">Xem chi tiết →</button>
+          </div>
+          <SourceBar groups={det?.sources || sum.sources} max={10} big />
+        </Card>
+      )}
 
       <div className="grid gap-3 xl:grid-cols-3">
         <Card className="!p-3 xl:col-span-2">
@@ -279,7 +311,54 @@ function Detail({ site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiSta
           {tab === "pages" && <Table rows={det.pages?.slice(0, 100)} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} /> }, ...qCols.slice(1)]} />}
           {tab === "channels" && <Table rows={det.channels} cols={[{ h: "Kênh", v: (c) => <b className="text-slate-700">{c.name}</b> }, { h: "Phiên", right: true, v: (c) => <span>{int(c.cur.sessions)} <Delta cur={c.cur.sessions} prev={c.prev.sessions} /></span> }, { h: "Người dùng", right: true, v: (c) => int(c.cur.activeUsers) }, { h: "Tương tác", right: true, v: (c) => (c.cur.engagementRate != null ? pct1(c.cur.engagementRate * 100) : "—") }, { h: "Chuyển đổi", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span> }]} />}
           {tab === "landing" && <Table rows={det.landing} cols={[{ h: "Trang đích", wide: true, v: (l) => <Name t={l.landingPagePlusQueryString} href={`https://${site.domain}${l.landingPagePlusQueryString}`} /> }, { h: "Phiên", right: true, v: (l) => int(l.sessions) }, { h: "Tương tác", right: true, v: (l) => <span className={l.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}>{pct1(l.engagementRate * 100)}</span> }, { h: "TG TB", right: true, v: (l) => dur(l.averageSessionDuration) }, { h: "Chuyển đổi", right: true, v: (l) => int(l.keyEvents) }]} />}
-          {tab === "conv" && <Table rows={det.conversions} empty="Chưa có sự kiện chính (key event) nào — đánh dấu sự kiện quan trọng (gọi điện, Zalo, gửi form…) là Sự kiện chính trong GA4." cols={[{ h: "Sự kiện", v: (c) => <b className="text-slate-700">{c.name}</b> }, { h: "Kỳ này", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span> }, { h: "Kỳ trước", right: true, v: (c) => int(c.prev.keyEvents) }]} />}
+          {tab === "sources" && (
+            <div>
+              <div className="mb-2 text-[11px] text-slate-400">Bấm 1 dòng để xem nguồn gốc chi tiết (nguồn / phương tiện GA4). Tương tác thấp (&lt;40%) = khách vào rồi thoát nhanh.</div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-[12px]">
+                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Nguồn</th><th className="py-2 pr-3 text-right">Phiên</th><th className="py-2 pr-3 text-right">Tỉ trọng</th><th className="py-2 pr-3 text-right">Người dùng</th><th className="py-2 pr-3 text-right">Tương tác</th><th className="py-2 pr-3 text-right">Chuyển đổi</th></tr></thead>
+                  <tbody>{(det.sources || []).map((g) => (<Fragment key={g.key}>
+                    <tr onClick={() => setOpenSrc(openSrc === g.key ? null : g.key)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50">
+                      <td className="py-1.5 pr-3"><span className="flex items-center gap-1.5 font-bold text-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />{g.label}<span className="text-[10px] font-semibold text-slate-400">{openSrc === g.key ? "▾" : "▸"} {g.items.length}</span></span></td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.sessions)} <Delta cur={g.cur.sessions} prev={g.prev.sessions} /></td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{pct1(g.share)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.activeUsers)}</td>
+                      <td className={`py-1.5 pr-3 text-right tabular-nums ${g.cur.engagementRate != null && g.cur.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}`}>{g.cur.engagementRate != null ? pct1(g.cur.engagementRate * 100) : "—"}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.keyEvents)} <Delta cur={g.cur.keyEvents} prev={g.prev.keyEvents} /></td>
+                    </tr>
+                    {openSrc === g.key && g.items.slice(0, 30).map((it) => (
+                      <tr key={g.key + it.src + it.med} className="border-b border-slate-50 bg-slate-50/60 text-slate-500">
+                        <td className="py-1 pl-6 pr-3">{it.src} <span className="text-slate-400">/ {it.med}</span></td>
+                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.sessions)}</td><td />
+                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.activeUsers)}</td>
+                        <td className="py-1 pr-3 text-right tabular-nums">{it.cur.engagementRate != null ? pct1(it.cur.engagementRate * 100) : "—"}</td>
+                        <td className="py-1 pr-3 text-right tabular-nums">{int(it.cur.keyEvents)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {tab === "events" && (() => {
+            const ev = (det.events || []).filter((e) => showAuto || !e.auto);
+            return (
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                  <span><Star size={11} className="inline text-amber-500" /> = sự kiện chính (GA4 tính là chuyển đổi)</span>
+                  <label className="ml-auto flex items-center gap-1 font-semibold text-slate-500"><input type="checkbox" checked={showAuto} onChange={(e) => setShowAuto(e.target.checked)} /> Hiện cả sự kiện tự động (xem trang, cuộn…)</label>
+                </div>
+                <Table rows={ev} empty="Chưa có sự kiện hành động nào (ngoài xem trang). Nên cài đo: bấm gọi, bấm Zalo, gửi form, đặt hàng…" cols={[
+                  { h: "Sự kiện", wide: true, v: (e) => <div className="min-w-0"><div className="flex items-center gap-1 font-bold text-slate-700">{e.key && <Star size={12} className="shrink-0 fill-amber-400 text-amber-500" />}{e.label || e.name}{e.auto && <span className="text-[10px] font-semibold text-slate-400">tự động</span>}</div>{e.label && <div className="text-[10.5px] text-slate-400">{e.name}</div>}</div> },
+                  { h: "Số lần", right: true, v: (e) => <span>{int(e.cur.eventCount)} <Delta cur={e.cur.eventCount} prev={e.prev.eventCount} /></span> },
+                  { h: "Số người", right: true, v: (e) => int(e.cur.totalUsers) },
+                  { h: "Lần/người", right: true, v: (e) => (e.cur.totalUsers ? (e.cur.eventCount / e.cur.totalUsers).toFixed(1).replace(".", ",") : "—") },
+                  { h: "Kỳ trước", right: true, v: (e) => int(e.prev.eventCount) },
+                ]} />
+                {(det.events || []).some((e) => e.name === "form_submit" && e.key && (e.cur.eventCount || 0) > (e.cur.totalUsers || 0) * 2) && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[11.5px] text-amber-800">⚠ "Gửi form" đang là sự kiện chính nhưng mỗi người gửi trung bình nhiều lần → có thể GA4 đếm cả ô tìm kiếm/form phụ. Nên kiểm tra lại cấu hình sự kiện chính.</div>}
+              </div>
+            );
+          })()}
           {tab === "device" && (
             <div className="grid gap-4 md:grid-cols-3">
               {det.gscDevices && <div><div className="mb-1 text-[11px] font-extrabold uppercase text-slate-400">Google theo thiết bị</div><Table rows={det.gscDevices} cols={[{ h: "Thiết bị", v: (r) => r.keys[0] }, { h: "Click", right: true, v: (r) => int(r.clicks) }, { h: "Vị trí", right: true, v: (r) => pos1(r.position) }]} /></div>}

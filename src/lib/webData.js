@@ -18,6 +18,84 @@ export function rangesOf(days) {
 
 export const pctChange = (cur, prev) => (cur == null || prev == null || !prev ? null : ((cur - prev) / Math.abs(prev)) * 100);
 
+// ===== PHÂN LOẠI NGUỒN TRUY CẬP theo nền tảng (từ sessionSource / sessionMedium của GA4) =====
+export const SOURCE_GROUPS = [
+  { key: "google", label: "Google tìm kiếm", color: "#4285F4" },
+  { key: "gads", label: "Google Ads", color: "#34A853" },
+  { key: "ai", label: "AI (ChatGPT, Gemini…)", color: "#8b5cf6" },
+  { key: "facebook", label: "Facebook", color: "#1877F2" },
+  { key: "fbads", label: "Facebook/Insta QC", color: "#0ea5e9" },
+  { key: "instagram", label: "Instagram", color: "#E1306C" },
+  { key: "tiktok", label: "TikTok", color: "#111827" },
+  { key: "zalo", label: "Zalo", color: "#0068FF" },
+  { key: "youtube", label: "YouTube", color: "#FF0000" },
+  { key: "social", label: "MXH khác", color: "#f97316" },
+  { key: "search", label: "Tìm kiếm khác (Bing, Cốc Cốc…)", color: "#14b8a6" },
+  { key: "direct", label: "Truy cập thẳng", color: "#94a3b8" },
+  { key: "email", label: "Email", color: "#eab308" },
+  { key: "referral", label: "Web khác giới thiệu", color: "#a3a3a3" },
+  { key: "unknown", label: "Không rõ", color: "#e2e8f0" },
+];
+export const groupOf = (k) => SOURCE_GROUPS.find((g) => g.key === k) || SOURCE_GROUPS[SOURCE_GROUPS.length - 1];
+const AI_RE = /chatgpt|openai|gemini\.google|bard\.google|perplexity|copilot|claude\.ai|anthropic|deepseek|you\.com|poe\.com|meta\.ai|grok|x\.ai|phind|mistral|felo|kimi|doubao|qwen|character\.ai|huggingface/;
+export function classifySource(src = "", med = "") {
+  const s = String(src).toLowerCase(), m = String(med).toLowerCase();
+  const paid = /cpc|ppc|paid|ads?$|cpm|display/.test(m);
+  if (m === "ai-assistant" || AI_RE.test(s)) return "ai";
+  if (/^(google|adwords)$/.test(s) && paid) return "gads";
+  if (/(^|\.)(facebook|fb|instagram|ig|messenger)(\.|$)/.test(s) && paid) return "fbads";
+  if (/instagram|^ig$/.test(s)) return "instagram";
+  if (/facebook|^fb$|messenger|fb\.me/.test(s)) return "facebook";
+  if (/tiktok/.test(s)) return "tiktok";
+  if (/zalo/.test(s)) return "zalo";
+  if (/youtube|youtu\.be/.test(s)) return "youtube";
+  if (/^google$|google\./.test(s) && (m === "organic" || m === "referral")) return "google";
+  if (/^t\.co$|twitter|^x\.com|threads|linkedin|pinterest|reddit|telegram|t\.me|telegra\.ph|discord|lemon8/.test(s) || m === "social") return "social";
+  if (m === "organic" || /bing|yahoo|coccoc|duckduckgo|ecosia|yandex|naver|baidu/.test(s)) return "search";
+  if (s === "(direct)") return "direct";
+  if (/e-?mail|newsletter/.test(m)) return "email";
+  if (m === "referral") return "referral";
+  return "unknown";
+}
+// Gom dòng GA (source/medium + cur/prev) theo nhóm nền tảng
+export function groupSources(rows) {
+  const g = new Map();
+  for (const r of rows) {
+    const key = classifySource(r.src, r.med);
+    const o = g.get(key) || { key, ...groupOf(key), cur: { sessions: 0, activeUsers: 0, engaged: 0, keyEvents: 0 }, prev: { sessions: 0, activeUsers: 0, keyEvents: 0 }, items: [] };
+    o.cur.sessions += r.cur.sessions || 0; o.cur.activeUsers += r.cur.activeUsers || 0; o.cur.keyEvents += r.cur.keyEvents || 0;
+    o.cur.engaged += (r.cur.engagementRate || 0) * (r.cur.sessions || 0);
+    o.prev.sessions += r.prev.sessions || 0; o.prev.activeUsers += r.prev.activeUsers || 0; o.prev.keyEvents += r.prev.keyEvents || 0;
+    o.items.push(r); g.set(key, o);
+  }
+  const list = [...g.values()].map((o) => ({ ...o, cur: { ...o.cur, engagementRate: o.cur.sessions ? o.cur.engaged / o.cur.sessions : null }, items: o.items.sort((a, b) => (b.cur.sessions || 0) - (a.cur.sessions || 0)) }));
+  const total = list.reduce((x, o) => x + o.cur.sessions, 0);
+  return list.map((o) => ({ ...o, share: total ? (o.cur.sessions / total) * 100 : 0 })).sort((a, b) => b.cur.sessions - a.cur.sessions);
+}
+
+// ===== SỰ KIỆN: tên dễ hiểu + phân loại (tự động / hành động khách) =====
+const EVENT_VI = {
+  page_view: "Xem trang", session_start: "Bắt đầu phiên", first_visit: "Lần đầu vào web", user_engagement: "Có tương tác", scroll: "Cuộn 90% trang",
+  click: "Bấm link ra ngoài", file_download: "Tải file", video_start: "Xem video", video_progress: "Xem video (tiếp)", video_complete: "Xem hết video",
+  view_search_results: "Tìm kiếm trên web", form_start: "Bắt đầu điền form", form_submit: "Gửi form", generate_lead: "Gửi thông tin (lead)",
+  add_to_cart: "Thêm giỏ hàng", view_cart: "Xem giỏ", begin_checkout: "Bắt đầu thanh toán", purchase: "Mua hàng", view_item: "Xem sản phẩm",
+  phone_click: "Bấm gọi điện", zalo_click: "Bấm Zalo", contact_link_click: "Bấm liên hệ", outbound_link_click: "Bấm link ra ngoài",
+};
+const AUTO_EVENTS = new Set(["page_view", "session_start", "first_visit", "user_engagement", "scroll"]);
+export function eventLabel(name) {
+  if (EVENT_VI[name]) return EVENT_VI[name];
+  const n = name.toLowerCase();
+  if (/zalo/.test(n)) return "Bấm Zalo";
+  if (/call|phone|tel|hotline/.test(n)) return "Bấm gọi điện";
+  if (/booking|dat_ban|reserve/.test(n)) return /success|submit/.test(n) ? "Đặt bàn/đặt lịch thành công" : "Bấm đặt bàn/đặt lịch";
+  if (/map|direction/.test(n)) return "Mở bản đồ";
+  if (/messenger|facebook|fb_/.test(n)) return "Bấm Facebook/Messenger";
+  if (/tiktok/.test(n)) return "Bấm TikTok";
+  if (/form|lead|contact/.test(n)) return "Liên hệ / gửi form";
+  return "";
+}
+export const isAutoEvent = (n) => AUTO_EVENTS.has(n) || /session_source/.test(n);
+
 // Gộp web: 1 dòng / tên miền. GSC ưu tiên property sc-domain (đủ http/https/www). GA4 ghép theo tên property chứa tên miền.
 export async function loadSites({ hidden = [], gaOverride = {} } = {}) {
   const { props, conn } = await listGoogleProps();
@@ -63,6 +141,9 @@ export async function loadSiteSummary(site, R) {
       const pick = (k) => rows.find((r) => r.dateRange === k) || {};
       out.ga = { cur: pick("date_range_0"), prev: pick("date_range_1") };
     }).catch((e) => out.errors.push("GA4: " + e.message)),
+    site.ga && gaReport(site.ga, { ranges: [R.ga.cur], metrics: ["sessions"], dims: ["sessionSource", "sessionMedium"], limit: 300 }).then((rows) => {
+      out.sources = groupSources(rows.map((r) => ({ src: r.sessionSource, med: r.sessionMedium, cur: { sessions: r.sessions }, prev: {} })));
+    }).catch(() => {}),
   ]);
   out.verdict = verdictOf(out);
   return out;
@@ -98,6 +179,17 @@ export async function loadSiteDetail(site, R) {
     jobs.push(safe(gaReport(site.ga, { ranges: [R.ga.cur, R.ga.prev], metrics: ["sessions", "activeUsers", "engagementRate", "keyEvents"], dims: ["sessionDefaultChannelGroup"], limit: 50 }).then(splitRanges("sessionDefaultChannelGroup")), "channels"));
     jobs.push(safe(a(["landingPagePlusQueryString"], ["sessions", "engagementRate", "averageSessionDuration", "keyEvents"], { limit: 30, orderBy: "sessions" }), "landing"));
     jobs.push(safe(gaReport(site.ga, { ranges: [R.ga.cur, R.ga.prev], metrics: ["keyEvents"], dims: ["eventName"], limit: 50 }).then(splitRanges("eventName")).then((l) => l.filter((x) => x.cur.keyEvents > 0 || x.prev.keyEvents > 0)), "conversions"));
+    jobs.push(safe(gaReport(site.ga, { ranges: [R.ga.cur, R.ga.prev], metrics: ["sessions", "activeUsers", "engagementRate", "keyEvents"], dims: ["sessionSource", "sessionMedium"], limit: 1000 }).then((rows) => {
+      const m = new Map();
+      for (const r of rows) {
+        const k = r.sessionSource + "|" + r.sessionMedium; const o = m.get(k) || { src: r.sessionSource, med: r.sessionMedium, cur: {}, prev: {} };
+        o[r.dateRange === "date_range_1" ? "prev" : "cur"] = r; m.set(k, o);
+      }
+      return groupSources([...m.values()]);
+    }), "sources"));
+    jobs.push(safe(gaReport(site.ga, { ranges: [R.ga.cur, R.ga.prev], metrics: ["eventCount", "totalUsers", "keyEvents"], dims: ["eventName"], limit: 200 }).then(splitRanges("eventName")).then((l) => l
+      .map((e) => ({ ...e, label: eventLabel(e.name), auto: isAutoEvent(e.name), key: (e.cur.keyEvents || 0) > 0 || (e.prev.keyEvents || 0) > 0 }))
+      .sort((a, b) => (a.auto - b.auto) || (b.cur.eventCount || 0) - (a.cur.eventCount || 0))), "events"));
     jobs.push(safe(a(["deviceCategory"], ["sessions", "engagementRate", "keyEvents"]), "gaDevices"));
     jobs.push(safe(a(["city"], ["activeUsers", "sessions", "keyEvents"], { limit: 10, orderBy: "activeUsers" }), "cities"));
     jobs.push(safe(a(["date"], ["activeUsers", "sessions", "keyEvents"], { limit: 400 }).then((l) => l.map((x) => ({ ...x, date: `${x.date.slice(0, 4)}-${x.date.slice(4, 6)}-${x.date.slice(6)}` })).sort((x, y) => x.date.localeCompare(y.date))), "gaDaily"));
@@ -118,7 +210,7 @@ const splitRanges = (dim) => (rows) => {
     const k = r[dim]; const o = m.get(k) || { name: k, cur: {}, prev: {} };
     o[r.dateRange === "date_range_1" ? "prev" : "cur"] = r; m.set(k, o);
   }
-  return [...m.values()].sort((a, b) => (b.cur.sessions || b.cur.keyEvents || 0) - (a.cur.sessions || a.cur.keyEvents || 0));
+  return [...m.values()].sort((a, b) => (b.cur.sessions || b.cur.eventCount || b.cur.keyEvents || 0) - (a.cur.sessions || a.cur.eventCount || a.cur.keyEvents || 0));
 };
 
 // CTR kỳ vọng theo vị trí (đường cong trung bình ngành, %)
