@@ -181,7 +181,7 @@ export default function Settings() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="space-y-3">
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">

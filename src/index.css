@@ -62,3 +62,9 @@ body {
 
 .fade-up { animation: fadeUp .5s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+
+/* Nội dung module FULL WIDTH: không lề, không padding ngoài — thẻ (card) trải sát mép, vuông góc, phẳng */
+.qws-full .card {
+  border-radius: 0;
+  box-shadow: none;
+}

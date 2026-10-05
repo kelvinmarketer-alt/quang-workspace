@@ -367,7 +367,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6"><PushPrompt />{children}</main>
+        <main className="qws-full w-full"><PushPrompt />{children}</main>
       </div>
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />
     </div>

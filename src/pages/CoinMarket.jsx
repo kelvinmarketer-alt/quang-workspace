@@ -56,48 +56,71 @@ function CandleChart({ candles, e20, e50, events, lines, precision, fitKey }) {
   return <div ref={box} className="h-[300px] w-full sm:h-[420px]" />;
 }
 
-function Stat({ label, value, tone = "slate", sub }) {
-  const c = { slate: "text-slate-700", emerald: "text-emerald-600", rose: "text-rose-600", amber: "text-amber-600", indigo: "text-indigo-600" }[tone];
+const TONE = { slate: "text-slate-700", emerald: "text-emerald-600", rose: "text-rose-600", amber: "text-amber-600", indigo: "text-indigo-600" };
+
+// 1 dòng chỉ báo gọn: nhãn trái · giá trị phải (+ chú thích nhỏ)
+function Row({ label, value, tone = "slate", sub }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`text-sm font-extrabold ${c}`}>{value}</div>
-      {sub && <div className="truncate text-[10px] text-slate-400">{sub}</div>}
+    <div className="flex items-baseline justify-between gap-3 py-1.5">
+      <span className="shrink-0 text-[12px] font-semibold text-slate-500">{label}</span>
+      <span className="min-w-0 text-right">
+        <span className={`text-[13px] font-extrabold ${TONE[tone]}`}>{value}</span>
+        {sub && <span className="block truncate text-[10.5px] text-slate-400">{sub}</span>}
+      </span>
+    </div>
+  );
+}
+function Group({ title, children }) {
+  return (
+    <div>
+      <div className="mb-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{title}</div>
+      <div className="divide-y divide-slate-100">{children}</div>
     </div>
   );
 }
 
-function SetupCard({ s, prec }) {
+// Phiếu lệnh: 4 ô số chính + điều kiện kích hoạt + checklist rút gọn; chi tiết bấm mở
+function TradeTicket({ s, prec, compact }) {
+  const [more, setMore] = useState(false);
   const long = s.direction === "long";
-  const row = (label, v, extra, tone) => (
-    <div className="flex items-center justify-between gap-2 py-1 text-sm">
-      <span className="text-[12px] font-semibold text-slate-500">{label}</span>
-      <span className={`font-mono font-extrabold ${tone}`}>{v != null && fmtP(v, prec)} <span className={v != null ? "text-[11px] font-bold opacity-70" : ""}>{extra}</span></span>
+  const okN = (s.checklist || []).filter((c) => c.ok).length, allN = (s.checklist || []).length;
+  const Cell = ({ label, v, sub, tone }) => (
+    <div className="rounded-lg bg-white px-2.5 py-1.5 ring-1 ring-slate-100">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`font-mono text-[14px] font-extrabold ${tone}`}>{fmtP(v, prec)}</div>
+      {sub && <div className="text-[10.5px] font-semibold text-slate-400">{sub}</div>}
     </div>
   );
   return (
-    <div className={`rounded-2xl border-2 p-3 ${long ? "border-emerald-200 bg-emerald-50/40" : "border-rose-200 bg-rose-50/40"}`}>
-      <div className="mb-1 flex flex-wrap items-center gap-1.5">
-        <span className={`rounded-lg px-2 py-0.5 text-[12px] font-extrabold text-white ${long ? "bg-emerald-500" : "bg-rose-500"}`}>{long ? "LONG" : "SHORT"}</span>
-        {s.setup_type && <Badge tone="violet">{s.setup_type}</Badge>}
-        {s.label && <Badge tone="slate">{s.label}</Badge>}
-        {s.order && <Badge tone="indigo">{s.order}</Badge>}
+    <div className={`rounded-xl p-2.5 ${long ? "bg-emerald-50/70" : "bg-rose-50/70"}`}>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <span className={`rounded-md px-2 py-0.5 text-[11px] font-extrabold text-white ${long ? "bg-emerald-500" : "bg-rose-500"}`}>{long ? "LONG" : "SHORT"}</span>
+        {s.setup_type && <span className="text-[11px] font-extrabold text-slate-600">{s.setup_type}</span>}
+        {s.label && !compact && <span className="text-[11px] text-slate-400">· kịch bản {s.label}</span>}
+        {allN > 0 && <span className={`ml-auto rounded-md px-1.5 py-0.5 text-[10.5px] font-extrabold ${okN === allN ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{okN}/{allN} điều kiện</span>}
       </div>
-      {!s.valid && <div className="mb-1 flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={12} /> Mức giá AI đưa ra không hợp lý (SL/TP sai phía) — đừng dùng kịch bản này.</div>}
-      {s.tooFar && <div className="mb-1 flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700"><AlertTriangle size={12} /> SL cách entry {s.slAtr?.toFixed(1)} ATR (&gt; 4 ATR) — theo EA phải HUỶ lệnh, tránh đuổi giá.</div>}
-      {s.entry_zone && row("Vùng chờ", null, `${fmtP(s.entry_zone[0], prec)} – ${fmtP(s.entry_zone[1], prec)}`, "text-indigo-500")}
-      {row("Điểm vào", s.entry, "", "text-indigo-600")}
-      {row("Cắt lỗ", s.stop_loss, `${fmtPct(pct(s.stop_loss, s.entry))}${s.slAtr ? ` · ${s.slAtr.toFixed(1)} ATR` : ""}`, "text-rose-600")}
-      {s.take_profit.map((t, i) => row(`Chốt lời ${i + 1}`, t, `${fmtPct(pct(t, s.entry))}${s.rr[i] ? ` · R:R 1:${s.rr[i].toFixed(1)}` : ""}`, "text-emerald-600"))}
-      {s.trigger && <div className="mt-1.5 rounded-lg bg-indigo-50 px-2 py-1.5 text-[12px] text-indigo-800"><b>Kích hoạt khi:</b> {s.trigger}</div>}
-      {s.checklist?.length > 0 && (
-        <div className="mt-1.5 space-y-0.5">
-          {s.checklist.map((c, i) => <div key={i} className={`flex items-start gap-1.5 text-[12px] ${c.ok ? "text-emerald-700" : "text-slate-500"}`}><span className="font-extrabold">{c.ok ? "✓" : "✗"}</span><span>{c.item}</span></div>)}
+      {(!s.valid || s.tooFar) && (
+        <div className="mb-2 flex items-center gap-1 rounded-md bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-800"><AlertTriangle size={12} className="shrink-0" />
+          {!s.valid ? "SL/TP sai phía — đừng dùng kịch bản này." : `SL cách entry ${s.slAtr?.toFixed(1)} ATR (> 4) — theo EA nên huỷ.`}
         </div>
       )}
-      {s.reason && <div className="mt-1.5 text-[12px] text-slate-600"><b>Lý do:</b> {s.reason}</div>}
-      {s.invalidation && <div className="mt-1 text-[12px] text-slate-500"><b>Huỷ kịch bản khi:</b> {s.invalidation}</div>}
-      {s.management && <div className="mt-1 text-[12px] text-slate-500"><b>Quản lý lệnh:</b> {s.management}</div>}
+      <div className="grid grid-cols-2 gap-1.5">
+        <Cell label="Vào lệnh" v={s.entry} sub={s.entry_zone ? `vùng ${fmtP(s.entry_zone[0], prec)}–${fmtP(s.entry_zone[1], prec)}` : null} tone="text-indigo-600" />
+        <Cell label="Cắt lỗ" v={s.stop_loss} sub={`${fmtPct(pct(s.stop_loss, s.entry))}${s.slAtr ? ` · ${s.slAtr.toFixed(1)} ATR` : ""}`} tone="text-rose-600" />
+        {s.take_profit.slice(0, 2).map((t, i) => <Cell key={i} label={`Chốt lời ${i + 1}`} v={t} sub={`${fmtPct(pct(t, s.entry))}${s.rr[i] ? ` · R:R 1:${s.rr[i].toFixed(1)}` : ""}`} tone="text-emerald-600" />)}
+      </div>
+      {s.trigger && <div className="mt-2 text-[12px] leading-snug text-slate-700"><span className="font-extrabold text-indigo-600">Kích hoạt khi: </span>{s.trigger}</div>}
+      <button onClick={() => setMore((v) => !v)} className="mt-1.5 flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-indigo-600">
+        <ChevronDown size={13} className={`transition ${more ? "rotate-180" : ""}`} /> {more ? "Ẩn chi tiết" : "Checklist · lý do · quản lý lệnh"}
+      </button>
+      {more && (
+        <div className="mt-1.5 space-y-1.5 text-[12px] leading-snug">
+          {allN > 0 && <div className="flex flex-wrap gap-1">{s.checklist.map((c, i) => <span key={i} className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${c.ok ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`}>{c.ok ? "✓" : "✗"} {c.item}</span>)}</div>}
+          {s.reason && <div className="text-slate-600"><b className="text-slate-700">Lý do:</b> {s.reason}</div>}
+          {s.invalidation && <div className="text-slate-600"><b className="text-slate-700">Huỷ khi:</b> {s.invalidation}</div>}
+          {s.management && <div className="text-slate-600"><b className="text-slate-700">Quản lý lệnh:</b> {s.management}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -212,149 +235,164 @@ export default function CoinMarket() {
   const rsiV = s?.momentum.rsi;
   const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `${m} phút trước` : m < 1440 ? `${Math.round(m / 60)} giờ trước` : `${Math.round(m / 1440)} ngày trước`; };
 
+  // Tín hiệu tự phát hiện theo bộ kiến thức (nến đã đóng)
+  const sig = s ? [
+    ...s.vsa.flatMap((b) => b.tags.map((t) => ({ t: `VSA ${b.barsAgo}n: ${t}`, tone: /CLIMAX|UPTHRUST|NO DEMAND|SOW|STOPPING VOLUME khi tăng|PHÂN KỲ/.test(t) ? "rose" : "emerald" }))),
+    ...s.sfp.map((x) => ({ t: `SFP ${x.dir} ${fmtP(x.level, prec)} · vol ${x.volRel}x · ${x.valid}`, tone: x.dir.startsWith("tăng") ? "emerald" : "rose" })),
+    ...(s.sideway.fakeout ? [{ t: `Fakeout sideway: ${s.sideway.fakeout}`, tone: "amber" }] : []),
+    ...s.volumeDivergence.map((t) => ({ t, tone: t.includes("ÂM") ? "rose" : "emerald" })),
+    ...s.momentum.divergence.map((t) => ({ t, tone: t.includes("âm") ? "rose" : "emerald" })),
+    ...s.patterns.map((x) => ({ t: `${x.name} · ${x.ago}n trước`, tone: /TĂNG|Bullish|dưới|tăng/.test(x.name) ? "emerald" : /GIẢM|Bearish|trên|giảm/.test(x.name) ? "rose" : "slate" })),
+  ] : [];
+  const main = ai?.setups?.[0], others = ai?.setups?.slice(1) || [];
+  const DETAIL = ai ? [["Khung lớn", ai.htf_context], ["Wyckoff", ai.wyckoff_phase], ["Bộ lọc xu hướng", ai.trend_filter], ["SMC", ai.smc], ["Thanh khoản", ai.liquidity], ["Price action", ai.price_action], ["Khối lượng", ai.volume], ["VSA", ai.vsa], ["Động lượng", ai.momentum]].filter(([, v]) => v) : [];
+
   return (
-    <div className="space-y-3 sm:space-y-4">
-      {/* Chọn coin */}
-      <Card className="!p-3">
+    <div className="space-y-3">
+      {/* Thanh chọn coin: tìm + danh sách theo dõi (1 dòng, cuộn ngang) */}
+      <Card className="!p-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-            <Search size={15} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder="Gõ mã coin bất kỳ (VD: PEPE, SUI) rồi Enter" className="w-full bg-transparent text-sm uppercase outline-none placeholder:normal-case" />
+          <div className="flex w-36 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 sm:w-52">
+            <Search size={14} className="shrink-0 text-slate-400" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder="Mã coin + Enter" className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
           </div>
-          <button onClick={() => pickSym(q)} className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-bold text-white">Xem</button>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {watch.map((w) => (
-            <span key={w} className={`group flex items-center rounded-lg text-[12px] font-bold ${w === sym ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-amber-100"}`}>
-              <button onClick={() => setSym(w)} className="px-2.5 py-1">{w}</button>
-              {extraWatch.includes(w) && w !== sym && <button onClick={() => removeWatch(w)} className="-ml-1 pr-1.5 text-slate-400 hover:text-rose-600"><X size={11} /></button>}
-            </span>
-          ))}
-        </div>
-      </Card>
-
-      {/* Giá + khung thời gian */}
-      <Card className="!p-3 sm:!p-4">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{sym}/USDT · Binance</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-slate-900 sm:text-3xl">{fmtP(price, prec)}</span>
-              {tick && <span className={`text-sm font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtPct(tick.chg)} 24h</span>}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="flex rounded-xl bg-slate-100 p-1">
-              {Object.keys(TF).map((k) => (
-                <button key={k} onClick={() => setTf(k)} className={`rounded-lg px-3 py-1.5 text-[12px] font-extrabold ${tf === k ? "bg-white text-amber-600 shadow" : "text-slate-500"}`}>{TF[k].label}</button>
-              ))}
-            </div>
-            <button onClick={() => load(false)} disabled={loading} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={15} className={loading ? "animate-spin" : ""} /></button>
-          </div>
-        </div>
-
-        {err ? (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>
-        ) : (
-          <div className="mt-2">
-            <CandleChart candles={data.ltf} e20={ta?.series.e20 || []} e50={ta?.series.e50 || []} events={ta?.series.events || []} lines={lines} precision={prec} fitKey={data.key} />
-            <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-semibold text-slate-400">
-              <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span><span><span className="text-yellow-500">┅</span> Key Volume</span><span><span className="text-rose-400">┅</span>/<span className="text-emerald-400">┅</span> Protected H/L</span><span><span className="text-slate-400">┅</span> POC</span>
-              {lines.length > 0 && <span><span className="text-indigo-500">━</span> Entry <span className="text-rose-500">━</span> SL <span className="text-emerald-500">━</span> TP</span>}
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Chỉ báo tính sẵn */}
-      {s && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="Cấu trúc" value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />
-          <Stat label="EMA" value={s.ema.stack.split(" ")[0]} tone={s.ema.stack.startsWith("tăng") ? "emerald" : s.ema.stack.startsWith("giảm") ? "rose" : "slate"} sub={`20: ${fmtP(s.ema.e20, prec)} · 50: ${fmtP(s.ema.e50, prec)}`} />
-          <Stat label="RSI 14" value={rsiV != null ? rsiV.toFixed(1) : "—"} tone={rsiV > 70 ? "rose" : rsiV < 30 ? "emerald" : "slate"} sub={rsiV > 70 ? "quá mua" : rsiV < 30 ? "quá bán" : s.momentum.divergence[0] || "trung tính"} />
-          <Stat label="MACD" value={s.momentum.macdHist > 0 ? "dương" : "âm"} tone={s.momentum.macdHist > 0 ? "emerald" : "rose"} sub={s.momentum.macdCross ? `${s.momentum.macdCross.dir} ${s.momentum.macdCross.ago} nến trước` : (Math.abs(s.momentum.macdHist) > Math.abs(s.momentum.macdHistPrev || 0) ? "đang mạnh lên" : "đang yếu đi")} />
-          <Stat label="Khối lượng" value={`${s.volume.relVolLastClosed?.toFixed(2)}x TB`} tone={s.volume.relVolLastClosed > 1.5 ? "amber" : "slate"} sub={`Mua chủ động 20 nến: ${Math.round((s.volume.buyRatio20 || 0) * 100)}%`} />
-          <Stat label="Biến động ATR" value={`${s.volatility.atrPct?.toFixed(2)}%`} sub={fmtP(s.volatility.atr, prec)} />
-          <Stat label="Vùng giá" value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} sub={s.range100.position.split("(")[1]?.replace(")", "")} />
-          <Stat label="OB / FVG gần" value={`${s.orderBlocks.length} / ${s.fvg.length}`} tone="indigo" sub={s.patterns[0]?.name || "không có mẫu nến đặc biệt"} />
-          <Stat label="Bộ lọc EA" value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${s.trendFilter.adx?.toFixed(0) ?? "—"}${s.trendFilter.adxOk ? " ✓" : " (yếu)"} · ${s.sideway.isSideway ? "SIDEWAY" : "có xu hướng"}`} />
-          <Stat label="Key Volume" value={s.keyVolume.maxVolume100 ? `${s.keyVolume.maxVolume100.volX?.toFixed(1)}x TB` : "—"} tone="amber" sub={s.keyVolume.maxVolume100 ? `${fmtP(s.keyVolume.maxVolume100.bottom, prec)}–${fmtP(s.keyVolume.maxVolume100.top, prec)}${s.keyVolume.maxVolume100.defended ? " · đã được bảo vệ" : ""}` : ""} />
-          <Stat label="Protected H / L" value={`${fmtP(s.protected.protectedHigh?.price, prec)} / ${fmtP(s.protected.protectedLow?.price, prec)}`} tone="indigo" sub={s.protected.protectedLow?.broken ? "đã thủng đáy bảo vệ!" : s.protected.protectedHigh?.broken ? "đã vượt đỉnh bảo vệ!" : "chưa bị phá"} />
-          <Stat label="Volume Profile" value={`POC ${fmtP(s.volumeProfile?.poc, prec)}`} sub={s.volumeProfile?.hvn?.[0] ? `HVN gần: ${fmtP(s.volumeProfile.hvn[0].bottom, prec)}–${fmtP(s.volumeProfile.hvn[0].top, prec)}` : ""} />
-        </div>
-      )}
-
-      {/* Tín hiệu phát hiện tự động theo bộ kiến thức (nến đã đóng) */}
-      {s && (() => {
-        const sig = [
-          ...s.vsa.flatMap((b) => b.tags.map((t) => ({ t: `VSA · ${b.barsAgo} nến trước: ${t}`, tone: /CLIMAX|UPTHRUST|NO DEMAND|SOW|STOPPING VOLUME khi tăng|PHÂN KỲ/.test(t) ? "rose" : "emerald" }))),
-          ...s.sfp.map((x) => ({ t: `SFP ${x.dir} tại ${fmtP(x.level, prec)} · ${x.barsAgo} nến trước · vol ${x.volRel}x → ${x.valid}`, tone: x.dir.startsWith("tăng") ? "emerald" : "rose" })),
-          ...(s.sideway.fakeout ? [{ t: `Sideway fakeout: ${s.sideway.fakeout}`, tone: "amber" }] : []),
-          ...s.volumeDivergence.map((t) => ({ t, tone: t.includes("ÂM") ? "rose" : "emerald" })),
-          ...s.momentum.divergence.map((t) => ({ t, tone: t.includes("âm") ? "rose" : "emerald" })),
-          ...s.patterns.map((x) => ({ t: `Nến · ${x.ago} nến trước: ${x.name}`, tone: /TĂNG|Bullish|dưới|tăng/.test(x.name) ? "emerald" : /GIẢM|Bearish|trên|giảm/.test(x.name) ? "rose" : "slate" })),
-        ];
-        return (
-          <Card className="!p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[12px] font-extrabold uppercase tracking-wide text-slate-500"><Radar size={14} /> Tín hiệu theo bộ kiến thức ({sig.length})</div>
-            {sig.length ? (
-              <div className="space-y-1">{sig.map((x, i) => <div key={i} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ${{ rose: "bg-rose-50 text-rose-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-50 text-slate-600" }[x.tone]}`}>{x.t}</div>)}</div>
-            ) : <div className="text-[12px] text-slate-400">Chưa có tín hiệu VSA/SFP/mẫu nến đặc biệt ở các nến đã đóng gần nhất.</div>}
-          </Card>
-        );
-      })()}
-
-      {/* AI */}
-      <Card className="!p-3 sm:!p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <div className="flex items-center gap-1.5 font-extrabold text-slate-800"><Sparkles size={16} className="text-indigo-500" /> AI phân tích {sym} · {TF[tf].label}</div>
-            <div className="text-[11px] text-slate-400">Theo bộ kiến thức của bạn (EA SMC + Key Volume + VSA/Wyckoff) · bối cảnh khung {TF[tf].htf.toUpperCase()}{ai ? ` · ${ago(ai.at)} (giá lúc đó ${fmtP(ai.priceAt, prec)})` : ""}</div>
-          </div>
-          <button onClick={runAI} disabled={aiBusy || !hasKey || !s} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg disabled:opacity-40">
-            {aiBusy ? <><Loader2 size={15} className="animate-spin" /> Đang phân tích…</> : <><Sparkles size={15} /> {ai ? "Phân tích lại" : "Phân tích"}</>}
-          </button>
-        </div>
-        {!hasKey && <div className="mt-2 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700"><SettingsIcon size={14} /> Chưa có API key OpenAI — vào Cài đặt để nhập.</div>}
-        {aiErr && <div className="mt-2 rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{aiErr}</div>}
-
-        {ai && (
-          <div className="mt-3 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-sm font-extrabold text-white ${ai.bias === "tăng" ? "bg-emerald-500" : ai.bias === "giảm" ? "bg-rose-500" : "bg-slate-500"}`}>
-                {ai.bias === "tăng" ? <TrendingUp size={15} /> : ai.bias === "giảm" ? <TrendingDown size={15} /> : <Minus size={15} />} Xu hướng {ai.bias}
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+            {watch.map((w) => (
+              <span key={w} className={`flex shrink-0 items-center rounded-lg text-[12px] font-bold ${w === sym ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-amber-100"}`}>
+                <button onClick={() => setSym(w)} className="px-2.5 py-1">{w}</button>
+                {extraWatch.includes(w) && w !== sym && <button onClick={() => removeWatch(w)} className="-ml-1 pr-1.5 text-slate-400 hover:text-rose-600"><X size={11} /></button>}
               </span>
-              <div className="flex items-center gap-1.5 text-[12px] font-bold text-slate-500">Độ tin cậy
-                <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-indigo-500" style={{ width: `${ai.confidence}%` }} /></div>{ai.confidence}%
-              </div>
-            </div>
-            {ai.headline && <div className="text-[15px] font-bold text-slate-800">{ai.headline}</div>}
-
-            {ai.setups?.length ? (
-              <div className="grid gap-2 sm:grid-cols-2">{ai.setups.map((x, i) => <SetupCard key={i} s={x} prec={prec} />)}</div>
-            ) : (
-              <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-600"><Target size={15} className="mt-0.5 shrink-0 text-slate-400" /><span><b>Chưa có điểm vào đẹp.</b> {ai.wait_for}</span></div>
-            )}
-            {ai.setups?.length > 0 && ai.wait_for && <div className="text-[12px] text-slate-500"><b>Chờ thêm:</b> {ai.wait_for}</div>}
-
-            {(ai.key_levels.support.length > 0 || ai.key_levels.resistance.length > 0) && (
-              <div className="flex flex-wrap gap-1.5 text-[12px]">
-                {ai.key_levels.resistance.map((v) => <span key={"r" + v} className="rounded-lg bg-rose-50 px-2 py-1 font-mono font-bold text-rose-700">Kháng cự {fmtP(v, prec)}</span>)}
-                {ai.key_levels.support.map((v) => <span key={"s" + v} className="rounded-lg bg-emerald-50 px-2 py-1 font-mono font-bold text-emerald-700">Hỗ trợ {fmtP(v, prec)}</span>)}
-              </div>
-            )}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[["Wyckoff", ai.wyckoff_phase], ["Khung lớn", ai.htf_context], ["Bộ lọc xu hướng", ai.trend_filter], ["Khối lượng", ai.volume], ["VSA", ai.vsa], ["Động lượng", ai.momentum], ["SMC", ai.smc], ["Thanh khoản", ai.liquidity], ["Price action", ai.price_action]].filter(([, v]) => v).map(([t, v]) => (
-                <div key={t} className="rounded-xl bg-slate-50 px-3 py-2"><div className="text-[11px] font-extrabold uppercase text-slate-400">{t}</div><div className="text-[13px] text-slate-700">{v}</div></div>
-              ))}
-            </div>
-            {ai.risk_note && <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] text-amber-800"><ShieldAlert size={14} className="mt-0.5 shrink-0" /> {ai.risk_note}</div>}
+            ))}
           </div>
-        )}
-        <KnowledgePanel />
-        <div className="mt-3 text-center text-[11px] text-slate-400">Kịch bản do AI tổng hợp từ chỉ báo kỹ thuật — chỉ để tham khảo, KHÔNG phải tư vấn đầu tư. Luôn tự kiểm tra & quản lý vốn.</div>
+        </div>
       </Card>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {/* Biểu đồ */}
+        <Card className="!p-3 xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-[12px] font-extrabold text-slate-400">{sym}/USDT</span>
+              <span className="text-2xl font-extrabold tabular-nums text-slate-900">{fmtP(price, prec)}</span>
+              {tick && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtPct(tick.chg)} <span className="font-semibold text-slate-400">24h</span></span>}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="flex rounded-lg bg-slate-100 p-0.5">
+                {Object.keys(TF).map((k) => (
+                  <button key={k} onClick={() => setTf(k)} className={`rounded-md px-2.5 py-1 text-[12px] font-extrabold ${tf === k ? "bg-white text-amber-600 shadow" : "text-slate-500"}`}>{TF[k].label}</button>
+                ))}
+              </div>
+              <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
+            </div>
+          </div>
+          {err ? (
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>
+          ) : (
+            <div className="mt-2">
+              <CandleChart candles={data.ltf} e20={ta?.series.e20 || []} e50={ta?.series.e50 || []} events={ta?.series.events || []} lines={lines} precision={prec} fitKey={data.key} />
+              <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-semibold text-slate-400">
+                <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span><span><span className="text-yellow-500">┅</span> Key Volume</span><span><span className="text-rose-400">┅</span>/<span className="text-emerald-400">┅</span> Protected</span><span><span className="text-slate-400">┅</span> POC</span>
+                {lines.length > 0 && <span><span className="text-indigo-500">━</span> Entry <span className="text-rose-500">━</span> SL <span className="text-emerald-500">━</span> TP</span>}
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Cột phải: AI kết luận + phiếu lệnh */}
+        <Card className="!p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[14px] font-extrabold text-slate-800"><Sparkles size={15} className="text-indigo-500" /> AI · {sym} {TF[tf].label}</div>
+            <button onClick={runAI} disabled={aiBusy || !hasKey || !s} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[12px] font-bold text-white shadow disabled:opacity-40">
+              {aiBusy ? <><Loader2 size={13} className="animate-spin" /> Đang phân tích…</> : <><Sparkles size={13} /> {ai ? "Phân tích lại" : "Phân tích"}</>}
+            </button>
+          </div>
+          {!hasKey && <div className="mt-2 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[12px] font-semibold text-amber-700"><SettingsIcon size={13} /> Chưa có API key OpenAI — vào Cài đặt.</div>}
+          {aiErr && <div className="mt-2 rounded-lg bg-rose-50 px-2.5 py-2 text-[12px] font-semibold text-rose-600">{aiErr}</div>}
+          {!ai ? (
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-6 text-center text-[12px] text-slate-500">Bấm <b>Phân tích</b> để AI đọc khối lượng, động lượng, SMC, price action theo bộ kiến thức của bạn và đưa ra điểm vào / cắt lỗ / chốt lời.</div>
+          ) : (
+            <div className="mt-2.5 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-extrabold text-white ${ai.bias === "tăng" ? "bg-emerald-500" : ai.bias === "giảm" ? "bg-rose-500" : "bg-slate-500"}`}>
+                  {ai.bias === "tăng" ? <TrendingUp size={13} /> : ai.bias === "giảm" ? <TrendingDown size={13} /> : <Minus size={13} />} {ai.bias === "tăng" ? "Thiên tăng" : ai.bias === "giảm" ? "Thiên giảm" : "Đi ngang"}
+                </span>
+                <div className="flex flex-1 items-center gap-1.5 text-[11px] font-bold text-slate-500">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${ai.confidence >= 65 ? "bg-emerald-500" : ai.confidence >= 45 ? "bg-amber-500" : "bg-rose-400"}`} style={{ width: `${ai.confidence}%` }} /></div>
+                  tin cậy {ai.confidence}%
+                </div>
+              </div>
+              {ai.headline && <div className="text-[13px] font-bold leading-snug text-slate-800">{ai.headline}</div>}
+              {main ? <TradeTicket s={main} prec={prec} /> : (
+                <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2.5 text-[12px] text-slate-600"><Target size={14} className="mt-0.5 shrink-0 text-slate-400" /><span><b>Chưa có điểm vào đẹp.</b> {ai.wait_for}</span></div>
+              )}
+              {others.length > 0 && (
+                <details className="group">
+                  <summary className="cursor-pointer list-none text-[11px] font-bold text-slate-500 hover:text-indigo-600">▸ {others.length} kịch bản phụ</summary>
+                  <div className="mt-1.5 space-y-2">{others.map((x, i) => <TradeTicket key={i} s={x} prec={prec} compact />)}</div>
+                </details>
+              )}
+              {main && ai.wait_for && <div className="text-[11.5px] leading-snug text-slate-500"><b className="text-slate-600">Chờ thêm:</b> {ai.wait_for}</div>}
+              {(ai.key_levels.support.length > 0 || ai.key_levels.resistance.length > 0) && (
+                <div className="space-y-1 text-[11.5px]">
+                  {ai.key_levels.resistance.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="w-16 font-bold text-rose-600">Kháng cự</span>{ai.key_levels.resistance.map((v) => <span key={v} className="rounded bg-rose-50 px-1.5 py-0.5 font-mono font-bold text-rose-700">{fmtP(v, prec)}</span>)}</div>}
+                  {ai.key_levels.support.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="w-16 font-bold text-emerald-600">Hỗ trợ</span>{ai.key_levels.support.map((v) => <span key={v} className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono font-bold text-emerald-700">{fmtP(v, prec)}</span>)}</div>}
+                </div>
+              )}
+              {ai.risk_note && <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11.5px] leading-snug text-amber-800"><ShieldAlert size={13} className="mt-0.5 shrink-0" /> {ai.risk_note}</div>}
+              <div className="text-[10.5px] text-slate-400">Phân tích {ago(ai.at)} · giá lúc đó {fmtP(ai.priceAt, prec)}</div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {/* Chỉ báo gọn theo nhóm */}
+        {s && (
+          <Card className="!p-3">
+            <div className="space-y-2.5">
+              <Group title="Xu hướng">
+                <Row label="Cấu trúc" value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />
+                <Row label="EMA 20/50" value={s.ema.stack.split(" ")[0]} tone={s.ema.stack.startsWith("tăng") ? "emerald" : s.ema.stack.startsWith("giảm") ? "rose" : "slate"} sub={`${fmtP(s.ema.e20, prec)} / ${fmtP(s.ema.e50, prec)}`} />
+                <Row label="Bộ lọc EA" value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${s.trendFilter.adx?.toFixed(0) ?? "—"}${s.trendFilter.adxOk ? " ✓" : " yếu"} · ${s.sideway.isSideway ? "sideway" : "có xu hướng"}`} />
+                <Row label="Vùng giá 100 nến" value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} />
+              </Group>
+              <Group title="Động lượng & khối lượng">
+                <Row label="RSI 14" value={rsiV != null ? rsiV.toFixed(1) : "—"} tone={rsiV > 70 ? "rose" : rsiV < 30 ? "emerald" : "slate"} sub={rsiV > 70 ? "quá mua" : rsiV < 30 ? "quá bán" : s.momentum.divergence[0] || "trung tính"} />
+                <Row label="MACD" value={s.momentum.macdHist > 0 ? "dương" : "âm"} tone={s.momentum.macdHist > 0 ? "emerald" : "rose"} sub={s.momentum.macdCross ? `${s.momentum.macdCross.dir} ${s.momentum.macdCross.ago} nến trước` : (Math.abs(s.momentum.macdHist) > Math.abs(s.momentum.macdHistPrev || 0) ? "đang mạnh lên" : "đang yếu đi")} />
+                <Row label="Khối lượng nến đóng" value={`${s.volume.relVolLastClosed?.toFixed(2)}× TB`} tone={s.volume.relVolLastClosed > 1.5 ? "amber" : "slate"} sub={`mua chủ động 20 nến ${Math.round((s.volume.buyRatio20 || 0) * 100)}%`} />
+                <Row label="Biến động ATR" value={`${s.volatility.atrPct?.toFixed(2)}%`} sub={fmtP(s.volatility.atr, prec)} />
+              </Group>
+              <Group title="Vùng giá quan trọng">
+                <Row label="Key Volume" value={s.keyVolume.maxVolume100 ? `${fmtP(s.keyVolume.maxVolume100.bottom, prec)}–${fmtP(s.keyVolume.maxVolume100.top, prec)}` : "—"} tone="amber" sub={s.keyVolume.maxVolume100 ? `${s.keyVolume.maxVolume100.volX?.toFixed(1)}× TB${s.keyVolume.maxVolume100.defended ? " · đã được bảo vệ" : ""}` : ""} />
+                <Row label="Protected H / L" value={`${fmtP(s.protected.protectedHigh?.price, prec)} / ${fmtP(s.protected.protectedLow?.price, prec)}`} tone="indigo" sub={s.protected.protectedLow?.broken ? "đã thủng đáy bảo vệ!" : s.protected.protectedHigh?.broken ? "đã vượt đỉnh bảo vệ!" : "chưa bị phá"} />
+                <Row label="POC (Volume Profile)" value={fmtP(s.volumeProfile?.poc, prec)} sub={s.volumeProfile?.hvn?.[0] ? `HVN ${fmtP(s.volumeProfile.hvn[0].bottom, prec)}–${fmtP(s.volumeProfile.hvn[0].top, prec)}` : ""} />
+                <Row label="OB / FVG gần" value={`${s.orderBlocks.length} / ${s.fvg.length}`} tone="indigo" />
+              </Group>
+            </div>
+          </Card>
+        )}
+
+        {/* Tín hiệu tự phát hiện + phân tích chi tiết của AI */}
+        <Card className="!p-3 xl:col-span-2">
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><Radar size={13} /> Tín hiệu nến đã đóng ({sig.length})</div>
+          {sig.length ? (
+            <div className="flex flex-wrap gap-1">{sig.map((x, i) => <span key={i} className={`rounded-md px-2 py-1 text-[11.5px] font-semibold ${{ rose: "bg-rose-50 text-rose-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-50 text-slate-600" }[x.tone]}`}>{x.t}</span>)}</div>
+          ) : <div className="text-[12px] text-slate-400">Chưa có tín hiệu VSA / SFP / mẫu nến đặc biệt ở các nến gần nhất.</div>}
+
+          {DETAIL.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-2.5">
+              <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">AI đọc chi tiết</div>
+              <div className="grid gap-x-5 gap-y-2 md:grid-cols-2">
+                {DETAIL.map(([t, v]) => (
+                  <div key={t} className="text-[12px] leading-snug"><span className="font-extrabold text-slate-700">{t}: </span><span className="text-slate-600">{v}</span></div>
+                ))}
+              </div>
+            </div>
+          )}
+          <KnowledgePanel />
+          <div className="mt-2 text-[10.5px] text-slate-400">Kịch bản do AI tổng hợp từ chỉ báo kỹ thuật — chỉ để tham khảo, KHÔNG phải tư vấn đầu tư. Luôn tự kiểm tra & quản lý vốn.</div>
+        </Card>
+      </div>
     </div>
   );
 }
