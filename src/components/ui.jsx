@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { CalendarDays } from "lucide-react";
 import { formatVND, formatShort } from "../lib/format.js";
 
 export function Card({ className = "", children }) {
@@ -70,10 +72,14 @@ export function DateField({ value, onChange, className = "", placeholder = "Ch�
   const short = value && /^\d{4}-\d{2}-\d{2}$/.test(value)
     ? (() => { const [y, m, d] = value.split("-"); return `${d}/${m}/${y.slice(2)}`; })()
     : placeholder;
+  const ref = useRef(null);
+  // Bấm BẤT KỲ đâu trong ô → mở lịch (Chrome/Edge desktop mặc định chỉ mở khi bấm trúng icon lịch)
+  const open = (e) => { try { ref.current?.showPicker?.(); e?.preventDefault?.(); } catch { /* trình duyệt cũ: để mặc định */ } };
   return (
-    <div className={`relative cursor-pointer ${className}`}>
+    <div className={`relative flex cursor-pointer items-center justify-between gap-2 ${className}`}>
       <span className={value ? "" : "text-slate-400"}>{short}</span>
-      <input type="date" value={value || ""} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Chọn ngày" />
+      <CalendarDays size={14} className="shrink-0 text-slate-400" />
+      <input ref={ref} type="date" value={value || ""} onChange={(e) => onChange(e.target.value)} onClick={open} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") open(e); }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Chọn ngày" />
     </div>
   );
 }
