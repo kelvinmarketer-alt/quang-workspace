@@ -1,9 +1,10 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff,
 } from "lucide-react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -47,18 +48,58 @@ function PushPrompt() {
 }
 
 const NAV = [
-  { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true, feat: "dashboard" },
-  { to: "/khach-hang", label: "Khách & Dự án", icon: Users, feat: "customers" },
-  { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan" },
+  { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true, feat: "dashboard", group: "biz" },
+  { to: "/khach-hang", label: "Khách & Dự án", icon: Users, feat: "customers", group: "biz" },
+  { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan", group: "fin" },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
-  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks" },
-  { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin" },
-  { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads" },
-  { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers" },
-  { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true },
-  { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true },
-  { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon },
+  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "me" },
+  { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin", group: "fin" },
+  { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
+  { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "customers", group: "biz" },
+  { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
+  { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "sys" },
+  { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
 ];
+// Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
+const NAV_GROUPS = [
+  { id: "biz", label: "Kinh doanh", order: ["/", "/khach-hang", "/tai-nguyen", "/quang-cao"] },
+  { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
+  { id: "me", label: "Cá nhân", order: ["/cong-viec", "/tai-khoan"] },
+  { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
+];
+const navKey = (n) => n.to || n.href;
+
+// Mục menu được phép thấy (quyền thành viên / chỉ chủ / văn phòng AI) — dùng chung cho sidebar + ô tìm kiếm
+function useNavItems() {
+  const { perms, isOwner } = useData();
+  const officeOk = useOfficeAccess(isOwner);
+  return useMemo(
+    () => NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner) && (!n.office || officeOk)),
+    [perms, isOwner, officeOk]
+  );
+}
+
+// Ghim menu — localStorage "qws_nav_pins" (mảng key to|href)
+const PIN_KEY = "qws_nav_pins";
+function readPins() {
+  try { const v = JSON.parse(localStorage.getItem(PIN_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; }
+}
+function useNavPins() {
+  const [pins, setPins] = useState(readPins);
+  useEffect(() => {
+    const h = (e) => { if (!e || e.key === PIN_KEY) setPins(readPins()); };
+    window.addEventListener("storage", h);
+    return () => window.removeEventListener("storage", h);
+  }, []);
+  const toggle = useCallback((key) => {
+    setPins((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      try { localStorage.setItem(PIN_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+  return [pins, toggle];
+}
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
 const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án" };
 
@@ -74,27 +115,36 @@ function Brand() {
   );
 }
 
-function SideNav({ onNavigate }) {
-  const { perms, isOwner } = useData();
-  const officeOk = useOfficeAccess(isOwner);
-  const items = NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner) && (!n.office || officeOk));
+function NavItem({ n, onNavigate, pinned, onTogglePin, mobile }) {
+  const pinBtn = (
+    <button
+      type="button"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(navKey(n)); }}
+      title={pinned ? "Bỏ ghim" : "Ghim lên đầu"}
+      aria-label={pinned ? "Bỏ ghim " + n.label : "Ghim " + n.label}
+      className={`absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 transition ${
+        mobile ? "text-slate-300 opacity-70" : "text-slate-400 opacity-0 focus:opacity-100 group-hover/item:opacity-100"
+      } ${pinned ? "hover:text-rose-500" : "hover:text-indigo-600"} hover:bg-slate-100/80`}
+    >
+      {pinned ? <PinOff size={13} /> : <Pin size={13} />}
+    </button>
+  );
   return (
-    <nav className="mt-6 flex flex-col gap-1 px-3">
-      {items.map((n) => n.href ? (
-        <a key={n.href} href={n.href} target="_blank" rel="noopener" onClick={onNavigate}
-          className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900">
+    <div className="group/item relative">
+      {n.href ? (
+        <a href={n.href} target="_blank" rel="noopener" onClick={onNavigate}
+          className="group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900">
           <n.icon size={18} />
           {n.label}
           <ExternalLink size={13} className="ml-auto opacity-50" />
         </a>
       ) : (
         <NavLink
-          key={n.to}
           to={n.to}
           end={n.end}
           onClick={onNavigate}
           className={({ isActive }) =>
-            `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            `group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold transition ${
               isActive
                 ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
                 : "text-slate-500 hover:bg-white hover:text-slate-900"
@@ -104,76 +154,62 @@ function SideNav({ onNavigate }) {
           <n.icon size={18} />
           {n.label}
         </NavLink>
+      )}
+      {pinBtn}
+    </div>
+  );
+}
+
+function SideNav({ onNavigate, pins = [], onTogglePin, mobile }) {
+  const items = useNavItems();
+  const sections = useMemo(() => {
+    const pinnedItems = pins.map((k) => items.find((n) => navKey(n) === k)).filter(Boolean);
+    const pinnedSet = new Set(pinnedItems.map(navKey));
+    const rest = items.filter((n) => !pinnedSet.has(navKey(n)));
+    const out = [];
+    if (pinnedItems.length) out.push({ id: "pin", label: "Ghim", items: pinnedItems });
+    const known = new Set(NAV_GROUPS.map((g) => g.id));
+    for (const g of NAV_GROUPS) {
+      const pos = (n) => { const i = g.order.indexOf(navKey(n)); return i < 0 ? 999 : i; };
+      const gi = rest.filter((n) => n.group === g.id).sort((a, b) => pos(a) - pos(b));
+      if (gi.length) out.push({ id: g.id, label: g.label, items: gi });
+    }
+    const other = rest.filter((n) => !known.has(n.group));
+    if (other.length) out.push({ id: "other", label: "Khác", items: other });
+    return out;
+  }, [items, pins]);
+  return (
+    <nav className="mt-5 flex min-h-0 flex-col gap-1 overflow-y-auto px-3 pb-2">
+      {sections.map((s, si) => (
+        <div key={s.id} className={si ? "mt-3" : ""}>
+          <div className={`mb-1 flex items-center gap-1 px-3 text-[10px] font-bold uppercase tracking-wider ${s.id === "pin" ? "text-indigo-400" : "text-slate-400"}`}>
+            {s.id === "pin" && <Pin size={10} />}{s.label}
+          </div>
+          <div className="flex flex-col gap-1">
+            {s.items.map((n) => (
+              <NavItem key={navKey(n)} n={n} onNavigate={onNavigate} pinned={s.id === "pin"} onTogglePin={onTogglePin} mobile={mobile} />
+            ))}
+          </div>
+        </div>
       ))}
     </nav>
   );
 }
 
-function SearchBox() {
-  const { customerList, projects } = useData();
-  const nav = useNavigate();
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const results = useMemo(() => {
-    if (!q.trim()) return { custs: [], jobs: [] };
-    const lq = q.toLowerCase();
-    const custs = customerList.filter((c) => c.name.toLowerCase().includes(lq) || (c.phone || "").includes(q)).slice(0, 4);
-    const jobs = projects.filter((p) => (p.name + (p.customerName || "")).toLowerCase().includes(lq)).slice(0, 5);
-    return { custs, jobs };
-  }, [q, customerList, projects]);
-
-  const has = results.custs.length || results.jobs.length;
-
+// Nút giả ô tìm kiếm → mở CommandPalette (Ctrl/Cmd+K, "/")
+function SearchButton({ onOpen }) {
   return (
-    <div ref={ref} className="relative hidden sm:block">
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
-        <Search size={16} className="text-slate-400" />
-        <input
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Tìm khách / JOB…"
-          className="w-44 text-slate-700 outline-none placeholder:text-slate-400"
-        />
-      </div>
-      {open && q.trim() && (
-        <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
-          {!has && <div className="p-4 text-sm text-slate-400">Không tìm thấy.</div>}
-          {results.custs.length > 0 && (
-            <div className="p-2">
-              <div className="px-2 py-1 text-[11px] font-bold uppercase text-slate-400">Khách hàng</div>
-              {results.custs.map((c) => (
-                <button key={c.id} onClick={() => { nav("/khach-hang"); setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50">
-                  <Users size={15} className="text-indigo-500" />
-                  <span className="flex-1 text-sm font-semibold text-slate-700">{c.name}</span>
-                  <span className="text-xs text-slate-400">{c.phone}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {results.jobs.length > 0 && (
-            <div className="border-t border-slate-50 p-2">
-              <div className="px-2 py-1 text-[11px] font-bold uppercase text-slate-400">Dự án</div>
-              {results.jobs.map((p) => (
-                <button key={p.id} onClick={() => { nav("/du-an"); setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left hover:bg-slate-50">
-                  <ShoppingBag size={15} className="text-sky-500" />
-                  <span className="flex-1 truncate text-sm font-semibold text-slate-700">{p.name}</span>
-                  <span className="text-xs text-slate-400">{p.customerName}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Tìm mọi thứ"
+      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 text-sm text-slate-400 transition hover:border-indigo-200 hover:text-slate-600 sm:px-3"
+    >
+      <Search size={18} className="text-slate-500 sm:hidden" />
+      <Search size={16} className="hidden sm:block" />
+      <span className="hidden w-32 text-left sm:inline">Tìm mọi thứ…</span>
+      <kbd className="hidden rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-sans text-[10px] font-bold text-slate-400 md:inline">{KBD_HINT}</kbd>
+    </button>
   );
 }
 
@@ -268,6 +304,9 @@ function Notifications() {
 
 export default function Layout({ children }) {
   const [open, setOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [pins, togglePin] = useNavPins();
+  const navItems = useNavItems();
   const loc = useLocation();
   const li = lunarInfo(new Date());
   const title = NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
@@ -281,7 +320,7 @@ export default function Layout({ children }) {
         <div className="pt-6">
           <Brand />
         </div>
-        <SideNav />
+        <SideNav pins={pins} onTogglePin={togglePin} />
         <div className="mt-auto p-4">
           <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white">
             <div className="text-[11px] font-medium uppercase tracking-wide text-indigo-200">Âm lịch hôm nay</div>
@@ -297,14 +336,14 @@ export default function Layout({ children }) {
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-slate-900/40" onClick={() => setOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 bg-white/95 backdrop-blur-xl">
+          <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-white/95 backdrop-blur-xl">
             <div className="flex items-center justify-between pr-3 pt-5">
               <Brand />
               <button onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
                 <X size={20} />
               </button>
             </div>
-            <SideNav onNavigate={() => setOpen(false)} />
+            <SideNav onNavigate={() => setOpen(false)} pins={pins} onTogglePin={togglePin} mobile />
           </div>
         </div>
       )}
@@ -319,7 +358,7 @@ export default function Layout({ children }) {
             <h1 className="text-lg font-extrabold tracking-tight text-slate-900">{title}</h1>
             <div className="ml-auto flex items-center gap-2">
               <SyncBadge />
-              <SearchBox />
+              <SearchButton onOpen={() => setPaletteOpen(true)} />
               <Notifications />
               <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-sm font-bold text-white">
                 Q
@@ -330,6 +369,7 @@ export default function Layout({ children }) {
 
         <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6"><PushPrompt />{children}</main>
       </div>
+      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />
     </div>
   );
 }

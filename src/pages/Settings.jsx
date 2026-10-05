@@ -6,6 +6,8 @@ import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
+import CloudBackups from "../components/CloudBackups.jsx";
+import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
 import { FEATURES, memberAccess } from "../lib/permissions.js";
 
@@ -209,6 +211,8 @@ export default function Settings() {
 
       {isOwner && <AiImport />}
 
+      {isOwner && <AiUsage />}
+
       {isOwner && <AdsAccounts />}
 
       <Card>
@@ -249,6 +253,8 @@ export default function Settings() {
         </div>
         {msg && <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-600">{msg}</div>}
       </Card>
+
+      <CloudBackups />
 
       <Card>
         <SectionTitle action={<RotateCcw size={18} className="text-rose-500" />}>Khôi phục mặc định</SectionTitle>

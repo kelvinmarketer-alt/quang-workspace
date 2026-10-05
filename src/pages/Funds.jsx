@@ -401,10 +401,10 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
 }
 
 /* ---- Modal CHI TỪ ẢNH (nhiều ảnh biên lai) — OpenAI Vision đọc số tiền ---- */
-function ExpenseImageModal({ fund, apiKey, model, cats, onManage, onClose, onSave }) {
+function ExpenseImageModal({ fund, apiKey, aiReady, model, cats, onManage, onClose, onSave }) {
   const [items, setItems] = useState([]); // {id, thumb, status, amount, note, date, cat, error}
   const [defaultCat, setDefaultCat] = useState("");
-  const hasKey = !!(apiKey || "").trim();
+  const hasKey = aiReady ?? !!(apiKey || "").trim();
 
   // Đọc 1 ảnh → có thể ra NHIỀU giao dịch → thay dòng placeholder bằng N dòng
   const readOne = async (id, dataUrl, cat) => {
@@ -1040,7 +1040,7 @@ function FundsMain() {
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
       {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} autoDebt={0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={(id) => { if (confirm("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
-      {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
+      {imgFund && <ExpenseImageModal fund={imgFund} apiKey={settings?.openaiKey} aiReady={settings?.aiReady} model={settings?.openaiModel} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setImgFund(null)} onSave={(txs) => addFundTxMany(txs)} />}
       {fundModal && <FundModal initial={fundModal.id ? fundModal : null} onClose={() => setFundModal(null)} onSave={(data) => (fundModal.id ? updateFund(fundModal.id, data) : addFund(data))} />}
       {txModal && <TxModal fund={txModal.fund} type={txModal.type} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setTxModal(null)} onSave={addFundTxMany} />}
       {editTx && <TxEditModal key={editTx.id} tx={editTx} fund={(funds || []).find((f) => f.id === editTx.fundId)} cats={spendCats} onManage={() => setCatMgr(true)} onClose={() => setEditTx(null)} onSave={updateFundTx} />}

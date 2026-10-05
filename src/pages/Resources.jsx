@@ -197,7 +197,7 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
 // Modal AI: đọc ẢNH (chụp màn hình link/tài nguyên) → tự bóc + điền + thêm
 export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd }) {
   const { settings } = useData();
-  const hasKey = !!(settings.openaiKey || "").trim();
+  const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
   const fileRef = useRef(null);
   const [img, setImg] = useState(null);
   const [note, setNote] = useState("");

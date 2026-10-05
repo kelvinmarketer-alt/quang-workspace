@@ -3,6 +3,16 @@ import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, 
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 import { ALL_FEATURES, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess } from "./permissions.js";
+import { merge3, deepEqual } from "./merge.js";
+import { deriveKey, encryptJSON, decryptJSON, newSalt, PIN_ITER } from "./crypto.js";
+
+const PRIVATE_TABLE = "qws_private";
+// Gỡ dữ liệu bí mật khỏi khối CHUNG (thành viên tải được khối chung) — vault + OpenAI key nằm ở kho riêng của chủ
+function stripSecrets(s) {
+  const { vault, ...rest } = s; // eslint-disable-line no-unused-vars
+  const { openaiKey, ...settings } = rest.settings || {}; // eslint-disable-line no-unused-vars
+  return { ...rest, settings };
+}
 
 const KEY = "quang-workspace-v4";
 const Ctx = createContext(null);
@@ -98,21 +108,143 @@ export function DataProvider({ children }) {
   // Chủ workspace: mặc định = chính mình; nếu là THÀNH VIÊN (được chia sẻ) thì = user_id của chủ.
   const [ownerId, setOwnerId] = useState(null);
   const ownerRef = useRef(null);
+  // Chống ghi đè: bản cloud lần đọc/ghi gần nhất + mốc updated_at để lưu có kiểm tra phiên bản (RPC qws_save)
+  const baseRef = useRef(null);
+  const baseAtRef = useRef(null);
+  const casOff = useRef(false);
+  const pushing = useRef(false);
+  const pendingPush = useRef(false);
+  // KHO RIÊNG của chủ (qws_private): vault + OpenAI key. privAvail: null=chưa biết/không phải chủ, true=dùng kho riêng, false=chưa tạo bảng (giữ cách cũ)
+  const [privAvail, setPrivAvail] = useState(null);
+  const privAvailRef = useRef(null);
+  privAvailRef.current = privAvail;
+  const privRef = useRef({});
+  const [vaultMem, setVaultMem] = useState(null); // mảng đã giải mã (null = đang khoá)
+  const vaultMemRef = useRef(null);
+  vaultMemRef.current = vaultMem;
+  const [vaultLocked, setVaultLocked] = useState(false);
+  const [vaultHasPin, setVaultHasPin] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState("");
+  const pinKeyRef = useRef(null);
+  const pendingLegacyVault = useRef([]);
+  const privTimer = useRef(null);
+  const outgoing = (s) => (privAvailRef.current ? stripSecrets(s) : s);
 
-  // Đẩy state hiện tại lên Supabase (dùng chung cho debounce / flush / retry)
-  const pushCloud = () => {
+  // Đẩy state hiện tại lên Supabase (dùng chung cho debounce / flush / retry).
+  // Lưu CÓ KIỂM TRA PHIÊN BẢN: nếu nơi khác vừa sửa → tải bản mới, GỘP 3 chiều rồi lưu lại (không đè mất của nhau).
+  const pushCloud = async () => {
     if (!user) return;
+    if (pushing.current) { pendingPush.current = true; return; }
+    pushing.current = true;
     setSyncStatus("saving");
-    supabase.from(WORKSPACE_TABLE).upsert({ user_id: ownerRef.current || user.id, data: stateRef.current }).then(({ error }) => {
-      if (error) {
-        console.warn("Lưu Supabase lỗi:", error.message);
-        setSyncStatus("error");
-        clearTimeout(retryTimer.current);
-        retryTimer.current = setTimeout(pushCloud, 5000); // tự thử lại
-      } else {
-        dirty.current = false;
-        setSyncStatus("idle");
+    try {
+      const owner = ownerRef.current || user.id;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const local = outgoing(stateRef.current);
+        if (casOff.current || !baseAtRef.current) {
+          const { data, error } = await supabase.from(WORKSPACE_TABLE).upsert({ user_id: owner, data: local }).select("updated_at").maybeSingle();
+          if (error) throw error;
+          baseRef.current = local; baseAtRef.current = data?.updated_at || null;
+          break;
+        }
+        const { data, error } = await supabase.rpc("qws_save", { p_owner: owner, p_data: local, p_expect: baseAtRef.current });
+        if (error) {
+          // Chưa chạy SQL tạo hàm qws_save → lưu kiểu cũ
+          if (error.code === "PGRST202" || /qws_save/.test(error.message || "")) { casOff.current = true; continue; }
+          throw error;
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; break; }
+        // XUNG ĐỘT: nơi khác đã lưu trước → gộp
+        const rem = await supabase.from(WORKSPACE_TABLE).select("data,updated_at").eq("user_id", owner).single();
+        if (rem.error) throw rem.error;
+        const merged = migrate(merge3(baseRef.current, local, rem.data.data || {}));
+        baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
+        stateRef.current = merged;
+        skipSave.current = true;
+        setState(stateRef.current);
       }
+      dirty.current = false;
+      setSyncStatus("idle");
+    } catch (e) {
+      console.warn("Lưu Supabase lỗi:", e?.message || e);
+      setSyncStatus("error");
+      clearTimeout(retryTimer.current);
+      retryTimer.current = setTimeout(pushCloud, 5000); // tự thử lại
+    } finally {
+      pushing.current = false;
+      if (pendingPush.current) { pendingPush.current = false; pushCloud(); }
+    }
+  };
+
+  // Kéo bản mới từ cloud (nơi khác vừa sửa) — chỉ khi máy này KHÔNG có bản sửa chưa lưu
+  const pullCloud = async () => {
+    if (!user || !ownerRef.current || dirty.current || pushing.current) return;
+    const owner = ownerRef.current;
+    const head = await supabase.from(WORKSPACE_TABLE).select("updated_at").eq("user_id", owner).maybeSingle();
+    if (head.error || !head.data || head.data.updated_at === baseAtRef.current) return;
+    const rem = await supabase.from(WORKSPACE_TABLE).select("data,updated_at").eq("user_id", owner).single();
+    if (rem.error || dirty.current || pushing.current) return;
+    baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
+    const next = migrate(rem.data.data || {});
+    if (deepEqual(outgoing(next), outgoing(stateRef.current))) return;
+    skipSave.current = true;
+    setState(next);
+  };
+
+  // ===== KHO RIÊNG (chỉ chủ) =====
+  const savePrivate = async () => {
+    if (!user || privAvailRef.current !== true) return;
+    let P = { ...privRef.current };
+    if (P.lock) {
+      if (pinKeyRef.current && vaultMemRef.current) P.vaultEnc = await encryptJSON(pinKeyRef.current, vaultMemRef.current);
+      delete P.vault;
+    } else {
+      P.vault = vaultMemRef.current || P.vault || [];
+      delete P.vaultEnc;
+    }
+    privRef.current = P;
+    const { error } = await supabase.from(PRIVATE_TABLE).upsert({ user_id: user.id, data: P });
+    if (error) { console.warn("Lưu kho riêng lỗi:", error.message); setSyncStatus("error"); }
+  };
+  const schedulePrivate = () => { clearTimeout(privTimer.current); privTimer.current = setTimeout(savePrivate, 500); };
+
+  const loadPrivate = async (blob) => {
+    const r = await supabase.from(PRIVATE_TABLE).select("data").eq("user_id", user.id).maybeSingle();
+    if (r.error) { setPrivAvail(false); return; } // bảng chưa tạo → giữ cách cũ (vault trong khối chung)
+    let P = r.data?.data || null;
+    const legacyVault = Array.isArray(blob?.vault) ? blob.vault : [];
+    const legacyKey = (blob?.settings?.openaiKey || "").trim();
+    let changed = false;
+    if (!P) {
+      P = { vault: legacyVault, openaiKey: legacyKey };
+      const w = await supabase.from(PRIVATE_TABLE).upsert({ user_id: user.id, data: P });
+      if (w.error) { setPrivAvail(false); return; }
+    } else {
+      // App cũ (chưa cập nhật) lỡ ghi lại vào khối chung → gộp vào kho riêng
+      if (!P.openaiKey && legacyKey) { P = { ...P, openaiKey: legacyKey }; changed = true; }
+      if (legacyVault.length) {
+        if (P.lock) pendingLegacyVault.current = legacyVault;
+        else {
+          const ids = new Set((P.vault || []).map((x) => x.id));
+          const add = legacyVault.filter((x) => !ids.has(x.id));
+          if (add.length) { P = { ...P, vault: [...add, ...(P.vault || [])] }; changed = true; }
+        }
+      }
+    }
+    privRef.current = P;
+    privAvailRef.current = true;
+    setPrivAvail(true);
+    setOpenaiKey(P.openaiKey || "");
+    setVaultHasPin(!!P.lock);
+    setVaultLocked(!!P.lock);
+    setVaultMem(P.lock ? null : P.vault || []);
+    vaultMemRef.current = P.lock ? null : P.vault || [];
+    if (changed) savePrivate();
+    // Gỡ bí mật khỏi khối chung (+ cờ aiEnabled để tài khoản phụ biết AI dùng được) → effect lưu sẽ đẩy bản sạch lên
+    setState((s) => {
+      const clean = stripSecrets(s);
+      return { ...clean, settings: { ...clean.settings, aiEnabled: !!(P.openaiKey || "").trim() } };
     });
   };
 
@@ -123,7 +255,7 @@ export function DataProvider({ children }) {
     setSynced(false);
     (async () => {
       // 1) Thử dòng của CHÍNH MÌNH (chủ workspace)
-      const own = await supabase.from(WORKSPACE_TABLE).select("user_id,data").eq("user_id", user.id).maybeSingle();
+      const own = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").eq("user_id", user.id).maybeSingle();
       if (!alive) return;
       if (own.error) {
         // ĐỌC LỖI (mạng/token/RLS): TUYỆT ĐỐI không ghi gì để tránh đè dữ liệu thật bằng bản local/rỗng.
@@ -131,24 +263,35 @@ export function DataProvider({ children }) {
         setTimeout(() => { if (alive) setReloadTick((t) => t + 1); }, 4000);
         return;
       }
-      let owner = user.id, blob = own.data?.data;
+      let owner = user.id, blob = own.data?.data, blobAt = own.data?.updated_at || null;
       if (!own.data) {
         // 2) Không có dòng riêng → có thể là THÀNH VIÊN: RLS cho phép thấy dòng của CHỦ đã chia sẻ cho mình
-        const shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data").neq("user_id", user.id).limit(1);
+        const shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").neq("user_id", user.id).limit(1);
         if (!alive) return;
-        if (!shared.error && shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; }
+        if (!shared.error && shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; blobAt = shared.data[0].updated_at; }
       }
       ownerRef.current = owner;
       setOwnerId(owner);
+      baseRef.current = blob || null;
+      baseAtRef.current = blobAt;
       if (blob && Object.keys(blob).length > 0) {
         skipSave.current = true;
-        setState(migrate(blob));
+        const next = migrate(blob);
+        // Tài khoản phụ: không bao giờ giữ vault/key trong máy
+        setState(owner === user.id ? next : stripSecrets(next));
       } else if (owner === user.id) {
         // CHỈ chủ mới tạo dòng mới (thành viên không có dòng riêng → không tạo, tránh tách dữ liệu)
         skipSave.current = true;
-        await supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current });
+        const ins = await supabase.from(WORKSPACE_TABLE).upsert({ user_id: user.id, data: stateRef.current }).select("updated_at").maybeSingle();
+        baseRef.current = stateRef.current; baseAtRef.current = ins.data?.updated_at || null;
       }
+      if (owner === user.id && alive) await loadPrivate(blob);
       setSynced(true);
+      // Khối chung trên cloud còn sót vault/key (bản cũ) → đẩy ngay bản đã gỡ bí mật
+      if (privAvailRef.current === true && (blob?.vault?.length || blob?.settings?.openaiKey)) {
+        dirty.current = true;
+        setTimeout(pushCloud, 800);
+      }
       setSyncStatus("idle");
     })();
     return () => { alive = false; };
@@ -189,14 +332,34 @@ export function DataProvider({ children }) {
   // bỏ qua nếu đang có bản sửa chưa lưu (tránh đè mất). Đã flush khi ẩn tab nên lúc hiện lại thường sạch.
   useEffect(() => {
     if (!user) return;
-    const onVisible = () => { if (document.visibilityState === "visible" && !dirty.current) setReloadTick((t) => t + 1); };
+    let hiddenAt = 0;
+    const onVisible = () => {
+      if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+      // Ẩn app > 5 phút → khoá lại kho Tài khoản & Thẻ (nếu có PIN)
+      if (hiddenAt && Date.now() - hiddenAt > 5 * 60000 && privRef.current?.lock) { pinKeyRef.current = null; setVaultMem(null); setVaultLocked(true); }
+      if (synced) pullCloud();
+    };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [user?.id]);
+    // Thấy thay đổi từ thiết bị/người khác trong ~20s (chỉ hỏi mốc updated_at — rất nhẹ)
+    const t = setInterval(() => { if (synced && document.visibilityState === "visible") pullCloud(); }, 20000);
+    return () => { document.removeEventListener("visibilitychange", onVisible); clearInterval(t); };
+  }, [user?.id, synced]);
 
   const api = useMemo(() => {
     const uid = () => Math.random().toString(36).slice(2, 9);
     const normUrl = (u) => { u = (u || "").trim(); return u && !/^https?:\/\//i.test(u) ? "https://" + u : u; };
+    // Vault: kho riêng (đã mở khoá) hoặc kiểu cũ trong khối chung (khi chưa tạo bảng qws_private)
+    const vaultSet = (fn) => {
+      if (privAvailRef.current === true) {
+        if (!vaultMemRef.current) return; // đang khoá → không sửa được
+        const next = fn(vaultMemRef.current);
+        vaultMemRef.current = next;
+        setVaultMem(next);
+        schedulePrivate();
+        return;
+      }
+      setState((s) => ({ ...s, vault: fn(s.vault || []) }));
+    };
     return {
       // state LUÔN đã ở dạng migrate (load()/fetch đã migrate) → không migrate lại mỗi render (tốn CPU + phá tham chiếu)
       ...state,
@@ -454,7 +617,19 @@ export function DataProvider({ children }) {
           return { ...s, customerList, projects };
         }),
       // SETTINGS (cấu hình app — key OpenAI…)
-      setSettings: (patch) => setState((s) => ({ ...s, settings: { ...s.settings, ...patch } })),
+      setSettings: (patch) => {
+        // OpenAI key → kho riêng của chủ (không nằm trong khối chung); khối chung chỉ giữ cờ aiEnabled
+        if (privAvailRef.current === true && "openaiKey" in patch) {
+          const { openaiKey: k, ...rest } = patch;
+          const key = (k || "").trim();
+          privRef.current = { ...privRef.current, openaiKey: key };
+          setOpenaiKey(key);
+          savePrivate();
+          setState((s) => ({ ...s, settings: { ...s.settings, ...rest, aiEnabled: !!key } }));
+          return;
+        }
+        setState((s) => ({ ...s, settings: { ...s.settings, ...patch } }));
+      },
       // NGƯỜI DÙNG & PHÂN QUYỀN — thành viên chung workspace, lưu trong data.members=[{email,name,perms:[]}]
       addMember: (m) => setState((s) => {
         const email = (m.email || "").trim().toLowerCase();
@@ -472,10 +647,10 @@ export function DataProvider({ children }) {
       addAdsResult: (r) => setState((s) => ({ ...s, adsResults: [{ id: "ar" + uid(), accountId: r.accountId, date: r.date, customers: Number(r.customers) || 0, revenue: Number(r.revenue) || 0, note: r.note || "" }, ...(s.adsResults || [])] })),
       deleteAdsResult: (id) => setState((s) => ({ ...s, adsResults: (s.adsResults || []).filter((x) => x.id !== id) })),
       // KHO TÀI KHOẢN / THẺ / THANH TOÁN (CHỈ CHỦ) — {id,type:"app"|"card"|"bank",title,...fields,note,updatedAt}
-      addVaultItem: (v) => setState((s) => ({ ...s, vault: [{ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() }, ...(s.vault || [])] })),
-      addVaultItems: (arr) => setState((s) => ({ ...s, vault: [...(arr || []).map((v) => ({ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() })), ...(s.vault || [])] })),
-      updateVaultItem: (id, patch) => setState((s) => ({ ...s, vault: (s.vault || []).map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) })),
-      deleteVaultItem: (id) => setState((s) => ({ ...s, vault: (s.vault || []).filter((x) => x.id !== id) })),
+      addVaultItem: (v) => vaultSet((list) => [{ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() }, ...list]),
+      addVaultItems: (arr) => vaultSet((list) => [...(arr || []).map((v) => ({ id: "v" + uid(), type: v.type || "app", ...v, updatedAt: Date.now() })), ...list]),
+      updateVaultItem: (id, patch) => vaultSet((list) => list.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x))),
+      deleteVaultItem: (id) => vaultSet((list) => list.filter((x) => x.id !== id)),
       // TÀI NGUYÊN / TÀI LIỆU ONLINE (LINK) — {id,title,url,type,projectId,customerId,tags,note,createdAt}
       addResource: (r) => setState((s) => ({ ...s, resources: [{ id: "r" + uid(), title: (r.title || "").trim(), url: normUrl(r.url), type: r.type || "web", projectId: r.projectId || "", customerId: r.customerId || "", username: (r.username || "").trim(), password: r.password || "", tags: r.tags || [], note: r.note || "", createdAt: Date.now() }, ...(s.resources || [])] })),
       addResources: (arr) => setState((s) => ({ ...s, resources: [...(arr || []).map((r) => ({ id: "r" + uid(), title: (r.title || "").trim(), url: normUrl(r.url), type: r.type || "web", projectId: r.projectId || "", customerId: r.customerId || "", username: (r.username || "").trim(), password: r.password || "", tags: r.tags || [], note: r.note || "", createdAt: Date.now() })), ...(s.resources || [])] })),
@@ -501,6 +676,54 @@ export function DataProvider({ children }) {
     };
   }, [state]);
 
+  // ===== KHOÁ PIN cho Tài khoản & Thẻ (mã hoá AES-GCM ngay trong máy, PIN không lưu ở đâu) =====
+  const vaultApi = useMemo(() => ({
+    vaultLocked: privAvail === true && vaultLocked,
+    vaultHasPin,
+    vaultPrivate: privAvail === true,
+    unlockVault: async (pin) => {
+      const P = privRef.current;
+      if (!P?.lock) return true;
+      try {
+        const key = await deriveKey(pin, P.lock.salt, P.lock.iter || PIN_ITER);
+        let list = P.vaultEnc ? await decryptJSON(key, P.vaultEnc) : [];
+        pinKeyRef.current = key;
+        if (pendingLegacyVault.current.length) {
+          const ids = new Set(list.map((x) => x.id));
+          list = [...pendingLegacyVault.current.filter((x) => !ids.has(x.id)), ...list];
+          pendingLegacyVault.current = [];
+          vaultMemRef.current = list;
+          savePrivate();
+        }
+        vaultMemRef.current = list;
+        setVaultMem(list);
+        setVaultLocked(false);
+        return true;
+      } catch { return false; }
+    },
+    lockVault: () => { if (privRef.current?.lock) { pinKeyRef.current = null; vaultMemRef.current = null; setVaultMem(null); setVaultLocked(true); } },
+    // Đặt / đổi PIN (cần đang mở khoá) → mã hoá lại toàn bộ kho
+    setVaultPin: async (pin) => {
+      if (privAvailRef.current !== true || !vaultMemRef.current) return false;
+      const salt = newSalt();
+      pinKeyRef.current = await deriveKey(pin, salt, PIN_ITER);
+      privRef.current = { ...privRef.current, lock: { salt, iter: PIN_ITER } };
+      await savePrivate();
+      setVaultHasPin(true);
+      return true;
+    },
+    removeVaultPin: async () => {
+      if (privAvailRef.current !== true || !vaultMemRef.current) return false;
+      const { lock, vaultEnc, ...rest } = privRef.current; // eslint-disable-line no-unused-vars
+      privRef.current = rest;
+      pinKeyRef.current = null;
+      await savePrivate();
+      setVaultHasPin(false);
+      return true;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [privAvail, vaultLocked, vaultHasPin, user?.id]);
+
   const value = useMemo(() => {
     const email = (user?.email || "").toLowerCase();
     const isOwner = !!user && !!ownerId && ownerId === user.id;
@@ -520,8 +743,14 @@ export function DataProvider({ children }) {
         if (!editable.includes(feat)) for (const m of methods) if (m in guarded) guarded[m] = noop;
       }
     }
-    return { ...guarded, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId };
-  }, [api, syncStatus, user?.id, user?.email, ownerId, state.members]);
+    // Kho riêng: vault lấy từ bản đã giải mã; settings có openaiKey (chỉ chủ, trong bộ nhớ) + aiReady cho mọi người
+    const usePriv = privAvail === true;
+    const vault = usePriv ? vaultMem || [] : state.vault || [];
+    const key = usePriv ? openaiKey : (state.settings?.openaiKey || "");
+    const settings = { ...state.settings, openaiKey: isOwner || !ownerId ? key : "", aiReady: !!(key || "").trim() || !!state.settings?.aiEnabled };
+    const vApi = isOwner ? vaultApi : { vaultLocked: false, vaultHasPin: false, vaultPrivate: false };
+    return { ...guarded, ...vApi, vault, settings, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId };
+  }, [api, vaultApi, vaultMem, openaiKey, privAvail, syncStatus, user?.id, user?.email, ownerId, state.members]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

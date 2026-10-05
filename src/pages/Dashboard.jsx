@@ -10,6 +10,7 @@ import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, allIn
 import { MONTHS_VI, fmtDateVI } from "../lib/format.js";
 import { generateCalendarEvents } from "../lib/events.js";
 import { lunarInfo } from "../lib/lunar.js";
+import TodayPanel from "../components/today/TodayPanel.jsx";
 
 const BARC = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#f43f5e", "#a855f7", "#14b8a6", "#ec4899"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -43,6 +44,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      <TodayPanel />
+
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-6 text-white sm:p-8">
         <div className="absolute -right-10 -top-10 h-48 w-48 animate-floaty rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">

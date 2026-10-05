@@ -132,7 +132,7 @@ function KnowledgePanel() {
 
 export default function CoinMarket() {
   const { settings = {}, coins = [] } = useData();
-  const hasKey = !!(settings.openaiKey || "").trim();
+  const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
   const [sym, setSym] = useState(() => ls.get("qws_mkt_sym", "BTC"));
   const [tf, setTf] = useState(() => ls.get("qws_mkt_tf", "4h"));
   const [extraWatch, setExtraWatch] = useState(() => ls.get("qws_mkt_watch", []));

@@ -1,5 +1,28 @@
 // Gọi OpenAI API (client-side) để bóc tách dữ liệu từ ảnh / đoạn chat
 // thành khách hàng + dự án + đợt thu. Key/model truyền vào từ store.settings.
+import { supabase } from "./supabase.js";
+
+// Gọi OpenAI QUA MÁY CHỦ (edge fn qws-ai): key nằm ở kho riêng của chủ, trình duyệt không thấy; có ghi chi phí.
+// Máy chủ chưa bật (chưa deploy) → chủ còn key trong máy thì gọi thẳng như cũ.
+async function chat(body, key, feature) {
+  const asRes = (ok, status, data) => ({ ok, status, json: async () => data });
+  try {
+    const { data, error } = await supabase.functions.invoke("qws-ai", { body: { feature, body } });
+    if (!error && data && !data.error) return asRes(true, 200, data);
+    let msg = data?.error;
+    if (error) { try { msg = (await error.context?.json?.())?.error; } catch { /* bỏ qua */ } }
+    const notDeployed = error && (error.context?.status === 404 || /Failed to send|FunctionsFetchError/i.test(error.name + error.message));
+    if (!notDeployed) return asRes(false, error?.context?.status || 400, { error: { message: msg || error?.message || "Lỗi AI" } });
+  } catch { /* rơi xuống gọi thẳng */ }
+  if (!key) return asRes(false, 400, { error: { message: "AI chưa sẵn sàng: chủ workspace cần nhập API key OpenAI trong Cài đặt." } });
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify(body),
+  });
+  return asRes(r.ok, r.status, await r.json().catch(() => ({})));
+}
+
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -39,7 +62,6 @@ SCHEMA JSON trả về:
 
 export async function aiImport({ text, imageDataUrl, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!text && !imageDataUrl) throw new Error("Cần ảnh hoặc đoạn text để phân tích.");
 
   const userContent = [];
@@ -56,11 +78,7 @@ export async function aiImport({ text, imageDataUrl, apiKey, model }) {
     temperature: 0,
   };
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
+  const res = await chat(body, key, "import");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
@@ -79,7 +97,6 @@ export async function aiImport({ text, imageDataUrl, apiKey, model }) {
 // Đọc ảnh chụp màn hình chứa CÁC LINK / TÀI NGUYÊN online -> { resources: [{title,url,type}] } bằng OpenAI Vision.
 export async function aiReadResources({ imageDataUrl, text, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl && !text) throw new Error("Cần ảnh (hoặc text) để đọc.");
   const sys = `Bạn đọc ảnh chứa TÀI NGUYÊN ONLINE, THƯỜNG LÀ 1 BẢNG (spreadsheet) có hàng tiêu đề + nhiều dòng dữ liệu. Mỗi DÒNG dữ liệu = 1 mục. Trích MỌI dòng thành danh sách. CHỈ trả JSON, không giải thích.
 
@@ -107,11 +124,7 @@ SCHEMA: { "resources": [ { "title":"", "url":"", "type":"web", "username":"", "p
     response_format: { type: "json_object" },
     temperature: 0,
   };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
+  const res = await chat(body, key, "resources");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
@@ -131,7 +144,6 @@ SCHEMA: { "resources": [ { "title":"", "url":"", "type":"web", "username":"", "p
 // Đọc ảnh chứa DANH SÁCH TÀI KHOẢN / THẺ / TK NGÂN HÀNG -> { items: [{type,title,...fields}] } bằng OpenAI Vision.
 export async function aiReadVault({ imageDataUrl, text, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
   const sys = `Bạn đọc ảnh chứa DANH SÁCH TÀI KHOẢN ĐĂNG NHẬP / THẺ NGÂN HÀNG / TÀI KHOẢN NGÂN HÀNG-VÍ, THƯỜNG LÀ 1 BẢNG có hàng tiêu đề + nhiều dòng. Mỗi DÒNG = 1 mục. Trích MỌI dòng thành JSON. CHỈ trả JSON, không giải thích.
 NẾU LÀ BẢNG: nhìn hàng tiêu đề để ánh xạ cột → cột "Hạng Mục"/"Tên"/"Nguồn" = title; "Tài khoản"/"Đăng nhập"/"User"/"Email" = username; "Mật khẩu"/"Password"/"Pass" = password; "Link"/"Link Đăng Nhập"/"URL" = url; "Ghi chú"/"Note" = note. LẤY ĐÚNG chữ ở cột tên (KHÔNG tự đặt theo link). Đọc CHÍNH XÁC từng ký tự tài khoản/mật khẩu, ghép đúng theo hàng ngang không lệch dòng.
@@ -153,11 +165,7 @@ SCHEMA: { "items": [ { "type":"app", "title":"Facebook", "username":"user@mail.c
     response_format: { type: "json_object" },
     temperature: 0,
   };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
+  const res = await chat(body, key, "vault");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
@@ -218,7 +226,6 @@ export function imageToDataUrl(file, maxDim = 1280, quality = 0.82) {
 // Ảnh có thể là 1 giao dịch HOẶC danh sách nhiều giao dịch → trả về MẢNG (mỗi giao dịch 1 phần tử).
 export async function aiReadExpense({ imageDataUrl, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   if (!imageDataUrl) throw new Error("Cần ảnh để đọc.");
   const today = iso(new Date());
   const sys = `Bạn đọc ảnh chụp BIÊN LAI / GIAO DỊCH / SAO KÊ / LỊCH SỬ NGÂN HÀNG / VÍ ĐIỆN TỬ. Ảnh có thể là 1 giao dịch HOẶC DANH SÁCH nhiều giao dịch (nhiều dòng). Trích TỪNG giao dịch thành 1 phần tử. Hôm nay ${today}. CHỈ trả JSON, không giải thích.
@@ -238,11 +245,7 @@ SCHEMA: { "transactions": [ { "amount": 42000, "type": "out", "date": "${today}"
     response_format: { type: "json_object" },
     temperature: 0,
   };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  });
+  const res = await chat(body, key, "expense");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
@@ -268,7 +271,6 @@ SCHEMA: { "transactions": [ { "amount": 42000, "type": "out", "date": "${today}"
 // Phân tích số liệu Quảng cáo (module /quang-cao) → nhận xét + đề xuất bằng tiếng Việt (text thuần).
 export async function aiAdsAnalysis({ summary, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   const sys = `Bạn là chuyên gia tối ưu quảng cáo Facebook cho doanh nghiệp nhỏ ở Việt Nam. Đọc số liệu JSON và viết phân tích NGẮN GỌN bằng tiếng Việt.
 - Nhóm "conv" (chuyển đổi): đánh giá theo giá/kết quả (tin nhắn + lead), CTR, CPM; chỉ ra chiến dịch/quảng cáo/dịch vụ đang rẻ nhất và đắt nhất.
 - platform "google": kết quả = chuyển đổi Google, cpr = CPA; budgetLostIS = % hiển thị bị mất do thiếu ngân sách (cao + CPA tốt → nên tăng ngân sách); xem thêm từ khoá đắt mà ít chuyển đổi.
@@ -276,11 +278,7 @@ export async function aiAdsAnalysis({ summary, apiKey, model }) {
 - Có "prev" thì so sánh với kỳ trước (tăng/giảm %).
 - Có "real" (khách chốt/doanh thu nhập tay) thì tính giá mỗi khách thật và ROAS.
 Định dạng: với mỗi tài khoản 1 đoạn 2-3 dòng "Tên: nhận xét"; cuối cùng mục "ĐỀ XUẤT" gồm 3-5 hành động cụ thể (tắt/tăng/giảm ngân sách, đổi mẫu quảng cáo...). Tiền viết dạng 45k, 1,2tr. Không bịa số ngoài dữ liệu.`;
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: model || "gpt-4o-mini", temperature: 0.3, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(summary) }] }),
-  });
+  const res = await chat({ model: model || "gpt-4o-mini", temperature: 0.3, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(summary) }] }, key, "ads");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}
@@ -294,7 +292,6 @@ export async function aiAdsAnalysis({ summary, apiKey, model }) {
 // EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
 export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {
   const key = (apiKey || "").trim();
-  if (!key) throw new Error("Chưa có API key OpenAI. Vào Cài đặt để nhập key.");
   const { PLAYBOOK_TEXT, SETUP_TYPES } = await import("./tradeKnowledge.js");
   const sys = `Bạn là trader chuyên nghiệp phân tích crypto THEO ĐÚNG BỘ KIẾN THỨC/CHIẾN LƯỢC dưới đây (của chính người dùng — ưu tiên tuyệt đối hơn kiến thức chung). Mọi nhận định, setup, entry, SL, TP phải bám các quy tắc này.
 
@@ -329,11 +326,7 @@ Viết tiếng Việt ngắn gọn, đúng thuật ngữ. CHỈ trả JSON:
  "wait_for": "...", "risk_note": "..."
 }`;
   const payload = { symbol: symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: model || "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(payload) }] }),
-  });
+  const res = await chat({ model: model || "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(payload) }] }, key, "market");
   if (!res.ok) {
     let msg = res.status + "";
     try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch {}

@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import {
   Plus, X, Trash2, Pencil, Copy, Check, Eye, EyeOff, Search,
   KeyRound, CreditCard, Landmark, Lock, ShieldAlert, ExternalLink,
-  Sparkles, ImagePlus, Loader2, Settings as SettingsIcon,
+  Sparkles, ImagePlus, Loader2, Settings as SettingsIcon, LockKeyhole, Unlock,
 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -202,7 +202,7 @@ function VaultBatchModal({ startType = "app", onClose, onSave }) {
 // Modal AI: đọc ẢNH (danh sách tài khoản/thẻ) → tự bóc + điền + thêm hàng loạt
 function VaultAiModal({ onClose, onAdd }) {
   const { settings } = useData();
-  const hasKey = !!(settings.openaiKey || "").trim();
+  const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
   const fileRef = useRef(null);
   const [img, setImg] = useState(null);
   const [note, setNote] = useState("");
@@ -328,8 +328,73 @@ function VaultModal({ initial, onClose, onSave }) {
   );
 }
 
+/* ---- KHOÁ PIN: màn mở khoá + thanh quản lý PIN ---- */
+function PinUnlock({ onUnlock }) {
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const go = async (e) => {
+    e?.preventDefault();
+    if (!pin) return;
+    setBusy(true); setErr("");
+    const ok = await onUnlock(pin);
+    setBusy(false);
+    if (!ok) { setErr("Sai mã PIN"); setPin(""); }
+  };
+  return (
+    <Card>
+      <form onSubmit={go} className="mx-auto max-w-xs py-10 text-center">
+        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white"><LockKeyhole size={26} /></div>
+        <div className="mt-3 text-base font-extrabold text-slate-800">Kho Tài khoản & Thẻ đang khoá</div>
+        <div className="mt-1 text-xs text-slate-400">Nhập mã PIN để mở. Tự khoá lại khi rời app quá 5 phút.</div>
+        <input autoFocus type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Mã PIN" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-center text-lg tracking-[0.4em]" />
+        {err && <div className="mt-2 text-sm font-bold text-rose-600">{err}</div>}
+        <button disabled={busy || !pin} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <Unlock size={15} />} Mở khoá</button>
+      </form>
+    </Card>
+  );
+}
+
+function PinBar({ hasPin, setVaultPin, removeVaultPin, lockVault }) {
+  const [mode, setMode] = useState(null); // "set" | null
+  const [p1, setP1] = useState("");
+  const [p2, setP2] = useState("");
+  const [msg, setMsg] = useState("");
+  const save = async () => {
+    if (p1.length < 4) { setMsg("PIN tối thiểu 4 ký tự"); return; }
+    if (p1 !== p2) { setMsg("2 lần nhập không khớp"); return; }
+    const ok = await setVaultPin(p1);
+    setMsg(ok ? "✓ Đã khoá bằng PIN" : "Không đặt được PIN");
+    if (ok) { setMode(null); setP1(""); setP2(""); }
+  };
+  return (
+    <div className={`rounded-2xl border p-3 text-[12px] ${hasPin ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <LockKeyhole size={16} className="shrink-0" />
+        <span className="flex-1 font-semibold">{hasPin ? "Đã mã hoá bằng PIN — kể cả máy chủ cũng không đọc được." : "Nên khoá bằng PIN: dữ liệu được mã hoá ngay trên máy, sai PIN không mở được."}</span>
+        {hasPin ? (<>
+          <button onClick={lockVault} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Khoá ngay</button>
+          <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Đổi PIN</button>
+          <button onClick={async () => { if (confirm("Bỏ khoá PIN? Dữ liệu sẽ không còn được mã hoá.")) setMsg((await removeVaultPin()) ? "Đã bỏ khoá PIN" : "Không bỏ được"); }} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-400 shadow-sm hover:text-rose-600">Bỏ PIN</button>
+        </>) : (
+          <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-indigo-600 px-3 py-1 font-bold text-white hover:bg-indigo-700">Đặt PIN</button>
+        )}
+      </div>
+      {mode === "set" && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input type="password" inputMode="numeric" value={p1} onChange={(e) => setP1(e.target.value)} placeholder="PIN mới" className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700" />
+          <input type="password" inputMode="numeric" value={p2} onChange={(e) => setP2(e.target.value)} placeholder="Nhập lại" className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700" />
+          <button onClick={save} className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-bold text-white">Lưu PIN</button>
+          <span className="w-full text-[11px] font-semibold text-rose-600">⚠️ Quên PIN = KHÔNG khôi phục được kho này. Hãy ghi nhớ kỹ.</span>
+        </div>
+      )}
+      {msg && <div className="mt-1 font-bold">{msg}</div>}
+    </div>
+  );
+}
+
 export default function Vault() {
-  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId } = useData();
+  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId, vaultLocked, vaultHasPin, vaultPrivate, unlockVault, setVaultPin, removeVaultPin, lockVault } = useData();
   const canW = isOwner || !ownerId; // ghi = chủ (store đã chặn owner-only)
   const [tab, setTab] = useState("all");
   const [q, setQ] = useState("");
@@ -361,6 +426,8 @@ export default function Vault() {
     );
   }
 
+  if (vaultLocked) return <PinUnlock onUnlock={unlockVault} />;
+
   const TABS = [["all", "Tất cả"], ["app", "Ứng dụng"], ["card", "Thẻ"], ["bank", "Thanh toán"]];
 
   return (
@@ -370,6 +437,8 @@ export default function Vault() {
         <ShieldAlert size={16} className="mt-0.5 shrink-0 text-amber-500" />
         <span>Dữ liệu nhạy cảm — <b>chỉ tài khoản của bạn</b> thấy được. Bấm 👁 để hiện mục ẩn, <b>Copy</b> để gửi cho người khác. Tránh chia sẻ quyền chủ cho người lạ.</span>
       </div>
+
+      {vaultPrivate && <PinBar hasPin={vaultHasPin} setVaultPin={setVaultPin} removeVaultPin={removeVaultPin} lockVault={lockVault} />}
 
       {/* Tabs loại */}
       <div className="grid grid-cols-4 gap-1.5">

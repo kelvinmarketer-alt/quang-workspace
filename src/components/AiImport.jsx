@@ -84,7 +84,7 @@ export function AiKeyBar() {
 /** Hộp nhập AI dùng chung. mode: "project" | "installment". onApply(parsed) thực hiện ghi dữ liệu. */
 export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
   const { settings } = useData();
-  const hasKey = !!(settings.openaiKey || "").trim();
+  const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
   const [tab, setTab] = useState("chat");
   const [text, setText] = useState("");
   const [imgNote, setImgNote] = useState("");

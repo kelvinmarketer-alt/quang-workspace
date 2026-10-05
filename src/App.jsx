@@ -1,15 +1,21 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
-import Customers from "./pages/Customers.jsx";
-import Ketoan from "./pages/Ketoan.jsx";
-import Funds from "./pages/Funds.jsx";
-import Tasks from "./pages/Tasks.jsx";
-import Coin from "./pages/Coin.jsx";
-import Ads from "./pages/Ads.jsx";
-import Vault from "./pages/Vault.jsx";
-import Resources from "./pages/Resources.jsx";
-import Settings from "./pages/Settings.jsx";
+// Trang khác tải KHI MỞ (chunk riêng) → mở app nhanh hơn; Tổng quan tải sẵn vì là trang đầu.
+const Customers = lazy(() => import("./pages/Customers.jsx"));
+const Ketoan = lazy(() => import("./pages/Ketoan.jsx"));
+const Funds = lazy(() => import("./pages/Funds.jsx"));
+const Tasks = lazy(() => import("./pages/Tasks.jsx"));
+const Coin = lazy(() => import("./pages/Coin.jsx"));
+const Ads = lazy(() => import("./pages/Ads.jsx"));
+const Vault = lazy(() => import("./pages/Vault.jsx"));
+const Resources = lazy(() => import("./pages/Resources.jsx"));
+const Settings = lazy(() => import("./pages/Settings.jsx"));
+
+const PageLoading = () => (
+  <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>
+);
 import { useData } from "./lib/store.jsx";
 import { ROUTE_FEATURE } from "./lib/permissions.js";
 
@@ -30,6 +36,7 @@ export default function App() {
   };
   return (
     <Layout>
+      <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={g("/", <Dashboard />)} />
         <Route path="/khach-hang" element={g("/khach-hang", <Customers />)} />
@@ -47,6 +54,7 @@ export default function App() {
         <Route path="/tai-khoan" element={<Vault />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
+      </Suspense>
     </Layout>
   );
 }
