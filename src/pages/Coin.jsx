@@ -192,11 +192,13 @@ function CoinInvest() {
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
                     <span className="text-slate-400">SL {qtyFmt(r.qty)}</span>
+                    <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">Đã đầu tư {r.invested != null ? <>{fmtUSD(r.invested)} <span className="font-semibold text-indigo-500">≈ {fmtVND(r.invested * vnd)}</span></> : "—"}</span>
                     <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600">TB {r.avgCost != null ? fmtUSD(r.avgCost) : "—"}</span>
                     <span className={`rounded-md px-1.5 py-0.5 font-bold ${r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>Giá {r.price != null ? fmtUSD(r.price) : "…"}</span>
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
+                  <div className="text-[10px] font-semibold uppercase text-slate-400">Hiện có</div>
                   <div className="text-sm font-extrabold text-slate-800">{r.value != null ? fmtUSD(r.value) : "…"}</div>
                   {r.pnl != null && <div className={`text-[11px] font-bold ${r.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{r.pnl >= 0 ? "+" : ""}{fmtUSD(r.pnl)}{r.invested > 0 ? ` (${r.pnl >= 0 ? "+" : ""}${((r.pnl / r.invested) * 100).toFixed(1)}%)` : ""}</div>}
                 </div>
