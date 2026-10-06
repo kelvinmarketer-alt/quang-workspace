@@ -375,7 +375,7 @@ function LiveAds({ a, since, until, target }) {
                     {v && <span title={v.reason || ""}><Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge></span>}
                     {x.objective && <span className="text-[10.5px] font-semibold text-slate-400">{x.objective}{x.optimize ? " · tối ưu " + x.optimize : ""}</span>}
                   </div>
-                  <button onClick={() => setOpen(open === x.id ? null : x.id)} className={`mt-0.5 block w-full text-left text-[12.5px] leading-snug text-slate-700 ${open === x.id ? "whitespace-pre-line" : "line-clamp-2"}`}>{x.body || x.title || x.name}</button>
+                  <button onClick={() => setOpen(open === x.id ? null : x.id)} className={`mt-0.5 w-full text-left text-[12.5px] leading-snug text-slate-700 ${open === x.id ? "block whitespace-pre-line" : "line-clamp-2"}`} title={open === x.id ? "" : "Bấm để xem đủ nội dung"}>{x.body || x.title || x.name}</button>
                   <div className="mt-0.5 truncate text-[10.5px] text-slate-400" title={`${x.campaign} › ${x.adset} › ${x.name}`}>{x.campaign} › {x.adset}</div>
                 </div>
               </div>
