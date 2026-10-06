@@ -466,9 +466,9 @@ function AccountCard({ a, since, until, onChanged }) {
               <b>Quảng cáo có vấn đề:</b> {a.issues.map((x) => (x.status === "POLICY" ? x.name : `${x.name} (${x.status === "DISAPPROVED" ? "bị từ chối" : "có vấn đề"})`)).join(" · ")}
             </div>
           )}
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto">
             {(isG ? [["convs", "Loại chuyển đổi"], ["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [["live", "Quảng cáo đang chạy"], a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], a.adsets?.length > 0 && ["adsets", "Nhóm QC"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"], a.byAgeGender?.length > 0 && ["age", "Tuổi / giới"], a.byPlacement?.length > 0 && ["place", "Vị trí"]]).filter(Boolean).map(([k, l]) => (
-              <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
+              <button key={k} onClick={() => setTab(k)} className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
           {tab === "services" && <Table rows={vrows(a.services)} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
