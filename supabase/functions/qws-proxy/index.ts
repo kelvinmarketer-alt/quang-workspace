@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     if (!u?.user) return json({ error: "Chưa đăng nhập" }, 401);
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { action, ...p } = await req.json();
-    const feature = String(action || "").startsWith("google") ? "web" : "fanpage";
+    const feature = String(action || "").startsWith("google") ? "web" : action === "fbads" ? "ads" : "fanpage";
 
     // Chủ workspace của người gọi + quyền của họ với tính năng này
     let ownerId: string | null = null;
@@ -98,6 +98,22 @@ Deno.serve(async (req) => {
       u2.searchParams.set("access_token", pt.access_token);
       const j = await (await fetch(u2)).json();
       if (j?.paging?.next) j.paging.next = j.paging.next.replace(/access_token=[^&]+&?/, ""); // không trả token về trình duyệt
+      return json(j);
+    }
+    if (action === "fbads") {
+      // Quảng cáo trong 1 TK Meta: chỉ GET act_<id>/ads | act_<id>/insights, TK phải có trong office_fb_ads của chủ
+      const acc = String(p.account_id || "").replace(/^act_/, "");
+      const { data: ad } = await admin.from("office_fb_ads").select("fb_id").eq("owner_id", ownerId).eq("account_id", acc).maybeSingle();
+      if (!ad) return json({ error: "Tài khoản quảng cáo chưa kết nối bên Văn phòng AI" }, 403);
+      const path = String(p.path || "");
+      if (path !== `act_${acc}/ads` && path !== `act_${acc}/insights`) return json({ error: "Không cho phép" }, 400);
+      const { data: c } = await admin.from("office_fb").select("token").eq("id", ad.fb_id).maybeSingle();
+      if (!c?.token) return json({ error: "Chưa kết nối Facebook" }, 400);
+      const u2 = new URL(G + path);
+      for (const [k, v] of Object.entries(p.params || {})) u2.searchParams.set(k, typeof v === "string" ? v : JSON.stringify(v));
+      u2.searchParams.set("access_token", c.token);
+      const j = await (await fetch(u2)).json();
+      if (j?.paging?.next) delete j.paging.next;
       return json(j);
     }
     return json({ error: "Hành động không hợp lệ" }, 400);

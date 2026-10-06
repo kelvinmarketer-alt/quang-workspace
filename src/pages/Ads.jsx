@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell, CheckCircle2, XCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Info } from "lucide-react";
+import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell, CheckCircle2, XCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Info, ExternalLink, PlayCircle, Image as ImageIcon, Loader2 } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, StatCard, Badge, DateField, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { aiAdsAnalysis } from "../lib/ai.js";
 import { diagnose, judge, baselineOf } from "../lib/adsDiagnose.js";
+import { loadAccountAds, statusOf, setAdsProxy } from "../lib/fbAds.js";
 import { todayISO, formatShort } from "../lib/format.js";
 
 // ---------- định dạng ----------
@@ -324,9 +325,85 @@ function AiReport({ r }) {
   );
 }
 
+// ---------- Quảng cáo (bài) trong tài khoản: đang chạy + có chi tiêu trong kỳ ----------
+const ADS_CACHE = new Map();
+function LiveAds({ a, since, until, target }) {
+  const [list, setList] = useState(null);
+  const [err, setErr] = useState("");
+  const [mode, setMode] = useState("running");
+  const [sort, setSort] = useState("spend");
+  const [open, setOpen] = useState(null);
+  const key = `${a.id}|${since}|${until}`;
+  useEffect(() => {
+    let alive = true; setErr("");
+    const c = ADS_CACHE.get(key);
+    if (c && Date.now() - c.at < 300000) { setList(c.v); return; }
+    setList(null);
+    loadAccountAds(a.id, since, until).then((v) => { ADS_CACHE.set(key, { at: Date.now(), v }); alive && setList(v); }).catch((e) => alive && setErr(e.message));
+    return () => { alive = false; };
+  }, [key]);
+  if (err) return <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-600">{err}</div>;
+  if (!list) return <div className="flex items-center gap-2 py-6 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang lấy quảng cáo từ Facebook…</div>;
+  const running = list.filter((x) => x.running), spent = list.filter((x) => x.spend > 0);
+  const shown = (mode === "running" ? running : spent).slice().sort((x, y) => (sort === "cpr" ? (x.cpr ?? 1e15) - (y.cpr ?? 1e15) : sort === "results" ? y.results - x.results : y.spend - x.spend));
+  const conv = a.group === "conv";
+  const chip = (on) => `rounded-lg px-2.5 py-1 text-[11px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <button onClick={() => setMode("running")} className={chip(mode === "running")}>Đang chạy ({running.length})</button>
+        <button onClick={() => setMode("spent")} className={chip(mode === "spent")}>Có chi tiêu trong kỳ ({spent.length})</button>
+        <span className="ml-auto text-[11px] text-slate-400">Xếp:</span>
+        {[["spend", "Chi tiêu"], conv && ["results", "Kết quả"], conv && ["cpr", "Giá/KQ rẻ"]].filter(Boolean).map(([k, l]) => <button key={k} onClick={() => setSort(k)} className={chip(sort === k)}>{l}</button>)}
+      </div>
+      {shown.length === 0 && <div className="py-4 text-center text-xs text-slate-400">{mode === "running" ? "Không có quảng cáo nào đang chạy." : "Không có quảng cáo nào tiêu tiền trong kỳ."}</div>}
+      <div className="space-y-2">
+        {shown.map((x) => {
+          const [st, tone] = statusOf(x.status);
+          const v = conv && x.spend > 0 && target ? judge(x, target) : null;
+          const M = ({ l, val, hi }) => <div className="min-w-0"><div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">{l}</div><div className={`truncate text-[12.5px] font-extrabold tabular-nums ${hi || "text-slate-800"}`}>{val}</div></div>;
+          return (
+            <div key={x.id} className="rounded-xl border border-slate-100 p-2.5">
+              <div className="flex gap-2.5">
+                <a href={x.postUrl || undefined} target="_blank" rel="noreferrer" className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                  {x.img ? <img src={x.img} alt="" loading="lazy" className="h-full w-full object-cover" /> : <ImageIcon size={18} className="m-auto mt-5 text-slate-300" />}
+                  {x.type === "VIDEO" && <PlayCircle size={18} className="absolute bottom-1 right-1 rounded-full bg-black/40 text-white" />}
+                </a>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge tone={tone}>{st}</Badge>
+                    {v && <span title={v.reason || ""}><Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge></span>}
+                    {x.objective && <span className="text-[10.5px] font-semibold text-slate-400">{x.objective}{x.optimize ? " · tối ưu " + x.optimize : ""}</span>}
+                  </div>
+                  <button onClick={() => setOpen(open === x.id ? null : x.id)} className={`mt-0.5 block w-full text-left text-[12.5px] leading-snug text-slate-700 ${open === x.id ? "whitespace-pre-line" : "line-clamp-2"}`}>{x.body || x.title || x.name}</button>
+                  <div className="mt-0.5 truncate text-[10.5px] text-slate-400" title={`${x.campaign} › ${x.adset} › ${x.name}`}>{x.campaign} › {x.adset}</div>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5 sm:grid-cols-6">
+                <M l="Chi tiêu" val={vnd(x.spend)} />
+                {conv ? <M l="Kết quả" val={`${int(x.results)}${x.leads ? ` (${x.leads} lead)` : ""}`} /> : <M l="Tiếp cận" val={int(x.reach)} />}
+                {conv ? <M l="Giá/KQ" val={vnd(x.cpr)} hi={v ? { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600" }[v.tone] : undefined} /> : <M l="CPM" val={vnd(x.cpm)} />}
+                {conv ? <M l="Tiếp cận" val={int(x.reach)} /> : <M l="Tần suất" val={dec(x.frequency)} hi={x.frequency > 3 ? "text-rose-600" : undefined} />}
+                <M l="CTR" val={pct(x.ctr)} hi={x.impressions >= 1000 && x.ctr < 0.8 ? "text-rose-600" : undefined} />
+                <M l={x.dailyBudget ? "NS/ngày" : "Tương tác"} val={x.dailyBudget ? vnd(x.dailyBudget) : int(x.engagement)} />
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-slate-400">
+                {x.cta && <span>Nút: <b className="text-slate-500">{x.cta}</b></span>}
+                {x.thruplay > 0 && <span>ThruPlay <b className="text-slate-500">{int(x.thruplay)}</b></span>}
+                <span>Tạo {x.created ? new Date(x.created).toLocaleDateString("vi-VN") : "—"}</span>
+                {x.postUrl && <a href={x.postUrl} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1 font-bold text-indigo-600">Xem bài <ExternalLink size={11} /></a>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AccountCard({ a, since, until, onChanged }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState(a.platform === "google" ? "convs" : a.services ? "services" : "campaigns");
+  const [tab, setTab] = useState(a.platform === "google" ? "convs" : "live");
   const { settings = {}, setSettings, isOwner } = useData();
   const kpi = (settings.adsTargets || {})[a.id];
   const bl = a.group === "conv" ? baselineOf(a, kpi) : null;
@@ -390,13 +467,14 @@ function AccountCard({ a, since, until, onChanged }) {
             </div>
           )}
           <div className="flex gap-1.5">
-            {(isG ? [["convs", "Loại chuyển đổi"], ["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], a.adsets?.length > 0 && ["adsets", "Nhóm QC"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"], a.byAgeGender?.length > 0 && ["age", "Tuổi / giới"], a.byPlacement?.length > 0 && ["place", "Vị trí"]]).filter(Boolean).map(([k, l]) => (
+            {(isG ? [["convs", "Loại chuyển đổi"], ["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [["live", "Quảng cáo đang chạy"], a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], a.adsets?.length > 0 && ["adsets", "Nhóm QC"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"], a.byAgeGender?.length > 0 && ["age", "Tuổi / giới"], a.byPlacement?.length > 0 && ["place", "Vị trí"]]).filter(Boolean).map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
           {tab === "services" && <Table rows={vrows(a.services)} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "campaigns" && <Table rows={vrows(a.campaigns.filter((c) => c.spend > 0 || c.idle)).map((c) => ({ ...c, info: [c.status && c.status !== "ACTIVE" ? c.status : null, c.dailyBudget ? "NS " + formatShort(c.dailyBudget) + "/ngày" : null, c.idle ? "đang bật nhưng không tiêu" : null].filter(Boolean).join(" · ") }))} cols={cols} sub="info" />}
           {tab === "adsets" && <Table rows={vrows(a.adsets)} cols={cols} sub="campaign" />}
+          {tab === "live" && <LiveAds a={a} since={since} until={until} target={a.group === "conv" ? itemTarget : null} />}
           {tab === "ads" && <Table rows={vrows(topAds).map((x) => ({ ...x, info: [x.campaign, x.quality && x.quality !== "UNKNOWN" ? "chất lượng " + RANK[x.quality] : null, x.convRank && x.convRank !== "UNKNOWN" ? "chuyển đổi " + RANK[x.convRank] : null].filter(Boolean).join(" · ") }))} cols={cols} sub="info" />}
           {tab === "age" && <Table rows={vrows(a.byAgeGender).map((x) => ({ ...x, name: (x.gender === "female" ? "Nữ" : x.gender === "male" ? "Nam" : "?") + " " + x.age }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "place" && <Table rows={vrows(a.byPlacement).map((x) => ({ ...x, name: x.platform + " · " + x.position }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
@@ -426,6 +504,7 @@ function sumGroup(list) {
 export default function Ads() {
   const { isOwner, ownerId, perms = [], settings = {}, adsResults = [] } = useData();
   const canView = isOwner || (!!ownerId && perms.includes("ads")); // tài khoản phụ có quyền Quảng cáo: xem số liệu (máy chủ chỉ cho chế độ đọc)
+  setAdsProxy(!!ownerId && !isOwner);
   const [preset, setPreset] = useState("today");
   const [range, setRange] = useState(presetRange("today"));
   const [compare, setCompare] = useState(true);
