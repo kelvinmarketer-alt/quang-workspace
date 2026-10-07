@@ -278,9 +278,9 @@ function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack
           <button onClick={onBack} className="flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-200"><ArrowLeft size={14} /> Tất cả web</button>
           <a href={`https://${site.domain}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-lg font-extrabold text-slate-900 hover:text-indigo-600">{site.domain} <ExternalLink size={14} className="text-slate-300" /></a>
           {sum?.verdict && <Badge tone={sum.verdict.tone}>{sum.verdict.label}</Badge>}
-          {owner && <div className="ml-auto flex flex-wrap items-center gap-1.5 text-[12px]">
+          {owner && <div className="flex w-full items-center gap-1.5 text-[12px] sm:ml-auto sm:w-auto">
             <span className="text-slate-400">GA4:</span>
-            <select value={gaOverride[site.domain] || site.ga || ""} onChange={(e) => onGa(e.target.value)} className="max-w-[170px] rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px]">
+            <select value={gaOverride[site.domain] || site.ga || ""} onChange={(e) => onGa(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] sm:max-w-[200px] sm:flex-none">
               <option value="">— không ghép —</option>
               {gaProps.map((p) => <option key={p.prop_id} value={p.prop_id}>{p.name}</option>)}
             </select>
