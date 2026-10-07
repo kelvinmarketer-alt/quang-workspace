@@ -132,9 +132,11 @@ function SiteCard({ site, sum, onOpen }) {
 
 export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ" }) {
   if (!rows?.length) return <div className="py-4 text-center text-xs text-slate-400">{empty}</div>;
+  // Bảng nhiều cột mới cần bề rộng tối thiểu (cuộn ngang); bảng ít cột co theo khung để không bị khuất cột
+  const wideTable = cols.length > 4;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12px] sm:min-w-[620px]">
+      <table className={`w-full text-[12px] ${wideTable ? "sm:min-w-[620px]" : ""}`}>
         <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{cols.map((c, i) => <th key={i} className={`py-2 pr-3 ${c.right ? "text-right" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.h}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => (
           <tr key={i} className="border-b border-slate-50 align-top">{cols.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${c.right ? "text-right tabular-nums" : ""} ${c.wide ? "max-w-[180px] sm:max-w-[360px]" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.v(r)}</td>)}</tr>
@@ -147,6 +149,38 @@ const short = (u) => { try { const x = new URL(u); return decodeURIComponent(x.p
 const Name = ({ t, href }) => (
   <div className="flex min-w-0 items-center gap-1"><span className="truncate font-semibold text-slate-700" title={t}>{t}</span>{href && <a href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="shrink-0 text-slate-300 hover:text-indigo-600"><ExternalLink size={11} /></a>}</div>
 );
+
+// Danh sách dạng thanh ngang (tỉ trọng) — gọn, dễ đọc trên cả điện thoại lẫn máy tính
+const DEVICE_VI = { desktop: "Máy tính", mobile: "Điện thoại", tablet: "Máy tính bảng", "smart tv": "TV thông minh" };
+export const deviceVi = (d) => DEVICE_VI[String(d || "").toLowerCase()] || d;
+export function BarList({ title, unit, rows, color = "#6366f1", empty = "Chưa có dữ liệu" }) {
+  const total = (rows || []).reduce((t, r) => t + (r.value || 0), 0);
+  const max = Math.max(1, ...(rows || []).map((r) => r.value || 0));
+  return (
+    <div className="rounded-xl border border-slate-100 p-3">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <span className="text-[12px] font-extrabold text-slate-700">{title}</span>
+        {unit && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{unit}</span>}
+      </div>
+      {!rows?.length ? <div className="py-3 text-center text-[12px] text-slate-400">{empty}</div> : (
+        <div className="space-y-1">
+          {rows.map((r) => (
+            <div key={r.label} className="relative overflow-hidden rounded-md px-2 py-1.5">
+              <div className="absolute inset-y-0 left-0 rounded-md" style={{ width: `${((r.value || 0) / max) * 100}%`, background: color, opacity: 0.12 }} />
+              <div className="relative flex items-center gap-2 text-[12.5px]">
+                <span className="min-w-0 flex-1 truncate font-semibold text-slate-700" title={r.label}>{r.label}</span>
+                {r.sub && <span className="hidden shrink-0 text-[11px] text-slate-400 sm:inline">{r.sub}</span>}
+                <span className="shrink-0 font-extrabold tabular-nums text-slate-800">{int(r.value)}</span>
+                <span className="w-11 shrink-0 text-right text-[11px] font-semibold tabular-nums text-slate-400">{total ? pct1((r.value / total) * 100) : ""}</span>
+              </div>
+              {r.sub && <div className="relative text-[10.5px] text-slate-400 sm:hidden">{r.sub}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AiBox({ r, titles = ["SEO & thứ hạng", "Ý tưởng nội dung", "Nguồn khách & chuyển đổi"] }) {
   if (!r) return null;
@@ -395,10 +429,13 @@ function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack
             );
           })()}
           {tab === "device" && (
-            <div className="grid gap-4 md:grid-cols-3">
-              {det.gscDevices && <div><div className="mb-1 text-[11px] font-extrabold uppercase text-slate-400">Google theo thiết bị</div><Table rows={det.gscDevices} cols={[{ h: "Thiết bị", v: (r) => r.keys[0] }, { h: "Click", right: true, v: (r) => int(r.clicks) }, { h: "Vị trí", right: true, v: (r) => pos1(r.position) }]} /></div>}
-              {det.gaDevices && <div><div className="mb-1 text-[11px] font-extrabold uppercase text-slate-400">GA4 theo thiết bị</div><Table rows={det.gaDevices} cols={[{ h: "Thiết bị", v: (r) => r.deviceCategory }, { h: "Phiên", right: true, v: (r) => int(r.sessions) }, { h: "Tương tác", right: true, v: (r) => pct1(r.engagementRate * 100) }, { h: "CĐ", right: true, v: (r) => int(r.keyEvents) }]} /></div>}
-              {det.cities && <div><div className="mb-1 text-[11px] font-extrabold uppercase text-slate-400">Khu vực</div><Table rows={det.cities} cols={[{ h: "Thành phố", v: (r) => r.city }, { h: "Người dùng", right: true, v: (r) => int(r.activeUsers) }, { h: "CĐ", right: true, v: (r) => int(r.keyEvents) }]} /></div>}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {det.gscDevices && <BarList title="Google tìm kiếm theo thiết bị" unit="Click" color="#4285F4"
+                rows={det.gscDevices.map((r) => ({ label: deviceVi(r.keys[0]), value: r.clicks, sub: `vị trí ${pos1(r.position)} · CTR ${pct1(r.ctr)}` }))} />}
+              {det.gaDevices && <BarList title="Người vào web theo thiết bị" unit="Phiên" color="#10b981"
+                rows={det.gaDevices.map((r) => ({ label: deviceVi(r.deviceCategory), value: r.sessions, sub: `tương tác ${pct1(r.engagementRate * 100)}${r.keyEvents ? ` · ${int(r.keyEvents)} CĐ` : ""}` }))} />}
+              {det.cities && <BarList title="Khu vực (thành phố)" unit="Người dùng" color="#f59e0b"
+                rows={det.cities.filter((r) => r.city).map((r) => ({ label: r.city === "(not set)" ? "Không rõ" : r.city, value: r.activeUsers, sub: r.keyEvents ? `${int(r.keyEvents)} CĐ` : "" }))} />}
             </div>
           )}
         </>)}
