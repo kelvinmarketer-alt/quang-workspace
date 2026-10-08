@@ -17,6 +17,7 @@ export function rangesOf(period) {
   const gEnd = until > gMax ? gMax : until;
   return {
     days: daysBetween(since, until), key: `${since}_${until}`, since, until,
+    partial: since === t && until === t, // "Hôm nay": ngày đang chạy dở → không so với cả ngày hôm qua
     ga: win(since, until),
     gsc: since > gMax ? null : win(since, gEnd), gscCut: until > gMax,
   };
@@ -155,7 +156,9 @@ export async function loadSiteSummary(site, R) {
       out.sources = groupSources(rows.map((r) => ({ src: r.sessionSource, med: r.sessionMedium, cur: { sessions: r.sessions }, prev: {} })));
     }).catch(() => {}),
   ]);
-  out.verdict = verdictOf(out);
+  // Hôm nay chưa hết ngày → bỏ so sánh (tránh "giảm 96%" ảo) và không chấm điểm
+  if (R.partial) { if (out.gsc) out.gsc.prev = {}; if (out.ga) out.ga.prev = {}; out.verdict = { key: "live", label: "Trong ngày", tone: "slate" }; }
+  else out.verdict = verdictOf(out);
   return out;
 }
 

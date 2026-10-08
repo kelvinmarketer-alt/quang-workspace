@@ -235,7 +235,7 @@ export default function Fanpage() {
 
   const tot = useMemo(() => {
     const t = { reach: 0, pReach: 0, eng: 0, pEng: 0, msg: 0, pMsg: 0 };
-    for (const s of Object.values(sums)) if (s.cur) { t.reach += s.cur.reach; t.pReach += s.prev.reach; t.eng += s.cur.engagement; t.pEng += s.prev.engagement; t.msg += s.cur.messages; t.pMsg += s.prev.messages; }
+    for (const s of Object.values(sums)) if (s.cur) { t.reach += s.cur.reach; t.pReach += s.prev?.reach || 0; t.eng += s.cur.engagement; t.pEng += s.prev?.engagement || 0; t.msg += s.cur.messages; t.pMsg += s.prev?.messages || 0; }
     return t;
   }, [sums]);
 

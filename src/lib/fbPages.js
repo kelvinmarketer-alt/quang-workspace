@@ -14,7 +14,7 @@ export function fbRanges(period) {
   const t = iso(new Date());
   const until = period.until > t ? t : period.until, since = period.since > until ? until : period.since;
   const n = Math.round((Date.parse(until) - Date.parse(since)) / 86400000) + 1;
-  return { days: n, key: `${since}_${until}`, cur: [since, until], prev: [addDays(since, -n), addDays(since, -1)], hasToday: until === t };
+  return { days: n, key: `${since}_${until}`, cur: [since, until], prev: [addDays(since, -n), addDays(since, -1)], hasToday: until === t, partial: since === t };
 }
 
 let sysTokens = null;
@@ -111,7 +111,9 @@ export async function loadPageSummary(p, R) {
     const [cur, prev] = await Promise.all([pageInsights(p, R.cur), pageInsights(p, R.prev)]);
     out.cur = cur.t; out.prev = prev.t; out.daily = cur.daily;
   } catch (e) { out.errors.push(e.message); }
-  out.verdict = pageVerdict(out);
+  // Hôm nay: Facebook chưa chốt số ngày → không so sánh, không chấm điểm
+  if (R.partial) { if (out.cur) out.prev = {}; out.verdict = { key: "live", label: "Chốt sau 0h", tone: "slate" }; }
+  else out.verdict = pageVerdict(out);
   return out;
 }
 
