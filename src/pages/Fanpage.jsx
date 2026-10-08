@@ -5,7 +5,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy } from "../lib/fbPages.js";
 import { aiPageAnalysis } from "../lib/ai.js";
-import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker } from "./Web.jsx";
+import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, makePeriod } from "./Web.jsx";
 
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
 const CACHE = new Map();
@@ -201,7 +201,7 @@ export default function Fanpage() {
   const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
   const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ token)
   const canView = isOwner || perms.includes("fanpage");
-  const [days, setDays] = useState(28);
+  const [days, setDays] = useState(() => makePeriod("30d")); // { key, since, until }
   const [pages, setPages] = useState(null);
   const [meta, setMeta] = useState({});
   const [sums, setSums] = useState({});
@@ -248,7 +248,7 @@ export default function Fanpage() {
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
           <RangePicker value={days} onChange={setDays} />
-          <span className="text-[11px] text-slate-400">{R.custom ? `${dm(R.cur[0])}/${R.cur[0].slice(2, 4)} → ${dm(R.cur[1])}/${R.cur[1].slice(2, 4)} · ` : ""}so với {R.days} ngày liền trước</span>
+          <span className="w-full text-[11px] text-slate-400 sm:w-auto">{dm(R.cur[0])}/{R.cur[0].slice(2, 4)}{R.cur[0] !== R.cur[1] ? ` → ${dm(R.cur[1])}/${R.cur[1].slice(2, 4)}` : ""} · so với {R.days} ngày liền trước{R.hasToday ? " · số hôm nay Facebook chốt sau nửa đêm" : ""}</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
         <div className="mt-1.5 hidden text-[11px] text-slate-400 sm:block">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>

@@ -10,18 +10,15 @@ export const todayIso = () => iso(new Date());
 export const daysBetween = (a, b) => Math.round((Date.parse(b + "T00:00:00") - Date.parse(a + "T00:00:00")) / 86400000) + 1;
 const win = (start, end) => { const n = daysBetween(start, end); return { cur: [start, end], prev: [addDays(start, -n), addDays(start, -1)] }; };
 export function rangesOf(period) {
-  const t = todayIso();
-  const gMax = addDays(t, -3), aMax = addDays(t, -1);
-  if (period && typeof period === "object") {
-    const until = period.until > aMax ? aMax : period.until, since = period.since > until ? until : period.since;
-    const gEnd = until > gMax ? gMax : until, gStart = since > gEnd ? gEnd : since;
-    return { days: daysBetween(since, until), custom: true, key: `${since}_${until}`, ga: win(since, until), gsc: win(gStart, gEnd) };
-  }
-  const days = period;
+  // period = { since, until } (từ bộ lọc chung). GA4 có số tới hôm nay; Search Console trễ ~2 ngày → phần GSC tự cắt,
+  // kỳ nằm trọn trong 2 ngày gần nhất thì GSC = null (UI ghi "Google chưa có số"), không hiện 0 gây hiểu nhầm.
+  const t = todayIso(), gMax = addDays(t, -2);
+  const until = period.until > t ? t : period.until, since = period.since > until ? until : period.since;
+  const gEnd = until > gMax ? gMax : until;
   return {
-    days, key: String(days),
-    gsc: { cur: [addDays(gMax, -(days - 1)), gMax], prev: [addDays(gMax, -(2 * days - 1)), addDays(gMax, -days)] },
-    ga: { cur: [addDays(aMax, -(days - 1)), aMax], prev: [addDays(aMax, -(2 * days - 1)), addDays(aMax, -days)] },
+    days: daysBetween(since, until), key: `${since}_${until}`, since, until,
+    ga: win(since, until),
+    gsc: since > gMax ? null : win(since, gEnd), gscCut: until > gMax,
   };
 }
 
@@ -144,7 +141,7 @@ function sumGsc(rows) {
 export async function loadSiteSummary(site, R) {
   const out = { domain: site.domain, gsc: null, ga: null, errors: [] };
   await Promise.all([
-    site.gsc && gscQuery(site.gsc, { start: R.gsc.prev[0], end: R.gsc.cur[1], dims: ["date"] }).then((rows) => {
+    site.gsc && R.gsc && gscQuery(site.gsc, { start: R.gsc.prev[0], end: R.gsc.cur[1], dims: ["date"] }).then((rows) => {
       const daily = rows.map((r) => ({ date: r.keys[0], ...r })).sort((a, b) => a.date.localeCompare(b.date));
       const cur = daily.filter((d) => d.date >= R.gsc.cur[0]), prev = daily.filter((d) => d.date < R.gsc.cur[0]);
       out.gsc = { cur: sumGsc(cur), prev: sumGsc(prev), daily: cur };
@@ -180,7 +177,7 @@ export async function loadSiteDetail(site, R) {
   const d = { errors: [] };
   const safe = (p, k) => p.then((v) => { d[k] = v; }).catch((e) => d.errors.push(`${k}: ${e.message}`));
   const jobs = [];
-  if (site.gsc) {
+  if (site.gsc && R.gsc) {
     const g = (dims, range, limit) => gscQuery(site.gsc, { start: range[0], end: range[1], dims, limit });
     jobs.push(safe(Promise.all([g(["query"], R.gsc.cur, 500), g(["query"], R.gsc.prev, 500)]).then(([c, p]) => joinPrev(c, p)), "queries"));
     jobs.push(safe(Promise.all([g(["page"], R.gsc.cur, 300), g(["page"], R.gsc.prev, 300)]).then(([c, p]) => joinPrev(c, p)), "pages"));
