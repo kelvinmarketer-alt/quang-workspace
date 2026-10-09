@@ -438,7 +438,7 @@ function AccountCard({ a, since, until, onChanged, goalBase }) {
   const kpiBase = kpi?.cpr > 0 ? { value: kpi.cpr, label: "KPI bạn đặt" } : null;
   // Meta: mỗi dòng chấm theo MỤC TIÊU của nó (tiếp cận so với tiếp cận, tin nhắn so với tin nhắn…)
   const vrows = (list) => (list || []).map((x) => ({ ...x, _v: x.goal && goalBase ? judgeGoal(x, (x.goal === "msg" || x.goal === "lead") && kpiBase ? kpiBase : goalBase[x.goal]) : itemTarget ? judge(x, itemTarget) : null }));
-  const goalCols = !isG && a.goalsLoaded ? [...GOAL_COLS, vCol] : null;
+  const goalCols = a.platform !== "google" && a.goalsLoaded ? [...GOAL_COLS, vCol] : null;
   const goalInfo = (x, extra = []) => [x.goal && `🎯 ${x.goalLabel}${x.goal === "reach" ? " (chi phí/1.000 người)" : ""}`, ...extra].filter(Boolean).join(" · ");
   const isG = a.platform === "google";
   const cols = a.group === "conv" ? [...colsOf(a), vCol] : colsOf(a);
