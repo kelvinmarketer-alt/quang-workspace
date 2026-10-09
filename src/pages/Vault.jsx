@@ -8,6 +8,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadVault, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 
@@ -135,7 +136,7 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
             {canW && (
               <>
                 <button onClick={() => onEdit(item)} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-indigo-600"><Pencil size={14} /></button>
-                <button onClick={() => { if (confirm(`Xoá "${item.title || t.label}"?`)) onDelete(item.id); }} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-rose-600"><Trash2 size={14} /></button>
+                <button onClick={async () => { if (await ask(`Xoá "${item.title || t.label}"?`)) onDelete(item.id); }} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-rose-600"><Trash2 size={14} /></button>
               </>
             )}
           </div>
@@ -375,7 +376,7 @@ function PinBar({ hasPin, setVaultPin, removeVaultPin, lockVault }) {
         {hasPin ? (<>
           <button onClick={lockVault} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Khoá ngay</button>
           <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Đổi PIN</button>
-          <button onClick={async () => { if (confirm("Bỏ khoá PIN? Dữ liệu sẽ không còn được mã hoá.")) setMsg((await removeVaultPin()) ? "Đã bỏ khoá PIN" : "Không bỏ được"); }} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-400 shadow-sm hover:text-rose-600">Bỏ PIN</button>
+          <button onClick={async () => { if (await ask("Bỏ khoá PIN? Dữ liệu sẽ không còn được mã hoá.")) setMsg((await removeVaultPin()) ? "Đã bỏ khoá PIN" : "Không bỏ được"); }} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-400 shadow-sm hover:text-rose-600">Bỏ PIN</button>
         </>) : (
           <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-indigo-600 px-3 py-1 font-bold text-white hover:bg-indigo-700">Đặt PIN</button>
         )}

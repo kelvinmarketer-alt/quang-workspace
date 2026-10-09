@@ -10,6 +10,7 @@ import CloudBackups from "../components/CloudBackups.jsx";
 import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
 import { FEATURES, FEATURE_HINT, memberAccess } from "../lib/permissions.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const accBadge = (v) => (v === "edit" ? "bg-emerald-500 text-white" : v === "view" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400");
 const allAccess = (val) => Object.fromEntries(FEATURES.map(([k]) => [k, val]));
@@ -80,7 +81,7 @@ function MembersCard() {
                   <div className="truncate text-sm font-bold text-slate-800">{m.name || m.email}</div>
                   <div className="truncate text-[11px] text-slate-400">{m.email}</div>
                 </div>
-                <button onClick={() => { if (confirm(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
+                <button onClick={async () => { if (await ask(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
               <button type="button" onClick={() => setOpenM(openM === m.email ? null : m.email)} className="mt-2 flex w-full flex-wrap items-center gap-1 text-left">
                 {FEATURES.filter(([k]) => a[k] !== "none").map(([k, l]) => <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${accBadge(a[k])}`}>{l}{a[k] === "edit" ? " ✎" : ""}</span>)}
@@ -209,7 +210,7 @@ export default function Settings() {
               <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600"><Cloud size={12} /> Đã đồng bộ đám mây (Supabase)</div>
             </div>
           </div>
-          <button onClick={() => { if (confirm("Đăng xuất khỏi máy này?")) signOut(); }} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600"><LogOut size={15} /> Đăng xuất</button>
+          <button onClick={async () => { if (await ask("Đăng xuất khỏi máy này?")) signOut(); }} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600"><LogOut size={15} /> Đăng xuất</button>
         </div>
         <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mb-1 text-xs font-bold uppercase text-slate-400">Đổi mật khẩu</div>
@@ -278,7 +279,7 @@ export default function Settings() {
         <SectionTitle action={<RotateCcw size={18} className="text-rose-500" />}>Khôi phục mặc định</SectionTitle>
         <p className="text-sm text-slate-500">Đặt lại toàn bộ về dữ liệu gốc từ sheet. Mọi thay đổi & giao dịch bạn nhập thêm sẽ mất.</p>
         <button
-          onClick={() => { if (confirm("Đặt lại toàn bộ dữ liệu về mặc định? Hành động này không hoàn tác được.")) { reset(); setMsg("✓ Đã đặt lại dữ liệu gốc."); } }}
+          onClick={async () => { if (await ask("Đặt lại toàn bộ dữ liệu về mặc định? Hành động này không hoàn tác được.")) { reset(); setMsg("✓ Đã đặt lại dữ liệu gốc."); } }}
           className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-100">
           Đặt lại dữ liệu gốc
         </button>

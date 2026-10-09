@@ -3,6 +3,7 @@ import { Megaphone, Trash2, KeyRound, Search, Save, RefreshCw, Copy, Check } fro
 import { Card, Badge } from "./ui.jsx";
 import { supabase } from "../lib/supabase.js";
 import GADS_SCRIPT from "../../supabase/gads-script.js?raw";
+import { ask } from "./ConfirmDialog.jsx";
 
 // Quản lý TKQC Meta cho module Quảng cáo (CHỈ CHỦ). Token gửi thẳng lên edge fn qws-meta-ads,
 // lưu ở bảng qws_ads_accounts (chỉ service role đọc) — app không bao giờ nhận lại token, chỉ 6 ký tự cuối.
@@ -34,7 +35,7 @@ function GoogleSection() {
   };
   useEffect(() => { refresh(); }, []);
   const getScript = async (rotate) => {
-    if (rotate && !window.confirm("Tạo khoá mới? Các script đang chạy sẽ ngừng đẩy số cho tới khi dán lại script mới.")) return;
+    if (rotate && !await ask("Tạo khoá mới? Các script đang chạy sẽ ngừng đẩy số cho tới khi dán lại script mới.")) return;
     setErr("");
     try { const { key } = await call({ mode: "gads_key", rotate: !!rotate }); setScript(GADS_SCRIPT.replace("__INGEST_KEY__", key)); setCopied(false); }
     catch (e) { setErr(e.message || String(e)); }
@@ -42,7 +43,7 @@ function GoogleSection() {
   const copy = async () => { try { await navigator.clipboard.writeText(script); setCopied(true); } catch { setErr("Không copy được — bôi đen ô script rồi Ctrl/Cmd+C"); } };
   const update = async (cid, patch) => { try { await call({ mode: "gads_update", cid, patch }); await refresh(); } catch (e) { setErr(e.message || String(e)); } };
   const remove = async (a) => {
-    if (!window.confirm(`Xoá "${a.name}" và toàn bộ số liệu Google đã lưu của tài khoản này?`)) return;
+    if (!await ask(`Xoá "${a.name}" và toàn bộ số liệu Google đã lưu của tài khoản này?`)) return;
     try { await call({ mode: "gads_delete", cid: a.customer_id }); await refresh(); } catch (e) { setErr(e.message || String(e)); }
   };
   const ago = (t) => { if (!t) return "chưa đồng bộ"; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 60 ? `${m} phút trước` : `${Math.round(m / 60)} giờ trước`; };
@@ -125,7 +126,7 @@ export default function AdsAccounts() {
     try { await call({ mode: "config_update", id, patch }); await refresh(); } catch (e) { setErr(e.message || String(e)); }
   };
   const remove = async (a) => {
-    if (!window.confirm(`Xoá "${a.name}" khỏi module Quảng cáo? (Không ảnh hưởng tài khoản trên Facebook)`)) return;
+    if (!await ask(`Xoá "${a.name}" khỏi module Quảng cáo? (Không ảnh hưởng tài khoản trên Facebook)`)) return;
     setErr("");
     try { await call({ mode: "config_delete", id: a.id }); await refresh(); } catch (e) { setErr(e.message || String(e)); }
   };

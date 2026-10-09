@@ -5,6 +5,7 @@ import { useData } from "../lib/store.jsx";
 import { solarToLunar, canChiDay, canChiYear } from "../lib/lunar.js";
 import { generateCalendarEvents, upcomingEvents, parseEventsCSV, normEvent } from "../lib/events.js";
 import { MY_EVENTS } from "../data/myEvents.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const DOW = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const KIND_COLOR = {
@@ -280,7 +281,7 @@ export default function Calendar() {
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size} sự kiện</span>
             <div className="flex gap-2">
               <button onClick={() => setPicked(new Set())} className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-white">Bỏ chọn</button>
-              <button onClick={() => { if (confirm(`Xoá ${picked.size} sự kiện đã chọn?`)) { deleteFamilyMany([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
+              <button onClick={async () => { if (await ask(`Xoá ${picked.size} sự kiện đã chọn?`)) { deleteFamilyMany([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
             </div>
           </div>
         )}
@@ -334,7 +335,7 @@ export default function Calendar() {
                         <button onClick={() => updateFamily(fam.id, { done: true })} className="text-slate-300 hover:text-emerald-600"><Check size={16} /></button>
                       ) : null}
                       <button onClick={() => setModal(fam)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
-                      <button onClick={() => { if (confirm("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+                      <button onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
                     </div>
                   )}
                 </div>
@@ -387,7 +388,7 @@ export default function Calendar() {
                           ) : null}
                           <span className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
                             <button onClick={() => setModal(fam)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                            <button onClick={() => { if (confirm("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
+                            <button onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
                           </span>
                         </span>
                       )}

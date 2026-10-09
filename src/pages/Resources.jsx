@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { aiReadResources, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import { RES_TYPES, RES_TYPE_KEYS, detectResType, guessTitle, hostOf } from "../lib/resources.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const TONE_GRAD = {
@@ -77,7 +78,7 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
           <button onClick={() => openUrl(r.url)} className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 sm:block" title="Mở"><ExternalLink size={14} /></button>
           <button onClick={doCopy} className={`rounded-lg p-2 sm:p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
           {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
-          {canW && onDelete && <button onClick={() => { if (confirm("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
+          {canW && onDelete && <button onClick={async () => { if (await ask("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
         </div>
       </div>
       {open && hasCred && (
@@ -357,8 +358,8 @@ export default function Resources() {
   const [sel, setSel] = useState(() => new Set());
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const clearSel = () => setSel(new Set());
-  const deleteSelected = () => { if (sel.size && confirm(`Xoá ${sel.size} tài nguyên đã chọn?`)) { deleteResources([...sel]); clearSel(); } };
-  const deleteGroup = (g) => { if (confirm(`Xoá TẤT CẢ ${g.items.length} tài nguyên của "${g.name}"?`)) deleteResources(g.items.map((r) => r.id)); };
+  const deleteSelected = async () => { if (sel.size && await ask(`Xoá ${sel.size} tài nguyên đã chọn?`)) { deleteResources([...sel]); clearSel(); } };
+  const deleteGroup = async (g) => { if (await ask(`Xoá TẤT CẢ ${g.items.length} tài nguyên của "${g.name}"?`)) deleteResources(g.items.map((r) => r.id)); };
   const toggleGroupSel = (g) => setSel((s) => { const n = new Set(s); const all = g.items.every((r) => n.has(r.id)); g.items.forEach((r) => (all ? n.delete(r.id) : n.add(r.id))); return n; });
 
   const activeCustomers = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);

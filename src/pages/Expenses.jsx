@@ -5,6 +5,7 @@ import { useData } from "../lib/store.jsx";
 import { EXPENSE_CATEGORIES } from "../data/seed.js";
 import { monthlyOperatingCost, expensesInRange } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { "AI": "violet", "App": "indigo", "Khác": "slate" };
 const REC = { monthly: ["Hằng tháng", "rose"], yearly: ["Hằng năm", "amber"], once: ["1 lần", "slate"] };
@@ -171,7 +172,7 @@ export default function Expenses() {
           {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
           <div className="mt-1 flex justify-end gap-2">
             <button onClick={() => setModal(e)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
-            <button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+            <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
           </div>
         </div>
       </div>
@@ -187,7 +188,7 @@ export default function Expenses() {
         <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
         <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
         <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}{e.endDate && <span className="text-rose-400"> → {fmtDateVI(e.endDate)}</span>}</td>
-        <td className="px-2 py-2.5 text-right"><span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100"><button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button><button onClick={() => { if (confirm("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button></span></td>
+        <td className="px-2 py-2.5 text-right"><span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100"><button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button><button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button></span></td>
       </tr>
     );
   };
@@ -220,7 +221,7 @@ export default function Expenses() {
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size}</span>
             <div className="flex gap-2">
               <button onClick={() => setPicked(new Set())} className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-white">Bỏ chọn</button>
-              <button onClick={() => { if (confirm(`Xoá ${picked.size} khoản chi?`)) { deleteExpensesMany([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
+              <button onClick={async () => { if (await ask(`Xoá ${picked.size} khoản chi?`)) { deleteExpensesMany([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
             </div>
           </div>
         )}

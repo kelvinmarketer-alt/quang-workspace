@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { UserPlus, Trash2 } from "lucide-react";
 import { useData } from "../lib/store.jsx";
 import { OFFICE_AGENTS, MEMBER_FLAGS, DEFAULT_MEMBER_PERMS, loadOfficeMembers, saveOfficeMember, deleteOfficeMember } from "../lib/office.js";
+import { ask } from "./ConfirmDialog.jsx";
 
 // Tài khoản phụ dùng Văn phòng AI + quyền riêng từng người (bảng office_members, RLS chỉ chủ sửa)
 export default function OfficeMembers({ ownerId }) {
@@ -25,7 +26,7 @@ export default function OfficeMembers({ ownerId }) {
     catch (err) { setMsg({ t: "err", m: err.message }); }
   };
   const remove = async (m) => {
-    if (!confirm(`Gỡ ${m.name || m.email} khỏi Văn phòng AI?`)) return;
+    if (!await ask(`Gỡ ${m.name || m.email} khỏi Văn phòng AI?`)) return;
     try { await deleteOfficeMember(ownerId, m.email); reload(); } catch (e) { setMsg({ t: "err", m: e.message }); }
   };
   const suggest = (qwsMembers || []).filter((x) => x.email && !(rows || []).some((r) => r.email === x.email.toLowerCase()));

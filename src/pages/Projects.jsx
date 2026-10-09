@@ -11,6 +11,7 @@ import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
 import { projectMetrics, installmentMetrics, projectsMonthly, projectYears } from "../lib/selectors.js";
 import { todayISO, fmtDateVI, MONTHS_VI } from "../lib/format.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
@@ -347,7 +348,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button onClick={onEdit} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
-            <button onClick={() => { if (confirm("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
+            <button onClick={async () => { if (await ask("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 sm:p-1.5"><X size={18} /></button>
           </div>
         </div>

@@ -1,8 +1,9 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
+import { ConfirmHost } from "./components/ConfirmDialog.jsx";
 // Trang khác tải KHI MỞ (chunk riêng) → mở app nhanh hơn; Tổng quan tải sẵn vì là trang đầu.
+const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Customers = lazy(() => import("./pages/Customers.jsx"));
 const Ketoan = lazy(() => import("./pages/Ketoan.jsx"));
 const Funds = lazy(() => import("./pages/Funds.jsx"));
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
       </Suspense>
+      <ConfirmHost />
     </Layout>
   );
 }

@@ -3,6 +3,7 @@ import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, Al
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const n = (v) => Number(String(v ?? "").replace(/[^\d.\-]/g, "")) || 0;
@@ -191,7 +192,7 @@ function CoinInvest() {
                       {r.manual && canW && (
                         <>
                           <button onClick={() => setModal(r)} className="-my-1.5 ml-1 shrink-0 rounded-lg p-2 text-slate-300 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
-                          <button onClick={() => { if (confirm(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-1.5 shrink-0 rounded-lg p-2 text-slate-300 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
+                          <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-1.5 shrink-0 rounded-lg p-2 text-slate-300 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
                         </>
                       )}
                     </div>
@@ -229,7 +230,7 @@ function CoinInvest() {
                     {r.manual && canW && (
                       <span className="ml-auto flex gap-0.5">
                         <button onClick={() => setModal(r)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                        <button onClick={() => { if (confirm(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
+                        <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
                       </span>
                     )}
                   </div>

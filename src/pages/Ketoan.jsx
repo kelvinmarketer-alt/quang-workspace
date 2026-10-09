@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search } from "lucide-react";
 import { Card, SectionTitle, Badge, MoneyInput, DateField, formatVND, formatShort } from "../components/ui.jsx";
@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -435,7 +436,7 @@ function DebtPanel() {
                           <div className="shrink-0 text-right">
                             <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
                             <div className="mt-1 flex justify-end gap-1.5">
-                              <button onClick={() => { if (confirm(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
+                              <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
                               <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu…</button>
                             </div>
                           </div>
@@ -458,6 +459,8 @@ const TABS = [["report", "Doanh thu", BarChart3], ["debt", "Công nợ", HandCoi
 
 export default function Ketoan({ initialTab = "report" }) {
   const [tab, setTab] = useState(initialTab);
+  // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card className="!p-2">

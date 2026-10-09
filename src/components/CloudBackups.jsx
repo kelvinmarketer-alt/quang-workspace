@@ -4,6 +4,7 @@ import { Card, SectionTitle } from "./ui.jsx";
 import { supabase, WORKSPACE_TABLE } from "../lib/supabase.js";
 import { useAuth } from "../lib/auth.jsx";
 import { useData } from "../lib/store.jsx";
+import { ask } from "./ConfirmDialog.jsx";
 
 // Sao lưu TỰ ĐỘNG trên cloud (bảng qws_backups, cron 3h sáng mỗi ngày, giữ 30 ngày) — chỉ chủ.
 const fmtTime = (iso) => new Date(iso).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
@@ -58,7 +59,7 @@ export default function CloudBackups() {
   };
 
   const restore = async (b) => {
-    if (!confirm(`Khôi phục dữ liệu về bản ${fmtTime(b.created_at)}?\nToàn bộ dữ liệu hiện tại (khách, dự án, kế toán, công việc…) sẽ bị thay bằng bản này. Tài khoản & Thẻ không bị đổi.\nNên tạo "Sao lưu ngay" trước khi khôi phục.`)) return;
+    if (!await ask(`Khôi phục dữ liệu về bản ${fmtTime(b.created_at)}?\nToàn bộ dữ liệu hiện tại (khách, dự án, kế toán, công việc…) sẽ bị thay bằng bản này. Tài khoản & Thẻ không bị đổi.\nNên tạo "Sao lưu ngay" trước khi khôi phục.`)) return;
     setBusy("rs" + b.id);
     try {
       const d = await fetchOne(b.id);

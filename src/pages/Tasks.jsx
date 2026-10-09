@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays } from "lucide-react";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -114,6 +114,8 @@ const TABS = [["tasks", "Công việc", ListChecks], ["calendar", "Lịch & Âm 
 
 export default function Tasks({ initialTab = "tasks" }) {
   const [tab, setTab] = useState(initialTab);
+  // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card className="!p-2">
