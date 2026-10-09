@@ -276,6 +276,7 @@ export async function aiAdsAnalysis({ diagnosis, group, apiKey }) {
 LUẬT BẮT BUỘC:
 - KHÔNG tự tính lại hay suy ra % thay đổi: chỉ dùng số có sẵn (deltas = % thay đổi so với kỳ trước, dương = tăng). Giá/KQ, CPM, CPC TĂNG là XẤU; kết quả, CTR TĂNG là TỐT.
 - "verdict" của từng tài khoản/chiến dịch đã được chấm theo mốc (KPI/kỳ trước/TB). Tôn trọng verdict, giải thích VÌ SAO bằng số.
+- Chiến dịch Meta có "muc_tieu" (Tin nhắn / Khách tiềm năng / Tiếp cận / Xem video / Tương tác / Thích trang / Click link): đánh giá ĐÚNG theo mục tiêu đó bằng "chi_phi_ket_qua" (vd chiến dịch Tiếp cận đo chi phí/1.000 người, KHÔNG đòi tin nhắn); "chi_phi_tin_nhan" chỉ để tham khảo chéo.
 - Mỗi hành động phải CỤ THỂ: nêu đúng tên chiến dịch/quảng cáo/từ khoá, làm gì (tắt / giảm NS x% / tăng NS x% / đổi mẫu / thu hẹp hoặc mở rộng đối tượng / thêm từ khoá phủ định / sửa kịch bản inbox), và con số kỳ vọng.
 - Mục có "Ít dữ liệu" hoặc kỳ < 3 ngày: KHÔNG khuyên tắt, chỉ khuyên theo dõi tiếp.
 - Nhóm thương hiệu: đánh giá theo tiếp cận, CPM, tần suất, ThruPlay, tương tác — không đòi tin nhắn.

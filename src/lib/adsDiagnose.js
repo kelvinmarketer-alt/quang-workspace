@@ -1,3 +1,4 @@
+import { judgeGoal } from "./adsGoals.js";
 // CHẤM ĐIỂM HIỆU QUẢ QUẢNG CÁO — tính bằng CODE (không để AI tự tính số → hết sai chiều tăng/giảm).
 // Mốc so sánh (theo thứ tự ưu tiên): KPI bạn đặt (Giá/KQ mục tiêu) → giá/KQ kỳ trước (đủ ≥5 KQ) → giá/KQ TB tài khoản.
 
@@ -64,9 +65,9 @@ function itemsOf(a) {
   };
 }
 
-const slim = (x, extra = {}) => ({ name: x.name, spend: r0(x.spend), results: r1(x.results), cpr: r0(x.cpr), ctr: r1(x.ctr), ...extra });
+const slim = (x, extra = {}) => ({ name: x.name, spend: r0(x.spend), results: r1(x.results), cpr: r0(x.cpr), ctr: r1(x.ctr), ...(x.goal ? { muc_tieu: x.goalLabel, ket_qua_theo_muc_tieu: r1(x.goalResults), chi_phi_ket_qua: r0(x.goalCost), chi_phi_tin_nhan: r0(x.costMsg) } : {}), ...extra });
 
-export function diagnose(accounts, { targets = {}, adsResults = [], since, until }) {
+export function diagnose(accounts, { targets = {}, adsResults = [], since, until, goalBase = null }) {
   const days = daysOf(since, until);
   const out = accounts.filter((a) => !a.error).map((a) => {
     const t = a.totals || {}, p = a.prev;
@@ -93,16 +94,23 @@ export function diagnose(accounts, { targets = {}, adsResults = [], since, until
     const bl = baselineOf(a, kpi);
     const target = bl?.value || null;
     // Tài khoản: so KPI / kỳ trước. Chỉ có TB chính nó → chưa chấm được (tự so với mình luôn "Đạt")
-    const verdict = bl?.source === "avg" ? { key: "thin", ...VERDICT.thin, label: "Chưa có KPI", reason: "đặt KPI giá/kết quả để chấm tài khoản" } : judge(t, target);
+    let verdict = bl?.source === "avg" ? { key: "thin", ...VERDICT.thin, label: "Chưa có KPI", reason: "đặt KPI giá/kết quả để chấm tài khoản" } : judge(t, target);
+    // Meta có mục tiêu từng chiến dịch: chấm TK theo phần chạy tin nhắn/lead (không lấy tiền chạy tiếp cận/video chia cho tin nhắn)
+    const gs = a.goalSummary;
+    const kpiBase = kpi.cpr > 0 ? { value: kpi.cpr, label: "KPI bạn đặt" } : null;
+    if (gs && goalBase) {
+      verdict = gs.spend > 0 ? judgeGoal({ spend: gs.spend, goal: "msg", goalResults: gs.results, goalCost: gs.results ? gs.spend / gs.results : null }, kpiBase || goalBase.msg)
+        : { key: "thin", ...VERDICT.thin, label: "Không chạy tin nhắn", reason: "kỳ này không có chiến dịch tối ưu tin nhắn/lead" };
+    }
     // Từng chiến dịch/QC: có KPI → so KPI; chưa có → so TB tài khoản kỳ này (xếp hạng tốt/kém TRONG tài khoản)
     const itemTarget = kpi.cpr > 0 ? kpi.cpr : t.results >= 3 && t.cpr ? t.cpr : target;
     const it = itemsOf(a);
-    const judgeList = (list) => (list || []).map((x) => ({ ...x, _v: judge(x, itemTarget) }));
+    const judgeList = (list) => (list || []).map((x) => ({ ...x, _v: x.goal && goalBase ? judgeGoal(x, (x.goal === "msg" || x.goal === "lead") && kpiBase ? kpiBase : goalBase[x.goal]) : judge(x, itemTarget) }));
     const camps = judgeList(it.services || it.campaigns);
     const ads = judgeList(it.ads);
     const kws = judgeList(it.keywords);
     const pool = [...camps, ...(isG ? kws : ads)];
-    const scale = pool.filter((x) => ["great", "good"].includes(x._v.key) && (x.results || 0) >= 2).sort((x, y) => x.cpr - y.cpr).slice(0, 5);
+    const scale = pool.filter((x) => ["great", "good"].includes(x._v.key) && ((x.goal ? x.goalResults : x.results) || 0) >= 2).sort((x, y) => (x._v.ratio ?? x.cpr) - (y._v.ratio ?? y.cpr)).slice(0, 5);
     const cut = pool.filter((x) => ["burn", "bad"].includes(x._v.key)).sort((x, y) => y.spend - x.spend).slice(0, 6);
     const wasted = cut.filter((x) => x._v.key === "burn").reduce((s, x) => s + x.spend, 0);
 
@@ -117,6 +125,7 @@ export function diagnose(accounts, { targets = {}, adsResults = [], since, until
     if (isG && t.searchIS != null && t.searchIS < 30) notes.push(`Tỉ lệ hiển thị tìm kiếm chỉ ${Math.round(t.searchIS)}% — giá thầu/điểm chất lượng thấp.`);
     const weakAds = ads.filter((x) => /BELOW_AVERAGE/.test(x.quality || "") || /BELOW_AVERAGE/.test(x.convRank || ""));
     if (weakAds.length) notes.push(`${weakAds.length} quảng cáo bị Meta xếp hạng chất lượng/chuyển đổi DƯỚI TRUNG BÌNH.`);
+    if (gs && goalBase && gs.otherSpend > 0) notes.push(`${Math.round(gs.otherSpend).toLocaleString("vi-VN")}đ chạy mục tiêu khác (tiếp cận, video, tương tác, thích trang…) — chấm riêng theo mục tiêu đó, không tính vào chi phí/tin nhắn.`);
     if (a.issues?.length) notes.push(`${a.issues.length} quảng cáo bị từ chối / có vấn đề chính sách.`);
     if (wasted > 0) notes.push(`${Math.round(wasted).toLocaleString("vi-VN")}đ đã tiêu vào mục 0 kết quả (≥1,5× mốc giá).`);
     if (a.group === "conv" && !customers) notes.push("Chưa nhập khách chốt/doanh thu thật → chưa biết lãi/lỗ thật, chỉ biết giá tin nhắn/lead.");
@@ -130,7 +139,7 @@ export function diagnose(accounts, { targets = {}, adsResults = [], since, until
     } : null;
 
     return {
-      ...base, verdict, results: r1(t.results), cpr: r0(t.cpr), cpm: r0(t.cpm), ctr: r1(t.ctr), frequency: r1(t.frequency),
+      ...base, verdict, results: r1(gs && goalBase ? gs.results : t.results), cpr: r0(gs && goalBase ? (gs.results ? gs.spend / gs.results : null) : t.cpr), cpm: r0(t.cpm), ctr: r1(t.ctr), frequency: r1(t.frequency),
       msgs: r0(t.msgs), leads: r0(t.leads), replyRate: r1(t.replyRate),
       baseline: bl ? { value: r0(target), source: bl.source, label: bl.label } : null,
       itemBaseline: itemTarget ? { value: r0(itemTarget), label: kpi.cpr > 0 ? "KPI" : "TB tài khoản kỳ này" } : null,

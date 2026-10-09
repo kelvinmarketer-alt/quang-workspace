@@ -2,6 +2,7 @@
 // (office_fb_ads: TK quảng cáo đã đồng bộ, office_fb: token System User mỗi BM). CHỈ ĐỌC, gọi thẳng Graph từ trình duyệt chủ.
 // Tài khoản phụ (quyền Quảng cáo) → qua edge fn qws-proxy (token ở máy chủ).
 import { supabase } from "./supabase.js";
+import { goalOf, withGoal } from "./adsGoals.js";
 
 const G = "https://graph.facebook.com/v23.0/";
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
@@ -53,6 +54,19 @@ const CTA = { MESSAGE_PAGE: "Gửi tin nhắn", LEARN_MORE: "Tìm hiểu thêm",
 const STATUS = { ACTIVE: ["Đang chạy", "emerald"], PAUSED: ["Tạm dừng", "slate"], CAMPAIGN_PAUSED: ["Chiến dịch dừng", "slate"], ADSET_PAUSED: ["Nhóm QC dừng", "slate"], PENDING_REVIEW: ["Đang duyệt", "amber"], IN_PROCESS: ["Đang xử lý", "amber"], DISAPPROVED: ["Bị từ chối", "rose"], WITH_ISSUES: ["Có vấn đề", "rose"], PREAPPROVED: ["Đã duyệt trước", "sky"], ARCHIVED: ["Lưu trữ", "slate"], DELETED: ["Đã xoá", "slate"] };
 export const statusOf = (s) => STATUS[s] || [s || "—", "slate"];
 
+// Mục tiêu từng chiến dịch của 1 TK: { byId: {id: goal}, byName: {name: goal} } (theo optimization_goal của nhóm QC)
+const GOAL_CACHE = new Map();
+export async function loadCampaignGoals(accountId) {
+  const c = GOAL_CACHE.get(accountId);
+  if (c && Date.now() - c.at < 1800000) return c.v;
+  const j = await actGet(accountId, "campaigns", { fields: "id,name,objective,adsets.limit(50){optimization_goal}", limit: "300" });
+  const byId = {}, byName = {};
+  for (const x of j.data || []) { const g = goalOf(x.objective, (x.adsets?.data || []).map((a) => a.optimization_goal)); byId[x.id] = g; if (x.name) byName[x.name] = g; }
+  const v = { byId, byName };
+  GOAL_CACHE.set(accountId, { at: Date.now(), v });
+  return v;
+}
+
 // Quảng cáo của 1 TK trong kỳ: (a) đang chạy + (b) có chi tiêu trong kỳ (kể cả đã dừng). Kèm creative + số liệu kỳ.
 export async function loadAccountAds(accountId, since, until) {
   const tr = JSON.stringify({ since, until });
@@ -70,7 +84,8 @@ export async function loadAccountAds(accountId, since, until) {
     const i = a.insights?.data?.[0] || {};
     const msgs = act(i, MSG), leads = act(i, "lead", "onsite_conversion.lead_grouped"), results = msgs + leads, spend = num(i.spend);
     const c = a.creative || {};
-    return {
+    const goal = goalOf(a.campaign?.objective, a.adset?.optimization_goal ? [a.adset.optimization_goal] : []);
+    return withGoal({
       id: a.id, name: a.name, status: a.effective_status, running: a.effective_status === "ACTIVE", created: a.created_time,
       campaign: a.campaign?.name, objective: OBJ[a.campaign?.objective] || a.campaign?.objective || "",
       adset: a.adset?.name, optimize: OPT[a.adset?.optimization_goal] || a.adset?.optimization_goal || "",
@@ -80,6 +95,7 @@ export async function loadAccountAds(accountId, since, until) {
       spend, impressions: num(i.impressions), reach: num(i.reach), frequency: num(i.frequency), ctr: num(i.ctr), cpc: num(i.cpc), cpm: num(i.cpm), clicks: num(i.clicks),
       msgs, leads, results, cpr: results > 0 ? spend / results : null,
       engagement: act(i, "post_engagement"), linkClicks: act(i, "link_click"), thruplay: num((i.video_thruplay_watched_actions || [])[0]?.value),
-    };
+      pageLikes: act(i, "like"), video3s: act(i, "video_view"),
+    }, goal);
   }).sort((x, y) => (y.running - x.running) || y.spend - x.spend);
 }

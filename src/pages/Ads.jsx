@@ -6,7 +6,8 @@ import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { aiAdsAnalysis } from "../lib/ai.js";
 import { diagnose, judge, baselineOf } from "../lib/adsDiagnose.js";
-import { loadAccountAds, statusOf, setAdsProxy } from "../lib/fbAds.js";
+import { loadAccountAds, statusOf, setAdsProxy, loadCampaignGoals } from "../lib/fbAds.js";
+import { GOALS, withGoal, goalBaselines, judgeGoal } from "../lib/adsGoals.js";
 import { todayISO, formatShort } from "../lib/format.js";
 
 // ---------- định dạng ----------
@@ -48,6 +49,28 @@ const COLS = {
   ],
 };
 const RANK = { ABOVE_AVERAGE: "trên TB", AVERAGE: "TB", BELOW_AVERAGE_35: "dưới TB (top 35% thấp)", BELOW_AVERAGE_20: "dưới TB (top 20% thấp)", BELOW_AVERAGE_10: "dưới TB (top 10% thấp)" };
+// Cột chiến dịch/QC Meta theo MỤC TIÊU: kết quả + chi phí/KQ đúng mục tiêu, cột Chi phí/tin nhắn riêng
+const GOAL_COLS = [
+  ["spend", "Chi phí", (v) => vnd(v)], ["goalResText", "Kết quả (theo mục tiêu)", (v) => v || "—"], ["goalCost", "Chi phí/KQ", (v) => vnd(v), "bad"],
+  ["costMsg", "Chi phí/tin nhắn", (v) => vnd(v), "bad"], ["msgs", "Tin nhắn", (v) => int(v)], ["reach", "Tiếp cận", (v) => int(v)],
+  ["ctr", "CTR", (v) => pct(v)], ["cpm", "CPM", (v) => vnd(v), "bad"], ["frequency", "Tần suất", (v) => dec(v), "bad"],
+];
+function enrichGoals(a, g) {
+  if (a.platform === "google" || a.error) return a;
+  const def = a.group === "conv" ? "msg" : "reach";
+  const W = (row, goal) => { const x = withGoal(row, goal); const G = GOALS[goal]; return { ...x, goalResText: goal === "reach" ? `${int(x.reach)} người` : `${int(x.goalResults)} ${G.unit}` }; };
+  const campaigns = (a.campaigns || []).map((c) => W(c, (g && (g.byId[c.id] || g.byName[c.name])) || def));
+  const gByName = Object.fromEntries(campaigns.map((c) => [c.name, c.goal]));
+  const dom = (list) => { const m = {}; for (const c of list) m[c.goal] = (m[c.goal] || 0) + (c.spend || 0); return Object.entries(m).sort((x, y) => y[1] - x[1])[0]?.[0] || def; };
+  const services = a.services ? a.services.map((s) => W(s, dom(campaigns.filter((c) => c.service === s.name)))) : a.services;
+  const msgCamps = campaigns.filter((c) => c.goal === "msg" || c.goal === "lead");
+  return {
+    ...a, campaigns, services, goalsLoaded: !!g,
+    ads: (a.ads || []).map((x) => W(x, gByName[x.campaign] || def)),
+    adsets: a.adsets ? a.adsets.map((x) => W(x, gByName[x.campaign] || def)) : a.adsets,
+    goalSummary: g ? { spend: msgCamps.reduce((t, c) => t + (c.spend || 0), 0), results: msgCamps.reduce((t, c) => t + (c.msgs || 0) + (c.leads || 0), 0), otherSpend: campaigns.filter((c) => c.goal !== "msg" && c.goal !== "lead").reduce((t, c) => t + (c.spend || 0), 0) } : null,
+  };
+}
 const colsOf = (a) => (a.platform === "google" ? COLS.gads : COLS[a.group]);
 
 function Delta({ cur, prev, bad }) {
@@ -257,7 +280,7 @@ function Scorecard({ diag, onWeek }) {
             ) : (<>
               <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
                 <span>Kết quả <b className="text-slate-700">{dec(x.results)}</b>{x.deltas?.results != null && ` (${x.deltas.results > 0 ? "+" : ""}${x.deltas.results}%)`}</span>
-                <span>Giá/KQ <b className="text-slate-700">{vnd(x.cpr)}</b>{x.deltas?.cpr != null && <span className={x.deltas.cpr > 0 ? "text-rose-600" : "text-emerald-600"}> ({x.deltas.cpr > 0 ? "+" : ""}{x.deltas.cpr}%)</span>}</span>
+                <span>Chi phí/tin nhắn+lead <b className="text-slate-700">{vnd(x.cpr)}</b>{x.deltas?.cpr != null && <span className={x.deltas.cpr > 0 ? "text-rose-600" : "text-emerald-600"}> ({x.deltas.cpr > 0 ? "+" : ""}{x.deltas.cpr}%)</span>}</span>
                 <span>Mốc <b className="text-slate-700">{x.baseline ? vnd(x.baseline.value) : "—"}</b>{x.baseline && <span className="text-slate-400"> · {x.baseline.label}</span>}</span>
                 {x.real?.costPerCustomer != null && <span>Giá/khách chốt <b className="text-slate-700">{vnd(x.real.costPerCustomer)}</b></span>}
                 {x.real?.roas != null && <span>ROAS <b className="text-slate-700">{x.real.roas}</b></span>}
@@ -267,13 +290,13 @@ function Scorecard({ diag, onWeek }) {
                   {x.scale.length > 0 && (
                     <div className="rounded-lg bg-emerald-50 p-2 text-[11px] text-emerald-800">
                       <div className="mb-1 flex items-center gap-1 font-bold"><ArrowUpRight size={13} /> Đang hiệu quả — nên dồn ngân sách</div>
-                      {x.scale.map((c) => <div key={c.name} className="truncate">• {c.name} — {vnd(c.cpr)}/KQ · {dec(c.results)} KQ</div>)}
+                      {x.scale.map((c) => <div key={c.name} className="truncate">• {c.name} — {c.muc_tieu ? `🎯 ${c.muc_tieu} · ${vnd(c.chi_phi_ket_qua)}/KQ · ${dec(c.ket_qua_theo_muc_tieu)} KQ` : `${vnd(c.cpr)}/KQ · ${dec(c.results)} KQ`}</div>)}
                     </div>
                   )}
                   {x.cut.length > 0 && (
                     <div className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-800">
                       <div className="mb-1 flex items-center gap-1 font-bold"><ArrowDownRight size={13} /> Kém — nên giảm/tắt{x.wasted > 0 ? ` (đã đốt ${vnd(x.wasted)})` : ""}</div>
-                      {x.cut.map((c) => <div key={c.name} className="truncate">• {c.name} — {c.results ? vnd(c.cpr) + "/KQ" : "0 KQ"} · tiêu {vnd(c.spend)}</div>)}
+                      {x.cut.map((c) => <div key={c.name} className="truncate">• {c.name} — {c.muc_tieu ? `🎯 ${c.muc_tieu} · ${c.ket_qua_theo_muc_tieu ? vnd(c.chi_phi_ket_qua) + "/KQ" : "0 KQ"}` : c.results ? vnd(c.cpr) + "/KQ" : "0 KQ"} · tiêu {vnd(c.spend)}</div>)}
                     </div>
                   )}
                 </div>
@@ -327,7 +350,7 @@ function AiReport({ r }) {
 
 // ---------- Quảng cáo (bài) trong tài khoản: đang chạy + có chi tiêu trong kỳ ----------
 const ADS_CACHE = new Map();
-function LiveAds({ a, since, until, target }) {
+function LiveAds({ a, since, until, goalBase }) {
   const [list, setList] = useState(null);
   const [err, setErr] = useState("");
   const [mode, setMode] = useState("running");
@@ -345,8 +368,9 @@ function LiveAds({ a, since, until, target }) {
   if (err) return <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-600">{err}</div>;
   if (!list) return <div className="flex items-center gap-2 py-6 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang lấy quảng cáo từ Facebook…</div>;
   const running = list.filter((x) => x.running), spent = list.filter((x) => x.spend > 0);
-  const shown = (mode === "running" ? running : spent).slice().sort((x, y) => (sort === "cpr" ? (x.cpr ?? 1e15) - (y.cpr ?? 1e15) : sort === "results" ? y.results - x.results : y.spend - x.spend));
-  const conv = a.group === "conv";
+  // Xếp "rẻ nhất" theo tỉ lệ so với mốc CỦA ĐÚNG MỤC TIÊU từng QC (QC tiếp cận không so với QC tin nhắn)
+  const ratioOf = (x) => { const b = goalBase?.[x.goal]; return x.goalCost != null && b ? x.goalCost / b.value : 1e9; };
+  const shown = (mode === "running" ? running : spent).slice().sort((x, y) => (sort === "cpr" ? ratioOf(x) - ratioOf(y) : sort === "results" ? (y.msgs || 0) - (x.msgs || 0) : y.spend - x.spend));
   const chip = (on) => `rounded-lg px-2.5 py-1 text-[11px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
   return (
     <div>
@@ -354,13 +378,14 @@ function LiveAds({ a, since, until, target }) {
         <button onClick={() => setMode("running")} className={chip(mode === "running")}>Đang chạy ({running.length})</button>
         <button onClick={() => setMode("spent")} className={chip(mode === "spent")}>Có chi tiêu trong kỳ ({spent.length})</button>
         <span className="ml-auto text-[11px] text-slate-400">Xếp:</span>
-        {[["spend", "Chi tiêu"], conv && ["results", "Kết quả"], conv && ["cpr", "Giá/KQ rẻ"]].filter(Boolean).map(([k, l]) => <button key={k} onClick={() => setSort(k)} className={chip(sort === k)}>{l}</button>)}
+        {[["spend", "Chi tiêu"], ["cpr", "Hiệu quả nhất"], ["results", "Nhiều tin nhắn"]].map(([k, l]) => <button key={k} onClick={() => setSort(k)} className={chip(sort === k)}>{l}</button>)}
       </div>
       {shown.length === 0 && <div className="py-4 text-center text-xs text-slate-400">{mode === "running" ? "Không có quảng cáo nào đang chạy." : "Không có quảng cáo nào tiêu tiền trong kỳ."}</div>}
       <div className="space-y-2">
         {shown.map((x) => {
           const [st, tone] = statusOf(x.status);
-          const v = conv && x.spend > 0 && target ? judge(x, target) : null;
+          const v = x.spend > 0 && goalBase ? judgeGoal(x, goalBase[x.goal]) : null;
+          const G = GOALS[x.goal] || GOALS.msg;
           const M = ({ l, val, hi }) => <div className="min-w-0"><div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">{l}</div><div className={`truncate text-[12.5px] font-extrabold tabular-nums ${hi || "text-slate-800"}`}>{val}</div></div>;
           return (
             <div key={x.id} className="rounded-xl border border-slate-100 p-2.5">
@@ -373,6 +398,7 @@ function LiveAds({ a, since, until, target }) {
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge tone={tone}>{st}</Badge>
                     {v && <span title={v.reason || ""}><Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge></span>}
+                    <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10.5px] font-bold text-indigo-700">🎯 {x.goalLabel}</span>
                     {x.objective && <span className="text-[10.5px] font-semibold text-slate-400">{x.objective}{x.optimize ? " · tối ưu " + x.optimize : ""}</span>}
                   </div>
                   <button onClick={() => setOpen(open === x.id ? null : x.id)} className={`mt-0.5 w-full text-left text-[12.5px] leading-snug text-slate-700 ${open === x.id ? "block whitespace-pre-line" : "line-clamp-2"}`} title={open === x.id ? "" : "Bấm để xem đủ nội dung"}>{x.body || x.title || x.name}</button>
@@ -381,11 +407,11 @@ function LiveAds({ a, since, until, target }) {
               </div>
               <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5 sm:grid-cols-6">
                 <M l="Chi tiêu" val={vnd(x.spend)} />
-                {conv ? <M l="Kết quả" val={`${int(x.results)}${x.leads ? ` (${x.leads} lead)` : ""}`} /> : <M l="Tiếp cận" val={int(x.reach)} />}
-                {conv ? <M l="Giá/KQ" val={vnd(x.cpr)} hi={v ? { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600" }[v.tone] : undefined} /> : <M l="CPM" val={vnd(x.cpm)} />}
-                {conv ? <M l="Tiếp cận" val={int(x.reach)} /> : <M l="Tần suất" val={dec(x.frequency)} hi={x.frequency > 3 ? "text-rose-600" : undefined} />}
+                <M l={`KQ · ${G.label}`} val={x.goal === "reach" ? `${int(x.reach)} người` : `${int(x.goalResults)} ${G.unit}`} />
+                <M l={G.costLabel} val={vnd(x.goalCost)} hi={v ? { emerald: "text-emerald-600", amber: "text-amber-600", rose: "text-rose-600" }[v.tone] : undefined} />
+                <M l="Chi phí/tin nhắn" val={x.msgs ? `${vnd(x.costMsg)} (${int(x.msgs)})` : "0 tin"} />
                 <M l="CTR" val={pct(x.ctr)} hi={x.impressions >= 1000 && x.ctr < 0.8 ? "text-rose-600" : undefined} />
-                <M l={x.dailyBudget ? "NS/ngày" : "Tương tác"} val={x.dailyBudget ? vnd(x.dailyBudget) : int(x.engagement)} />
+                <M l={x.goal === "reach" ? "Tần suất" : x.dailyBudget ? "NS/ngày" : "Tiếp cận"} val={x.goal === "reach" ? dec(x.frequency) : x.dailyBudget ? vnd(x.dailyBudget) : int(x.reach)} hi={x.goal === "reach" && x.frequency > 3 ? "text-rose-600" : undefined} />
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-slate-400">
                 {x.cta && <span>Nút: <b className="text-slate-500">{x.cta}</b></span>}
@@ -401,7 +427,7 @@ function LiveAds({ a, since, until, target }) {
   );
 }
 
-function AccountCard({ a, since, until, onChanged }) {
+function AccountCard({ a, since, until, onChanged, goalBase }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(a.platform === "google" ? "convs" : "live");
   const { settings = {}, setSettings, isOwner } = useData();
@@ -409,7 +435,11 @@ function AccountCard({ a, since, until, onChanged }) {
   const bl = a.group === "conv" ? baselineOf(a, kpi) : null;
   // dòng con: KPI nếu có, không thì TB tài khoản kỳ này (xếp hạng trong tài khoản) — giống adsDiagnose
   const itemTarget = kpi?.cpr > 0 ? kpi.cpr : a.totals?.results >= 3 && a.totals.cpr ? a.totals.cpr : bl?.value;
-  const vrows = (list) => (list || []).map((x) => ({ ...x, _v: itemTarget ? judge(x, itemTarget) : null }));
+  const kpiBase = kpi?.cpr > 0 ? { value: kpi.cpr, label: "KPI bạn đặt" } : null;
+  // Meta: mỗi dòng chấm theo MỤC TIÊU của nó (tiếp cận so với tiếp cận, tin nhắn so với tin nhắn…)
+  const vrows = (list) => (list || []).map((x) => ({ ...x, _v: x.goal && goalBase ? judgeGoal(x, (x.goal === "msg" || x.goal === "lead") && kpiBase ? kpiBase : goalBase[x.goal]) : itemTarget ? judge(x, itemTarget) : null }));
+  const goalCols = !isG && a.goalsLoaded ? [...GOAL_COLS, vCol] : null;
+  const goalInfo = (x, extra = []) => [x.goal && `🎯 ${x.goalLabel}${x.goal === "reach" ? " (chi phí/1.000 người)" : ""}`, ...extra].filter(Boolean).join(" · ");
   const isG = a.platform === "google";
   const cols = a.group === "conv" ? [...colsOf(a), vCol] : colsOf(a);
   if (a.error) return (
@@ -471,11 +501,11 @@ function AccountCard({ a, since, until, onChanged }) {
               <button key={k} onClick={() => setTab(k)} className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
-          {tab === "services" && <Table rows={vrows(a.services)} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
-          {tab === "campaigns" && <Table rows={vrows(a.campaigns.filter((c) => c.spend > 0 || c.idle)).map((c) => ({ ...c, info: [c.status && c.status !== "ACTIVE" ? c.status : null, c.dailyBudget ? "NS " + formatShort(c.dailyBudget) + "/ngày" : null, c.idle ? "đang bật nhưng không tiêu" : null].filter(Boolean).join(" · ") }))} cols={cols} sub="info" />}
-          {tab === "adsets" && <Table rows={vrows(a.adsets)} cols={cols} sub="campaign" />}
-          {tab === "live" && <LiveAds a={a} since={since} until={until} target={a.group === "conv" ? itemTarget : null} />}
-          {tab === "ads" && <Table rows={vrows(topAds).map((x) => ({ ...x, info: [x.campaign, x.quality && x.quality !== "UNKNOWN" ? "chất lượng " + RANK[x.quality] : null, x.convRank && x.convRank !== "UNKNOWN" ? "chuyển đổi " + RANK[x.convRank] : null].filter(Boolean).join(" · ") }))} cols={cols} sub="info" />}
+          {tab === "services" && <Table rows={vrows(a.services).map((x) => ({ ...x, info: goalInfo(x) }))} cols={goalCols || cols.filter(([k]) => !["reach", "frequency"].includes(k))} sub="info" />}
+          {tab === "campaigns" && <Table rows={vrows(a.campaigns.filter((c) => c.spend > 0 || c.idle)).map((c) => ({ ...c, info: goalInfo(c, [c.status && c.status !== "ACTIVE" ? c.status : null, c.dailyBudget ? "NS " + formatShort(c.dailyBudget) + "/ngày" : null, c.idle ? "đang bật nhưng không tiêu" : null]) }))} cols={goalCols || cols} sub="info" />}
+          {tab === "adsets" && <Table rows={vrows(a.adsets).map((x) => ({ ...x, info: goalInfo(x, [x.campaign]) }))} cols={goalCols || cols} sub="info" />}
+          {tab === "live" && <LiveAds a={a} since={since} until={until} goalBase={goalBase} />}
+          {tab === "ads" && <Table rows={vrows(topAds).map((x) => ({ ...x, info: [x.goal && `🎯 ${x.goalLabel}`, x.campaign, x.quality && x.quality !== "UNKNOWN" ? "chất lượng " + RANK[x.quality] : null, x.convRank && x.convRank !== "UNKNOWN" ? "chuyển đổi " + RANK[x.convRank] : null].filter(Boolean).join(" · ") }))} cols={goalCols || cols} sub="info" />}
           {tab === "age" && <Table rows={vrows(a.byAgeGender).map((x) => ({ ...x, name: (x.gender === "female" ? "Nữ" : x.gender === "male" ? "Nam" : "?") + " " + x.age }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "place" && <Table rows={vrows(a.byPlacement).map((x) => ({ ...x, name: x.platform + " · " + x.position }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
           {tab === "convs" && (
@@ -534,7 +564,18 @@ export default function Ads() {
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [since, until, compare, canView, live]);
 
-  const accounts = (data?.accounts || []).filter((a) => a.group === group);
+  // Mục tiêu từng chiến dịch Meta (lấy 1 lần/30 phút/TK) → gắn kết quả + chi phí theo mục tiêu
+  const [goals, setGoals] = useState({});
+  useEffect(() => {
+    for (const a of data?.accounts || []) {
+      if (a.platform === "google" || a.error || goals[a.id]) continue;
+      loadCampaignGoals(a.id).then((v) => setGoals((o) => ({ ...o, [a.id]: v }))).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  const allAccs = useMemo(() => (data?.accounts || []).map((a) => enrichGoals(a, goals[a.id])), [data, goals]);
+  const goalBase = useMemo(() => goalBaselines(allAccs.flatMap((a) => (a.platform === "google" || !a.goalsLoaded ? [] : a.campaigns || []))), [allAccs]);
+  const accounts = allAccs.filter((a) => a.group === group);
   const tot = useMemo(() => sumGroup(accounts), [data, group]);
   const prevTot = useMemo(() => {
     if (!data?.prev) return null;
@@ -545,7 +586,7 @@ export default function Ads() {
     return s;
   }, [data, group]);
 
-  const diag = useMemo(() => (data ? diagnose(accounts, { targets: settings.adsTargets || {}, adsResults, since, until }) : null), [data, group, settings.adsTargets, adsResults, since, until]);
+  const diag = useMemo(() => (data ? diagnose(accounts, { targets: settings.adsTargets || {}, adsResults, since, until, goalBase }) : null), [allAccs, goalBase, group, settings.adsTargets, adsResults, since, until]);
 
   const runAi = async () => {
     setAi({ busy: true, text: "", err: "" });
@@ -617,7 +658,7 @@ export default function Ads() {
 
       {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
       {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
-      {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} onChanged={() => load(true)} />)}
+      {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} goalBase={goalBase} onChanged={() => load(true)} />)}
     </div>
   );
 }
