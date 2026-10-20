@@ -343,9 +343,14 @@ function CoinInvest({ active = true }) {
     for (const x of fiat) { if (x.fiat !== "VND" || !x.amount) continue; const k = `FIAT|${x.date}|${x.amount}`; if (!ledger.items?.[k]) add[k] = { t: "FIAT", vnd: Number(x.amount), date: x.date }; }
     if (Object.keys(add).length) setSettings({ coinDeposits: { ...ledger, items: { ...(ledger.items || {}), ...add } } });
   };
-  const ledgerList = Object.values(ledger.items || {});
-  const ledgerVnd = ledgerList.reduce((s, x) => s + (x.t === "SELL" ? -x.vnd : x.vnd), 0);
+  // Tính "đã nạp" TỪ NGÀY (mặc định = toàn bộ sổ) — lịch sử Binance có cả các đợt nạp/rút cũ; chủ chọn mốc bắt đầu đợt đầu tư hiện tại
+  const allList = Object.values(ledger.items || {});
+  const net = (l) => l.reduce((s, x) => s + (x.t === "SELL" ? -x.vnd : x.vnd), 0);
+  const fromTs = ledger.fromDate ? new Date(ledger.fromDate + "T00:00:00+07:00").getTime() : 0;
+  const ledgerList = allList.filter((x) => x.date >= fromTs);
+  const ledgerVnd = net(ledgerList), allVnd = net(allList);
   const ledgerFrom = ledgerList.length ? Math.min(...ledgerList.map((x) => x.date)) : null;
+  const iso = (t) => new Date(t + 7 * 3600000).toISOString().slice(0, 10);
   const [depEdit, setDepEdit] = useState(null);
 
   // Đồng bộ ví Binance — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm); giá thị trường vẫn realtime 15s ở trên.
@@ -414,7 +419,7 @@ function CoinInvest({ active = true }) {
   }, [binRows, manRows, fut]);
 
   // So với tiền VND đã nạp (P2P + fiat) — CHỈ tài sản Binance, không gồm coin nhập tay
-  const depVnd = Math.max(Number(bn?.deposited?.vnd) || 0, ledgerVnd) + (Number(ledger.extraVnd) || 0); // sổ cộng dồn (không rơi khoản cũ) + điều chỉnh tay
+  const depVnd = (allList.length ? ledgerVnd : Number(bn?.deposited?.vnd) || 0) + (Number(ledger.extraVnd) || 0); // sổ cộng dồn (không rơi khoản cũ) + điều chỉnh tay
   const hasDep = depVnd > 0 && tot.missing === 0;
   const vsDepVnd = hasDep ? tot.binance * vnd - depVnd : null;
   const vsDep = hasDep ? vsDepVnd / vnd : null;
@@ -456,12 +461,15 @@ function CoinInvest({ active = true }) {
                   {headPnl >= 0 ? <TrendingUp size={16} className="shrink-0" /> : <TrendingDown size={16} className="shrink-0" />}
                   {isOwner ? `${fmtUsdSigned(vsDep)} (${sPct(vsDepPct)})` : `${fmtUsdSigned(tot.manPnl)}${tot.manPct != null ? ` (${sPct(tot.manPct)})` : ""}`}
                 </div>
-                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)} <button onClick={() => setDepEdit(depEdit == null ? String(ledger.extraVnd || "") : null)} className="ml-1 font-bold text-amber-200 underline">{depEdit == null ? "Sửa" : "Đóng"}</button></div>}
+                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)}{fromTs ? ` (từ ${new Date(fromTs).toLocaleDateString("vi-VN")})` : ""} <button onClick={() => setDepEdit(depEdit == null ? { extra: String(ledger.extraVnd || ""), from: ledger.fromDate || "" } : null)} className="ml-1 font-bold text-amber-200 underline">{depEdit == null ? "Sửa" : "Đóng"}</button></div>}
                 {isOwner && depEdit != null && (
                   <div className="mt-2 rounded-xl bg-white/10 p-3 text-[12px] text-amber-50">
-                    <div><b>Đã nạp</b> = sổ nạp tự ghi <b>{formatVND(ledgerVnd)}</b> ({ledgerList.length} lệnh P2P/nạp{ledgerFrom ? ` từ ${new Date(ledgerFrom).toLocaleDateString("vi-VN")}` : ""}) + khoản bạn tự thêm. Binance chỉ cho xem lịch sử P2P khoảng 30 ngày gần nhất nên các lần nạp CŨ HƠN cần nhập vào đây (app sẽ giữ mãi, không còn tự giảm). Nếu sau này sổ tự tìm thấy thêm lệnh cũ, nhớ giảm phần tự thêm để khỏi tính 2 lần.</div>
-                    <div className="mt-2 flex items-center gap-2"><span className="shrink-0">Nạp thêm ngoài sổ:</span><input inputMode="numeric" value={depEdit} onChange={(e) => setDepEdit(e.target.value.replace(/[^\d]/g, ""))} placeholder="vd 11650000" className="w-full rounded-lg bg-white px-2.5 py-1.5 text-sm text-slate-900" /><span>đ</span></div>
-                    <button onClick={() => { setSettings({ coinDeposits: { ...ledger, extraVnd: Number(depEdit) || 0 } }); setDepEdit(null); }} className="mt-2 rounded-lg bg-amber-400 px-3 py-1.5 text-[12px] font-extrabold text-slate-900">Lưu</button>
+                    <div><b>Đã nạp</b> = lệnh nạp/mua P2P trừ bán P2P {fromTs ? <>từ <b>{new Date(fromTs).toLocaleDateString("vi-VN")}</b></> : "toàn thời gian"}: <b>{formatVND(ledgerVnd)}</b> ({ledgerList.length} lệnh){Number(ledger.extraVnd) ? <> + tự thêm <b>{formatVND(ledger.extraVnd)}</b></> : null}. Toàn bộ lịch sử: {allList.length} lệnh, nạp ròng {formatVND(allVnd)}{allList.length ? ` (từ ${new Date(Math.min(...allList.map((x) => x.date))).toLocaleDateString("vi-VN")})` : ""}.</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2"><span className="shrink-0">Tính từ ngày:</span><input type="date" value={depEdit.from} onChange={(e) => setDepEdit({ ...depEdit, from: e.target.value })} className="rounded-lg bg-white px-2 py-1.5 text-sm text-slate-900" /><button onClick={() => setDepEdit({ ...depEdit, from: "" })} className="text-amber-200 underline">toàn thời gian</button></div>
+                    {allList.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{[...new Set(allList.filter((x) => x.t !== "SELL").map((x) => iso(x.date).slice(0, 7)))].sort().reverse().slice(0, 6).map((m) => { const first = allList.filter((x) => iso(x.date).startsWith(m)).sort((p, q) => p.date - q.date)[0]; return <button key={m} onClick={() => setDepEdit({ ...depEdit, from: iso(first.date) })} className="rounded-md bg-white/15 px-1.5 py-0.5 text-[11px]">từ {new Date(first.date).toLocaleDateString("vi-VN")}</button>; })}</div>}
+                    <div className="mt-2 flex items-center gap-2"><span className="shrink-0">Nạp thêm ngoài sổ:</span><input inputMode="numeric" value={depEdit.extra} onChange={(e) => setDepEdit({ ...depEdit, extra: e.target.value.replace(/[^\d]/g, "") })} placeholder="thường để trống" className="w-full rounded-lg bg-white px-2.5 py-1.5 text-sm text-slate-900" /><span>đ</span></div>
+                    <div className="mt-1 text-[11px] text-amber-100/70">Sổ tự ghi mọi lệnh nạp/mua/bán P2P Binance trả về (đến 24 tháng) và giữ mãi. "Nạp thêm ngoài sổ" chỉ dùng cho tiền nạp bằng cách khác (chuyển từ ví ngoài…).</div>
+                    <button onClick={() => { setSettings({ coinDeposits: { ...ledger, extraVnd: Number(depEdit.extra) || 0, fromDate: depEdit.from || null } }); setDepEdit(null); }} className="mt-2 rounded-lg bg-amber-400 px-3 py-1.5 text-[12px] font-extrabold text-slate-900">Lưu</button>
                   </div>
                 )}
               </div>
