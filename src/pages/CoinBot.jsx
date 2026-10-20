@@ -4,7 +4,8 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
-import { runSession, finalize, statsOf, cfgOf, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
+import { runSession, finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -22,6 +23,73 @@ const ago = (t) => { const d = (Date.now() - t) / 86400000; return d >= 1 ? `${M
 const tone = (v) => (v == null ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const setupName = (k) => SETUPS[k]?.label.split(" (")[0] || k;
 const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "LONG" : "SHORT"}</span>;
+
+// Biểu đồ nến của 1 luồng (cặp × khung) + điểm vào/ra của mọi lệnh bot + đường Entry/SL/TP lệnh đang mở / lệnh đang chọn + lệnh chờ.
+// Giờ hiển thị theo giờ VN (UTC+7). Nến đang chạy cập nhật realtime từ WebSocket.
+const VN = 7 * 3600, toT = (ms) => Math.floor(ms / 1000) + VN;
+function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus }) {
+  const box = useRef(null), api = useRef(null), [K, setK] = useState([]), fitted = useRef(""), step = TFS[tf].ms;
+  useEffect(() => {
+    const chart = createChart(box.current, {
+      autoSize: true,
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#64748b", fontSize: 11 },
+      grid: { vertLines: { color: "rgba(148,163,184,0.12)" }, horzLines: { color: "rgba(148,163,184,0.12)" } },
+      rightPriceScale: { borderVisible: false }, timeScale: { borderVisible: false, timeVisible: true, rightOffset: 6 }, crosshair: { mode: 0 },
+      handleScroll: { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+    });
+    const candle = chart.addSeries(CandlestickSeries, { upColor: "#10b981", downColor: "#f43f5e", borderVisible: false, wickUpColor: "#10b981", wickDownColor: "#f43f5e" });
+    const vol = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
+    chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+    const e50 = chart.addSeries(LineSeries, { color: "#6366f1", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    api.current = { chart, candle, vol, e50, markers: createSeriesMarkers(candle, []), lines: [] };
+    return () => { chart.remove(); api.current = null; };
+  }, []);
+  // nến đã đóng (lấy từ bộ nhớ đệm của bot) — tải lại khi đổi luồng hoặc bot vừa xét nến mới
+  useEffect(() => { let off = false; loadKlines(SYMBOLS[coin], tf, startAt - 120 * step).then((k) => { if (!off) setK(k); }).catch(() => {}); return () => { off = true; }; }, [coin, tf, startAt, rawAt, step]);
+  useEffect(() => {
+    const a = api.current; if (!a || !K.length) return;
+    const p0 = K[K.length - 1][4], prec = p0 >= 1000 ? 1 : p0 >= 10 ? 2 : 4;
+    a.candle.applyOptions({ priceFormat: { type: "price", precision: prec, minMove: 1 / 10 ** prec } });
+    a.candle.setData(K.map((k) => ({ time: toT(k[0]), open: k[1], high: k[2], low: k[3], close: k[4] })));
+    a.vol.setData(K.map((k) => ({ time: toT(k[0]), value: k[5], color: k[4] >= k[1] ? "rgba(16,185,129,0.3)" : "rgba(244,63,94,0.3)" })));
+    const kk = 2 / 51; let e = K[0][4]; a.e50.setData(K.map((k, i) => { e = i ? k[4] * kk + e * (1 - kk) : k[4]; return { time: toT(k[0]), value: e }; }));
+    const key = `${coin}|${tf}`;
+    if (fitted.current !== key) { fitted.current = key; a.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, K.length - 150), to: K.length + 6 }); }
+  }, [K, coin, tf]);
+  // điểm vào / ra lệnh
+  useEffect(() => {
+    const a = api.current; if (!a) return;
+    const m = [];
+    for (const t of trades) {
+      m.push({ time: toT(t.entryAt), position: t.side === 1 ? "belowBar" : "aboveBar", color: t.side === 1 ? "#10b981" : "#f43f5e", shape: t.side === 1 ? "arrowUp" : "arrowDown", text: t.side === 1 ? "L" : "S", size: focus?.id === t.id ? 2 : 1 });
+      if (t.exitAt) m.push({ time: toT(Math.floor((t.exitAt - 1) / step) * step), position: t.side === 1 ? "aboveBar" : "belowBar", color: t.r >= 0 ? "#059669" : "#e11d48", shape: "circle", text: `${t.r >= 0 ? "+" : ""}${t.r.toFixed(1)}R`, size: focus?.id === t.id ? 2 : 1 });
+    }
+    a.markers.setMarkers(m.sort((x, y) => x.time - y.time));
+  }, [trades, focus, step]);
+  // đường giá: lệnh đang chọn (hoặc mọi lệnh đang mở) + lệnh chờ
+  useEffect(() => {
+    const a = api.current; if (!a) return;
+    a.lines.forEach((pl) => a.candle.removePriceLine(pl));
+    const show = focus ? [focus] : trades.filter((t) => !t.exitAt), L = [];
+    for (const t of show) {
+      const tag = `${t.side === 1 ? "LONG" : "SHORT"}`;
+      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: "SL" }, { price: t.tp, color: "#059669", title: "TP" });
+    }
+    for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
+    a.lines = L.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: 1, lineStyle: ln.style ?? 2, axisLabelVisible: true, title: ln.title }));
+  }, [trades, pending, focus]);
+  // nhảy tới lệnh đang chọn
+  useEffect(() => {
+    const a = api.current; if (!a || !focus || !K.length) return;
+    a.chart.timeScale().setVisibleRange({ from: toT(focus.entryAt - 40 * step), to: toT((focus.exitAt || Date.now()) + 25 * step) });
+  }, [focus, K, step]);
+  // nến đang chạy (realtime)
+  useEffect(() => {
+    const a = api.current, b = live?.current?.[`${coin}|${tf}`]; if (!a || !b || !K.length || b.t < K[K.length - 1][0]) return;
+    try { a.candle.update({ time: toT(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); a.vol.update({ time: toT(b.t), value: b.v || 0, color: b.c >= b.o ? "rgba(16,185,129,0.3)" : "rgba(244,63,94,0.3)" }); } catch { /* nến cũ hơn dữ liệu → bỏ qua */ }
+  }, [ver, coin, tf, K, live]);
+  return <div ref={box} className="h-[340px] w-full sm:h-[460px]" />;
+}
 
 function Num({ label, v, sub, tone: t = "text-slate-900" }) {
   return <div className="bg-white px-3 py-2.5"><div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`text-lg font-extrabold tabular-nums ${t}`}>{v}</div>{sub && <div className="text-[11px] text-slate-400">{sub}</div>}</div>;
@@ -130,7 +198,7 @@ function useLive(active, coins, tfs, onClose) {
         try {
           const k = JSON.parse(m.data)?.data?.k; if (!k) return;
           const coin = sym2coin[k.s]; if (!coin) return;
-          live.current[`${coin}|${k.i}`] = { t: k.t, h: +k.h, l: +k.l, c: +k.c };
+          live.current[`${coin}|${k.i}`] = { t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v };
           live.current[`px|${coin}`] = +k.c;
           dirty.current = true;
           if (k.x) cb.current?.();
@@ -166,6 +234,9 @@ export default function CoinBot() {
   const [showN, setShowN] = useState(40);
   const [view, setView] = useState("auto");
   const [optAll, setOptAll] = useState(false);
+  const [tab, setTab] = useState("chart");
+  const [focus, setFocus] = useState(null);
+  const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
   const [toast, setToast] = useState(null);
   const running = useRef(false), lastRun = useRef(0), hits = useRef(new Map()), prevSt = useRef(null), debounce = useRef(null);
   const cfg = cfgOf(session);
@@ -235,6 +306,14 @@ export default function CoinBot() {
   const by = (key, vals, label = (x) => x) => vals.map((v) => [label(v), statsOf(list.filter((t) => t[key] === v))]);
   const curveA = useMemo(() => (res ? res.portfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
   const curveB = useMemo(() => (res ? res.basePortfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
+  // mở biểu đồ đúng luồng của lệnh được chọn
+  const showOnChart = (t) => { setSel({ coin: t.coin, tf: t.tf }); setFocus(t); setTab("chart"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* bỏ qua */ } };
+  const selInit = useRef(false);
+  useEffect(() => { // mặc định: luồng có lệnh gần nhất
+    if (!res || selInit.current) return; selInit.current = true;
+    const last = [...res.portfolio.trades].filter((t) => t.status !== "skip").sort((a, b) => b.entryAt - a.entryAt)[0], c0 = cfgOf(session);
+    setSel(last ? { coin: last.coin, tf: last.tf } : { coin: c0.coins[0], tf: c0.tfs[c0.tfs.length - 1] });
+  }, [res]); // eslint-disable-line react-hooks/exhaustive-deps
   const taken = useMemo(() => {
     if (!P) return [];
     const src = filter === "reject" ? res.rejected.map((t) => ({ ...t, status: "reject" })) : P.trades;
@@ -309,15 +388,55 @@ export default function CoinBot() {
           <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : all.pf.toFixed(2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
           <Num label="Sụt vốn lớn nhất" v={`${P.maxDD.toFixed(1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} />
-          <Num label="Kỳ vọng / lệnh ($)" v={usd(expUsd)} sub="lãi/lỗ TB mỗi lệnh" tone={tone(expUsd)} />
-          <Num label="Thắng TB / Thua TB" v={<>{rr(all.avgWin)} <span className="text-slate-300">/</span> <span className="text-rose-600">{rr(all.avgLoss)}</span></>} sub={`payoff ${f2(all.payoff)} · lớn nhất ${rr(all.maxWin)}`} />
-          <Num label="SQN (chất lượng hệ)" v={f2(all.sqn)} sub="<1.6 kém · 2–3 tốt" tone={all.sqn >= 1.6 ? "text-emerald-600" : all.sqn != null ? "text-rose-600" : undefined} />
-          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R / lệnh`} />
-          <Num label="Recovery factor" v={f2(recovery)} sub="lãi ròng ÷ sụt vốn, >2 tốt" tone={tone(recovery)} />
-          <Num label="Giữ lệnh TB" v={all.holdH == null ? "—" : all.holdH >= 24 ? `${(all.holdH / 24).toFixed(1)} ngày` : `${all.holdH.toFixed(1)} giờ`} sub={Object.entries(all.reasons).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"} />
-          <Num label="Long / Short" v={<><span className={tone(longS.avgR)}>{longS.winRate?.toFixed(0) ?? "—"}%</span> <span className="text-slate-300">/</span> <span className={tone(shortS.avgR)}>{shortS.winRate?.toFixed(0) ?? "—"}%</span></>} sub={`${longS.n} long ${rr(longS.avgR)} · ${shortS.n} short ${rr(shortS.avgR)}`} />
-          <Num label="Lệnh thua từng lời" v={rr(all.mfeLoss)} sub={`TB trước khi quay đầu · lệnh thắng từng âm ${rr(all.maeWin == null ? null : -all.maeWin)}`} />
         </div>
+
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+          {[["chart", "Biểu đồ & lệnh"], ["history", `Lịch sử lệnh (${P.trades.filter((t) => t.status !== "skip").length})`], ["stats", "Thống kê"], ["opt", "Tối ưu & bài học"]].map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={`flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12.5px] font-bold ${tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>{l}</button>)}
+        </div>
+
+        {tab === "chart" && (<>
+        <Card className="!p-0 overflow-hidden">
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-3 py-2">
+            {cfg.coins.flatMap((c) => cfg.tfs.map((t) => [c, t])).map(([c, t]) => { const on = sel.coin === c && sel.tf === t, n = P.trades.filter((x) => x.coin === c && x.tf === t && x.status !== "skip").length, op = P.trades.some((x) => x.coin === c && x.tf === t && x.status === "open"); return (
+              <button key={c + t} onClick={() => { setSel({ coin: c, tf: t }); setFocus(null); }} className={`rounded-lg px-2.5 py-1 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}>{c} {TFS[t].label} <span className={on ? "text-white/60" : "text-slate-400"}>{n}</span>{op && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle" />}</button>
+            ); })}
+            <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
+          </div>
+          <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={P.trades.filter((x) => x.coin === sel.coin && x.tf === sel.tf && x.status !== "skip")} pending={(active ? res.pending || [] : []).filter((x) => x.coin === sel.coin && x.tf === sel.tf)} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} />
+          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · TP {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button></div>}
+        </Card>
+
+        {open.length > 0 && (
+          <Card className="!p-3">
+            <Title right={active && status === "live" ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh đang mở ({open.length})</Title>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => {
+              const pos = Math.min(1, Math.max(0, (t.last - t.curSl) / (t.tp - t.curSl))), toTp = ((t.tp - t.last) / t.last) * 100 * t.side, toSl = ((t.last - t.curSl) / t.last) * 100 * t.side;
+              return (
+                <div key={t.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
+                  <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
+                  <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
+                  <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
+                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {toSl.toFixed(2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {toTp.toFixed(2)}%</span></div>
+                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({t.lev.toFixed(1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
+                </div>
+              );
+            })}</div>
+          </Card>
+        )}
+
+        {res.pending?.length > 0 && active && (
+          <Card className="!p-3">
+            <Title>Lệnh chờ đang đặt ({res.pending.length}) · khớp khi giá xuyên qua, hết hạn thì huỷ</Title>
+            <div className="space-y-1">{res.pending.map((p) => { const cur = live.current[`px|${p.coin}`], d = cur ? ((cur - p.lim) / p.lim) * 100 * p.side : null; return (
+              <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
+                {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
+                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · SL {px(p.sl)}</span>
+                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {Math.max(0, d).toFixed(2)}%</span>}
+                <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+              </div>
+            ); })}</div>
+          </Card>
+        )}
 
         <div className="grid gap-3 xl:grid-cols-3">
           <Card className="!p-3 xl:col-span-2">
@@ -362,7 +481,9 @@ export default function CoinBot() {
             ); }) : <div className="text-[12px] text-slate-400">Chưa có lệnh.</div>}</div>
           </Card>
         </div>
+        </>)}
 
+        {tab === "history" && (<>
         {open.length > 0 && (
           <Card className="!p-3">
             <Title right={active && status === "live" ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh đang mở ({open.length})</Title>
@@ -381,64 +502,64 @@ export default function CoinBot() {
           </Card>
         )}
 
-        {res.pending?.length > 0 && active && (
-          <Card className="!p-3">
-            <Title>Lệnh chờ đang đặt ({res.pending.length}) · khớp khi giá xuyên qua, hết hạn thì huỷ</Title>
-            <div className="space-y-1">{res.pending.map((p) => { const cur = live.current[`px|${p.coin}`], d = cur ? ((cur - p.lim) / p.lim) * 100 * p.side : null; return (
-              <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
-                {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
-                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · SL {px(p.sl)}</span>
-                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {Math.max(0, d).toFixed(2)}%</span>}
-                <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+        <Card className="!p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Lịch sử lệnh</span>
+            {[["all", "Tất cả"], ["win", "Thắng"], ["loss", "Thua"], ["open", "Đang mở"], ["skip", "Bị bỏ (danh mục)"], ...(cfg.adaptive && !isBase ? [["reject", "Bị loại"]] : [])].map(([k, l]) => <button key={k} onClick={() => { setFilter(k); setShowN(40); }} className={`rounded-md px-2 py-1 text-[11px] font-bold ${filter === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>)}
+            <span className="ml-auto text-[11px] text-slate-400">{taken.length} lệnh · bấm 1 lệnh để xem trên biểu đồ</span>
+          </div>
+          <div className="divide-y divide-slate-100">{taken.slice(0, showN).map((t) => { const R = t.r ?? t.uR, dim = t.status === "skip" || t.status === "reject"; return (
+            <button key={t.id} onClick={() => showOnChart(t)} className={`block w-full px-1 py-2 text-left hover:bg-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""} ${focus?.id === t.id ? "bg-indigo-50/70" : ""}`}>
+              <div className="flex items-center gap-2 text-[12.5px]">
+                {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TFS[t.tf].label}</span><span className="truncate text-slate-500">{setupName(t.setup)}</span>
+                {t.status === "open" && <span className="rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
+                <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${dim ? "text-slate-400" : tone(R)}`}>{rr(R)}</span>
+                <span className={`w-[72px] shrink-0 text-right font-extrabold tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
               </div>
-            ); })}</div>
-          </Card>
-        )}
+              <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
+                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">SL {px(t.sl)}</span><span className="text-emerald-600">TP {px(t.tp)}</span>
+                <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${t.reason}` : t.exitAt ? `${t.reason} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
+              </div>
+              {t.lesson && <div className="mt-0.5 text-[11px] leading-snug text-rose-700/80">Rút kinh nghiệm: {t.lesson}</div>}
+            </button>
+          ); })}</div>
+          {!taken.length && <div className="py-6 text-center text-[12px] text-slate-400">Chưa có lệnh nào.</div>}
+          {taken.length > showN && <button onClick={() => setShowN((n) => n + 100)} className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-slate-50 py-2 text-[12px] font-bold text-slate-500"><ChevronDown size={14} /> Xem thêm ({taken.length - showN})</button>}
+        </Card>
+        </>)}
 
-        {rawOld && (() => {
-          const o = finalize(rawOld, null), so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
-          const cols = [["Bot (luật mới + tối ưu)", sa, res.portfolio, "text-violet-700"], ["Luật mới (cố định)", sb, res.basePortfolio, "text-emerald-700"], ["Bản cũ (chưa lọc vào đẹp)", so, o.basePortfolio, "text-slate-500"]].filter((c, i) => i || cfg.adaptive);
-          return (
-            <Card className="!p-3">
-              <Title icon={Activity}>Luật vào đẹp có hiệu quả không? (cùng phiên, cùng dữ liệu)</Title>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[520px] text-[12px]">
-                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" />{cols.map(([l, , , c]) => <th key={l} className={`py-1.5 pr-2 text-right ${c}`}>{l}</th>)}</tr></thead>
-                  <tbody>{[
-                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${s.winRate.toFixed(1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
-                    ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${P.maxDD.toFixed(1)}%`],
-                  ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
-                </table>
-              </div>
-              <div className="mt-1.5 text-[11px] text-slate-400">Bản cũ = cùng tín hiệu, cùng lệnh chờ nhưng không kiểm tra đuổi giá / SL sát / Key Volume / volume nến tín hiệu / engulfing. {Object.entries(res.skipped).filter(([k]) => /đuổi|sát|không về|volume|engulf|D1/i.test(k)).map(([k, v]) => `${v} tín hiệu bị bỏ vì ${k}`).join(" · ")}</div>
-            </Card>
-          );
-        })()}
+        {tab === "stats" && (<>
+        <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4 xl:grid-cols-8">
+          <Num label="Kỳ vọng / lệnh ($)" v={usd(expUsd)} sub="lãi/lỗ TB mỗi lệnh" tone={tone(expUsd)} />
+          <Num label="Thắng TB / Thua TB" v={<>{rr(all.avgWin)} <span className="text-slate-300">/</span> <span className="text-rose-600">{rr(all.avgLoss)}</span></>} sub={`payoff ${f2(all.payoff)} · lớn nhất ${rr(all.maxWin)}`} />
+          <Num label="SQN (chất lượng hệ)" v={f2(all.sqn)} sub="<1.6 kém · 2–3 tốt" tone={all.sqn >= 1.6 ? "text-emerald-600" : all.sqn != null ? "text-rose-600" : undefined} />
+          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R / lệnh`} />
+          <Num label="Recovery factor" v={f2(recovery)} sub="lãi ròng ÷ sụt vốn, >2 tốt" tone={tone(recovery)} />
+          <Num label="Giữ lệnh TB" v={all.holdH == null ? "—" : all.holdH >= 24 ? `${(all.holdH / 24).toFixed(1)} ngày` : `${all.holdH.toFixed(1)} giờ`} sub={Object.entries(all.reasons).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"} />
+          <Num label="Long / Short" v={<><span className={tone(longS.avgR)}>{longS.winRate?.toFixed(0) ?? "—"}%</span> <span className="text-slate-300">/</span> <span className={tone(shortS.avgR)}>{shortS.winRate?.toFixed(0) ?? "—"}%</span></>} sub={`${longS.n} long ${rr(longS.avgR)} · ${shortS.n} short ${rr(shortS.avgR)}`} />
+          <Num label="Lệnh thua từng lời" v={rr(all.mfeLoss)} sub={`TB trước khi quay đầu · lệnh thắng từng âm ${rr(all.maeWin == null ? null : -all.maeWin)}`} />
+        </div>
 
-        {cfg.adaptive && cfg.learnLoss && (
-          <Card className="!p-3">
-            <Title icon={Brain}>Rút kinh nghiệm từ lệnh thua</Title>
-            {(() => {
-              const m = res.metaNow || {}, line = (x, name) => !x ? null : x.mb == null
-                ? <div className="text-[12px] text-slate-500">• {name}: <b>đang thu thập</b> ({x.b || 0} tín hiệu bị chặn, cần ≥ {cfg.lessonMin} để kiểm chứng)</div>
-                : <div className={`text-[12px] ${x.ok ? "text-emerald-700" : "text-amber-700"}`}>• {name}: <b>{x.ok ? "ĐANG ÁP DỤNG" : "CHỈ QUAN SÁT"}</b> — tín hiệu bị chặn TB <b>{rr(x.mb)}</b> so với tín hiệu được vào <b>{rr(x.mk)}</b> ({x.b} lệnh gần nhất){x.ok ? " → chặn đúng, giúp giảm lỗ." : " → chặn chưa đúng (lệnh bị chặn lại tốt hơn), nên chưa dùng để chặn."}</div>;
-              return <div className="space-y-1 rounded-lg bg-slate-50 p-2.5">{line(m.lesson, "Bài học từ lệnh thua")}{line(m.opt, "Bộ tối ưu (tắt ô / nghỉ khung)")}
-                <div className="text-[11px] text-slate-400">Mỗi lệnh thua, hệ thống xem đặc điểm của lệnh (ADX, biến động, khoảng cách EMA50, độ rộng SL, phiên, hướng, độ dốc EMA50, thân nến…). Đặc điểm nào {cfg.lessonN} lệnh gần nhất thua rõ (≤ −0,2R) thành bài học. Bài học chỉ được dùng để chặn khi chính nó chứng minh được là đúng.</div></div>;
-            })()}
-            <div className="mt-2 grid gap-3 md:grid-cols-2">
-              <div>
-                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Bài học hiện có ({res.lessonsActive.length})</div>
-                {res.lessonsActive.length ? <div className="space-y-0.5">{res.lessonsActive.map((l) => <div key={l.k} className="flex items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{l.label}</span><span className="shrink-0 tabular-nums text-slate-400">{l.n} lệnh · thắng {l.win?.toFixed(0)}%</span><span className={`shrink-0 font-bold tabular-nums ${tone(l.exp)}`}>{rr(l.exp)}</span></div>)}</div> : <div className="text-[12px] text-slate-400">Chưa có đặc điểm nào thua rõ rệt.</div>}
-              </div>
-              <div>
-                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Nhật ký học ({res.lessons.length})</div>
-                <div className="max-h-44 space-y-0.5 overflow-y-auto">{[...res.lessons].reverse().slice(0, 40).map((l, i) => (
-                  <div key={i} className="text-[11.5px] leading-snug"><span className="tabular-nums text-slate-400">{dt(l.t)}</span> <b className={l.on ? "text-rose-700" : "text-emerald-700"}>{l.on ? "Học" : "Gỡ"}</b> {l.label} <span className="text-slate-400">({l.n} lệnh, {rr(l.exp)}){l.from ? ` · từ lệnh thua ${l.from}` : ""}</span></div>
-                ))}</div>
-              </div>
-            </div>
-          </Card>
-        )}
+        <Card className="!p-3">
+          <Title icon={Info}>Nhận xét tự động · {isBase ? "luật gốc" : "bot tự tối ưu"}</Title>
+          <div className="grid gap-x-6 gap-y-1.5 text-[12px] leading-snug text-slate-600 md:grid-cols-2">
+            {all.n < 100 && <div>• Mới {all.n} lệnh đã đóng — cần ≥ 100 lệnh để tỉ lệ thắng đáng tin.</div>}
+            <div>• Hoà vốn ở R:R 2 cần thắng ≥ <b>33%</b>, R:R 3 cần ≥ <b>25%</b>; hiện {all.winRate?.toFixed(0) ?? "—"}% với payoff {f2(all.payoff)}.</div>
+            <div>• Phí + trượt giá ăn TB <b>{f2(all.feeR)}R</b>/lệnh{all.feeR > 0.2 ? " — lớn (SL sát ở khung nhỏ), nên ưu tiên H1/H4." : "."}</div>
+            {all.mfeLoss != null && <div>• Lệnh thua từng lời TB <b>{rr(all.mfeLoss)}</b> trước khi quay đầu{all.mfeLoss >= 0.8 ? " — nhiều lệnh đã gần đúng hướng, chốt sớm/dời hoà vốn sớm có thể cứu." : " — phần lớn sai hướng ngay từ đầu, cần lọc điểm vào chặt hơn."}</div>}
+            {(() => { const segs = [...by("tf", cfg.tfs, (x) => TFS[x].label), ...by("setup", cfg.setups, setupName), ...by("coin", cfg.coins)].filter(([, s]) => s.n >= 10).sort((a, b) => b[1].avgR - a[1].avgR); return segs.length ? <><div>• Tốt nhất: <b className="text-emerald-700">{segs[0][0]}</b> ({rr(segs[0][1].avgR)}/lệnh, {segs[0][1].n} lệnh)</div><div>• Kém nhất: <b className="text-rose-700">{segs[segs.length - 1][0]}</b> ({rr(segs[segs.length - 1][1].avgR)}/lệnh)</div></> : null; })()}
+            {Object.keys(res.skipped).length > 0 && <div className="text-slate-400">• Luật bỏ qua: {Object.entries(res.skipped).map(([k, v]) => `${v} tín hiệu ${k.toLowerCase()}`).join(", ")}.</div>}
+          </div>
+        </Card>
+
+        <Card className="!p-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatTable title="Theo setup" rows={by("setup", cfg.setups, setupName)} />
+            <StatTable title="Theo cặp" rows={by("coin", cfg.coins)} />
+            <StatTable title="Theo khung giờ" rows={by("tf", cfg.tfs, (x) => TFS[x].label)} />
+            <StatTable title="Theo hướng" rows={[["Long", longS], ["Short", shortS]]} />
+          </div>
+        </Card>
 
         <Card className="!p-3">
           <Title icon={Activity}>So sánh khung giờ — khung nào hiệu quả nhất</Title>
@@ -468,6 +589,53 @@ export default function CoinBot() {
           </div>
           <div className="mt-1.5 text-[11px] leading-snug text-slate-400">Lãi/lỗ gốc = mọi tín hiệu của khung theo luật gốc trong danh mục. "Bot hiện tại" = kỳ vọng {cfg.lookback * 3} lệnh gần nhất của cả khung; âm thì bot tự nghỉ khung đó tới khi hồi lại.</div>
         </Card>
+
+        {rawOld && (() => {
+          const o = finalize(rawOld, null), so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
+          const cols = [["Bot (luật mới + tối ưu)", sa, res.portfolio, "text-violet-700"], ["Luật mới (cố định)", sb, res.basePortfolio, "text-emerald-700"], ["Bản cũ (chưa lọc vào đẹp)", so, o.basePortfolio, "text-slate-500"]].filter((c, i) => i || cfg.adaptive);
+          return (
+            <Card className="!p-3">
+              <Title icon={Activity}>Luật vào đẹp có hiệu quả không? (cùng phiên, cùng dữ liệu)</Title>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-[12px]">
+                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" />{cols.map(([l, , , c]) => <th key={l} className={`py-1.5 pr-2 text-right ${c}`}>{l}</th>)}</tr></thead>
+                  <tbody>{[
+                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${s.winRate.toFixed(1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
+                    ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${P.maxDD.toFixed(1)}%`],
+                  ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+              <div className="mt-1.5 text-[11px] text-slate-400">Bản cũ = cùng tín hiệu, cùng lệnh chờ nhưng không kiểm tra đuổi giá / SL sát / Key Volume / volume nến tín hiệu / engulfing. {Object.entries(res.skipped).filter(([k]) => /đuổi|sát|không về|volume|engulf|D1/i.test(k)).map(([k, v]) => `${v} tín hiệu bị bỏ vì ${k}`).join(" · ")}</div>
+            </Card>
+          );
+        })()}
+        </>)}
+
+        {tab === "opt" && (<>
+        {cfg.adaptive && cfg.learnLoss && (
+          <Card className="!p-3">
+            <Title icon={Brain}>Rút kinh nghiệm từ lệnh thua</Title>
+            {(() => {
+              const m = res.metaNow || {}, line = (x, name) => !x ? null : x.mb == null
+                ? <div className="text-[12px] text-slate-500">• {name}: <b>đang thu thập</b> ({x.b || 0} tín hiệu bị chặn, cần ≥ {cfg.lessonMin} để kiểm chứng)</div>
+                : <div className={`text-[12px] ${x.ok ? "text-emerald-700" : "text-amber-700"}`}>• {name}: <b>{x.ok ? "ĐANG ÁP DỤNG" : "CHỈ QUAN SÁT"}</b> — tín hiệu bị chặn TB <b>{rr(x.mb)}</b> so với tín hiệu được vào <b>{rr(x.mk)}</b> ({x.b} lệnh gần nhất){x.ok ? " → chặn đúng, giúp giảm lỗ." : " → chặn chưa đúng (lệnh bị chặn lại tốt hơn), nên chưa dùng để chặn."}</div>;
+              return <div className="space-y-1 rounded-lg bg-slate-50 p-2.5">{line(m.lesson, "Bài học từ lệnh thua")}{line(m.opt, "Bộ tối ưu (tắt ô / nghỉ khung)")}
+                <div className="text-[11px] text-slate-400">Mỗi lệnh thua, hệ thống xem đặc điểm của lệnh (ADX, biến động, khoảng cách EMA50, độ rộng SL, phiên, hướng, độ dốc EMA50, thân nến…). Đặc điểm nào {cfg.lessonN} lệnh gần nhất thua rõ (≤ −0,2R) thành bài học. Bài học chỉ được dùng để chặn khi chính nó chứng minh được là đúng.</div></div>;
+            })()}
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Bài học hiện có ({res.lessonsActive.length})</div>
+                {res.lessonsActive.length ? <div className="space-y-0.5">{res.lessonsActive.map((l) => <div key={l.k} className="flex items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{l.label}</span><span className="shrink-0 tabular-nums text-slate-400">{l.n} lệnh · thắng {l.win?.toFixed(0)}%</span><span className={`shrink-0 font-bold tabular-nums ${tone(l.exp)}`}>{rr(l.exp)}</span></div>)}</div> : <div className="text-[12px] text-slate-400">Chưa có đặc điểm nào thua rõ rệt.</div>}
+              </div>
+              <div>
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Nhật ký học ({res.lessons.length})</div>
+                <div className="max-h-44 space-y-0.5 overflow-y-auto">{[...res.lessons].reverse().slice(0, 40).map((l, i) => (
+                  <div key={i} className="text-[11.5px] leading-snug"><span className="tabular-nums text-slate-400">{dt(l.t)}</span> <b className={l.on ? "text-rose-700" : "text-emerald-700"}>{l.on ? "Học" : "Gỡ"}</b> {l.label} <span className="text-slate-400">({l.n} lệnh, {rr(l.exp)}){l.from ? ` · từ lệnh thua ${l.from}` : ""}</span></div>
+                ))}</div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {cfg.adaptive && (
           <div className="grid gap-3 xl:grid-cols-3">
@@ -524,56 +692,8 @@ export default function CoinBot() {
             </Card>
           </div>
         )}
-
-        <Card className="!p-3">
-          <Title icon={Info}>Nhận xét tự động · {isBase ? "luật gốc" : "bot tự tối ưu"}</Title>
-          <div className="grid gap-x-6 gap-y-1.5 text-[12px] leading-snug text-slate-600 md:grid-cols-2">
-            {all.n < 100 && <div>• Mới {all.n} lệnh đã đóng — cần ≥ 100 lệnh để tỉ lệ thắng đáng tin.</div>}
-            <div>• Hoà vốn ở R:R 2 cần thắng ≥ <b>33%</b>, R:R 3 cần ≥ <b>25%</b>; hiện {all.winRate?.toFixed(0) ?? "—"}% với payoff {f2(all.payoff)}.</div>
-            <div>• Phí + trượt giá ăn TB <b>{f2(all.feeR)}R</b>/lệnh{all.feeR > 0.2 ? " — lớn (SL sát ở khung nhỏ), nên ưu tiên H1/H4." : "."}</div>
-            {all.mfeLoss != null && <div>• Lệnh thua từng lời TB <b>{rr(all.mfeLoss)}</b> trước khi quay đầu{all.mfeLoss >= 0.8 ? " — nhiều lệnh đã gần đúng hướng, chốt sớm/dời hoà vốn sớm có thể cứu." : " — phần lớn sai hướng ngay từ đầu, cần lọc điểm vào chặt hơn."}</div>}
-            {(() => { const segs = [...by("tf", cfg.tfs, (x) => TFS[x].label), ...by("setup", cfg.setups, setupName), ...by("coin", cfg.coins)].filter(([, s]) => s.n >= 10).sort((a, b) => b[1].avgR - a[1].avgR); return segs.length ? <><div>• Tốt nhất: <b className="text-emerald-700">{segs[0][0]}</b> ({rr(segs[0][1].avgR)}/lệnh, {segs[0][1].n} lệnh)</div><div>• Kém nhất: <b className="text-rose-700">{segs[segs.length - 1][0]}</b> ({rr(segs[segs.length - 1][1].avgR)}/lệnh)</div></> : null; })()}
-            {Object.keys(res.skipped).length > 0 && <div className="text-slate-400">• Luật bỏ qua: {Object.entries(res.skipped).map(([k, v]) => `${v} tín hiệu ${k.toLowerCase()}`).join(", ")}.</div>}
-          </div>
-        </Card>
-
-        <Card className="!p-3">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatTable title="Theo setup" rows={by("setup", cfg.setups, setupName)} />
-            <StatTable title="Theo cặp" rows={by("coin", cfg.coins)} />
-            <StatTable title="Theo khung giờ" rows={by("tf", cfg.tfs, (x) => TFS[x].label)} />
-            <StatTable title="Theo hướng" rows={[["Long", longS], ["Short", shortS]]} />
-          </div>
-        </Card>
-
-        <Card className="!p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Nhật ký lệnh</span>
-            {[["all", "Đã vào"], ["win", "Thắng"], ["loss", "Thua"], ["open", "Đang mở"], ["skip", "Bị bỏ (danh mục)"], ...(cfg.adaptive && !isBase ? [["reject", "Bị tối ưu loại"]] : [])].map(([k, l]) => <button key={k} onClick={() => { setFilter(k); setShowN(40); }} className={`rounded-md px-2 py-1 text-[11px] font-bold ${filter === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>)}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-[12px]">
-              <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">
-                <th className="py-1.5 pr-2">Vào lúc</th><th className="py-1.5 pr-2">Cặp</th><th className="py-1.5 pr-2">Setup</th><th className="py-1.5 pr-2 text-right">Vào</th><th className="py-1.5 pr-2 text-right">SL</th><th className="py-1.5 pr-2 text-right">TP</th><th className="py-1.5 pr-2">Kết thúc</th><th className="py-1.5 pr-2 text-right">R</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ</th><th className="py-1.5">Rút kinh nghiệm / tối ưu</th>
-              </tr></thead>
-              <tbody>{taken.slice(0, showN).map((t) => (
-                <tr key={t.id} className={`border-b border-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""}`}>
-                  <td className="py-1.5 pr-2 tabular-nums text-slate-500">{dt(t.entryAt)}</td>
-                  <td className="py-1.5 pr-2"><span className={`mr-1 font-extrabold ${t.side === 1 ? "text-emerald-600" : "text-rose-600"}`}>{t.side === 1 ? "▲" : "▼"}</span><b>{t.coin}</b> <span className="text-slate-400">{TFS[t.tf].label}</span></td>
-                  <td className="py-1.5 pr-2 text-slate-600" title={t.note}>{setupName(t.setup)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{px(t.entry)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-rose-500">{px(t.sl)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums text-emerald-600">{px(t.tp)}</td>
-                  <td className="py-1.5 pr-2 text-slate-500">{t.status === "skip" ? <span className="text-slate-400">bỏ: {t.why}</span> : t.status === "reject" ? <span className="text-slate-400">loại · nếu vào: {t.reason}</span> : <>{t.reason}{t.liveExit ? <span className="font-bold text-amber-600"> · realtime</span> : ""}{t.exitAt ? <span className="text-slate-400"> · {dt(t.exitAt)}</span> : ""}</>}</td>
-                  <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${t.status === "reject" ? "text-slate-400" : tone(t.r ?? t.uR)}`}>{rr(t.r ?? t.uR)}</td>
-                  <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(t.pnl)}`}>{t.status === "skip" || t.status === "reject" ? "—" : usd(t.pnl)}</td>
-                  <td className="max-w-[320px] py-1.5 text-[11px] leading-snug text-slate-400">{t.lesson ? <span className="text-rose-700/80">{t.lesson}</span> : t.score ? (t.score.level < 0 ? "chưa đủ mẫu" : <><span className={tone(t.score.exp)}>{rr(t.score.exp)}</span>/{t.score.n} · {t.score.variant}</>) : "—"}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-          {taken.length > showN && <button onClick={() => setShowN((n) => n + 100)} className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-slate-50 py-2 text-[12px] font-bold text-slate-500"><ChevronDown size={14} /> Xem thêm ({taken.length - showN})</button>}
-        </Card>
+        {!cfg.adaptive && <Card><div className="text-[12px] text-slate-500">Phiên này tắt tự tối ưu.</div></Card>}
+        </>)}
 
         <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
           <ShieldAlert size={13} className="mt-0.5 shrink-0" />
