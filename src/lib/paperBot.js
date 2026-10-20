@@ -17,23 +17,28 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 2,
+  cfgVer: 3,
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
+  maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
   partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
   // Tự tối ưu: học thêm 90 ngày trước ngày bắt đầu; xét 60 lệnh gần nhất, cần ≥20 mẫu; điểm thận trọng = kỳ vọng − 1×sai số chuẩn ≥ 0 mới vào;
   // cổng khung giờ: cả khung đang âm thì nghỉ khung đó. Kiểm tra 30–150 ngày: vốn giữ 959–1.073$ trong khi luật gốc còn 530–813$.
-  adaptive: true, warmupDays: 90, lookback: 60, minSample: 20, minExp: 0, confK: 1, tfGate: true,
+  adaptive: true, warmupDays: 90, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
   htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h", "4h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"],
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V3_KEYS = ["maxExtAtr", "minSlAtr", "limitAt", "fillBars", "entryMode", "minExp", "confK"];
 const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
 export const MIN_RR = 1.5; // luật của Quang: R:R tối thiểu 1:1,5 — mọi mức chốt lời (kể cả chốt 1 nửa) không thấp hơn
 export function cfgOf(session) {
   const c = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
-  if ((session?.cfg?.cfgVer || 1) < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
+  const ver = session?.cfg?.cfgVer || 1;
+  if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
+  c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
   c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
   if (c.partialAtR > 0 && c.partialAtR < MIN_RR) c.partialAtR = MIN_RR;
   return c;
@@ -169,20 +174,24 @@ function findSignals(K, setups) {
       }
     }
   }
-  return { sig, atr };
+  return { sig, atr, e50 };
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
-function simTrade(K, s, cfg, atr, endIdx) {
+function simTrade(K, s, cfg, atr, endIdx, e50) {
   const e0 = s.i + 1; if (e0 > endIdx) return null; // chưa có nến để vào
   const slip = cfg.slipPct / 100, side = s.side, a = atr[s.i];
   const limit = cfg.entryMode === "limit", maker = (cfg.makerPct ?? 0.02) / 100, taker = cfg.feePct / 100;
   // Vào lệnh: thị trường ở giá mở nến kế (trả phí taker + trượt) · hoặc LỆNH CHỜ ở giá đóng nến tín hiệu, chờ tối đa 3 nến (phí maker, không trượt)
   let e = e0, entry = K[e0][1] * (1 + side * slip);
   if (limit) {
-    const lim = K[s.i][4]; e = -1;
-    for (let k = e0; k <= Math.min(endIdx, e0 + 2); k++) if ((side === 1 ? K[k][3] < lim : K[k][2] > lim)) { e = k; break; } // giá phải xuyên qua (không chỉ chạm) mới tính khớp — thận trọng về hàng chờ
-    if (e < 0) return e0 + 2 <= endIdx ? { skip: "lệnh chờ không khớp" } : null;
+    // Điểm vào đẹp: "close" = giá đóng nến tín hiệu · "mid" = hồi 50% thân nến tín hiệu (giá tốt hơn, khó khớp hơn)
+    const [, so, , , sc] = K[s.i], lim = cfg.limitAt === "mid" ? (so + sc) / 2 : sc, win = Math.max(1, cfg.fillBars || 3); e = -1;
+    // Luật vào đẹp (biết trước khi đặt lệnh): không đuổi giá xa EMA50, SL không quá sát vùng nhiễu
+    if (cfg.maxExtAtr > 0 && e50 && Math.abs(lim - e50[s.i]) / a > cfg.maxExtAtr) return { skip: `đuổi giá (xa EMA50 > ${cfg.maxExtAtr} ATR)` };
+    if (cfg.minSlAtr > 0 && ((lim - s.sl) * side) / a < cfg.minSlAtr && ((lim - s.sl) * side) > 0) return { skip: `SL sát < ${cfg.minSlAtr} ATR` };
+    for (let k = e0; k <= Math.min(endIdx, e0 + win - 1); k++) if ((side === 1 ? K[k][3] < lim : K[k][2] > lim)) { e = k; break; } // giá phải xuyên qua (không chỉ chạm) mới tính khớp — thận trọng về hàng chờ
+    if (e < 0) return e0 + win - 1 <= endIdx ? { skip: "giá không về điểm vào" } : { pending: { side, lim, sl: s.sl, until: K[e0][0] + win * (K[e0][0] - K[s.i][0]) } };
     entry = lim;
   }
   const risk = (entry - s.sl) * side;
@@ -228,7 +237,7 @@ export async function runSession(session, onProgress = () => {}) {
   const until = session.stoppedAt || Date.now(), startAt = session.startAt;
   const learnFrom = cfg.adaptive ? startAt - cfg.warmupDays * 86400000 : startAt;
   const V = variantsOf(cfg), baseVi = V.findIndex((v) => v.rr === cfg.rr && v.beAtR === cfg.beAtR);
-  const skipped = {}, streams = [], shadows = [];
+  const skipped = {}, streams = [], shadows = [], pending = [];
   const bump = (k, n = 1) => { if (n) skipped[k] = (skipped[k] || 0) + n; };
   // tải song song mọi cặp × khung (kể cả khung lớn để lọc) — lần sau chỉ tải phần nến mới
   const need = new Map();
@@ -257,8 +266,9 @@ export async function runSession(session, onProgress = () => {}) {
     }
     const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
-      const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx));
+      const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50));
       if (!sims[0]) continue;
+      if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], ...sims[0].pending }); continue; }
       if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
       const entryAt = K[sims[0].entryIdx][0];
       const build = (vi, extra) => {
@@ -327,7 +337,7 @@ export async function runSession(session, onProgress = () => {}) {
     .sort((a, b) => (b.take - a.take) || ((b.exp ?? -9) - (a.exp ?? -9)));
 
   const tfState = cfg.tfs.map((tf) => ({ tf, ...(tfExp(tf, until) || { exp: null, n: 0 }), pause: cfg.tfGate && (tfExp(tf, until)?.exp ?? 0) < 0 }));
-  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
 }
 
 // Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.

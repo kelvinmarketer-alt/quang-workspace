@@ -79,9 +79,10 @@ function SetupForm({ initial, onStart, onCancel }) {
           {field("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}{field("rr", `Chốt lời gốc (R:R ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}{field("beAtR", "Dời hoà vốn ở (0=tắt)", 0.5, "R")}{field("feePct", "Phí mỗi chiều", 0.01, "%")}
           {field("maxFeeR", "Bỏ lệnh khi phí > (0=tắt)", 0.05, "R")}
         </div>
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cách vào lệnh</div>
-          <div className="flex flex-wrap gap-1.5">{[["limit", "Lệnh chờ ở giá đóng nến (maker 0,02%)"], ["market", "Giá thị trường nến kế (taker 0,05% + trượt)"]].map(([k, l]) => <button key={k} onClick={() => setC({ ...c, entryMode: k })} className={chip(c.entryMode === k)}>{l}</button>)}</div>
-          <div className="mt-1 text-[11px] text-slate-400">Lệnh chờ chỉ khớp khi giá xuyên qua mức đặt trong 3 nến, không khớp thì huỷ. Kiểm tra 180 ngày: lỗ TB giảm từ −0,23R xuống −0,11R/lệnh.</div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
+          <div className="text-[13px] font-extrabold text-emerald-800">Chỉ vào LỆNH CHỜ (limit) — đúng điểm đẹp mới vào, không thì bỏ</div>
+          <div className="mt-1 text-[11.5px] leading-snug text-emerald-900/70">Đặt lệnh chờ ở giá đóng nến tín hiệu (phí maker 0,02%, không trượt). Chỉ khớp khi giá <b>xuyên qua</b> mức đặt trong số nến chờ; hết hạn không khớp → huỷ. Trước khi đặt còn kiểm tra: <b>không đuổi giá</b> (giá vào không xa EMA50 quá N ATR) và <b>SL ngoài vùng nhiễu</b> (≥ N ATR). Kiểm tra 180 ngày: tỉ lệ thắng 35% → 44%, R TB −0,12 → +0,13.</div>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("maxExtAtr", "Không đuổi: xa EMA50 ≤ (0=tắt)", 0.5, "ATR")}{field("minSlAtr", "SL tối thiểu (0=tắt)", 0.5, "ATR")}{field("fillBars", "Chờ khớp tối đa", 1, "nến")}</div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", `Chốt 50% ở (0=tắt, ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}</div>
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700"><input type="checkbox" checked={c.htfFilter} onChange={(e) => setC({ ...c, htfFilter: e.target.checked })} /> Chỉ đánh thuận xu hướng khung lớn (đa khung — luật cốt lõi)</label>
@@ -150,6 +151,7 @@ export default function CoinBot() {
   const { settings = {}, setSettings, isOwner } = useData();
   const session = settings.paperBot || null;
   const [raw, setRaw] = useState(null);
+  const [rawOld, setRawOld] = useState(null); // bản cũ: cùng phiên nhưng chưa có luật vào đẹp — để so sánh
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [config, setConfig] = useState(false);
@@ -165,13 +167,17 @@ export default function CoinBot() {
   const run = async () => {
     if (!session || running.current) return;
     running.current = true; setErr("");
-    try { setRaw(await runSession(session, (m) => setBusy(m))); lastRun.current = Date.now(); }
+    try {
+      setRaw(await runSession(session, (m) => setBusy(m))); lastRun.current = Date.now();
+      const c0 = cfgOf(session);
+      if (c0.maxExtAtr > 0 || c0.minSlAtr > 0) setRawOld(await runSession({ ...session, cfg: { ...c0, maxExtAtr: 0, minSlAtr: 0 } })); else setRawOld(null);
+    }
     catch (e) { setErr(e.message || String(e)); }
     running.current = false; setBusy("");
   };
   const { live, shown, ver, status } = useLive(active, cfg.coins, cfg.tfs, () => { clearTimeout(debounce.current); debounce.current = setTimeout(run, 2500); });
 
-  useEffect(() => { setRaw(null); hits.current = new Map(); prevSt.current = null; if (session) run(); /* eslint-disable-next-line */ }, [session?.createdAt, session?.stoppedAt]);
+  useEffect(() => { setRaw(null); setRawOld(null); hits.current = new Map(); prevSt.current = null; if (session) run(); /* eslint-disable-next-line */ }, [session?.createdAt, session?.stoppedAt]);
   // Dự phòng khi mất WebSocket: mỗi phút xét nến mới (đang có realtime thì 5 phút/lần)
   useEffect(() => {
     if (!active) return undefined;
@@ -248,7 +254,7 @@ export default function CoinBot() {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · {cfg.entryMode === "limit" ? "vào lệnh chờ" : "vào giá thị trường"} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
         </div>
@@ -353,6 +359,40 @@ export default function CoinBot() {
             })}</div>
           </Card>
         )}
+
+        {res.pending?.length > 0 && active && (
+          <Card className="!p-3">
+            <Title>Lệnh chờ đang đặt ({res.pending.length}) · khớp khi giá xuyên qua, hết hạn thì huỷ</Title>
+            <div className="space-y-1">{res.pending.map((p) => { const cur = live.current[`px|${p.coin}`], d = cur ? ((cur - p.lim) / p.lim) * 100 * p.side : null; return (
+              <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
+                {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
+                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · SL {px(p.sl)}</span>
+                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {Math.max(0, d).toFixed(2)}%</span>}
+                <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+              </div>
+            ); })}</div>
+          </Card>
+        )}
+
+        {rawOld && (() => {
+          const o = finalize(rawOld, null), so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
+          const cols = [["Bot (luật mới + tối ưu)", sa, res.portfolio, "text-violet-700"], ["Luật mới (cố định)", sb, res.basePortfolio, "text-emerald-700"], ["Bản cũ (chưa lọc vào đẹp)", so, o.basePortfolio, "text-slate-500"]].filter((c, i) => i || cfg.adaptive);
+          return (
+            <Card className="!p-3">
+              <Title icon={Activity}>Luật vào đẹp có hiệu quả không? (cùng phiên, cùng dữ liệu)</Title>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-[12px]">
+                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" />{cols.map(([l, , , c]) => <th key={l} className={`py-1.5 pr-2 text-right ${c}`}>{l}</th>)}</tr></thead>
+                  <tbody>{[
+                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${s.winRate.toFixed(1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
+                    ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${P.maxDD.toFixed(1)}%`],
+                  ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
+                </table>
+              </div>
+              <div className="mt-1.5 text-[11px] text-slate-400">Bản cũ = cùng tín hiệu, cùng lệnh chờ nhưng không kiểm tra đuổi giá / SL sát. {Object.entries(res.skipped).filter(([k]) => /đuổi|sát|không về/.test(k)).map(([k, v]) => `${v} tín hiệu bị bỏ vì ${k}`).join(" · ")}</div>
+            </Card>
+          );
+        })()}
 
         <Card className="!p-3">
           <Title icon={Activity}>So sánh khung giờ — khung nào hiệu quả nhất</Title>
@@ -491,7 +531,7 @@ export default function CoinBot() {
 
         <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
           <ShieldAlert size={13} className="mt-0.5 shrink-0" />
-          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, vào bằng lệnh chờ ở giá đóng nến tín hiệu (chỉ khớp khi giá xuyên qua) hoặc giá mở nến kế tiếp, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát, có phí + trượt giá. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
+          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, chỉ vào lệnh chờ ở giá đóng nến tín hiệu (khớp khi giá xuyên qua, hết hạn thì huỷ), không đuổi giá, SL ngoài vùng nhiễu, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát, có phí + trượt giá. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
         </div>
       </>)}
     </div>
