@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
-import { Receipt, Layers, Tag, Tags, ArrowUp, ArrowDown, PiggyBank, Wallet, Sparkles, Plus, Check, X } from "lucide-react";
+import { Receipt, Layers, Tag, Tags, ArrowUp, ArrowDown, PiggyBank, Wallet, Sparkles, Plus, Check, X, ChevronDown } from "lucide-react";
 import { Card, SectionTitle, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { fundSpends } from "../lib/selectors.js";
@@ -163,9 +163,16 @@ function CategorizeModal({ rows, funds, cats, onAddCat, onSave, onClose }) {
 export default function FundStats() {
   const { fundTx, funds, spendCats, addSpendCat, categorizeFundTx } = useData();
   const now = new Date();
-  const [preset, setPreset] = useState("thisMonth");
-  const [cf, setCf] = useState(iso(new Date(now.getFullYear(), now.getMonth(), 1)));
-  const [ct, setCt] = useState(iso(now));
+  // Kỳ đang xem — nhớ localStorage (mặc định "Tháng này"); kỳ Tùy chọn nhớ luôn ngày từ/đến
+  const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem("qws_fstats_period") || "{}") || {}; } catch { return {}; } }, []);
+  const [preset, setPreset0] = useState(() => (PRESETS.some(([k]) => k === saved.preset) ? saved.preset : "thisMonth"));
+  const [cf, setCf0] = useState(saved.cf || iso(new Date(now.getFullYear(), now.getMonth(), 1)));
+  const [ct, setCt0] = useState(saved.ct || iso(now));
+  const persist = (patch) => { try { localStorage.setItem("qws_fstats_period", JSON.stringify({ preset, cf, ct, ...patch })); } catch {} };
+  const setPreset = (v) => { setPreset0(v); persist({ preset: v }); };
+  const setCf = (v) => { setCf0(v); persist({ cf: v }); };
+  const setCt = (v) => { setCt0(v); persist({ ct: v }); };
+  const [openCat, setOpenCat] = useState(null); // danh mục đang xổ danh sách giao dịch
   const [compare, setCompare] = useState(true);
   const [fundId, setFundId] = useState("all");
 
@@ -295,13 +302,31 @@ export default function FundStats() {
                 <div className="space-y-2.5">
                   {byCat.map((c) => {
                     const pct = total ? Math.round((c.amount / total) * 100) : 0;
+                    const open = openCat === c.cat;
+                    // Bấm 1 danh mục → xổ các giao dịch của danh mục đó trong kỳ đang xem
+                    const txs = open ? inPeriod.filter((t) => (t.cat || UNCAT) === c.cat).sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount) : [];
                     return (
-                      <div key={c.cat}>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2 font-semibold text-slate-700"><span className={`h-2.5 w-2.5 rounded-full ${TONE_BG[catColor(c.cat)] || "bg-slate-400"}`} />{c.cat} <span className="text-[11px] font-medium text-slate-400">· {c.count} lần</span></span>
-                          <span className="font-bold text-slate-800">{formatShort(c.amount)} <span className="font-medium text-slate-400">· {pct}%</span></span>
-                        </div>
-                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${TONE_BG[catColor(c.cat)] || "bg-slate-400"}`} style={{ width: pct + "%" }} /></div>
+                      <div key={c.cat} className={`-mx-2 rounded-xl px-2 ${open ? "bg-slate-50 pb-2" : ""}`}>
+                        <button onClick={() => setOpenCat(open ? null : c.cat)} className="block w-full py-1 text-left" aria-expanded={open}>
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span className="flex min-w-0 items-center gap-2 font-semibold text-slate-700"><ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} /><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE_BG[catColor(c.cat)] || "bg-slate-400"}`} /><span className="truncate">{c.cat}</span> <span className="shrink-0 text-[11px] font-medium text-slate-400">· {c.count} lần</span></span>
+                            <span className="shrink-0 font-bold text-slate-800">{formatShort(c.amount)} <span className="font-medium text-slate-400">· {pct}%</span></span>
+                          </div>
+                          <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${TONE_BG[catColor(c.cat)] || "bg-slate-400"}`} style={{ width: pct + "%" }} /></div>
+                        </button>
+                        {open && (
+                          <div className="mt-1.5 divide-y divide-slate-100 rounded-lg bg-white ring-1 ring-slate-100">
+                            {txs.map((t) => (
+                              <div key={t.id} className="flex items-center gap-2.5 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-[13px] font-semibold text-slate-700">{t.note || "(không ghi chú)"}</div>
+                                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400"><span>{fmtDateVI(t.date)}</span><span className={`h-1.5 w-1.5 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate">{fundName(t.fundId)}</span></div>
+                                </div>
+                                <span className="shrink-0 text-[13px] font-extrabold tabular-nums text-rose-600">−{formatVND(t.amount)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

@@ -72,7 +72,8 @@ export async function loadAccountAds(accountId, since, until) {
   const tr = JSON.stringify({ since, until });
   const FIELDS = `id,name,effective_status,created_time,campaign{name,objective},adset{name,daily_budget,lifetime_budget,optimization_goal},creative{thumbnail_url,image_url,body,title,object_type,call_to_action_type,effective_object_story_id,instagram_permalink_url},insights.time_range(${tr}){spend,impressions,reach,frequency,ctr,cpc,cpm,clicks,actions,video_thruplay_watched_actions}`;
   // id các QC có tiêu tiền trong kỳ
-  const spentRows = await actGet(accountId, "insights", { level: "ad", fields: "ad_id,spend", time_range: tr, filtering: [{ field: "spend", operator: "GREATER_THAN", value: 0 }], limit: "300" }).then((j) => j.data || []).catch(() => []);
+  let spentError = ""; // lỗi lấy chi tiêu → UI báo "Có chi tiêu trong kỳ" có thể thiếu (không im lặng = 0)
+  const spentRows = await actGet(accountId, "insights", { level: "ad", fields: "ad_id,spend", time_range: tr, filtering: [{ field: "spend", operator: "GREATER_THAN", value: 0 }], limit: "300" }).then((j) => j.data || []).catch((e) => { spentError = e.message || "Facebook lỗi"; return []; });
   const spentIds = spentRows.map((r) => r.ad_id);
   const [running, spent] = await Promise.all([
     actGet(accountId, "ads", { fields: FIELDS, effective_status: ["ACTIVE"], limit: "100" }).then((j) => j.data || []),
@@ -80,7 +81,7 @@ export async function loadAccountAds(accountId, since, until) {
   ]);
   const map = new Map();
   for (const a of [...running, ...spent]) map.set(a.id, a);
-  return [...map.values()].map((a) => {
+  const out = [...map.values()].map((a) => {
     const i = a.insights?.data?.[0] || {};
     const msgs = act(i, MSG), leads = act(i, "lead", "onsite_conversion.lead_grouped"), results = msgs + leads, spend = num(i.spend);
     const c = a.creative || {};
@@ -98,4 +99,6 @@ export async function loadAccountAds(accountId, since, until) {
       pageLikes: act(i, "like"), video3s: act(i, "video_view"),
     }, goal);
   }).sort((x, y) => (y.running - x.running) || y.spend - x.spend);
+  if (spentError) out.spentError = spentError;
+  return out;
 }

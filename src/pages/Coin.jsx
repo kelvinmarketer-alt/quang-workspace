@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -6,15 +6,37 @@ import { supabase } from "../lib/supabase.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
-const n = (v) => Number(String(v ?? "").replace(/[^\d.\-]/g, "")) || 0;
+// Đọc số kiểu VN: phẩy = thập phân ("0,5"); chấm + đúng 3 số = phân cách nghìn ("60.000", "1.234.567");
+// 1 dấu chấm còn lại = thập phân ("0.5", "81234.5"); có cả 2 loại → dấu xuất hiện sau cùng là thập phân
+const n = (v) => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  let s = String(v ?? "").replace(/\s/g, "").replace(/[^\d.,\-]/g, "");
+  const neg = s.startsWith("-"); s = s.replace(/-/g, "");
+  if (!s) return 0;
+  const lc = s.lastIndexOf(","), ld = s.lastIndexOf(".");
+  if (lc >= 0 && ld >= 0) s = lc > ld ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if (lc >= 0) s = (s.match(/,/g).length > 1 ? s.replace(/,/g, "") : s.replace(",", "."));
+  else if (ld >= 0) {
+    const parts = s.split(".");
+    const thousands = parts.slice(1).every((p) => p.length === 3) && !/^0*$/.test(parts[0]);
+    s = thousands ? parts.join("") : parts.slice(0, -1).join("") + "." + parts[parts.length - 1];
+  }
+  const x = Number(s);
+  return Number.isFinite(x) ? (neg ? -x : x) : 0;
+};
+const viNum = (x) => Number(x || 0).toLocaleString("vi-VN", { maximumFractionDigits: 10 });
+// Số đã lưu → chuỗi để sửa (phẩy thập phân, không nhóm nghìn) — tránh "1234.567" bị đọc thành 1.234.567
+const toInput = (x) => (x === "" || x == null ? "" : typeof x === "number" ? x.toLocaleString("vi-VN", { useGrouping: false, maximumFractionDigits: 12 }) : x);
 const fmtUSD = (v) => (v == null ? "—" : (Math.abs(v) >= 1 ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : v.toPrecision(4)) + " $");
 const fmtVND = (v) => (Math.round(Number(v) || 0)).toLocaleString("vi-VN") + "đ";
 const pair = (s) => (s || "").toUpperCase().replace(/USDT$/, "") + "USDT";
 const qtyFmt = (q) => Number(q || 0).toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 function CoinModal({ initial, onClose, onSave }) {
-  const [f, setF] = useState(initial);
+  const [f, setF] = useState(() => ({ ...initial, qty: toInput(initial.qty), buyPrice: toInput(initial.buyPrice ?? initial.avgCost) })); // dòng danh mục chỉ có avgCost
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  // Hiện số sẽ lưu ngay dưới ô để user thấy app hiểu đúng
+  const hint = (raw) => (String(raw ?? "").trim() ? <span className="mt-1 block text-[11px] font-semibold text-slate-400">= {viNum(n(raw))}</span> : null);
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
@@ -25,10 +47,10 @@ function CoinModal({ initial, onClose, onSave }) {
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Mã coin *</span><input value={f.symbol} onChange={set("symbol")} autoFocus className={`${inputCls} uppercase`} placeholder="BTC, ETH, SOL…" /></label>
         <div className="mb-4 grid grid-cols-2 gap-3">
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số lượng</span><input value={f.qty} onChange={set("qty")} inputMode="decimal" className={inputCls} placeholder="0.5" /></label>
-          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Giá vốn ($/coin)</span><input value={f.buyPrice} onChange={set("buyPrice")} inputMode="decimal" className={inputCls} placeholder="60000" /></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số lượng</span><input value={f.qty} onChange={set("qty")} inputMode="decimal" className={inputCls} placeholder="0,5" />{hint(f.qty)}</label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Giá vốn ($/coin)</span><input value={f.buyPrice} onChange={set("buyPrice")} inputMode="decimal" className={inputCls} placeholder="60.000" />{hint(f.buyPrice)}</label>
         </div>
-        <button onClick={() => { if ((f.symbol || "").trim()) { onSave({ ...f, symbol: f.symbol.trim().toUpperCase(), qty: n(f.qty), buyPrice: n(f.buyPrice) }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-500/30">Lưu</button>
+        <button onClick={() => { if ((f.symbol || "").trim()) { onSave({ symbol: f.symbol.trim().toUpperCase(), qty: n(f.qty), buyPrice: n(f.buyPrice) }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-500/30">Lưu</button>
       </div>
     </div>
   );
@@ -41,7 +63,10 @@ const CoinBot = lazy(() => import("./CoinBot.jsx"));
 
 export default function Coin() {
   const [tab, setTab] = useState(() => { try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
-  const pick = (t) => { setTab(t); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
+  // Tab đã mở thì GIỮ mounted (ẩn bằng class hidden) → Demo tự động/Thị trường không phải tính lại khi quay lại
+  const [seen, setSeen] = useState(() => ({ [tab]: true }));
+  const pick = (t) => { setTab(t); setSeen((s) => (s[t] ? s : { ...s, [t]: true })); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
+  const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
     <div className="space-y-3 sm:space-y-4">
       <div className="grid grid-cols-3 gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl">
@@ -51,17 +76,16 @@ export default function Coin() {
           </button>
         ))}
       </div>
-      {tab === "invest" ? <CoinInvest /> : (
-        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>}>
-          {tab === "bot" ? <CoinBot /> : <CoinMarket />}
-        </Suspense>
-      )}
+      {seen.invest && <div className={tab === "invest" ? "" : "hidden"}><CoinInvest active={tab === "invest"} /></div>}
+      {seen.market && <div className={tab === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={tab === "market"} /></Suspense></div>}
+      {seen.bot && <div className={tab === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot /></Suspense></div>}
     </div>
   );
 }
 
-function CoinInvest() {
+function CoinInvest({ active = true }) {
   const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner } = useData();
+  const activeRef = useRef(active); activeRef.current = active; // tab ẩn → ngừng poll giá
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
   const [wallet, setWallet] = useState(null);
@@ -93,7 +117,7 @@ function CoinInvest() {
       setPrices(map);
     } catch { /* giữ giá cũ */ }
   };
-  useEffect(() => { loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey]);
+  useEffect(() => { if (!active) return; loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey, active]);
 
   // Đồng bộ ví Binance (số dư + giá vốn TB + đã nạp) — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm);
   // giá thị trường vẫn realtime 15s ở trên. Tạm dừng khi tab ẩn để đỡ tốn request.
@@ -111,7 +135,7 @@ function CoinInvest() {
   useEffect(() => {
     if (!isOwner) return;
     syncBinance();
-    const t = setInterval(() => { if (!document.hidden) syncBinance(true); }, 300000);
+    const t = setInterval(() => { if (!document.hidden && activeRef.current) syncBinance(true); }, 300000);
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [isOwner]);
 
@@ -170,11 +194,16 @@ function CoinInvest() {
         <div className="mt-3 text-[11px] text-amber-100/70">Tự cập nhật giá mỗi 15s · ví mỗi 5 phút · tỉ giá {Math.round(vnd).toLocaleString("vi-VN")}đ/$ (tự động)</div>
       </div>
 
-      {wErr && <div className="mx-3 flex items-center gap-2 rounded-xl bg-amber-50 sm:mx-0 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
+      {wErr && rows.length > 0 && <div className="mx-3 flex items-center gap-2 rounded-xl bg-amber-50 sm:mx-0 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
 
       {/* Danh sách coin */}
       {rows.length === 0 ? (
-        <Card><div className="py-12 text-center"><Coins size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">{isOwner ? "Đang tải ví Binance…" : "Chưa có coin"}</div><div className="mt-1 text-xs text-slate-400">{isOwner ? "Số dư & giá vốn tự đồng bộ từ Binance." : "Bạn chỉ có quyền xem."}</div></div></Card>
+        isOwner && wErr && !syncing ? (
+          // Đồng bộ lỗi → báo lỗi + nút thử lại thay vì kẹt "Đang tải…"
+          <Card><div className="py-10 text-center"><AlertTriangle size={28} className="mx-auto text-amber-400" /><div className="mt-2 text-sm font-bold text-slate-600">Không tải được ví Binance</div><div className="mx-auto mt-1 max-w-sm break-words text-xs text-slate-400">{wErr}</div><button onClick={() => { syncBinance(); loadPrices(); }} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-bold text-white shadow"><RefreshCw size={14} /> Thử lại</button></div></Card>
+        ) : (
+          <Card><div className="py-12 text-center"><Coins size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">{isOwner && (syncing || wallet == null) ? "Đang tải ví Binance…" : "Chưa có coin"}</div><div className="mt-1 text-xs text-slate-400">{isOwner ? "Số dư & giá vốn tự đồng bộ từ Binance." : "Bạn chỉ có quyền xem."}</div></div></Card>
+        )
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
@@ -193,8 +222,8 @@ function CoinInvest() {
                       <span className="truncate">SL {qtyFmt(r.qty)}</span>
                       {r.manual && canW && (
                         <>
-                          <button onClick={() => setModal(r)} className="-my-1.5 ml-1 shrink-0 rounded-lg p-2 text-slate-300 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
-                          <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-1.5 shrink-0 rounded-lg p-2 text-slate-300 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
+                          <button onClick={() => setModal(r)} className="-my-2 ml-1 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+                          <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-2 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
                         </>
                       )}
                     </div>
@@ -230,9 +259,9 @@ function CoinInvest() {
                     {r.manual && <Badge tone="slate">tay</Badge>}
                     {r.chg != null && <Badge tone={r.chg >= 0 ? "emerald" : "rose"}>{r.chg >= 0 ? "+" : ""}{r.chg.toFixed(1)}%</Badge>}
                     {r.manual && canW && (
-                      <span className="ml-auto flex gap-0.5">
-                        <button onClick={() => setModal(r)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                        <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
+                      <span className="-my-2 ml-auto flex gap-0.5">
+                        <button onClick={() => setModal(r)} className="rounded-lg p-2.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+                        <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
                       </span>
                     )}
                   </div>

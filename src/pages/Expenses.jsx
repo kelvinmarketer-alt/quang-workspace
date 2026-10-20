@@ -15,7 +15,11 @@ const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
   const [f, setF] = useState(initial || { name: "", category: EXPENSE_CATEGORIES[0], amount: "", date: todayISO(), recurring: "monthly", note: "", active: true });
   const [plan, setPlan] = useState(null); // đổi gói: null | { date, amount }
+  const [tried, setTried] = useState(false); // đã bấm Lưu khi còn thiếu → tô đỏ ô thiếu
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const miss = { name: !(f.name || "").trim(), amount: !num(f.amount) };
+  const ok = !miss.name && !miss.amount;
+  const errCls = (bad) => (tried && bad ? " !border-rose-400 bg-rose-50/40" : "");
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
@@ -25,12 +29,14 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khoản chi *</span>
-          <input value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus className={inputCls} placeholder="VD: ChatGPT Plus, Canva Pro, Hosting…" /></label>
+          <input value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus className={inputCls + errCls(miss.name)} placeholder="VD: ChatGPT Plus, Canva Pro, Hosting…" />
+          {tried && miss.name && <span className="mt-1 block text-[11px] font-semibold text-rose-600">Nhập tên khoản chi</span>}</label>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Danh mục</span>
             <select value={f.category} onChange={(e) => set("category", e.target.value)} className={inputCls}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
           <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số tiền</span>
-            <MoneyInput value={f.amount} onChange={(v) => set("amount", v)} className={inputCls} placeholder="500.000" /></label>
+            <MoneyInput value={f.amount} onChange={(v) => set("amount", v)} className={inputCls + errCls(miss.amount)} placeholder="500.000" />
+            {tried && miss.amount && <span className="mt-1 block text-[11px] font-semibold text-rose-600">Nhập số tiền &gt; 0</span>}</label>
         </div>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <div><span className="mb-1 block text-sm font-semibold text-slate-600">Chu kỳ</span>
@@ -73,7 +79,8 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
             )}
           </div>
         )}
-        <button onClick={() => { if (f.name.trim() && num(f.amount)) { onSave({ ...f, name: f.name.trim(), amount: num(f.amount) }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu chi phí</button>
+        <button onClick={() => { if (!ok) return setTried(true); onSave({ ...f, name: f.name.trim(), amount: num(f.amount) }); onClose(); }} aria-disabled={!ok} className={`w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 ${ok ? "" : "cursor-not-allowed opacity-40 shadow-none"}`}>Lưu chi phí</button>
+        {!ok && <div className={`mt-1.5 text-center text-[11px] font-semibold ${tried ? "text-rose-600" : "text-slate-400"}`}>Còn thiếu: {[miss.name && "tên khoản chi", miss.amount && "số tiền"].filter(Boolean).join(", ")}</div>}
       </div>
     </div>
   );
@@ -102,7 +109,7 @@ function ExpenseBatchModal({ onClose, onSave }) {
               <div className="flex items-center gap-2">
                 <input value={r.name} onChange={(e) => setRow(r.key, { name: e.target.value })} autoFocus={i === 0} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-semibold" placeholder="Tên khoản chi *" />
                 <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} className="w-28 shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-bold" placeholder="Số tiền *" />
-                {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+                {rows.length > 1 && <button onClick={() => delRow(r.key)} className="-m-1 shrink-0 rounded-lg p-2.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Bỏ dòng"><Trash2 size={15} /></button>}
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <select value={r.category} onChange={(e) => setRow(r.key, { category: e.target.value })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
@@ -127,7 +134,8 @@ export default function Expenses() {
   const { expenses, addExpense, addExpensesMany, updateExpense, changeExpensePlan, deleteExpense, deleteExpensesMany } = useData();
   const [modal, setModal] = useState(null);
   const [batch, setBatch] = useState(false);
-  const [catF, setCatF] = useState("all");
+  const [catF, setCatF0] = useState(() => { try { return localStorage.getItem("qws_exp_cat") || "all"; } catch { return "all"; } });
+  const setCatF = (v) => { setCatF0(v); try { localStorage.setItem("qws_exp_cat", v); } catch {} };
   const [picked, setPicked] = useState(() => new Set());
 
   const now = new Date();
@@ -155,8 +163,10 @@ export default function Expenses() {
     for (const e of rows) { const k = e.recurring || "monthly"; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
     return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + monthEquiv(e), 0) }; });
   }, [rows]);
-  const [openRec, setOpenRec] = useState(() => new Set()); // mặc định ĐÓNG hết, bấm chu kỳ để xổ
-  const toggleRec = (k) => setOpenRec((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  // Mặc định MỞ nhóm "Hằng tháng" (không có thì nhóm đầu tiên) để danh sách không trông trống; bấm chu kỳ để đóng/mở
+  const [openRec0, setOpenRec] = useState(null);
+  const openRec = openRec0 || new Set([byRec.some((g) => g.rec === "monthly") ? "monthly" : byRec[0]?.rec]);
+  const toggleRec = (k) => setOpenRec(() => { const n = new Set(openRec); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const renderCard = (e) => {
     const off = e.active === false, isPicked = picked.has(e.id);
@@ -170,9 +180,9 @@ export default function Expenses() {
         <div className="shrink-0 text-right">
           <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
           {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
-          <div className="mt-1 flex justify-end gap-2">
-            <button onClick={() => setModal(e)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
-            <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+          <div className="-mb-2 -mr-2 mt-0.5 flex justify-end">
+            <button onClick={() => setModal(e)} className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={16} /></button>
+            <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={16} /></button>
           </div>
         </div>
       </div>
@@ -188,7 +198,7 @@ export default function Expenses() {
         <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
         <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
         <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}{e.endDate && <span className="text-rose-400"> → {fmtDateVI(e.endDate)}</span>}</td>
-        <td className="px-2 py-2.5 text-right"><span className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100"><button onClick={() => setModal(e)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button><button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button></span></td>
+        <td className="px-1 py-1 text-right"><span className="flex items-center justify-end">{/* luôn hiện (iPad không có hover), mờ nhẹ */}<button onClick={() => setModal(e)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button><button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button></span></td>
       </tr>
     );
   };

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Search, Users, ShoppingBag, FolderOpen, ListChecks, Receipt, CalendarHeart, KeyRound, ExternalLink, CornerDownLeft,
+  Search, Users, ShoppingBag, FolderOpen, ListChecks, Receipt, CalendarHeart, KeyRound, ExternalLink, CornerDownLeft, Globe, ThumbsUp,
 } from "lucide-react";
 import { useData } from "../lib/store.jsx";
 import { formatVND, fmtDateVI } from "../lib/format.js";
@@ -20,6 +20,19 @@ const REC = { monthly: "hằng tháng", yearly: "hằng năm", once: "1 lần" }
 const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? u : "");
 const fmtDate = (d) => { try { return d ? fmtDateVI(d) : ""; } catch { return ""; } };
 
+// Danh sách Website (GSC/GA4) + Fanpage bên Văn phòng AI — tải 1 lần khi mở ô tìm lần đầu (chỉ chủ), tải lười để không nặng bundle chính
+let extCache = null;
+async function loadExt({ web, fanpage }) {
+  if (extCache) return extCache;
+  const [w, f] = await Promise.allSettled([
+    web ? import("../lib/webData.js").then((m) => m.loadSites()) : null,
+    fanpage ? import("../lib/fbPages.js").then((m) => m.listPages()) : null,
+  ]);
+  const r = { sites: (w.status === "fulfilled" && w.value?.sites) || [], pages: (f.status === "fulfilled" && f.value?.pages) || [] };
+  if (w.status === "fulfilled" || f.status === "fulfilled") extCache = r; // lỗi mạng cả 2 → lần mở sau thử lại
+  return r;
+}
+
 function isTypingTarget(el) {
   if (!el) return false;
   const tag = el.tagName;
@@ -35,6 +48,14 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
   const [sel, setSel] = useState(0);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const [ext, setExt] = useState(extCache || { sites: [], pages: [] });
+  const canWeb = isOwner && perms.includes("web"), canFb = isOwner && perms.includes("fanpage");
+  useEffect(() => {
+    if (!open || (!canWeb && !canFb) || extCache) return;
+    let alive = true;
+    loadExt({ web: canWeb, fanpage: canFb }).then((r) => alive && setExt(r)).catch(() => {});
+    return () => { alive = false; };
+  }, [open, canWeb, canFb]);
 
   // Phím tắt toàn cục: Ctrl/Cmd+K bật/tắt, "/" mở (khi không gõ trong ô nhập)
   useEffect(() => {
@@ -98,10 +119,10 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
     if (!tokens.length) return out;
 
     if (has("customers")) {
-      const custs = (data.customerList || []).filter((c) => match(c.name, c.phone, c.zalo) || (qDigits.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(qDigits)));
+      const custs = (data.customerList || []).filter((c) => match(c.name, c.phone, c.zalo, c.note) || (qDigits.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(qDigits)));
       if (custs.length)
         out.push({ label: "Khách hàng", items: take(custs, (c) => c.name).map((c) => ({
-          key: "c:" + c.id, icon: Users, tone: "text-indigo-500", title: c.name || "(chưa đặt tên)", sub: c.phone || "", run: go("/khach-hang"),
+          key: "c:" + c.id, icon: Users, tone: "text-indigo-500", title: c.name || "(chưa đặt tên)", sub: c.phone || "", run: go(`/khach-hang?id=${encodeURIComponent(c.id)}`),
         })) });
 
       const projs = (data.projects || []).filter((p) => match(p.name, p.customerName, p.category));
@@ -110,7 +131,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
           const total = (p.installments || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
           return {
             key: "p:" + p.id, icon: ShoppingBag, tone: "text-sky-500", title: p.name || "(chưa đặt tên)",
-            sub: [p.customerName, total ? formatVND(total) : ""].filter(Boolean).join(" · "), run: go("/du-an"),
+            sub: [p.customerName, total ? formatVND(total) : ""].filter(Boolean).join(" · "), run: go(`/khach-hang?project=${encodeURIComponent(p.id)}`),
           };
         }) });
     }
@@ -137,7 +158,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
         out.push({ label: "Công việc", items: take(tasks, (t) => t.title).map((t) => ({
           key: "t:" + t.id, icon: ListChecks, tone: "text-emerald-500", title: t.title || "(không tên)",
           sub: [fmtDate(t.date) + (t.time ? " · " + t.time : ""), t.status === "done" ? "Đã xong" : ""].filter(Boolean).join(" · "),
-          run: go("/cong-viec"),
+          run: go(`/cong-viec?id=${encodeURIComponent(t.id)}`),
         })) });
 
       const evs = (data.family || []).filter((f) => match(f.title, f.name, f.note, f.category));
@@ -162,6 +183,24 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
         })) });
     }
 
+    // Website + Fanpage (Văn phòng AI) — chỉ chủ, danh sách tải lười khi mở ô tìm
+    if (canWeb) {
+      const sites = (ext.sites || []).filter((x) => match(x.domain, x.gaName));
+      if (sites.length)
+        out.push({ label: "Website", items: take(sites, (x) => x.domain).map((x) => ({
+          key: "w:" + x.domain, icon: Globe, tone: "text-sky-500", title: x.domain, sub: [x.gsc ? "Search Console" : "", x.ga ? "GA4" : ""].filter(Boolean).join(" + "),
+          run: go(`/website?site=${encodeURIComponent(x.domain)}`),
+        })) });
+    }
+    if (canFb) {
+      const pages = (ext.pages || []).filter((x) => match(x.name, x.category));
+      if (pages.length)
+        out.push({ label: "Fanpage", items: take(pages, (x) => x.name).map((x) => ({
+          key: "fb:" + x.page_id, icon: ThumbsUp, tone: "text-blue-500", title: x.name || x.page_id, sub: [x.category, x.fans ? `${Number(x.fans).toLocaleString("vi-VN")} theo dõi` : ""].filter(Boolean).join(" · "),
+          run: go(`/fanpage?page=${encodeURIComponent(x.page_id)}`),
+        })) });
+    }
+
     // Tài khoản & Thẻ — CHỈ chủ, chỉ hiện TÊN (không bao giờ hiện/so khớp trường bí mật)
     if (isOwner) {
       const vs = (data.vault || []).filter((v) => match(v.title));
@@ -172,7 +211,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
         })) });
     }
     return out;
-  }, [open, q, navItems, perms, isOwner, data.customerList, data.projects, data.resources, data.tasks, data.family, data.expenses, data.vault, nav]);
+  }, [open, q, navItems, perms, isOwner, data.customerList, data.projects, data.resources, data.tasks, data.family, data.expenses, data.vault, nav, ext, canWeb, canFb]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
@@ -206,7 +245,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Tìm khách, dự án, tài nguyên, việc, chi phí…"
+            placeholder="Tìm khách, dự án, tài nguyên, việc, chi phí, web, fanpage…"
             className="min-w-0 flex-1 bg-transparent text-base text-slate-800 outline-none placeholder:text-slate-400 sm:text-sm"
             autoComplete="off"
             spellCheck={false}

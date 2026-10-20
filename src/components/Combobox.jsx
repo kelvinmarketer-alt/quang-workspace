@@ -4,8 +4,9 @@ import { ChevronDown, Search, Check } from "lucide-react";
 /**
  * Ô chọn có tìm kiếm + gợi ý.
  * options: [{value, label, sub?}]  value(selected) -> onChange(value)
+ * allowEmpty: trường TUỲ CHỌN → thêm dòng "— Không gắn —" (onChange("")) để bỏ chọn
  */
-export default function Combobox({ options, value, onChange, placeholder = "Tìm & chọn…", emptyText = "Không tìm thấy" }) {
+export default function Combobox({ options, value, onChange, placeholder = "Tìm & chọn…", emptyText = "Không tìm thấy", allowEmpty = false, emptyLabel = "— Không gắn —" }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const ref = useRef(null);
@@ -36,6 +37,12 @@ export default function Combobox({ options, value, onChange, placeholder = "Tìm
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Gõ để tìm…" className="w-full text-sm outline-none" />
           </div>
           <div className="max-h-56 overflow-y-auto py-1">
+            {allowEmpty && !q.trim() && (
+              <button type="button" onClick={() => { onChange(""); setOpen(false); setQ(""); }} className="flex w-full items-center gap-2 border-b border-slate-50 px-3 py-2 text-left hover:bg-slate-50">
+                <span className="flex-1 text-sm font-semibold text-slate-400">{emptyLabel}</span>
+                {!value && <Check size={15} className="text-indigo-600" />}
+              </button>
+            )}
             {filtered.length === 0 && <div className="px-3 py-3 text-sm text-slate-400">{emptyText}</div>}
             {filtered.map((o) => (
               <button key={o.value} type="button" onClick={() => { onChange(o.value); setOpen(false); setQ(""); }} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">

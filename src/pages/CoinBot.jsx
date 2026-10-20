@@ -5,7 +5,8 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { runSession, finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
+import { runSessionAsync } from "../lib/botRunner.js";
+import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -29,6 +30,10 @@ const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-e
 const VN = 7 * 3600, toT = (ms) => Math.floor(ms / 1000) + VN;
 function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus }) {
   const box = useRef(null), api = useRef(null), [K, setK] = useState([]), fitted = useRef(""), step = TFS[tf].ms;
+  const [kState, setKState] = useState("loading"), [retry, setRetry] = useState(0);
+  // Chữ ký dữ liệu: chỉ vẽ lại mốc/đường giá khi lệnh thật sự đổi (giá realtime nhảy mỗi giây không làm vẽ lại)
+  const markSig = trades.map((t) => `${t.id}:${t.exitAt || ""}:${t.r ?? ""}`).join("|") + `#${focus?.id || ""}`;
+  const lineSig = (focus ? [focus] : trades.filter((t) => !t.exitAt)).map((t) => `${t.id}:${t.entry}:${t.curSl ?? t.sl}:${t.tp}`).join("|") + "#" + pending.map((p) => `${p.id}:${p.lim}`).join("|");
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true,
@@ -45,7 +50,11 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     return () => { chart.remove(); api.current = null; };
   }, []);
   // nến đã đóng (lấy từ bộ nhớ đệm của bot) — tải lại khi đổi luồng hoặc bot vừa xét nến mới
-  useEffect(() => { let off = false; loadKlines(SYMBOLS[coin], tf, startAt - 120 * step).then((k) => { if (!off) setK(k); }).catch(() => {}); return () => { off = true; }; }, [coin, tf, startAt, rawAt, step]);
+  useEffect(() => { // đổi luồng → xoá nến cũ ngay, hiện "đang tải"
+    let off = false; setKState((s) => (K.length && fitted.current === `${coin}|${tf}` ? s : "loading"));
+    loadKlines(SYMBOLS[coin], tf, startAt - 120 * step).then((k) => { if (!off) { setK(k); setKState("ok"); } }).catch(() => { if (!off) setKState("error"); });
+    return () => { off = true; };
+  }, [coin, tf, startAt, rawAt, step, retry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const a = api.current; if (!a || !K.length) return;
     const p0 = K[K.length - 1][4], prec = p0 >= 1000 ? 1 : p0 >= 10 ? 2 : 4;
@@ -65,7 +74,7 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
       if (t.exitAt) m.push({ time: toT(Math.floor((t.exitAt - 1) / step) * step), position: t.side === 1 ? "aboveBar" : "belowBar", color: t.r >= 0 ? "#059669" : "#e11d48", shape: "circle", text: `${t.r >= 0 ? "+" : ""}${t.r.toFixed(1)}R`, size: focus?.id === t.id ? 2 : 1 });
     }
     a.markers.setMarkers(m.sort((x, y) => x.time - y.time));
-  }, [trades, focus, step]);
+  }, [markSig, step]); // eslint-disable-line react-hooks/exhaustive-deps
   // đường giá: lệnh đang chọn (hoặc mọi lệnh đang mở) + lệnh chờ
   useEffect(() => {
     const a = api.current; if (!a) return;
@@ -77,7 +86,7 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     }
     for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
     a.lines = L.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: 1, lineStyle: ln.style ?? 2, axisLabelVisible: true, title: ln.title }));
-  }, [trades, pending, focus]);
+  }, [lineSig]); // eslint-disable-line react-hooks/exhaustive-deps
   // nhảy tới lệnh đang chọn
   useEffect(() => {
     const a = api.current; if (!a || !focus || !K.length) return;
@@ -88,7 +97,13 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     const a = api.current, b = live?.current?.[`${coin}|${tf}`]; if (!a || !b || !K.length || b.t < K[K.length - 1][0]) return;
     try { a.candle.update({ time: toT(b.t), open: b.o, high: b.h, low: b.l, close: b.c }); a.vol.update({ time: toT(b.t), value: b.v || 0, color: b.c >= b.o ? "rgba(16,185,129,0.3)" : "rgba(244,63,94,0.3)" }); } catch { /* nến cũ hơn dữ liệu → bỏ qua */ }
   }, [ver, coin, tf, K, live]);
-  return <div ref={box} className="h-[340px] w-full sm:h-[460px]" />;
+  return (
+    <div className="relative">
+      <div ref={box} className={`h-[340px] w-full sm:h-[460px] ${kState === "loading" ? "opacity-30" : ""}`} />
+      {kState === "loading" && <div className="absolute inset-0 grid place-items-center text-[12.5px] font-bold text-slate-500"><span className="flex items-center gap-1.5 rounded-lg bg-white/90 px-3 py-1.5 shadow-sm"><Loader2 size={14} className="animate-spin" /> Đang tải nến {coin} {TFS[tf].label}…</span></div>}
+      {kState === "error" && <div className="absolute inset-0 grid place-items-center"><div className="rounded-xl bg-white px-4 py-3 text-center text-[12.5px] shadow"><div className="font-bold text-rose-600">Không tải được nến từ Binance</div><button onClick={() => setRetry((x) => x + 1)} className="mt-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-bold text-white">Thử lại</button></div></div>}
+    </div>
+  );
 }
 
 function Num({ label, v, sub, tone: t = "text-slate-900", className = "" }) {
@@ -231,6 +246,8 @@ export default function CoinBot() {
   const [err, setErr] = useState("");
   const [config, setConfig] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [hStream, setHStream] = useState("all"); // lọc lịch sử theo cặp|khung
+  const histScroll = useRef(0);
   const [showN, setShowN] = useState(40);
   const [view, setView] = useState("auto");
   const [optAll, setOptAll] = useState(false);
@@ -251,11 +268,8 @@ export default function CoinBot() {
     running.current = true; setErr("");
     const ss = sessRef.current, same = () => sessRef.current?.createdAt === ss.createdAt && sessRef.current?.stoppedAt === ss.stoppedAt;
     try {
-      const r = await runSession(ss, (m) => setBusy(m));
-      if (same()) { setRaw(r); lastRun.current = Date.now(); }
-      const c0 = cfgOf(ss);
-      const o = c0.maxExtAtr > 0 || c0.minSlAtr > 0 || c0.keyVolume > 0 ? await runSession({ ...ss, cfg: { ...c0, maxExtAtr: 0, minSlAtr: 0, keyVolume: 0, sigVol: false, noEngulf: false, d1Bias: false } }) : null;
-      if (same()) setRawOld(o);
+      const r = await runSessionAsync(ss, (m) => setBusy(m));
+      if (same()) { setRaw(r); lastRun.current = Date.now(); setRawOld(null); }
     }
     catch (e) { setErr(e.message || String(e)); }
     running.current = false; setBusy("");
@@ -271,6 +285,15 @@ export default function CoinBot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.createdAt]);
   useEffect(() => { setRaw(null); setRawOld(null); hits.current = new Map(); prevSt.current = null; if (session) run(); /* eslint-disable-next-line */ }, [session?.createdAt, session?.stoppedAt]);
+  // Bản cũ (chưa lọc vào đẹp) chỉ để so sánh → CHỈ tính khi mở tab Thống kê (đỡ tốn máy)
+  const oldBusy = useRef(false);
+  useEffect(() => {
+    if (tab !== "stats" || !raw || rawOld || oldBusy.current || !session) return;
+    const c0 = cfgOf(session); if (!(c0.maxExtAtr > 0 || c0.minSlAtr > 0 || c0.keyVolume > 0)) return;
+    oldBusy.current = true;
+    runSessionAsync({ ...session, cfg: { ...c0, maxExtAtr: 0, minSlAtr: 0, keyVolume: 0, sigVol: false, noEngulf: false, d1Bias: false } }).then(setRawOld).catch(() => {}).finally(() => { oldBusy.current = false; });
+  }, [tab, raw, rawOld]); // eslint-disable-line react-hooks/exhaustive-deps
+  const oldFin = useMemo(() => (rawOld ? finalize(rawOld, null) : null), [rawOld]);
   // Dự phòng khi mất WebSocket: mỗi phút xét nến mới (đang có realtime thì 5 phút/lần)
   useEffect(() => {
     if (!active) return undefined;
@@ -308,18 +331,29 @@ export default function CoinBot() {
   const curveA = useMemo(() => (res ? res.portfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
   const curveB = useMemo(() => (res ? res.basePortfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
   // mở biểu đồ đúng luồng của lệnh được chọn
-  const showOnChart = (t) => { setSel({ coin: t.coin, tf: t.tf }); setFocus(t); setTab("chart"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* bỏ qua */ } };
+  const showOnChart = (t) => { if (tab === "history") histScroll.current = window.scrollY; setSel({ coin: t.coin, tf: t.tf }); setFocus(t); setTab("chart"); try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* bỏ qua */ } };
+  const backToHistory = () => { setTab("history"); setTimeout(() => { try { window.scrollTo({ top: histScroll.current }); } catch { /* bỏ qua */ } }, 60); };
   const selInit = useRef(false);
   useEffect(() => { // mặc định: luồng có lệnh gần nhất
     if (!res || selInit.current) return; selInit.current = true;
     const last = [...res.portfolio.trades].filter((t) => t.status !== "skip").sort((a, b) => b.entryAt - a.entryAt)[0], c0 = cfgOf(session);
     setSel(last ? { coin: last.coin, tf: last.tf } : { coin: c0.coins[0], tf: c0.tfs[c0.tfs.length - 1] });
   }, [res]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chartTrades = useMemo(() => (P ? P.trades.filter((x) => x.coin === sel.coin && x.tf === sel.tf && x.status !== "skip") : []), [P, sel]);
+  const chartPending = useMemo(() => (res && active ? res.pending || [] : []).filter((x) => x.coin === sel.coin && x.tf === sel.tf), [res?.pending, active, sel]); // eslint-disable-line react-hooks/exhaustive-deps
   const taken = useMemo(() => {
     if (!P) return [];
     const src = filter === "reject" ? res.rejected.map((t) => ({ ...t, status: "reject" })) : P.trades;
-    return src.filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
-  }, [P, res, filter]);
+    return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
+  }, [P, res, filter, hStream]);
+  // Xuất lịch sử đang lọc ra CSV (mở được bằng Excel, giữ tiếng Việt)
+  const exportCsv = () => {
+    const head = ["Vào lúc", "Cặp", "Khung", "Hướng", "Setup", "Giá vào", "SL", "TP", "Kết thúc", "Giá thoát", "Lúc thoát", "R", "Lãi/lỗ $", "Trạng thái"];
+    const iso = (t) => (t ? new Date(t + 7 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "");
+    const rows = taken.map((t) => [iso(t.entryAt), t.coin, TFS[t.tf].label, t.side === 1 ? "LONG" : "SHORT", setupName(t.setup), t.entry, t.sl, t.tp, t.reason || "", t.exit ?? "", iso(t.exitAt), (t.r ?? t.uR)?.toFixed(2) ?? "", t.pnl != null ? t.pnl.toFixed(2) : "", t.status]);
+    const csv = "\ufeff" + [head, ...rows].map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = `lich-su-lenh-demo-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
   const feed = useMemo(() => {
     if (!P) return [];
     const ev = [];
@@ -374,7 +408,9 @@ export default function CoinBot() {
         {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
       </Card>
 
-      {!res ? <Card><div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> {busy || "Đang chạy lại dữ liệu…"}</div></Card> : (<>
+      {!res ? (err && !busy
+        ? <Card><div className="py-10 text-center"><div className="text-[14px] font-extrabold text-rose-600">Chưa tải được dữ liệu Binance</div><div className="mt-1 text-[12px] text-slate-500">{err}</div><button onClick={run} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
+        : <Card><div className="py-12 text-center text-sm text-slate-400"><div className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> {busy || "Đang chạy lại dữ liệu…"}</div><div className="mt-1 text-[11.5px]">Lần đầu cần tải ~3 tháng nến (vài chục nghìn nến) — các lần sau chỉ tải phần mới, mở rất nhanh.</div></div></Card>) : (<>
         {cfg.adaptive && (
           <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
             {[["auto", "Bot tự tối ưu", Brain], ["base", "Luật gốc (cố định)", Bot]].map(([k, l, I]) => <button key={k} onClick={() => { setView(k); setShowN(40); if (k === "base" && filter === "reject") setFilter("all"); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12.5px] font-bold ${view === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}><I size={14} /> {l}</button>)}
@@ -404,8 +440,8 @@ export default function CoinBot() {
             ); })}
             <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
           </div>
-          <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={P.trades.filter((x) => x.coin === sel.coin && x.tf === sel.tf && x.status !== "skip")} pending={(active ? res.pending || [] : []).filter((x) => x.coin === sel.coin && x.tf === sel.tf)} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} />
-          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · TP {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button></div>}
+          <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} />
+          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · TP {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
         </Card>
 
         {open.length > 0 && (
@@ -510,6 +546,14 @@ export default function CoinBot() {
             {[["all", "Tất cả"], ["win", "Thắng"], ["loss", "Thua"], ["open", "Đang mở"], ["skip", "Bị bỏ (danh mục)"], ...(cfg.adaptive && !isBase ? [["reject", "Bị loại"]] : [])].map(([k, l]) => <button key={k} onClick={() => { setFilter(k); setShowN(40); }} className={`rounded-md px-2.5 py-1.5 text-[11.5px] font-bold ${filter === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>)}
             <span className="ml-auto text-[11px] text-slate-400">{taken.length} lệnh · bấm 1 lệnh để xem trên biểu đồ</span>
           </div>
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <select value={hStream} onChange={(e) => { setHStream(e.target.value); setShowN(40); }} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[12px] font-bold text-slate-600">
+              <option value="all">Mọi cặp · mọi khung</option>
+              {cfg.coins.map((c) => <option key={c} value={c}>{c} · mọi khung</option>)}
+              {cfg.coins.flatMap((c) => cfg.tfs.map((t) => <option key={c + t} value={`${c}|${t}`}>{c} {TFS[t].label}</option>))}
+            </select>
+            <button onClick={exportCsv} disabled={!taken.length} className="ml-auto rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-40">Xuất CSV</button>
+          </div>
           <div className="divide-y divide-slate-100">{taken.slice(0, showN).map((t) => { const R = t.r ?? t.uR, dim = t.status === "skip" || t.status === "reject"; return (
             <button key={t.id} onClick={() => showOnChart(t)} className={`block w-full px-1 py-2 text-left hover:bg-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""} ${focus?.id === t.id ? "bg-indigo-50/70" : ""}`}>
               <div className="flex items-center gap-2 text-[12.5px]">
@@ -599,7 +643,7 @@ export default function CoinBot() {
         </Card>
 
         {rawOld && (() => {
-          const o = finalize(rawOld, null), so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
+          const o = oldFin, so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
           const cols = [["Bot (luật mới + tối ưu)", sa, res.portfolio, "text-violet-700"], ["Luật mới (cố định)", sb, res.basePortfolio, "text-emerald-700"], ["Bản cũ (chưa lọc vào đẹp)", so, o.basePortfolio, "text-slate-500"]].filter((c, i) => i || cfg.adaptive);
           return (
             <Card className="!p-3">

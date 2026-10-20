@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell, CheckCircle2, XCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Info, ExternalLink, PlayCircle, Image as ImageIcon, Loader2 } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, StatCard, Badge, DateField, MoneyInput } from "../components/ui.jsx";
@@ -8,30 +8,23 @@ import { aiAdsAnalysis } from "../lib/ai.js";
 import { diagnose, judge, baselineOf } from "../lib/adsDiagnose.js";
 import { loadAccountAds, statusOf, setAdsProxy, loadCampaignGoals } from "../lib/fbAds.js";
 import { GOALS, withGoal, goalBaselines, judgeGoal } from "../lib/adsGoals.js";
-import { todayISO, formatShort } from "../lib/format.js";
+import { todayISO, fmtShort, fmtNum, fmtPct, downloadCSV } from "../lib/format.js";
+import { RangePicker, usePeriod, makePeriod, useSort, sortRows, SortTh, CsvButton } from "./Web.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 
-// ---------- định dạng ----------
+// ---------- định dạng (kiểu Việt: dấu phẩy thập phân, giống Website / Fanpage) ----------
 const vnd = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN") + "đ");
 const int = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN"));
-const pct = (v) => (v == null ? "—" : Number(v).toFixed(2) + "%");
-const dec = (v) => (v == null ? "—" : Number(v).toFixed(2));
-const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return iso(d); };
+const pct = (v) => fmtPct(v, 2);
+const dec = (v) => fmtNum(v, 2, 0); // "12" · "1,5" · "2,35"
 const dm = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "");
-
-function presetRange(p) {
-  const t = todayISO();
-  const d = new Date(t + "T00:00:00");
-  if (p === "today") return [t, t];
-  if (p === "yesterday") return [addDays(t, -1), addDays(t, -1)];
-  if (p === "7d") return [addDays(t, -6), t];
-  if (p === "30d") return [addDays(t, -29), t];
-  if (p === "month") return [iso(new Date(d.getFullYear(), d.getMonth(), 1)), t];
-  if (p === "lastmonth") return [iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), iso(new Date(d.getFullYear(), d.getMonth(), 0))];
-  return [t, t];
-}
-const PRESETS = [["today", "Hôm nay"], ["yesterday", "Hôm qua"], ["7d", "7 ngày"], ["30d", "30 ngày"], ["month", "Tháng này"], ["lastmonth", "Tháng trước"], ["custom", "Tùy chọn"]];
+// Dòng cảnh báo vàng nhỏ + nút Thử lại (thay cho lỗi im lặng)
+const Warn = ({ children, onRetry }) => (
+  <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-700">
+    <AlertTriangle size={13} className="shrink-0" /><span className="min-w-0 flex-1">{children}</span>
+    {onRetry && <button onClick={onRetry} className="shrink-0 rounded-md bg-amber-500 px-2.5 py-1.5 text-[11px] font-bold text-white">Thử lại</button>}
+  </div>
+);
 
 // Cột chỉ số theo nhóm. bad = tăng là XẤU (chi phí) → mũi tên đỏ khi tăng.
 const COLS = {
@@ -92,21 +85,33 @@ function Metric({ label, value, delta }) {
   );
 }
 
-function Table({ rows, cols, nameKey = "name", sub }) {
+// Giá trị để xếp / xuất CSV theo cột: nhãn đánh giá xếp theo mức (Rất tốt → Đốt tiền), "Kết quả theo mục tiêu" xếp theo số KQ
+const V_RANK = { great: 1, good: 2, ok: 2, warn: 3, fatigue: 3, bad: 4, burn: 5, thin: 6, off: 7 };
+const sortVal = (r, k) => (k === "_v" ? (r._v ? (V_RANK[r._v.key] ?? 8) + (r._v.ratio || 0) / 100 : null) : k === "goalResText" ? (r.goal === "reach" ? r.reach : r.goalResults) : r[k]);
+const csvVal = (r, k) => (k === "_v" ? r._v?.label || "" : r[k]);
+
+function Table({ rows, cols, nameKey = "name", sub, csvName }) {
+  const [st, toggle] = useSort(); // i = -1: cột Tên
   if (!rows?.length) return <div className="py-3 text-center text-xs text-slate-400">Không có dữ liệu trong kỳ</div>;
+  const list = st ? sortRows(rows, (r) => (st.i < 0 ? r[nameKey] : sortVal(r, cols[st.i]?.[0])), st.dir) : rows;
+  const exportCsv = () => downloadCSV(csvName, [["Tên", ...(sub ? ["Ghi chú"] : []), ...cols.map(([, l]) => l)], ...list.map((r) => [r[nameKey], ...(sub ? [r[sub] || ""] : []), ...cols.map(([k]) => csvVal(r, k))])]);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-xs">
-        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">
-          <th className="py-2 pr-2">Tên</th>{cols.map(([k, l]) => <th key={k} className="py-2 pr-2 text-right">{l}</th>)}
-        </tr></thead>
-        <tbody>{rows.map((r, i) => (
-          <tr key={r.id || r.name || i} className="border-b border-slate-50">
-            <td className="max-w-[260px] py-2 pr-2"><div className="truncate font-semibold text-slate-700" title={r[nameKey]}>{r[nameKey]}</div>{sub && r[sub] && <div className="truncate text-[10px] text-slate-400">{r[sub]}</div>}</td>
-            {cols.map(([k, , f]) => <td key={k} className="py-2 pr-2 text-right tabular-nums text-slate-700">{f(r[k])}</td>)}
-          </tr>
-        ))}</tbody>
-      </table>
+    <div>
+      {csvName && <div className="-mt-1 mb-0.5 flex justify-end"><CsvButton onClick={exportCsv} /></div>}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-xs">
+          <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">
+            <SortTh label="Tên" on={st?.i === -1} dir={st?.dir} onClick={() => toggle(-1, false)} className="py-2 pr-2" />
+            {cols.map(([k, l], i) => <SortTh key={k} label={l} on={st?.i === i} dir={st?.dir} onClick={() => toggle(i, true)} className="py-2 pr-2 text-right" />)}
+          </tr></thead>
+          <tbody>{list.map((r, i) => (
+            <tr key={r.id || r.name || i} className="border-b border-slate-50">
+              <td className="max-w-[260px] py-2 pr-2"><div className="truncate font-semibold text-slate-700" title={r[nameKey]}>{r[nameKey]}</div>{sub && r[sub] && <div className="truncate text-[10px] text-slate-400">{r[sub]}</div>}</td>
+              {cols.map(([k, , f]) => <td key={k} className="py-2 pr-2 text-right tabular-nums text-slate-700">{f(r[k])}</td>)}
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -124,7 +129,7 @@ function RealResults({ acc, since, until, spend }) {
         <span>Khách chốt: <b>{cust}</b></span>
         <span>Doanh thu: <b>{vnd(rev)}</b></span>
         <span>Giá/khách thật: <b>{cust ? vnd(spend / cust) : "—"}</b></span>
-        <span>ROAS: <b>{spend > 0 && rev ? (rev / spend).toFixed(2) + "x" : "—"}</b></span>
+        <span>ROAS: <b>{spend > 0 && rev ? fmtNum(rev / spend, 2) + "x" : "—"}</b></span>
       </div>
       {canW && (
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
@@ -137,7 +142,7 @@ function RealResults({ acc, since, until, spend }) {
       {list.length > 0 && (
         <div className="flex flex-wrap gap-1.5">{list.map((r) => (
           <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] ring-1 ring-emerald-100">
-            {dm(r.date)} · {r.customers} khách · {formatShort(r.revenue)}
+            {dm(r.date)} · {r.customers} khách · {fmtShort(r.revenue)}
             {canW && <button onClick={() => deleteAdsResult(r.id)} aria-label="Xoá kết quả" className="-m-1.5 p-1.5 text-slate-300 hover:text-rose-500"><Trash2 size={13} /></button>}
           </span>
         ))}</div>
@@ -180,7 +185,7 @@ function BalanceBox({ a, onChanged }) {
         {b ? <>
           <span>Còn: <b className={b.balance <= 0 ? "text-rose-600" : ""}>{vnd(b.balance)}</b></span>
           <span>TB chi 7 ngày: <b>{vnd(b.avgDaily)}</b>/ngày</span>
-          <span>Đủ chạy: <b className={balTone(b) === "rose" ? "text-rose-600" : ""}>{b.daysLeft != null ? "~" + b.daysLeft.toFixed(1) + " ngày" : "—"}</b></span>
+          <span>Đủ chạy: <b className={balTone(b) === "rose" ? "text-rose-600" : ""}>{b.daysLeft != null ? "~" + fmtNum(b.daysLeft, 1) + " ngày" : "—"}</b></span>
           <span className="text-slate-400">{b.source === "google_budget" ? "theo ngân sách tài khoản Google" : "ước tính từ sổ nạp tiền"}</span>
         </> : <span className="text-slate-500">Chưa có — nhập <b>số dư hiện tại</b> đang thấy trên {a.platform === "google" ? "Google Ads (Thanh toán → Tóm tắt)" : "Meta (Thanh toán)"} để app tự trừ chi phí & cảnh báo khi sắp hết.</span>}
         {a.owed > 0 && <span>Đang nợ (chưa trừ thẻ): <b>{vnd(a.owed)}</b></span>}
@@ -197,8 +202,8 @@ function BalanceBox({ a, onChanged }) {
       {rows?.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">{rows.slice(0, 10).map((r) => (
           <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] ring-1 ring-sky-100">
-            {new Date(r.at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.kind === "anchor" ? "số dư" : "nạp"} {formatShort(r.amount)}
-            <button onClick={async () => { if (await ask(`Xoá lần ${r.kind === "anchor" ? "ghi số dư" : "nạp tiền"} ${formatShort(r.amount)}?`, { ok: "Xoá", danger: true })) del(r.id); }} aria-label="Xoá" className="-m-1.5 p-1.5 text-slate-300 hover:text-rose-500"><Trash2 size={13} /></button>
+            {new Date(r.at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.kind === "anchor" ? "số dư" : "nạp"} {fmtShort(r.amount)}
+            <button onClick={async () => { if (await ask(`Xoá lần ${r.kind === "anchor" ? "ghi số dư" : "nạp tiền"} ${fmtShort(r.amount)}?`, { ok: "Xoá", danger: true })) del(r.id); }} aria-label="Xoá" className="-m-1.5 p-1.5 text-slate-300 hover:text-rose-500"><Trash2 size={13} /></button>
           </span>
         ))}</div>
       )}
@@ -210,7 +215,10 @@ function BalanceBox({ a, onChanged }) {
 function AlertsPanel({ tick }) {
   const [list, setList] = useState(null);
   const [all, setAll] = useState(false);
-  useEffect(() => { invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch(() => setList([])); }, [tick]);
+  const [err, setErr] = useState("");
+  const [retry, setRetry] = useState(0);
+  useEffect(() => { setErr(""); invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch((e) => setErr(e.message || String(e))); }, [tick, retry]);
+  if (err && !list?.length) return <div className="px-3 sm:px-0"><Warn onRetry={() => setRetry((n) => n + 1)}>Không tải được cảnh báo 48 giờ qua: {err}</Warn></div>;
   if (!list?.length) return null;
   return (
     <Card>
@@ -219,13 +227,25 @@ function AlertsPanel({ tick }) {
         <div key={x.key} className="flex gap-2 text-xs"><span className="shrink-0 text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><span className="text-slate-700">{x.text}</span></div>
       ))}</div>
       {list.length > 3 && <button onClick={() => setAll((v) => !v)} className="mt-1.5 text-[12px] font-bold text-indigo-600">{all ? "Thu gọn" : `Xem thêm ${list.length - 3} cảnh báo`}</button>}
+      {err && <div className="mt-2"><Warn onRetry={() => setRetry((n) => n + 1)}>Không cập nhật được cảnh báo (đang hiện danh sách cũ): {err}</Warn></div>}
     </Card>
   );
 }
 
 // ---------- Chấm điểm ----------
-const VBadge = ({ v }) => (v ? <span title={v.reason || ""}><Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge></span> : null);
-const vCol = ["_v", "Đánh giá", (v) => <VBadge v={v} />];
+// Nhãn chấm điểm: rê chuột (máy tính) hoặc CHẠM (điện thoại) để hiện lý do ngay dưới nhãn
+function VBadge({ v, cell }) {
+  const [open, setOpen] = useState(false);
+  if (!v) return null;
+  const b = <Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge>;
+  if (!v.reason) return b;
+  const tap = (e) => { e.stopPropagation(); e.preventDefault(); setOpen((o) => !o); };
+  return (<>
+    <span role="button" tabIndex={0} title={v.reason} onClick={tap} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && tap(e)} className="cursor-pointer">{b}</span>
+    {open && <span className={`mt-0.5 block w-full text-[10.5px] font-medium normal-case leading-snug tracking-normal text-slate-500 ${cell ? "ml-auto min-w-[150px] max-w-[240px] whitespace-normal" : ""}`}>{v.reason}</span>}
+  </>);
+}
+const vCol = ["_v", "Đánh giá", (v) => <VBadge v={v} cell />];
 
 function KpiBox({ a, kpi, onSave }) {
   const [f, setF] = useState({ cpr: kpi?.cpr ? String(kpi.cpr) : "", cpa: kpi?.cpa ? String(kpi.cpa) : "" });
@@ -253,7 +273,7 @@ function Scorecard({ diag, onWeek }) {
       <div className="flex flex-wrap items-center gap-2">
         <CheckCircle2 size={16} className="text-emerald-500" />
         <span className="text-sm font-extrabold">Chấm điểm hiệu quả</span>
-        <span className="text-[11px] text-slate-400">tính tự động theo KPI / kỳ trước — rê chuột vào nhãn để xem lý do</span>
+        <span className="text-[11px] text-slate-400">tính tự động theo KPI / kỳ trước — chạm/rê vào nhãn để xem lý do</span>
       </div>
       {diag.days < 3 && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
@@ -284,7 +304,7 @@ function Scorecard({ diag, onWeek }) {
                 <span>Chi phí/tin nhắn+lead <b className="text-slate-700">{vnd(x.cpr)}</b>{x.deltas?.cpr != null && <span className={x.deltas.cpr > 0 ? "text-rose-600" : "text-emerald-600"}> ({x.deltas.cpr > 0 ? "+" : ""}{x.deltas.cpr}%)</span>}</span>
                 <span>Mốc <b className="text-slate-700">{x.baseline ? vnd(x.baseline.value) : "—"}</b>{x.baseline && <span className="text-slate-400"> · {x.baseline.label}</span>}</span>
                 {x.real?.costPerCustomer != null && <span>Giá/khách chốt <b className="text-slate-700">{vnd(x.real.costPerCustomer)}</b></span>}
-                {x.real?.roas != null && <span>ROAS <b className="text-slate-700">{x.real.roas}</b></span>}
+                {x.real?.roas != null && <span>ROAS <b className="text-slate-700">{fmtNum(x.real.roas, 1)}</b></span>}
               </div>
               {(x.scale.length > 0 || x.cut.length > 0) && (
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -357,22 +377,30 @@ function LiveAds({ a, since, until, goalBase }) {
   const [mode, setMode] = useState("running");
   const [sort, setSort] = useState("spend");
   const [open, setOpen] = useState(null);
+  const [retry, setRetry] = useState(0);
   const key = `${a.id}|${since}|${until}`;
   useEffect(() => {
     let alive = true; setErr("");
     const c = ADS_CACHE.get(key);
     if (c && Date.now() - c.at < 300000) { setList(c.v); return; }
     setList(null);
-    loadAccountAds(a.id, since, until).then((v) => { ADS_CACHE.set(key, { at: Date.now(), v }); alive && setList(v); }).catch((e) => alive && setErr(e.message));
+    // lỗi lấy chi tiêu (spentError) → không cache, để bấm Thử lại là gọi lại Facebook
+    loadAccountAds(a.id, since, until).then((v) => { if (!v.spentError) ADS_CACHE.set(key, { at: Date.now(), v }); alive && setList(v); }).catch((e) => alive && setErr(e.message || String(e)));
     return () => { alive = false; };
-  }, [key]);
-  if (err) return <div className="rounded-lg bg-rose-50 p-2 text-xs text-rose-600">{err}</div>;
+  }, [key, retry]);
+  const reload = () => { ADS_CACHE.delete(key); setRetry((n) => n + 1); };
+  if (err) return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-600">
+      <span className="min-w-0 flex-1">{err}</span>
+      <button onClick={reload} className="shrink-0 rounded-md bg-rose-600 px-2.5 py-1.5 text-[11px] font-bold text-white">Thử lại</button>
+    </div>
+  );
   if (!list) return <div className="flex items-center gap-2 py-6 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang lấy quảng cáo từ Facebook…</div>;
   const running = list.filter((x) => x.running), spent = list.filter((x) => x.spend > 0);
   // Xếp "rẻ nhất" theo tỉ lệ so với mốc CỦA ĐÚNG MỤC TIÊU từng QC (QC tiếp cận không so với QC tin nhắn)
   const ratioOf = (x) => { const b = goalBase?.[x.goal]; return x.goalCost != null && b ? x.goalCost / b.value : 1e9; };
   const shown = (mode === "running" ? running : spent).slice().sort((x, y) => (sort === "cpr" ? ratioOf(x) - ratioOf(y) : sort === "results" ? (y.msgs || 0) - (x.msgs || 0) : y.spend - x.spend));
-  const chip = (on) => `rounded-lg px-2.5 py-1 text-[11px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
+  const chip = (on) => `min-h-8 rounded-lg px-3 py-1.5 text-[11.5px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`; // cao ~32px cho dễ bấm
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -381,6 +409,7 @@ function LiveAds({ a, since, until, goalBase }) {
         <span className="ml-auto text-[11px] text-slate-400">Xếp:</span>
         {[["spend", "Chi tiêu"], ["cpr", "Hiệu quả nhất"], ["results", "Nhiều tin nhắn"]].map(([k, l]) => <button key={k} onClick={() => setSort(k)} className={chip(sort === k)}>{l}</button>)}
       </div>
+      {list.spentError && <div className="mb-2"><Warn onRetry={reload}>Không lấy được chi tiêu trong kỳ từ Facebook — mục "Có chi tiêu trong kỳ" có thể thiếu quảng cáo đã dừng ({list.spentError})</Warn></div>}
       {shown.length === 0 && <div className="py-4 text-center text-xs text-slate-400">{mode === "running" ? "Không có quảng cáo nào đang chạy." : "Không có quảng cáo nào tiêu tiền trong kỳ."}</div>}
       <div className="space-y-2">
         {shown.map((x) => {
@@ -398,7 +427,7 @@ function LiveAds({ a, since, until, goalBase }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge tone={tone}>{st}</Badge>
-                    {v && <span title={v.reason || ""}><Badge tone={v.tone}>{v.label}{v.lowSample ? "*" : ""}</Badge></span>}
+                    <VBadge v={v} />
                     <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10.5px] font-bold text-indigo-700">🎯 {x.goalLabel}</span>
                     {x.objective && <span className="text-[10.5px] font-semibold text-slate-400">{x.objective}{x.optimize ? " · tối ưu " + x.optimize : ""}</span>}
                   </div>
@@ -428,7 +457,7 @@ function LiveAds({ a, since, until, goalBase }) {
   );
 }
 
-function AccountCard({ a, since, until, onChanged, goalBase }) {
+function AccountCard({ a, since, until, onChanged, goalBase, goalErr, onRetryGoals }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(a.platform === "google" ? "convs" : "live");
   const { settings = {}, setSettings, isOwner } = useData();
@@ -443,6 +472,7 @@ function AccountCard({ a, since, until, onChanged, goalBase }) {
   const goalInfo = (x, extra = []) => [x.goal && `🎯 ${x.goalLabel}${x.goal === "reach" ? " (chi phí/1.000 người)" : ""}`, ...extra].filter(Boolean).join(" · ");
   const isG = a.platform === "google";
   const cols = a.group === "conv" ? [...colsOf(a), vCol] : colsOf(a);
+  const csv = (n) => `${a.name}-${n}-${since}_${until}`;
   if (a.error) return (
     <Card><div className="flex items-center gap-2 text-sm"><AlertTriangle size={16} className="text-rose-500" /><b>{a.name}</b><span className="text-rose-600">{a.error}</span></div></Card>
   );
@@ -465,7 +495,7 @@ function AccountCard({ a, since, until, onChanged, goalBase }) {
         {a.currency && a.currency !== "VND" && <Badge tone="slate">{a.currency}</Badge>}
         {isG && a.status && a.status !== "ENABLED" && <Badge tone="rose">Google: {a.status}</Badge>}
         {a.group === "conv" && t.spend > 0 && (bl && bl.source !== "avg" ? <VBadge v={judge(t, bl.value)} /> : <Badge tone="slate">Chưa có KPI</Badge>)}
-        {a.bal && <Badge tone={balTone(a.bal)}>Số dư {formatShort(a.bal.balance)}{a.bal.daysLeft != null ? ` · ~${a.bal.daysLeft.toFixed(1)} ngày` : ""}</Badge>}
+        {a.bal && <Badge tone={balTone(a.bal)}>Số dư {fmtShort(a.bal.balance)}{a.bal.daysLeft != null ? ` · ~${fmtNum(a.bal.daysLeft, 1)} ngày` : ""}</Badge>}
       </button>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
         {cols.map(([k, l, f, bad]) => <Metric key={k} label={l} value={f(t[k])} delta={p ? <Delta cur={t[k]} prev={p[k]} bad={bad} /> : null} />)}
@@ -478,8 +508,8 @@ function AccountCard({ a, since, until, onChanged, goalBase }) {
                 <ComposedChart data={a.daily.map((d) => ({ ...d, day: dm(d.date) }))}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
                   <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                  <YAxis yAxisId="l" tick={{ fontSize: 10 }} tickFormatter={formatShort} />
-                  <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10 }} tickFormatter={formatShort} />
+                  <YAxis yAxisId="l" tick={{ fontSize: 10 }} tickFormatter={fmtShort} />
+                  <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10 }} tickFormatter={fmtShort} />
                   <Tooltip formatter={(v, n) => (n === "Chi phí" || n === "CPM" ? vnd(v) : int(v))} />
                   <Bar yAxisId="l" dataKey="spend" name="Chi phí" fill="#818cf8" radius={[4, 4, 0, 0]} />
                   {a.group === "conv"
@@ -497,23 +527,24 @@ function AccountCard({ a, since, until, onChanged, goalBase }) {
               <b>Quảng cáo có vấn đề:</b> {a.issues.map((x) => (x.status === "POLICY" ? x.name : `${x.name} (${x.status === "DISAPPROVED" ? "bị từ chối" : "có vấn đề"})`)).join(" · ")}
             </div>
           )}
+          {goalErr && <Warn onRetry={onRetryGoals}>Không lấy được mục tiêu chiến dịch từ Facebook — bảng đang tạm tính theo {a.group === "conv" ? "tin nhắn" : "tiếp cận"} ({goalErr})</Warn>}
           <div className="flex gap-1.5 overflow-x-auto">
             {(isG ? [["convs", "Loại chuyển đổi"], ["campaigns", "Chiến dịch"], ["keywords", "Từ khoá"]] : [["live", "Quảng cáo đang chạy"], a.services && ["services", "Theo dịch vụ"], ["campaigns", "Chiến dịch"], a.adsets?.length > 0 && ["adsets", "Nhóm QC"], ["ads", a.group === "conv" ? "QC rẻ / đắt" : "Top quảng cáo"], a.byAgeGender?.length > 0 && ["age", "Tuổi / giới"], a.byPlacement?.length > 0 && ["place", "Vị trí"]]).filter(Boolean).map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)} className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold ${tab === k ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
-          {tab === "services" && <Table rows={vrows(a.services).map((x) => ({ ...x, info: goalInfo(x) }))} cols={goalCols || cols.filter(([k]) => !["reach", "frequency"].includes(k))} sub="info" />}
-          {tab === "campaigns" && <Table rows={vrows(a.campaigns.filter((c) => c.spend > 0 || c.idle)).map((c) => ({ ...c, info: goalInfo(c, [c.status && c.status !== "ACTIVE" ? c.status : null, c.dailyBudget ? "NS " + formatShort(c.dailyBudget) + "/ngày" : null, c.idle ? "đang bật nhưng không tiêu" : null]) }))} cols={goalCols || cols} sub="info" />}
-          {tab === "adsets" && <Table rows={vrows(a.adsets).map((x) => ({ ...x, info: goalInfo(x, [x.campaign]) }))} cols={goalCols || cols} sub="info" />}
+          {tab === "services" && <Table rows={vrows(a.services).map((x) => ({ ...x, info: goalInfo(x) }))} cols={goalCols || cols.filter(([k]) => !["reach", "frequency"].includes(k))} sub="info" csvName={csv("dich-vu")} />}
+          {tab === "campaigns" && <Table rows={vrows(a.campaigns.filter((c) => c.spend > 0 || c.idle)).map((c) => ({ ...c, info: goalInfo(c, [c.status && c.status !== "ACTIVE" ? c.status : null, c.dailyBudget ? "NS " + fmtShort(c.dailyBudget) + "/ngày" : null, c.idle ? "đang bật nhưng không tiêu" : null]) }))} cols={goalCols || cols} sub="info" csvName={csv("chien-dich")} />}
+          {tab === "adsets" && <Table rows={vrows(a.adsets).map((x) => ({ ...x, info: goalInfo(x, [x.campaign]) }))} cols={goalCols || cols} sub="info" csvName={csv("nhom-qc")} />}
           {tab === "live" && <LiveAds a={a} since={since} until={until} goalBase={goalBase} />}
-          {tab === "ads" && <Table rows={vrows(topAds).map((x) => ({ ...x, info: [x.goal && `🎯 ${x.goalLabel}`, x.campaign, x.quality && x.quality !== "UNKNOWN" ? "chất lượng " + RANK[x.quality] : null, x.convRank && x.convRank !== "UNKNOWN" ? "chuyển đổi " + RANK[x.convRank] : null].filter(Boolean).join(" · ") }))} cols={goalCols || cols} sub="info" />}
-          {tab === "age" && <Table rows={vrows(a.byAgeGender).map((x) => ({ ...x, name: (x.gender === "female" ? "Nữ" : x.gender === "male" ? "Nam" : "?") + " " + x.age }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
-          {tab === "place" && <Table rows={vrows(a.byPlacement).map((x) => ({ ...x, name: x.platform + " · " + x.position }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} />}
+          {tab === "ads" && <Table rows={vrows(topAds).map((x) => ({ ...x, info: [x.goal && `🎯 ${x.goalLabel}`, x.campaign, x.quality && x.quality !== "UNKNOWN" ? "chất lượng " + RANK[x.quality] : null, x.convRank && x.convRank !== "UNKNOWN" ? "chuyển đổi " + RANK[x.convRank] : null].filter(Boolean).join(" · ") }))} cols={goalCols || cols} sub="info" csvName={csv("quang-cao")} />}
+          {tab === "age" && <Table rows={vrows(a.byAgeGender).map((x) => ({ ...x, name: (x.gender === "female" ? "Nữ" : x.gender === "male" ? "Nam" : "?") + " " + x.age }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} csvName={csv("tuoi-gioi")} />}
+          {tab === "place" && <Table rows={vrows(a.byPlacement).map((x) => ({ ...x, name: x.platform + " · " + x.position }))} cols={cols.filter(([k]) => !["reach", "frequency"].includes(k))} csvName={csv("vi-tri")} />}
           {tab === "convs" && (
-            <Table rows={(a.convActions || []).map((c) => ({ ...c, label: (CONV_CAT[c.category] || c.category || "") + (c.counted === false ? " · không tính vào cột Chuyển đổi" : "") }))} sub="label"
+            <Table rows={(a.convActions || []).map((c) => ({ ...c, label: (CONV_CAT[c.category] || c.category || "") + (c.counted === false ? " · không tính vào cột Chuyển đổi" : "") }))} sub="label" csvName={csv("loai-chuyen-doi")}
               cols={[["conversions", "Chuyển đổi", dec], ["allConversions", "Tất cả CĐ", dec], ["cpa", "CP/CĐ loại này", vnd], ["value", "Giá trị", vnd]]} />
           )}
-          {tab === "keywords" && <Table rows={vrows(a.keywords)} cols={cols.filter(([k]) => k !== "budgetLostIS")} sub="campaign" />}
+          {tab === "keywords" && <Table rows={vrows(a.keywords)} cols={cols.filter(([k]) => k !== "budgetLostIS")} sub="campaign" csvName={csv("tu-khoa")} />}
         </div>
       )}
     </Card>
@@ -532,46 +563,70 @@ function sumGroup(list) {
   return s;
 }
 
+// Cache báo cáo chính trong bộ nhớ theo kỳ + so sánh: quay lại kỳ đã xem là hiện ngay; quá 5 phút thì hiện số cũ + tải lại ngầm
+const REPORT_CACHE = new Map();
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* bỏ qua */ } };
+
 export default function Ads() {
   const { isOwner, ownerId, perms = [], settings = {}, adsResults = [] } = useData();
   const canView = isOwner || (!!ownerId && perms.includes("ads")); // tài khoản phụ có quyền Quảng cáo: xem số liệu (máy chủ chỉ cho chế độ đọc)
   setAdsProxy(!!ownerId && !isOwner);
-  const [preset, setPreset] = useState("today");
-  const [range, setRange] = useState(presetRange("today"));
+  const [period, setPeriod] = usePeriod("today"); // nhớ chung với Website / Fanpage; chưa chọn bao giờ → Hôm nay
   const [compare, setCompare] = useState(true);
-  const [group, setGroup] = useState("conv");
-  const [data, setData] = useState(null);
+  const [group, setGroupS] = useState(() => (lsGet("qws-ads-group") === "brand" ? "brand" : "conv"));
+  const setGroup = (g) => { setGroupS(g); lsSet("qws-ads-group", g); };
+  const { since, until } = period;
+  const rKey = `${since}|${until}|${compare}`;
+  const [data, setData] = useState(() => REPORT_CACHE.get(rKey)?.v || null);
+  const [dataKey, setDataKey] = useState(() => (REPORT_CACHE.get(rKey) ? rKey : "")); // kỳ của số đang hiện
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false); // tải ngầm
   const [err, setErr] = useState("");
-  const [ai, setAi] = useState({ busy: false, text: "", err: "" });
-  const [since, until] = range;
+  const [aiState, setAiState] = useState({}); // kết quả AI theo "nhóm|từ|đến" → mỗi kỳ hiện đúng phân tích của nó
   const live = until >= todayISO();
+  const stale = !!data && dataKey !== rKey; // số đang hiện là của kỳ khác (đang chờ kỳ mới)
+  const reqRef = useRef(0);
 
-  const load = async (silent) => {
-    if (!silent) setLoading(true); setErr("");
+  // force = bỏ qua cache (Làm mới) · silent = tải ngầm, không che màn hình, không báo lỗi
+  const load = async ({ force = false, silent = false } = {}) => {
+    const key = rKey, c = REPORT_CACHE.get(key), id = ++reqRef.current;
+    if (!force && c) {
+      setData(c.v); setDataKey(key); setErr("");
+      if (Date.now() - c.at < 300000) { setLoading(false); setSyncing(false); return; }
+      silent = true;
+    }
+    setLoading(!silent); setSyncing(silent);
+    if (!silent) setErr("");
     try {
-      const { data: d, error } = await supabase.functions.invoke("qws-meta-ads", { body: { since, until, compare } });
-      if (error) throw error;
-      if (d?.error) throw new Error(d.error);
-      setData(d);
-    } catch (e) { if (!silent) setErr(e.message || String(e)); }
-    if (!silent) setLoading(false);
+      const d = await invoke({ since, until, compare });
+      REPORT_CACHE.set(key, { at: Date.now(), v: d });
+      if (id === reqRef.current) { setData(d); setDataKey(key); setErr(""); }
+    } catch (e) { if (id === reqRef.current && !silent) setErr(e.message || String(e)); }
+    if (id === reqRef.current) { setLoading(false); setSyncing(false); }
   };
-  useEffect(() => { if (canView) load(); /* eslint-disable-next-line */ }, [since, until, compare, canView]);
+  useEffect(() => { if (canView) load(); /* eslint-disable-next-line */ }, [rKey, canView]);
   // Kỳ có HÔM NAY → tự làm mới 5 phút/lần khi tab đang mở (Meta trễ ~15-30 phút so với thực tế)
   useEffect(() => {
     if (!canView || !live) return;
-    const t = setInterval(() => { if (!document.hidden) load(true); }, 300000);
+    const t = setInterval(() => { if (!document.hidden) load({ force: true, silent: true }); }, 300000);
     return () => clearInterval(t); /* eslint-disable-next-line */
-  }, [since, until, compare, canView, live]);
+  }, [rKey, canView, live]);
 
-  // Mục tiêu từng chiến dịch Meta (lấy 1 lần/30 phút/TK) → gắn kết quả + chi phí theo mục tiêu
+  // Mục tiêu từng chiến dịch Meta (lấy 1 lần/30 phút/TK) → gắn kết quả + chi phí theo mục tiêu. Lỗi → báo + Thử lại
   const [goals, setGoals] = useState({});
+  const [goalErr, setGoalErr] = useState({});
+  const goalReq = useRef(new Set());
+  const fetchGoals = (id) => {
+    if (goalReq.current.has(id)) return;
+    goalReq.current.add(id);
+    setGoalErr((o) => { if (!o[id]) return o; const n = { ...o }; delete n[id]; return n; });
+    loadCampaignGoals(id).then((v) => setGoals((o) => ({ ...o, [id]: v })))
+      .catch((e) => setGoalErr((o) => ({ ...o, [id]: e.message || String(e) })))
+      .finally(() => goalReq.current.delete(id));
+  };
   useEffect(() => {
-    for (const a of data?.accounts || []) {
-      if (a.platform === "google" || a.error || goals[a.id]) continue;
-      loadCampaignGoals(a.id).then((v) => setGoals((o) => ({ ...o, [a.id]: v }))).catch(() => {});
-    }
+    for (const a of data?.accounts || []) if (a.platform !== "google" && !a.error && !goals[a.id] && !goalErr[a.id]) fetchGoals(a.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
   const allAccs = useMemo(() => (data?.accounts || []).map((a) => enrichGoals(a, goals[a.id])), [data, goals]);
@@ -589,12 +644,15 @@ export default function Ads() {
 
   const diag = useMemo(() => (data ? diagnose(accounts, { targets: settings.adsTargets || {}, adsResults, since, until, goalBase }) : null), [allAccs, goalBase, group, settings.adsTargets, adsResults, since, until]);
 
+  const aiKey = `${group}|${since}|${until}`;
+  const ai = aiState[aiKey] || {};
   const runAi = async () => {
-    setAi({ busy: true, text: "", err: "" });
+    const key = aiKey;
+    setAiState((s) => ({ ...s, [key]: { busy: true } }));
     try {
       const text = await aiAdsAnalysis({ diagnosis: diag, group, apiKey: settings.openaiKey });
-      setAi({ busy: false, text, err: "" });
-    } catch (e) { setAi({ busy: false, text: "", err: e.message || String(e) }); }
+      setAiState((s) => ({ ...s, [key]: { text } }));
+    } catch (e) { setAiState((s) => ({ ...s, [key]: { err: e.message || String(e) } })); }
   };
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Quảng cáo.</div></Card>;
 
@@ -602,64 +660,63 @@ export default function Ads() {
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap items-center gap-2">
-          {PRESETS.map(([k, l]) => (
-            <button key={k} onClick={() => { setPreset(k); if (k !== "custom") setRange(presetRange(k)); }} className={`rounded-xl px-3 py-1.5 text-xs font-bold ${preset === k ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}</button>
-          ))}
-          {preset === "custom" && (
-            <div className="flex items-center gap-1.5 text-xs">
-              <DateField value={since} onChange={(v) => setRange([v, until < v ? v : until])} className="rounded-lg border border-slate-200 px-2 py-1.5" />
-              <span>→</span>
-              <DateField value={until} onChange={(v) => setRange([since > v ? v : since, v])} className="rounded-lg border border-slate-200 px-2 py-1.5" />
-            </div>
-          )}
+          <RangePicker value={period} onChange={setPeriod} />
           <label className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-slate-500"><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />So với kỳ trước</label>
-          <button onClick={() => load()} disabled={loading} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"><RefreshCw size={13} className={loading ? "animate-spin" : ""} />Làm mới</button>
+          <button onClick={() => load({ force: true })} disabled={loading} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"><RefreshCw size={13} className={loading || syncing ? "animate-spin" : ""} />Làm mới</button>
         </div>
         <div className="mt-2 text-[11px] text-slate-400">
           {dm(since)}{since !== until && " → " + dm(until)}
-          {data?.updatedAt && ` · cập nhật ${new Date(data.updatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`}
+          {data?.updatedAt && !stale && ` · cập nhật ${new Date(data.updatedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`}
           {live && " · số hôm nay Meta trễ ~15-30 phút, tự làm mới 5 phút/lần"}
-          {data?.prev && ` · kỳ trước ${dm(data.prev.since)} → ${dm(data.prev.until)}`}
+          {data?.prev && !stale && ` · kỳ trước ${dm(data.prev.since)} → ${dm(data.prev.until)}`}
         </div>
         {err && <div className="mt-2 rounded-xl bg-rose-50 p-2 text-xs text-rose-700">Lỗi tải số liệu: {err}</div>}
       </Card>
 
       <AlertsPanel tick={data?.updatedAt} />
 
-      <div className="flex gap-2 px-3 sm:px-0">
+      <div className="flex flex-wrap items-center gap-2 px-3 sm:px-0">
         {[["conv", "Chuyển đổi", Target], ["brand", "Thương hiệu", Megaphone]].map(([k, l, I]) => (
-          <button key={k} onClick={() => { setGroup(k); setAi({ busy: false, text: "", err: "" }); }} className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold ${group === k ? "bg-white text-slate-900 shadow ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60"}`}><I size={15} />{l}</button>
+          <button key={k} onClick={() => setGroup(k)} className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold ${group === k ? "bg-white text-slate-900 shadow ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60"}`}><I size={15} />{l}</button>
         ))}
+        {stale && <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">{loading ? <><Loader2 size={12} className="animate-spin" /> Đang tải…</> : "Đang hiện số của kỳ khác"}</span>}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={Wallet} label="Chi phí" value={tot.spend} sub={prevTot ? "Kỳ trước " + vnd(prevTot.spend) : null} tone="indigo" />
-        {group === "conv" ? <>
-          <StatCard icon={MessageCircle} label="Kết quả (tin + lead + CĐ)" value={int(tot.results)} money={false} sub={`${int(tot.msgs)} tin · ${int(tot.leads)} lead · ${dec(tot.gconv)} CĐ Google`} tone="emerald" />
-          <StatCard icon={Target} label="Giá / kết quả" value={vnd(tot.cpr)} money={false} sub={prevTot ? "Kỳ trước " + vnd(prevTot.cpr) : null} tone="rose" />
-        </> : <>
-          <StatCard icon={Eye} label="Tiếp cận (cộng các TK)" value={int(tot.reach)} money={false} sub={`${int(tot.impressions)} lượt hiển thị`} tone="amber" />
-          <StatCard icon={Megaphone} label="Hiển thị" value={int(tot.impressions)} money={false} sub={prevTot ? "Kỳ trước " + int(prevTot.impressions) : null} tone="sky" />
-        </>}
-        <StatCard icon={TrendingUp} label="CPM" value={vnd(tot.cpm)} money={false} sub={prevTot ? "Kỳ trước " + vnd(prevTot.cpm) : null} tone="sky" />
+      {/* Đang tải kỳ mới → làm mờ số cũ để không nhầm là số của kỳ vừa chọn */}
+      <div className={`space-y-4 transition-opacity ${stale ? "opacity-50" : ""}`}>
+        {!data ? (!err && (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="card h-[74px] animate-pulse sm:h-[104px]" />)}</div>
+        )) : (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard icon={Wallet} label="Chi phí" value={tot.spend} sub={prevTot ? "Kỳ trước " + vnd(prevTot.spend) : null} tone="indigo" />
+            {group === "conv" ? <>
+              <StatCard icon={MessageCircle} label="Kết quả (tin + lead + CĐ)" value={int(tot.results)} money={false} sub={`${int(tot.msgs)} tin · ${int(tot.leads)} lead · ${dec(tot.gconv)} CĐ Google`} tone="emerald" />
+              <StatCard icon={Target} label="Giá / kết quả" value={vnd(tot.cpr)} money={false} sub={prevTot ? "Kỳ trước " + vnd(prevTot.cpr) : null} tone="rose" />
+            </> : <>
+              <StatCard icon={Eye} label="Tiếp cận (cộng các TK)" value={int(tot.reach)} money={false} sub={`${int(tot.impressions)} lượt hiển thị`} tone="amber" />
+              <StatCard icon={Megaphone} label="Hiển thị" value={int(tot.impressions)} money={false} sub={prevTot ? "Kỳ trước " + int(prevTot.impressions) : null} tone="sky" />
+            </>}
+            <StatCard icon={TrendingUp} label="CPM" value={vnd(tot.cpm)} money={false} sub={prevTot ? "Kỳ trước " + vnd(prevTot.cpm) : null} tone="sky" />
+          </div>
+        )}
+
+        <Card>
+          <div className="flex flex-wrap items-center gap-2">
+            <Sparkles size={16} className="text-violet-500" />
+            <span className="text-sm font-extrabold">AI phân tích nhóm {group === "conv" ? "Chuyển đổi" : "Thương hiệu"}</span>
+            <button onClick={runAi} disabled={ai.busy || !data || stale} className="ml-auto rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{ai.busy ? "Đang phân tích…" : ai.text ? "Phân tích lại" : "Phân tích"}</button>
+          </div>
+          {ai.err && <div className="mt-2 text-xs text-rose-600">{ai.err}</div>}
+          {!ai.text && !ai.busy && !ai.err && <div className="mt-2 text-xs text-slate-400">AI đọc bảng chấm điểm bên dưới (số đã tính sẵn, không tự đoán) và đưa ra việc cần làm cụ thể cho từng chiến dịch.</div>}
+          <AiReport r={ai.text} />
+        </Card>
+
+        <Scorecard diag={diag} onWeek={() => setPeriod(makePeriod("7d"))} />
+
+        {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
+        {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
+        {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} goalBase={goalBase} goalErr={goalErr[a.id]} onRetryGoals={() => fetchGoals(a.id)} onChanged={() => load({ force: true, silent: true })} />)}
       </div>
-
-      <Card>
-        <div className="flex flex-wrap items-center gap-2">
-          <Sparkles size={16} className="text-violet-500" />
-          <span className="text-sm font-extrabold">AI phân tích nhóm {group === "conv" ? "Chuyển đổi" : "Thương hiệu"}</span>
-          <button onClick={runAi} disabled={ai.busy || !data} className="ml-auto rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50">{ai.busy ? "Đang phân tích…" : "Phân tích"}</button>
-        </div>
-        {ai.err && <div className="mt-2 text-xs text-rose-600">{ai.err}</div>}
-        {!ai.text && !ai.busy && !ai.err && <div className="mt-2 text-xs text-slate-400">AI đọc bảng chấm điểm bên dưới (số đã tính sẵn, không tự đoán) và đưa ra việc cần làm cụ thể cho từng chiến dịch.</div>}
-        <AiReport r={ai.text} />
-      </Card>
-
-      <Scorecard diag={diag} onWeek={() => { setPreset("7d"); setRange(presetRange("7d")); }} />
-
-      {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
-      {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
-      {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} goalBase={goalBase} onChanged={() => load(true)} />)}
     </div>
   );
 }

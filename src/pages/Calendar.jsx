@@ -108,7 +108,7 @@ function ImportModal({ onClose, onImport }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
-      <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+      <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Nhập sự kiện từ Google Sheet</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -127,7 +127,8 @@ function ImportModal({ onClose, onImport }) {
 const WINDOWS = [[30, "30 ngày"], [90, "3 tháng"], [180, "6 tháng"], [365, "1 năm"]];
 
 export default function Calendar() {
-  const { tasks, family, addFamily, updateFamily, deleteFamily, addFamilyMany, deleteFamilyMany } = useData();
+  const { tasks, family, addFamily, updateFamily, deleteFamily, addFamilyMany, deleteFamilyMany, canEdit } = useData();
+  const canW = canEdit ? canEdit("tasks") : true; // chỉ có quyền Xem → ẩn nút thêm/sửa/xoá
   const today = new Date();
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [selected, setSelected] = useState(isoOf(today));
@@ -153,7 +154,7 @@ export default function Calendar() {
   const report = useMemo(() => upcomingEvents(family, new Date(), win), [family, win]);
   const filtered = report.filter((r) => catF === "all" || r.category === catF);
   const remindNow = report.filter((r) => r.willRemind);
-  const selectable = filtered.filter((r) => !r.builtin); // chỉ sự kiện riêng mới chọn/xoá được
+  const selectable = canW ? filtered.filter((r) => !r.builtin) : []; // chỉ sự kiện riêng mới chọn/xoá được
   const allPicked = selectable.length > 0 && selectable.every((r) => picked.has(r.id));
   const toggle = (id) => setPicked((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () => setPicked(allPicked ? new Set() : new Set(selectable.map((r) => r.id)));
@@ -270,13 +271,17 @@ export default function Calendar() {
             {selectable.length > 0 && (
               <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />} Chọn</button>
             )}
-            <button onClick={loadMine} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-600 hover:bg-emerald-100"><FolderDown size={15} /> Nạp sự kiện của tôi</button>
-            <button onClick={() => setImportOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Download size={15} /> Nhập CSV</button>
-            <button onClick={() => setModal({})} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={15} /> Thêm</button>
+            {canW ? (<>
+              <button onClick={loadMine} className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-600 hover:bg-emerald-100"><FolderDown size={15} /> Nạp sự kiện của tôi</button>
+              <button onClick={() => setImportOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Download size={15} /> Nhập CSV</button>
+              <button onClick={() => setModal({})} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={15} /> Thêm</button>
+            </>) : (
+              <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>
+            )}
           </div>
         </div>
 
-        {picked.size > 0 && (
+        {canW && picked.size > 0 && (
           <div className="mt-3 flex items-center justify-between rounded-xl bg-indigo-50 px-4 py-2.5">
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size} sự kiện</span>
             <div className="flex gap-2">
@@ -304,11 +309,11 @@ export default function Calendar() {
           {filtered.length === 0 && <div className="py-8 text-center text-sm text-slate-400">Không có sự kiện trong khoảng này.</div>}
           {filtered.map((r) => {
             const C = CATS[r.category] || CATS["khác"];
-            const fam = !r.builtin ? family.find((x) => x.id === r.id) : null;
+            const fam = canW && !r.builtin ? family.find((x) => x.id === r.id) : null;
             const isPicked = picked.has(r.id);
             return (
               <div key={r.id + r.date} className={`flex items-start gap-2.5 rounded-xl border p-3 ${r.done ? "opacity-60" : ""} ${isPicked ? "border-indigo-300 bg-indigo-50/60" : r.willRemind && !r.done ? "border-amber-200 bg-amber-50/50" : "border-slate-100"}`}>
-                {fam && <button onClick={() => toggle(r.id)} className="mt-0.5 shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>}
+                {fam && <button onClick={() => toggle(r.id)} className="-m-1.5 grid h-9 w-9 shrink-0 place-items-center text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_COLOR[r.kind] || "bg-slate-400"}`} />
@@ -328,14 +333,15 @@ export default function Calendar() {
                     <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-extrabold ${r.daysUntil === 0 ? "bg-rose-100 text-rose-600" : r.willRemind ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{r.willRemind && <BellRing size={10} />}{r.daysUntil === 0 ? "Hôm nay" : `${r.daysUntil}n`}</span>
                   )}
                   {fam && (
-                    <div className="mt-1.5 flex justify-end gap-2">
+                    <div className="mt-1 -mr-1.5 flex justify-end gap-0.5">
+                      {/* Nút 36px cho dễ chạm trên điện thoại */}
                       {r.manualDone ? (
-                        <button onClick={() => updateFamily(fam.id, { done: false })} className="text-emerald-500"><Undo2 size={15} /></button>
+                        <button title="Mở lại" onClick={() => updateFamily(fam.id, { done: false })} className="grid h-9 w-9 place-items-center rounded-lg text-emerald-500 hover:bg-emerald-50"><Undo2 size={16} /></button>
                       ) : r.repeat === "once" && !r.done ? (
-                        <button onClick={() => updateFamily(fam.id, { done: true })} className="text-slate-300 hover:text-emerald-600"><Check size={16} /></button>
+                        <button title="Đánh dấu hoàn thành" onClick={() => updateFamily(fam.id, { done: true })} className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"><Check size={17} /></button>
                       ) : null}
-                      <button onClick={() => setModal(fam)} className="text-slate-300 hover:text-indigo-600"><Pencil size={15} /></button>
-                      <button onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+                      <button title="Sửa" onClick={() => setModal(fam)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={16} /></button>
+                      <button title="Xoá" onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={16} /></button>
                     </div>
                   )}
                 </div>
@@ -358,7 +364,7 @@ export default function Calendar() {
               {filtered.length === 0 && (<tr><td colSpan={9} className="py-8 text-center text-sm text-slate-400">Không có sự kiện trong khoảng này.</td></tr>)}
               {filtered.map((r) => {
                 const C = CATS[r.category] || CATS["khác"];
-                const fam = !r.builtin ? family.find((x) => x.id === r.id) : null;
+                const fam = canW && !r.builtin ? family.find((x) => x.id === r.id) : null;
                 const isPicked = picked.has(r.id);
                 return (
                   <tr key={r.id + r.date} className={`group border-b border-slate-50 ${r.done ? "opacity-55" : ""} ${isPicked ? "bg-indigo-50/70" : r.willRemind && !r.done ? "bg-amber-50/60" : ""}`}>
@@ -386,9 +392,9 @@ export default function Calendar() {
                           ) : r.repeat === "once" && !r.done ? (
                             <button title="Đánh dấu hoàn thành" onClick={() => updateFamily(fam.id, { done: true })} className="rounded p-1 text-slate-300 hover:text-emerald-600"><Check size={15} /></button>
                           ) : null}
-                          <span className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-                            <button onClick={() => setModal(fam)} className="rounded p-1 text-slate-300 hover:text-indigo-600"><Pencil size={13} /></button>
-                            <button onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="rounded p-1 text-slate-300 hover:text-rose-600"><Trash2 size={13} /></button>
+                          <span className="flex items-center gap-1 transition focus-within:opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100">
+                            <button title="Sửa" onClick={() => setModal(fam)} className="rounded-lg p-1.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
+                            <button title="Xoá" onClick={async () => { if (await ask("Xoá sự kiện này?")) deleteFamily(fam.id); }} className="rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
                           </span>
                         </span>
                       )}

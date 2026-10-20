@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Sparkles, ImagePlus, MessageSquareText, Key, Save, Loader2, Check, X, Trash2, Eye, EyeOff, Settings as SettingsIcon, Mic, MicOff } from "lucide-react";
-import { Card, SectionTitle, Badge, formatVND } from "./ui.jsx";
+import { Card, SectionTitle, formatVND, MoneyInput, DateField } from "./ui.jsx";
+import { PROJECT_CATEGORIES } from "../data/seed.js";
 import { useData } from "../lib/store.jsx";
 import { aiImport, fileToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
@@ -9,48 +10,83 @@ import { guardClose, markDirty } from "./ConfirmDialog.jsx";
 const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
-function ParsedPreview({ parsed, mode }) {
+const amt = (v) => (typeof v === "number" ? Math.round(v) : num(v));
+const cellCls = "w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs";
+const isISO = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+
+// 1 đợt thu sửa tại chỗ: tên đợt · ngày · nhận · đã thu (· tiền chạy nếu ADS) + bỏ dòng
+function InstEditor({ x, onChange, onRemove, showSpend }) {
+  const money = (k, label) => (
+    <label className="block min-w-0 text-[10px] font-bold text-slate-400">{label}
+      <MoneyInput value={String(amt(x[k]) || "")} onChange={(v) => onChange({ [k]: v })} className={`${cellCls} mt-0.5 font-bold text-slate-700`} placeholder="0" />
+    </label>
+  );
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-2">
+      <div className="flex items-center gap-1.5">
+        <input value={x.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} placeholder="Đợt" className={`${cellCls} flex-1 font-semibold`} />
+        <DateField value={isISO(x.date) ? x.date : ""} onChange={(v) => onChange({ date: v })} placeholder={x.date || "Chọn ngày"} className={`${cellCls} w-28 shrink-0`} />
+        <button onClick={onRemove} className="-my-1 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Bỏ dòng này"><Trash2 size={15} /></button>
+      </div>
+      <div className={`mt-1.5 grid gap-1.5 ${showSpend ? "grid-cols-3" : "grid-cols-2"}`}>
+        {money("amount", "Nhận")}{money("collected", "Đã thu")}{showSpend && money("spend", "Tiền chạy")}
+      </div>
+    </div>
+  );
+}
+
+// Xem trước kết quả AI — SỬA từng dòng / bỏ dòng trước khi "Thêm vào app"
+function ParsedPreview({ parsed, mode, onChange }) {
   const projects = parsed.projects || [];
   const customers = parsed.customers || [];
-  const insts = projects.flatMap((p) => p.installments || []);
-  if (!projects.length && !customers.length) return <div className="text-sm text-slate-400">AI không tìm thấy dữ liệu nào.</div>;
+  const setP = (pi, fn) => onChange({ ...parsed, projects: projects.map((p, i) => (i === pi ? fn(p) : p)) });
+  const setInst = (pi, ii, patch) => setP(pi, (p) => ({ ...p, installments: (p.installments || []).map((x, j) => (j === ii ? { ...x, ...patch } : x)) }));
+  const delInst = (pi, ii) => setP(pi, (p) => ({ ...p, installments: (p.installments || []).filter((_, j) => j !== ii) }));
+  const delProject = (pi) => onChange({ ...parsed, projects: projects.filter((_, i) => i !== pi) });
+  const delCustomer = (ci) => onChange({ ...parsed, customers: customers.filter((_, i) => i !== ci) });
+  const insts = projects.flatMap((p, pi) => (p.installments || []).map((x, ii) => ({ x, pi, ii })));
   if (mode === "installment") {
-    return (
-      <div className="space-y-1.5">
-        {insts.map((x, j) => (
-          <div key={j} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-sm">
-            <span className="font-semibold text-slate-700">{x.label || "Đợt"} <span className="font-normal text-slate-400">· {x.date}{x.spend ? ` · chạy ${formatVND(num(x.spend))}` : ""}</span></span>
-            <span className="text-slate-500">nhận {formatVND(num(x.amount))} · thu {formatVND(num(x.collected))}</span>
-          </div>
-        ))}
-      </div>
-    );
+    if (!insts.length) return <div className="text-sm text-slate-400">Không còn đợt nào để thêm.</div>;
+    const showSpend = insts.some(({ x }) => amt(x.spend) > 0);
+    return <div className="space-y-1.5">{insts.map(({ x, pi, ii }) => <InstEditor key={`${pi}-${ii}`} x={x} showSpend={showSpend} onChange={(patch) => setInst(pi, ii, patch)} onRemove={() => delInst(pi, ii)} />)}</div>;
   }
+  if (!projects.length && !customers.length) return <div className="text-sm text-slate-400">Không còn dữ liệu nào để thêm.</div>;
   return (
     <div className="space-y-2">
-      {projects.map((p, i) => {
-        const total = (p.installments || []).reduce((a, x) => a + num(x.amount), 0);
+      {projects.map((p, pi) => {
+        const total = (p.installments || []).reduce((a, x) => a + amt(x.amount), 0);
+        const showSpend = p.category === "ADS" || (p.installments || []).some((x) => amt(x.spend) > 0);
         return (
-          <div key={i} className="rounded-xl border border-slate-100 p-3">
-            <div className="flex items-center gap-2">
-              <Badge tone="indigo">{p.category || "Khác"}</Badge>
-              <span className="text-sm font-bold text-slate-800">{p.name || "Dự án"}</span>
-              <span className="text-xs text-slate-400">· {p.customerName}</span>
-              <span className="ml-auto text-sm font-extrabold text-slate-700">{formatVND(total)}</span>
+          <div key={pi} className="rounded-xl border border-slate-100 p-2.5">
+            <div className="flex items-center gap-1.5">
+              <select value={PROJECT_CATEGORIES.includes(p.category) ? p.category : "Khác"} onChange={(e) => setP(pi, (q) => ({ ...q, category: e.target.value }))} className={`${cellCls} w-auto shrink-0 font-bold text-indigo-600`}>
+                {PROJECT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+              <input value={p.name ?? ""} onChange={(e) => setP(pi, (q) => ({ ...q, name: e.target.value }))} placeholder="Tên dự án" className={`${cellCls} flex-1 text-sm font-bold text-slate-800`} />
+              <button onClick={() => delProject(pi)} className="-my-1 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Bỏ dự án này"><Trash2 size={15} /></button>
             </div>
-            <div className="mt-1 space-y-0.5">
-              {(p.installments || []).map((x, j) => (
-                <div key={j} className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span>{x.label || "Đợt"} · {x.date}{x.spend ? ` · chạy ${formatVND(num(x.spend))}` : ""}</span>
-                  <span>nhận {formatVND(num(x.amount))} · thu {formatVND(num(x.collected))}</span>
-                </div>
-              ))}
+            <div className="mt-1.5 flex items-center gap-2">
+              <input value={p.customerName ?? ""} onChange={(e) => setP(pi, (q) => ({ ...q, customerName: e.target.value }))} placeholder="Tên khách" className={`${cellCls} flex-1`} />
+              <span className="shrink-0 text-sm font-extrabold text-slate-700">{formatVND(total)}</span>
+            </div>
+            <div className="mt-1.5 space-y-1.5">
+              {(p.installments || []).map((x, ii) => <InstEditor key={ii} x={x} showSpend={showSpend} onChange={(patch) => setInst(pi, ii, patch)} onRemove={() => delInst(pi, ii)} />)}
+              {!(p.installments || []).length && <div className="text-[11px] text-slate-400">Dự án chưa có đợt thu.</div>}
             </div>
           </div>
         );
       })}
       {customers.length > 0 && (
-        <div className="rounded-xl border border-slate-100 p-3 text-sm"><span className="font-bold text-slate-700">Khách hàng: </span><span className="text-slate-500">{customers.map((c) => c.name).join(", ")}</span></div>
+        <div className="rounded-xl border border-slate-100 p-2.5 text-sm">
+          <div className="mb-1 font-bold text-slate-700">Khách hàng mới</div>
+          <div className="flex flex-wrap gap-1.5">
+            {customers.map((c, ci) => (
+              <span key={ci} className="inline-flex items-center rounded-lg bg-slate-100 pl-2.5 text-xs font-semibold text-slate-600">{c.name}
+                <button onClick={() => delCustomer(ci)} className="rounded-lg p-2 text-slate-400 hover:text-rose-600" title="Bỏ khách này"><X size={12} /></button>
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -135,13 +171,15 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
     setLoading(false);
   };
 
+  // Số dòng còn lại sau khi user sửa/bỏ trong bản xem trước
+  const count = !parsed ? 0 : mode === "installment"
+    ? (parsed.projects || []).flatMap((p) => p.installments || []).length
+    : (parsed.projects || []).length + (parsed.customers || []).length;
   const apply = () => {
-    if (!parsed) return;
+    if (!parsed || !count) return;
     onApply(parsed);
-    const count = mode === "installment"
-      ? (parsed.projects || []).flatMap((p) => p.installments || []).length
-      : (parsed.projects || []).length;
-    setDone(`✓ Đã thêm ${count} ${mode === "installment" ? "đợt" : "dự án"} vào app.`);
+    const nP = (parsed.projects || []).length;
+    setDone(`✓ Đã thêm ${mode === "installment" ? `${count} đợt` : `${nP} dự án`} vào app.`);
     setParsed(null); setText(""); setImgNote(""); setImgData(null);
   };
 
@@ -201,11 +239,11 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
       {parsed && (
         <div className="mt-4 rounded-xl border border-slate-100 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-700">AI bóc được — kiểm tra rồi thêm</span>
-            <button onClick={() => setParsed(null)} className="text-slate-400 hover:text-rose-600"><Trash2 size={15} /></button>
+            <span className="text-sm font-bold text-slate-700">AI bóc được — sửa / bỏ dòng rồi thêm</span>
+            <button onClick={() => setParsed(null)} className="-m-1 rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Bỏ toàn bộ kết quả"><Trash2 size={15} /></button>
           </div>
-          <ParsedPreview parsed={parsed} mode={mode} />
-          <button onClick={apply} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600"><Check size={16} /> Thêm vào app</button>
+          <ParsedPreview parsed={parsed} mode={mode} onChange={setParsed} />
+          <button onClick={apply} disabled={!count} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-40"><Check size={16} /> Thêm {count > 0 ? `${count} ${mode === "installment" ? "đợt" : "mục"} ` : ""}vào app</button>
         </div>
       )}
     </div>

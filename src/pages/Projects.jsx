@@ -324,6 +324,8 @@ function InstModal({ isAds, isSalary, salaryBase = 0, initial, dup = false, defa
 }
 
 export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClose, onEdit, onDelete, addInstallment, updateInstallment, deleteInstallment }) {
+  const { canEdit } = useData();
+  const canW = canEdit ? canEdit("customers") : true; // chỉ có quyền Xem → ẩn nút sửa/xoá/thu tiền
   const m = projectMetrics(project);
   const isAds = project.category === "ADS";
   const isSalary = project.category === "Lương";
@@ -342,13 +344,14 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
             <div className="flex items-center gap-2">
               <Badge tone={CAT_TONE[project.category] || "slate"}>{project.category}</Badge>
               <Badge tone={stone}>{slabel}</Badge>
+              {!canW && <span className="rounded-lg bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-600">Chỉ xem</span>}
             </div>
             <h3 className="mt-2 break-words text-lg font-extrabold text-slate-900">{project.name}</h3>
             <div className="text-sm text-slate-400">{project.customerName}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <button onClick={onEdit} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>
-            <button onClick={async () => { if (await ask("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>
+            {canW && <button onClick={onEdit} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>}
+            {canW && <button onClick={async () => { if (await ask("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>}
             <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 sm:p-1.5"><X size={18} /></button>
           </div>
         </div>
@@ -363,10 +366,10 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
 
         <div className="mt-5 flex items-center justify-between">
           <div className="text-sm font-bold text-slate-600">{isSalary ? `Các tháng lương (${insts.length})` : `Các đợt (${insts.length})`}</div>
-          <div className="flex items-center gap-2">
+          {canW && <div className="flex items-center gap-2">
             {!isSalary && <button onClick={() => setAiInst(true)} className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-xs font-bold text-white"><Sparkles size={13} /> AI</button>}
             <button onClick={() => setInstModal({})} className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold ${isSalary ? "bg-violet-100 text-violet-600 hover:bg-violet-200" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"}`}>{isSalary ? <><Wallet size={14} /> Ghi lương tháng</> : <><Plus size={14} /> Thêm đợt</>}</button>
-          </div>
+          </div>}
         </div>
         {insts.length === 0 && <div className="mt-1 text-xs text-slate-400">{isSalary ? "Chưa ghi tháng nào. Bấm \"Ghi lương tháng\" để ghi lương thực nhận." : "Chưa có đợt nào. Thêm đợt để ghi nhận thu tiền."}</div>}
         <div className="mt-2 space-y-2">
@@ -379,9 +382,11 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                   <div className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-slate-800"><span className="truncate">{x.label}</span>{x.carried && <Badge tone="sky">nối</Badge>}</div>
                   <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
                     <span className="text-[11px] text-slate-400">{x.date ? fmtDateVI(x.date) : ""}</span>
+                    {canW && <>
                     <button title="Nhân bản (đổi ngày)" onClick={() => setInstModal({ dup: { ...instToForm(x), id: undefined, carried: false, date: addMonthISO(x.date) } })} className="-my-1 rounded p-2 text-slate-300 hover:text-violet-600 sm:my-0 sm:p-1"><Copy size={13} /></button>
                     <button title="Sửa" onClick={() => setInstModal({ edit: instToForm(x) })} className="-my-1 rounded p-2 text-slate-300 hover:text-indigo-600 sm:my-0 sm:p-1"><Pencil size={13} /></button>
                     <button title="Xoá" onClick={() => deleteInstallment(project.id, x.id)} className="-my-1 rounded p-2 text-slate-300 hover:text-rose-600 sm:my-0 sm:p-1"><Trash2 size={13} /></button>
+                    </>}
                   </div>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
@@ -398,14 +403,14 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                   <span className={`text-[11px] font-bold ${full ? "text-emerald-600" : "text-rose-600"}`}>
                     {full ? "Đã thu đủ" : `Còn nợ ${formatVND(im.debt)}`} · thu {formatShort(im.collected)}/{formatShort(im.contractValue)}
                   </span>
-                  <div className="ml-auto flex items-center gap-1.5">
+                  {canW && <div className="ml-auto flex items-center gap-1.5">
                     {im.carry > 0 && (
                       <button onClick={() => addInstallment(project.id, { label: "Tiếp nối " + x.label, date: todayISO(), amount: im.carry, serviceFee: 0, spend: 0, refund: 0, carry: 0, ctv: 0, otherCost: 0, collected: im.carry, carried: true })} className="flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-600 hover:bg-amber-100"><ArrowRight size={12} /> Tạo đợt nối</button>
                     )}
                     {!full && (
                       <button onClick={() => updateInstallment(project.id, x.id, { collected: im.contractValue })} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
                     )}
-                  </div>
+                  </div>}
                 </div>
               </div>
             );
@@ -429,7 +434,8 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
 }
 
 export default function Projects() {
-  const { projects, customerList, addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment } = useData();
+  const { projects, customerList, addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment, canEdit } = useData();
+  const canW = canEdit ? canEdit("customers") : true;
   const [modal, setModal] = useState(null);
   const [aiModal, setAiModal] = useState(false);
   const [drawer, setDrawer] = useState(null);
@@ -496,10 +502,11 @@ export default function Projects() {
             <Search size={16} className="shrink-0 text-slate-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm dự án / khách…" className="w-full text-sm outline-none" />
           </div>
-          <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600 sm:ml-auto">Chỉ xem</span>}
+          {canW && <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
             <button onClick={() => setAiModal(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={16} /> AI</button>
             <button onClick={() => setModal(emptyProject)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 sm:flex-none"><Plus size={16} /> Thêm dự án</button>
-          </div>
+          </div>}
         </div>
         {/* MOBILE: dropdown trạng thái */}
         <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">

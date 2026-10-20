@@ -179,6 +179,7 @@ export function DataProvider({ children }) {
         stateRef.current = merged;
         skipSave.current = true;
         setState(stateRef.current);
+        setToast({ text: "Vừa có thay đổi từ thiết bị/người khác — đã gộp, không mất dữ liệu của ai", at: Date.now() });
       }
       dirty.current = false;
       clearPending();

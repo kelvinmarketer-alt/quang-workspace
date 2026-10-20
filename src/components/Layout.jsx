@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
@@ -215,12 +215,27 @@ function SearchButton({ onOpen }) {
   );
 }
 
+// Trạng thái lưu: Mất mạng / Đang lưu / Chưa đồng bộ / Đã lưu (hiện cả trên điện thoại)
 function SyncBadge() {
   const { syncStatus } = useData();
+  const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
+  const [savedAt, setSavedAt] = useState(0), prev = useRef(syncStatus);
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  useEffect(() => { if (prev.current === "saving" && syncStatus === "idle") setSavedAt(Date.now()); prev.current = syncStatus; }, [syncStatus]);
+  useEffect(() => { if (!savedAt) return undefined; const t = setTimeout(() => setSavedAt(0), 2500); return () => clearTimeout(t); }, [savedAt]);
+  const pill = "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold";
+  if (!online)
+    return <span title="Mất mạng — bản sửa được giữ trong máy, có mạng sẽ tự lưu lên cloud" className={`${pill} bg-slate-800 text-white`}><CloudOff size={12} /> <span className="hidden sm:inline">Mất mạng</span><span className="sm:hidden">Offline</span></span>;
   if (syncStatus === "saving")
-    return <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-500 sm:flex"><RefreshCw size={12} className="animate-spin" /> Đang lưu</span>;
+    return <span aria-label="Đang lưu" className={`${pill} bg-slate-100 text-slate-500`}><RefreshCw size={12} className="animate-spin" /> <span className="hidden sm:inline">Đang lưu</span></span>;
   if (syncStatus === "error")
-    return <span title="Bản sửa chưa lên cloud — app đang tự thử lại" className="flex items-center gap-1 rounded-lg bg-amber-100 px-2 py-1 text-[11px] font-bold text-amber-700"><CloudOff size={12} /> <span className="hidden sm:inline">Chưa đồng bộ</span></span>;
+    return <span title="Bản sửa chưa lên cloud — app đang tự thử lại" className={`${pill} bg-amber-100 text-amber-700`}><CloudOff size={12} /> <span className="hidden sm:inline">Chưa đồng bộ</span></span>;
+  if (savedAt)
+    return <span aria-label="Đã lưu" className={`${pill} bg-emerald-50 text-emerald-700`}><Check size={12} /> <span className="hidden sm:inline">Đã lưu</span></span>;
   return null;
 }
 
@@ -251,7 +266,7 @@ function Notifications() {
 
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:text-indigo-600">
+      <button onClick={() => setOpen((o) => !o)} aria-label="Thông báo" className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:text-indigo-600">
         <Bell size={18} />
         {office.unread > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white">{office.unread}</span>
           : items.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
@@ -354,7 +369,7 @@ export default function Layout({ children }) {
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-white/50 bg-white/55 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
-            <button onClick={() => setOpen(true)} className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">
+            <button onClick={() => setOpen(true)} aria-label="Mở menu" className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">
               <Menu size={20} />
             </button>
             <h1 className="text-lg font-extrabold tracking-tight text-slate-900">{title}</h1>

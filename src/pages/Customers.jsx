@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin } from "lucide-react";
 import { Card, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -16,6 +17,8 @@ const STATUS_ORDER = { doing: 0, paused: 1, done: 2, cancel: 3 };
 const TYPES = { fulltime: ["indigo", "Full-time"], remote: ["sky", "Remote"], le: ["slate", "Khách lẻ"] };
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
+// Bỏ dấu + lowercase để tìm không cần gõ dấu
+const fold = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/đ/g, "d");
 
 function zaloLink(phone, zalo) {
   const n = String(zalo || phone || "").replace(/[^\d]/g, "");
@@ -54,13 +57,35 @@ function CustomerModal({ initial, onClose, onSave }) {
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khách hàng *</span><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Anh Nam" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số điện thoại</span><input value={f.phone} onChange={set("phone")} inputMode="tel" className={inputCls} placeholder="0901234567" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Email</span><input value={f.email || ""} onChange={set("email")} inputMode="email" className={inputCls} placeholder="email@congty.com" /></label>
-        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Địa chỉ</span><input value={f.address || ""} onChange={set("address")} className={inputCls} placeholder="Số nhà, đường, quận, tỉnh…" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Zalo</span><input value={f.zalo || ""} onChange={set("zalo")} inputMode="tel" className={inputCls} placeholder="SĐT Zalo (bỏ trống = dùng SĐT)" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Địa chỉ</span><input value={f.address || ""} onChange={set("address")} className={inputCls} placeholder="Số nhà, đường, quận, tỉnh…" /></label>
+
+        {/* Loại khách → dùng cho bộ lọc + gợi ý dự án "Lương" (Full-time) */}
+        <div className="mb-3 text-sm">
+          <span className="mb-1 block font-semibold text-slate-600">Loại khách</span>
+          <div className="flex gap-1.5">
+            {Object.entries(TYPES).map(([v, [, l]]) => (
+              <button key={v} type="button" onClick={() => setF((p) => ({ ...p, type: v }))} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${(f.type || "remote") === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className={`mb-3 grid gap-3 ${f.type === "fulltime" ? "grid-cols-2" : "grid-cols-1"}`}>
+          <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">% phí dịch vụ</span>
+            <input value={f.feeRate ?? ""} onChange={set("feeRate")} inputMode="numeric" className={inputCls} placeholder="20" />
+            <span className="mt-0.5 block text-[11px] text-slate-400">Tự điền khi thêm đợt ADS</span></label>
+          {f.type === "fulltime" && (
+            <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Lương tháng</span>
+              <MoneyInput value={f.monthlySalary || ""} onChange={(v) => setF((p) => ({ ...p, monthlySalary: v }))} className={inputCls} placeholder="15.000.000" />
+              <span className="mt-0.5 block text-[11px] text-slate-400">Tự điền khi ghi lương</span></label>
+          )}
+        </div>
+        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><textarea value={f.note || ""} onChange={set("note")} rows={2} className={inputCls} placeholder="Ghi chú về khách (tuỳ chọn)" /></label>
 
         <button type="button" onClick={() => setF({ ...f, active: !(f.active ?? true) })} className={`mb-4 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold ${(f.active ?? true) ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-rose-200 bg-rose-50 text-rose-600"}`}>
           <Power size={15} /> {(f.active ?? true) ? "Đang hợp tác (bấm để OFF)" : "Đã OFF (bấm để bật lại)"}
         </button>
 
-        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, name: f.name.trim(), type: f.type || "remote", feeRate: Number(f.feeRate) || 20, monthlySalary: Number(f.monthlySalary) || 0, active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
+        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, name: f.name.trim(), zalo: (f.zalo || "").trim(), note: (f.note || "").trim(), type: f.type || "remote", feeRate: num(f.feeRate) || 20, monthlySalary: num(f.monthlySalary), active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
       </div>
     </div>
   );
@@ -123,6 +148,8 @@ export default function Customers() {
   const [projModal, setProjModal] = useState(null);   // project add/edit
   const [projDrawerId, setProjDrawerId] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [hi, setHi] = useState(null); // khách đang được làm nổi (mở từ link / ô tìm kiếm)
+  const [sp, setSp] = useSearchParams();
 
   // Gom dự án theo khách (sort: đang làm trước → hoạt động gần nhất)
   const projByCust = useMemo(() => {
@@ -134,13 +161,15 @@ export default function Customers() {
   }, [projects]);
 
   const rows = useMemo(() => {
+    const lq = fold(q.trim());
     return customerList.map((c) => {
       const cps = projByCust.get(c.id) || [];
       let debt = 0, revenue = 0;
       for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; }
       const lastIncome = customerLastIncome(projects, c.id);
       return { ...c, type: c.type || "remote", active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome };
-    }).filter((c) => c.name.toLowerCase().includes(q.toLowerCase()) || (c.phone || "").includes(q))
+    }) // Tìm theo tên / SĐT / Zalo / email / ghi chú / TÊN DỰ ÁN (không cần dấu)
+      .filter((c) => !lq || fold([c.name, c.phone, c.zalo, c.email, c.note, ...c.projects.map((p) => p.name)].filter(Boolean).join(" ")).includes(lq))
       // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off"
       .filter((c) => (typeF === "off" ? !c.active : c.active && (typeF === "all" || typeF === c.type)))
       .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
@@ -163,6 +192,25 @@ export default function Customers() {
   const drawerProject = projDrawerId ? projects.find((p) => p.id === projDrawerId) : null;
   const drawerCust = drawerProject ? customerList.find((c) => c.id === drawerProject.customerId) : null;
 
+  // Mở từ link: ?id=<khách> → xổ + cuộn tới + làm nổi; ?project=<dự án> → mở chi tiết dự án
+  const qId = sp.get("id"), qProj = sp.get("project");
+  useEffect(() => {
+    if (!qId && !qProj) return;
+    let custId = qId;
+    if (qProj) { const p = projects.find((x) => x.id === qProj); if (!p) return; setProjDrawerId(p.id); custId = p.customerId; }
+    const c = customerList.find((x) => x.id === custId);
+    if (!c && !qProj) return; // dữ liệu chưa tải xong → chờ
+    if (c) {
+      setQ(""); setTypeF((c.active ?? true) ? "all" : "off");
+      setExpanded((s) => new Set(s).add(c.id));
+      setHi(c.id);
+      setTimeout(() => document.getElementById("cust-" + c.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80);
+      setTimeout(() => setHi(null), 2500);
+    }
+    const n = new URLSearchParams(sp); n.delete("id"); n.delete("project"); setSp(n, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qId, qProj, projects, customerList]);
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card>
@@ -173,7 +221,7 @@ export default function Customers() {
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
           {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
-          {canW && <button onClick={() => setModal({ name: "", phone: "", email: "", address: "", logo: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
+          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
           {/* MOBILE: Chọn + Hàng loạt nằm cùng hàng nút */}
           {canW && rows.length > 0 && (
             <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
@@ -186,7 +234,7 @@ export default function Customers() {
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 sm:min-w-[150px]">
             <Search size={16} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / SĐT…" className="w-full min-w-0 text-sm outline-none" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / SĐT / Zalo / dự án…" className="w-full min-w-0 text-sm outline-none" />
           </div>
           {canW && rows.length > 0 && (
             <button onClick={toggleAll} className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex">
@@ -227,7 +275,7 @@ export default function Customers() {
             const open = expanded.has(c.id);
             const zl = zaloLink(c.phone, c.zalo);
             return (
-              <div key={c.id} className={`card overflow-hidden !p-0 ${isPicked ? "ring-2 ring-indigo-400" : ""} ${!c.active ? "opacity-70" : ""}`}>
+              <div key={c.id} id={"cust-" + c.id} className={`card overflow-hidden !p-0 transition ${isPicked ? "ring-2 ring-indigo-400" : hi === c.id ? "ring-2 ring-amber-400" : ""} ${!c.active ? "opacity-70" : ""}`}>
                 {/* DÒNG KHÁCH */}
                 <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-3.5">
                   {canW && (

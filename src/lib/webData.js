@@ -104,8 +104,12 @@ export function eventLabel(name) {
 export const isAutoEvent = (n) => AUTO_EVENTS.has(n) || /session_source/.test(n);
 
 // Gộp web: 1 dòng / tên miền. GSC ưu tiên property sc-domain (đủ http/https/www). GA4 ghép theo tên property chứa tên miền.
-export async function loadSites({ hidden = [], gaOverride = {} } = {}) {
+export async function loadSites(opts = {}) {
   const { props, conn } = await listGoogleProps();
+  return buildSites(props, conn, opts);
+}
+// Ghép web từ danh sách property (thuần, không gọi mạng) → ẩn web / đổi GA4 chỉ tính lại tại chỗ
+export function buildSites(props, conn, { hidden = [], gaOverride = {} } = {}) {
   const gsc = props.filter((p) => p.kind === "gsc");
   const ga = props.filter((p) => p.kind === "ga4");
   const map = new Map();

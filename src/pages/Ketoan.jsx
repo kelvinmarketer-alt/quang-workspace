@@ -1,10 +1,10 @@
 import { Fragment, useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search } from "lucide-react";
+import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search, Trash2, History } from "lucide-react";
 import { Card, SectionTitle, Badge, MoneyInput, DateField, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
-import { fmtDateVI } from "../lib/format.js";
+import { fmtDateVI, todayISO } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
@@ -71,10 +71,16 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
 
 function KetoanReport() {
   const { projects, expenses } = useData();
-  const [preset, setPreset] = useState("thisYear");
   const now = new Date();
-  const [cf, setCf] = useState(iso(new Date(now.getFullYear(), now.getMonth(), 1)));
-  const [ct, setCt] = useState(iso(now));
+  // Kỳ báo cáo — nhớ localStorage. Mặc định GIỮ "Năm nay": báo cáo này dạng năm (biểu đồ + nhóm theo tháng)
+  const saved = useMemo(() => { try { return JSON.parse(localStorage.getItem("qws_kt_period") || "{}") || {}; } catch { return {}; } }, []);
+  const [preset, setPreset0] = useState(() => (PRESETS.some(([k]) => k === saved.preset) ? saved.preset : "thisYear"));
+  const [cf, setCf0] = useState(saved.cf || iso(new Date(now.getFullYear(), now.getMonth(), 1)));
+  const [ct, setCt0] = useState(saved.ct || iso(now));
+  const persist = (patch) => { try { localStorage.setItem("qws_kt_period", JSON.stringify({ preset, cf, ct, ...patch })); } catch {} };
+  const setPreset = (v) => { setPreset0(v); persist({ preset: v }); };
+  const setCf = (v) => { setCf0(v); persist({ cf: v }); };
+  const setCt = (v) => { setCt0(v); persist({ ct: v }); };
   const [compare, setCompare] = useState(true);
 
   const { from, to } = periodFor(preset, cf, ct);
@@ -330,9 +336,41 @@ function KetoanReport() {
 }
 
 // ===== THU HỒI CÔNG NỢ =====
-function CollectModal({ item, onClose, onSave }) {
+// Mỗi lần thu lưu vào đợt: payments [{id, date, amount, note}]; "collected" (Đã thu) vẫn giữ tổng để tương thích.
+// Đợt cũ chưa có payments / Đã thu bị sửa tay lệch tổng → hiện 1 dòng "đã thu trước" = phần chênh.
+const paySum = (ps) => ps.reduce((a, p) => a + num(p.amount), 0);
+const storedPays = (x) => (Array.isArray(x.payments) ? x.payments.filter((p) => p && num(p.amount)) : []);
+function paymentsOf(x) {
+  const ps = storedPays(x).slice().sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const diff = num(x.collected) - paySum(ps);
+  return diff ? [...ps, { id: "_legacy", date: "", amount: diff, note: diff > 0 ? "Đã thu trước đây (chưa ghi ngày)" : "Điều chỉnh giảm (sửa tay)", legacy: true }] : ps;
+}
+const payId = () => "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function PayHistory({ item, onDelete }) {
+  const ps = paymentsOf(item);
+  if (!ps.length) return <div className="rounded-xl bg-slate-50 px-3 py-2.5 text-center text-[12px] text-slate-400">Chưa có lần thu nào.</div>;
+  return (
+    <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+      {ps.map((p) => (
+        <div key={p.id} className="flex items-center gap-2 py-1 pl-3 pr-1">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-bold text-slate-700">{p.date ? fmtDateVI(p.date) : "Trước đây"}</div>
+            {p.note && <div className="truncate text-[11px] text-slate-400">{p.note}</div>}
+          </div>
+          <span className={`shrink-0 text-[13px] font-extrabold tabular-nums ${p.amount < 0 ? "text-rose-600" : "text-emerald-600"}`}>{p.amount < 0 ? "−" : "+"}{formatVND(Math.abs(p.amount))}</span>
+          <button onClick={() => onDelete(item, p)} className="shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá lần thu này"><Trash2 size={14} /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CollectModal({ item, onClose, onSave, onDelete }) {
   const remain = num(item.debt);
   const [amt, setAmt] = useState(String(remain));
+  const [date, setDate] = useState(todayISO());
+  const [note, setNote] = useState("");
   const val = Math.min(remain, Math.max(0, num(amt)));
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={guardClose(onClose)} onInputCapture={markDirty}>
@@ -345,14 +383,24 @@ function CollectModal({ item, onClose, onSave }) {
           <div className="rounded-xl bg-rose-50 p-2"><div className="text-[10px] font-bold uppercase text-rose-400">Còn nợ</div><div className="text-sm font-extrabold text-rose-600">{formatShort(item.debt)}</div></div>
         </div>
         <label className="mt-4 block text-sm font-semibold text-slate-600">Số tiền thu lần này</label>
-        <MoneyInput value={amt} onChange={setAmt} autoFocus className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-lg font-bold outline-none focus:border-indigo-400" placeholder="0" />
-        <div className="mt-1.5 flex items-center justify-between text-[11px]">
-          <button type="button" onClick={() => setAmt(String(remain))} className="font-bold text-indigo-600">Thu đủ ({formatShort(remain)})</button>
-          <span className="text-slate-400">Còn nợ sau thu: <b className="text-slate-600">{formatShort(remain - val)}</b></span>
-        </div>
+        {remain > 0 ? (
+          <>
+            <MoneyInput value={amt} onChange={setAmt} autoFocus className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-lg font-bold outline-none focus:border-indigo-400" placeholder="0" />
+            <div className="mt-1.5 flex items-center justify-between text-[11px]">
+              <button type="button" onClick={() => setAmt(String(remain))} className="font-bold text-indigo-600">Thu đủ ({formatShort(remain)})</button>
+              <span className="text-slate-400">Còn nợ sau thu: <b className="text-slate-600">{formatShort(remain - val)}</b></span>
+            </div>
+            <div className="mt-3 grid grid-cols-[auto_1fr] gap-2">
+              <DateField value={date} onChange={(v) => setDate(v || todayISO())} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (CK, tiền mặt…)" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+            </div>
+          </>
+        ) : <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2.5 text-center text-sm font-bold text-emerald-700">Đợt này đã thu đủ.</div>}
+        <div className="mb-1.5 mt-4 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-slate-400"><History size={13} /> Lịch sử thu</div>
+        <div className="max-h-48 overflow-y-auto"><PayHistory item={item} onDelete={onDelete} /></div>
         <div className="mt-4 flex gap-2">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50">Huỷ</button>
-          <button disabled={val <= 0} onClick={() => onSave(val)} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-40">Ghi nhận thu</button>
+          <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-50">{remain > 0 ? "Huỷ" : "Đóng"}</button>
+          {remain > 0 && <button disabled={val <= 0} onClick={() => onSave(val, date, note.trim())} className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-40">Ghi nhận thu</button>}
         </div>
       </div>
     </div>
@@ -386,12 +434,24 @@ function DebtPanel() {
   const totalDebt = outstanding.reduce((a, x) => a + num(x.debt), 0);
   const toggle = (k) => setClosed((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
-  const doCollect = (val) => {
-    const it = collect;
-    updateInstallment(it.projectId, it.id, { collected: Math.min(num(it.contractValue), num(it.collected) + val) });
-    setCollect(null);
+  const allInst = useMemo(() => allInstallments(projects), [projects]);
+  // Đợt đang mở popup — lấy bản MỚI NHẤT từ store để lịch sử cập nhật ngay khi xoá/thu
+  const live = collect ? allInst.find((x) => x.id === collect.id && x.projectId === collect.projectId) || collect : null;
+  const addPay = (it, val, date, note) => {
+    const amount = Math.min(num(it.debt), val);
+    if (amount <= 0) return;
+    updateInstallment(it.projectId, it.id, { payments: [...storedPays(it), { id: payId(), date: date || todayISO(), amount, note: note || "" }], collected: num(it.collected) + amount });
   };
-  const collectFull = (it) => updateInstallment(it.projectId, it.id, { collected: num(it.contractValue) });
+  const doCollect = (val, date, note) => { addPay(live, val, date, note); setCollect(null); };
+  const collectFull = (it) => addPay(it, num(it.debt), todayISO(), "Thu đủ");
+  const delPay = async (it, p) => {
+    if (!(await ask(`Xoá lần thu ${formatVND(Math.abs(p.amount))}${p.date ? ` ngày ${fmtDateVI(p.date)}` : ""}?\nĐã thu của đợt sẽ tính lại, công nợ tăng tương ứng.`))) return;
+    if (p.legacy) updateInstallment(it.projectId, it.id, { collected: paySum(storedPays(it)) }); // bỏ phần "đã thu trước đây"
+    else { const rest = storedPays(it).filter((q) => q.id !== p.id); updateInstallment(it.projectId, it.id, { payments: rest, collected: Math.max(0, num(it.collected) - num(p.amount)) }); }
+  };
+  // Các lần thu gần đây (mọi đợt, kể cả đã thu đủ) để xem/xoá nhầm
+  const [moreHist, setMoreHist] = useState(false);
+  const recentPays = useMemo(() => allInst.flatMap((x) => storedPays(x).map((p) => ({ p, x }))).sort((a, b) => (b.p.date || "").localeCompare(a.p.date || "")), [allInst]);
 
   return (
     <div className="space-y-4">
@@ -431,7 +491,7 @@ function DebtPanel() {
                         <div key={x.id} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
-                            <div className="truncate text-[11px] text-slate-400">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}</div>
+                            <div className="truncate text-[11px] text-slate-400">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
                           </div>
                           <div className="shrink-0 text-right">
                             <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
@@ -450,17 +510,38 @@ function DebtPanel() {
           </div>
         </>
       )}
-      {collect && <CollectModal item={collect} onClose={() => setCollect(null)} onSave={doCollect} />}
+      {recentPays.length > 0 && (
+        <Card className="!p-0 overflow-hidden">
+          <div className="flex items-center gap-1.5 px-4 pb-2 pt-3.5 text-sm font-extrabold text-slate-800"><History size={15} className="text-indigo-500" /> Lịch sử thu nợ <Badge tone="slate">{recentPays.length}</Badge></div>
+          <div className="divide-y divide-slate-50">
+            {(moreHist ? recentPays : recentPays.slice(0, 10)).map(({ p, x }) => (
+              <div key={x.id + p.id} className="flex items-center gap-2 py-1.5 pl-4 pr-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-bold text-slate-700">{x.customerName || "Khách lẻ"} <span className="font-semibold text-slate-400">· {x.projectName}</span></div>
+                  <div className="truncate text-[11px] text-slate-400">{fmtDateVI(p.date)} · {x.label}{p.note ? ` · ${p.note}` : ""}</div>
+                </div>
+                <span className="shrink-0 text-[13px] font-extrabold tabular-nums text-emerald-600">+{formatVND(p.amount)}</span>
+                <button onClick={() => delPay(x, p)} className="shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá lần thu này"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+          {recentPays.length > 10 && <button onClick={() => setMoreHist((v) => !v)} className="w-full border-t border-slate-100 py-2.5 text-xs font-bold text-indigo-600 hover:bg-slate-50">{moreHist ? "Thu gọn" : `Xem tất cả ${recentPays.length} lần thu`}</button>}
+        </Card>
+      )}
+      {live && <CollectModal item={live} onClose={() => setCollect(null)} onSave={doCollect} onDelete={delPay} />}
     </div>
   );
 }
 
 const TABS = [["report", "Doanh thu", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí", CreditCard]];
 
-export default function Ketoan({ initialTab = "report" }) {
-  const [tab, setTab] = useState(initialTab);
+const ktTabLS = () => { try { const v = localStorage.getItem("qws_kt_tab"); return TABS.some(([k]) => k === v) ? v : "report"; } catch { return "report"; } };
+export default function Ketoan({ initialTab }) {
+  // Route chỉ định tab (vd /chi-phi) → theo route; /ke-toan → mở lại tab đã xem lần trước (nhớ localStorage)
+  const [tab, setTab0] = useState(() => initialTab || ktTabLS());
+  const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_kt_tab", v); } catch {} };
   // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
-  useEffect(() => { setTab(initialTab); }, [initialTab]);
+  useEffect(() => { setTab0(initialTab || ktTabLS()); }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card className="!p-2">

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { formatVND, formatShort } from "../lib/format.js";
 
@@ -84,17 +84,74 @@ export function DateField({ value, onChange, className = "", placeholder = "Ch�
   );
 }
 
+// Hậu tố tiền gõ tắt: 500k · 5tr · 1,5tr · 2 tỷ · 3m · 1b
+const MONEY_SUFFIX = { k: 1e3, nghin: 1e3, ngan: 1e3, tr: 1e6, trieu: 1e6, m: 1e6, ty: 1e9, ti: 1e9, b: 1e9 };
+const plainVi = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
+// "1,5tr" → { done: 1500000 } · "1,5t" (đang gõ dở hậu tố) → { partial: true } · không có hậu tố → null
+function parseMoneyExpr(raw) {
+  const m = String(raw).match(/^\s*([\d.,\s]*\d[\d.,\s]*?)\s*([^\d\s.,]+)\s*$/u);
+  if (!m) return null;
+  const suf = plainVi(m[2]);
+  if (MONEY_SUFFIX[suf] == null) return Object.keys(MONEY_SUFFIX).some((k) => k.startsWith(suf)) ? { partial: true } : null;
+  let num = m[1].replace(/\s/g, "");
+  // phẩy = thập phân; chấm + đúng 3 số = phân cách nghìn, chấm còn lại = thập phân ("1.5tr")
+  if (num.includes(",")) num = num.replace(/\./g, "").replace(",", ".").replace(/,/g, "");
+  else if (/\.\d{3}(?!\d)/.test(num) && !/\.\d{1,2}$/.test(num)) num = num.replace(/\./g, "");
+  const x = parseFloat(num);
+  return Number.isFinite(x) ? { done: Math.round(x * MONEY_SUFFIX[suf]) } : null;
+}
+const digitsBefore = (str, pos) => (str.slice(0, pos).match(/\d/g) || []).length;
+
+// Giữ nguyên API: value = chuỗi/số, onChange(chuỗi số thuần). Giữ vị trí con trỏ khi tự thêm dấu chấm,
+// hiểu hậu tố k/tr/triệu/m/tỷ/b (kể cả "1,5tr"); xoá trúng dấu chấm → xoá luôn chữ số cạnh nó.
 export function MoneyInput({ value, onChange, className = "", placeholder, autoFocus }) {
+  const ref = useRef(null), caret = useRef(null);
+  const [draft, setDraft] = useState(null); // {text, emit}: đang gõ dở "1,5" / "2 t" → hiện nguyên văn
+  const [, bump] = useState(0);
   const digits = String(value ?? "").replace(/[^\d]/g, "");
-  const display = digits ? Number(digits).toLocaleString("vi-VN") : "";
+  const fmt = (d) => (d ? Number(d).toLocaleString("vi-VN") : "");
+  const display = draft && draft.emit === digits ? draft.text : fmt(digits);
+  useLayoutEffect(() => {
+    const el = ref.current, want = caret.current;
+    caret.current = null;
+    if (!el || want == null || document.activeElement !== el) return;
+    let pos = 0, seen = 0;
+    if (want === "end") pos = el.value.length;
+    else while (pos < el.value.length && seen < want) { if (/\d/.test(el.value[pos])) seen++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch { /* input không hỗ trợ selection */ }
+  });
+  const emit = (d) => { onChange(d); bump((x) => x + 1); };
+  const handle = (e) => {
+    const raw = e.target.value, sel = e.target.selectionStart ?? raw.length;
+    const ex = parseMoneyExpr(raw);
+    if (ex?.done != null) { setDraft(null); caret.current = "end"; return emit(String(ex.done)); }
+    let d = raw.replace(/[^\d]/g, "");
+    // Gõ dở: hậu tố chưa đủ chữ ("2 t"), hoặc vừa gõ phẩy/chấm thập phân ("1," "1,5" "1.") → giữ nguyên văn
+    if (ex?.partial || /,/.test(raw) || /\.$/.test(raw) || (draft && /\.\d{0,2}$/.test(raw) && !/[^\d.,\s]/.test(raw))) {
+      setDraft({ text: raw, emit: d }); caret.current = null; return emit(d); // tạm lưu số thuần cho tới khi đủ hậu tố
+    }
+    setDraft(null);
+    let keep = digitsBefore(raw, sel);
+    // Xoá trúng dấu chấm phân cách (số không đổi) → xoá chữ số liền kề
+    if (d === digits && raw.length < display.length) {
+      const t = e.nativeEvent?.inputType;
+      if (t === "deleteContentBackward" && keep > 0) { d = d.slice(0, keep - 1) + d.slice(keep); keep -= 1; }
+      else if (t === "deleteContentForward") d = d.slice(0, keep) + d.slice(keep + 1);
+    }
+    const lead = d.length - String(Number(d || 0)).length; // số 0 đầu bị bỏ khi định dạng
+    caret.current = Math.max(0, keep - (d && lead > 0 ? lead : 0));
+    emit(d);
+  };
   return (
     <input
+      ref={ref}
       className={className}
       placeholder={placeholder}
       inputMode="numeric"
       autoFocus={autoFocus}
       value={display}
-      onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+      onChange={handle}
+      onBlur={() => setDraft(null)}
     />
   );
 }

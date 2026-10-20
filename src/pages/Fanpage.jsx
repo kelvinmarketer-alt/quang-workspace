@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import { RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, EyeOff, Eye, ExternalLink, Users, MessageCircle, Heart, PlayCircle, ThumbsUp, Clock } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy } from "../lib/fbPages.js";
 import { aiPageAnalysis } from "../lib/ai.js";
-import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, makePeriod } from "./Web.jsx";
+import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod } from "./Web.jsx";
 
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
 const CACHE = new Map();
@@ -68,15 +69,18 @@ function aiPayload(p, sum, det, R) {
   };
 }
 
-function Detail({ owner, p, sum, R, onBack, onHide, aiState, setAiState, apiKey, aiReady }) {
+function Detail({ owner, p, sum, R, tick, onBack, onHide, aiState, setAiState, apiKey, aiReady }) {
   const [det, setDet] = useState(null);
   const [err, setErr] = useState("");
+  const [retry, setRetry] = useState(0);
   const [sort, setSort] = useState("reach");
+  // tick (Làm mới) nằm trong khoá cache → bấm Làm mới là tải lại bài đăng
   useEffect(() => {
     let alive = true; setDet(null); setErr("");
-    cached(`posts|${p.page_id}|${R.key}`, () => loadPagePosts(p, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
+    cached(`posts|${p.page_id}|${R.key}|${tick}`, () => loadPagePosts(p, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message || String(e)));
     return () => { alive = false; };
-  }, [p.page_id, R.key]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.page_id, R.key, tick, retry]);
   const c = sum?.cur, v = sum?.prev;
   const key = `${p.page_id}|${R.key}`, ai = aiState[key];
   const runAi = async () => {
@@ -159,13 +163,17 @@ function Detail({ owner, p, sum, R, onBack, onHide, aiState, setAiState, apiKey,
       {ai?.r && <Card className="!p-3"><AiBox r={ai.r} titles={["Nội dung", "Lịch đăng", "Tin nhắn & bán hàng"]} /></Card>}
 
       <Card className="!p-3">
-        {err && <div className="mb-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
-        {!det ? <div className="h-40 animate-pulse rounded-lg bg-slate-50" /> : (<>
+        {err ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-2.5 text-[12px] text-rose-600">
+            <AlertTriangle size={14} className="shrink-0" /><span className="min-w-0 flex-1">Không tải được bài đăng: {err}</span>
+            <button onClick={() => setRetry((n) => n + 1)} className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-[12px] font-bold text-white">Thử lại</button>
+          </div>
+        ) : !det ? <div className="h-40 animate-pulse rounded-lg bg-slate-50" /> : (<>
           <div className="grid gap-4 md:grid-cols-3">
             {[["Theo loại bài", det.byType], ["Theo khung giờ đăng", det.bySlot], ["Theo thứ trong tuần", det.byDow]].map(([t, l]) => (
               <div key={t}>
                 <div className="mb-1 flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{t === "Theo khung giờ đăng" && <Clock size={11} />}{t}</div>
-                <Table rows={l} empty="Chưa có bài" cols={[{ h: "", v: (x) => <b className="text-slate-700">{x.label}</b> }, { h: "Bài", right: true, v: (x) => x.n }, { h: "Tiếp cận TB", right: true, v: (x) => int(x.reach) }, { h: "Tương tác TB", right: true, v: (x) => x.eng.toFixed(1).replace(".", ",") }]} />
+                <Table rows={l} empty="Chưa có bài" cols={[{ h: "", v: (x) => <b className="text-slate-700">{x.label}</b> }, { h: "Bài", right: true, v: (x) => x.n, s: (x) => x.n }, { h: "Tiếp cận TB", right: true, v: (x) => int(x.reach), s: (x) => x.reach }, { h: "Tương tác TB", right: true, v: (x) => x.eng.toFixed(1).replace(".", ","), s: (x) => x.eng }]} />
               </div>
             ))}
           </div>
@@ -173,23 +181,26 @@ function Detail({ owner, p, sum, R, onBack, onHide, aiState, setAiState, apiKey,
             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Bài đăng ({posts.length})</span>
             <span className="ml-auto text-[11px] text-slate-400">Xếp theo:</span>
             {[["reach", "Tiếp cận"], ["eng", "Tương tác"], ["clicks", "Click"], ["er", "Tỉ lệ TT"], ["at", "Mới nhất"]].map(([kk, l]) => (
-              <button key={kk} onClick={() => setSort(kk)} className={`rounded-md px-2 py-1 text-[11px] font-bold ${sort === kk ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
+              <button key={kk} onClick={() => setSort(kk)} className={`min-h-8 rounded-md px-2.5 py-1.5 text-[11.5px] font-bold ${sort === kk ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
             ))}
           </div>
-          <Table rows={posts} empty="Không có bài đăng trong kỳ." cols={[
+          <Table rows={posts} resetKey={sort} csvName={`bai-dang-${p.name}-${R.key}`} empty="Không có bài đăng trong kỳ." cols={[
             { h: "Bài", wide: true, v: (x) => (
               <a href={x.url} target="_blank" rel="noreferrer" className="flex min-w-0 items-start gap-2 hover:text-indigo-600">
                 {x.img ? <img src={x.img} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" loading="lazy" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-slate-100" />}
                 <div className="min-w-0"><div className="line-clamp-2 text-[12px] font-semibold text-slate-700">{x.text || "(không có chữ)"}</div><div className="text-[10.5px] text-slate-400">{x.type} · {when(x.at)}</div></div>
               </a>
-            ) },
-            { h: "Tiếp cận", right: true, v: (x) => <span className={x.reach >= (det.avgReach || 0) * 1.5 ? "font-bold text-emerald-600" : ""}>{int(x.reach)}</span> },
-            { h: "Lượt xem", right: true, sm: true, v: (x) => int(x.views) },
-            { h: "Click", right: true, sm: true, v: (x) => int(x.clicks) },
-            { h: <ThumbsUp size={11} className="ml-auto" />, right: true, v: (x) => int(x.reactions) },
-            { h: "Bình luận", right: true, sm: true, v: (x) => int(x.comments) },
-            { h: "Chia sẻ", right: true, sm: true, v: (x) => int(x.shares) },
-            { h: "Tỉ lệ TT", right: true, v: (x) => (x.er != null ? pct1(x.er) : "—") },
+            ), s: (x) => x.text, csvH: "Nội dung" },
+            { h: "Loại", csvOnly: true, csv: (x) => x.type },
+            { h: "Ngày đăng", csvOnly: true, csv: (x) => x.at },
+            { h: "Link", csvOnly: true, csv: (x) => x.url },
+            { h: "Tiếp cận", right: true, v: (x) => <span className={x.reach >= (det.avgReach || 0) * 1.5 ? "font-bold text-emerald-600" : ""}>{int(x.reach)}</span>, s: (x) => x.reach },
+            { h: "Lượt xem", right: true, sm: true, v: (x) => int(x.views), s: (x) => x.views },
+            { h: "Click", right: true, sm: true, v: (x) => int(x.clicks), s: (x) => x.clicks },
+            { h: <ThumbsUp size={11} />, right: true, v: (x) => int(x.reactions), s: (x) => x.reactions, csvH: "Cảm xúc" },
+            { h: "Bình luận", right: true, sm: true, v: (x) => int(x.comments), s: (x) => x.comments },
+            { h: "Chia sẻ", right: true, sm: true, v: (x) => int(x.shares), s: (x) => x.shares },
+            { h: "Tỉ lệ TT", right: true, v: (x) => (x.er != null ? pct1(x.er) : "—"), s: (x) => x.er, csvH: "Tỉ lệ TT %" },
           ]} />
         </>)}
       </Card>
@@ -201,12 +212,15 @@ export default function Fanpage() {
   const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
   const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ token)
   const canView = isOwner || perms.includes("fanpage");
-  const [days, setDays] = useState(() => makePeriod("30d")); // { key, since, until }
+  const [days, setDays] = usePeriod("30d"); // { key, since, until } — nhớ chung với Quảng cáo / Website
   const [pages, setPages] = useState(null);
   const [meta, setMeta] = useState({});
   const [sums, setSums] = useState({});
   const [err, setErr] = useState("");
-  const [sel, setSel] = useState(null);
+  // Page đang xem nằm trên URL (?page=…) → nút Back điện thoại quay về danh sách, mở link thẳng vào chi tiết
+  const [sp, setSp] = useSearchParams();
+  const loc = useLocation(), nav = useNavigate();
+  const sel = sp.get("page");
   const [tick, setTick] = useState(0);
   const [aiState, setAiState] = useState({});
   const [showHidden, setShowHidden] = useState(false);
@@ -240,8 +254,10 @@ export default function Fanpage() {
   }, [sums]);
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Hiệu quả Fanpage.</div></Card>;
-  const page = sel && pages?.find((p) => p.page_id === sel);
+  const page = sel && pages?.find((p) => String(p.page_id) === sel);
   const setHidden = (l) => setSettings({ fbHidden: l });
+  const openPage = (id) => { const n = new URLSearchParams(sp); n.set("page", id); setSp(n, { state: { qwsList: true } }); };
+  const closePage = () => { if (loc.state?.qwsList) nav(-1); else { const n = new URLSearchParams(sp); n.delete("page"); setSp(n, { replace: true }); } };
 
   return (
     <div className="space-y-3">
@@ -256,8 +272,8 @@ export default function Fanpage() {
       </Card>
 
       {page ? (
-        <Detail owner={isOwner} p={page} sum={sums[page.page_id]} R={R} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
-          onBack={() => setSel(null)} onHide={() => { setHidden([...hidden, page.page_id]); setSel(null); }} aiState={aiState} setAiState={setAiState} />
+        <Detail owner={isOwner} p={page} sum={sums[page.page_id]} R={R} tick={tick} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
+          onBack={closePage} onHide={() => { setHidden([...hidden, page.page_id]); closePage(); }} aiState={aiState} setAiState={setAiState} />
       ) : (<>
         <div className="grid grid-cols-3 gap-px bg-slate-100">
           {[["Tiếp cận · tất cả page", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I]) => (
@@ -268,7 +284,7 @@ export default function Fanpage() {
           <Card><div className="py-8 text-center text-sm text-slate-500">{meta.offCount ? <>Có {meta.offCount} page nhưng đang <b>tắt</b> bên Văn phòng AI. Vào <b>Văn phòng AI → Kết nối → Facebook</b> bật công tắc page cần theo dõi.</> : <>Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</>}</div></Card>
         ) : (
           <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
-            {shown.map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => setSel(p.page_id)} />)}
+            {shown.map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
           </div>
         )}
         {hid.length > 0 && (

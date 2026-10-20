@@ -441,6 +441,21 @@ export default function Vault() {
 
       {vaultPrivate && <PinBar hasPin={vaultHasPin} setVaultPin={setVaultPin} removeVaultPin={removeVaultPin} lockVault={lockVault} />}
 
+      {/* Nút THÊM đặt trên đầu (giống các mục khác) */}
+      {canW && (
+        <div className="flex gap-2">
+          <button onClick={() => setModal({ type: tab === "all" ? "app" : tab })} className="flex flex-[1.3] items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
+            <Plus size={15} /> Thêm
+          </button>
+          <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">
+            <Plus size={15} /> Hàng loạt
+          </button>
+          <button onClick={() => setAiOpen(true)} className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-100">
+            <Sparkles size={15} /> AI<span className="hidden sm:inline"> đọc ảnh</span>
+          </button>
+        </div>
+      )}
+
       {/* Tabs loại */}
       <div className="grid grid-cols-4 gap-1.5">
         {TABS.map(([k, lbl]) => (
@@ -471,20 +486,6 @@ export default function Vault() {
           {list.map((item) => (
             <VaultCard key={item.id} item={item} canW={canW} onEdit={setModal} onDelete={deleteVaultItem} />
           ))}
-        </div>
-      )}
-
-      {canW && (
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setAiOpen(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-100">
-            <Sparkles size={15} /> AI đọc ảnh
-          </button>
-          <button onClick={() => setModal({ type: tab === "all" ? "app" : tab })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">
-            <Plus size={15} /> Thêm 1 mục
-          </button>
-          <button onClick={() => setBatch(true)} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
-            <Plus size={15} /> Hàng loạt
-          </button>
         </div>
       )}
 

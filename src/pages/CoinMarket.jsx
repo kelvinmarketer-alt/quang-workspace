@@ -155,8 +155,9 @@ function KnowledgePanel() {
   );
 }
 
-export default function CoinMarket() {
+export default function CoinMarket({ active = true }) {
   const { settings = {}, coins = [] } = useData();
+  const activeRef = useRef(active); activeRef.current = active; // tab Thị trường đang ẩn → không poll nến
   const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
   const [sym, setSym] = useState(() => ls.get("qws_mkt_sym", "BTC"));
   const [tf, setTf] = useState(() => ls.get("qws_mkt_tf", "4h"));
@@ -169,11 +170,15 @@ export default function CoinMarket() {
   const [cache, setCache] = useState(() => ls.get("qws_mkt_ai", {}));
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
+  const [qBusy, setQBusy] = useState(false);
+  const [qErr, setQErr] = useState("");
   const key = `${sym}-${tf}`;
+  const keyRef = useRef(key); keyRef.current = key; // chống kết quả coin cũ về muộn đè coin mới
 
   const watch = useMemo(() => [...new Set([...DEFAULT_WATCH, ...coins.map((c) => (c.symbol || "").toUpperCase()), ...extraWatch].filter((s) => s && s !== "USDT"))], [coins, extraWatch]);
 
   const load = async (silent) => {
+    const k = key;
     if (!silent) { setLoading(true); setErr(""); }
     try {
       const [ltf, htf, t] = await Promise.all([
@@ -181,22 +186,24 @@ export default function CoinMarket() {
         fetchKlines(sym, TF[tf].htf, 200).catch(() => []),
         fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym}USDT`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       ]);
-      setData({ key, ltf, htf });
-      if (t) setTick({ price: +t.lastPrice, chg: +t.priceChangePercent, vol: +t.quoteVolume });
+      if (keyRef.current !== k) return; // đã đổi coin/khung → bỏ kết quả cũ
+      setData({ key: k, ltf, htf });
+      if (t) setTick({ sym, price: +t.lastPrice, chg: +t.priceChangePercent, vol: +t.quoteVolume });
       setErr("");
-    } catch (e) { if (!silent) { setErr(e.message || String(e)); setData({ key, ltf: [], htf: [] }); } }
-    if (!silent) setLoading(false);
+    } catch (e) { if (keyRef.current === k && !silent) { setErr(e.message || String(e)); setData({ key: k, ltf: [], htf: [] }); } }
+    if (!silent && keyRef.current === k) setLoading(false);
   };
   useEffect(() => {
     ls.set("qws_mkt_sym", sym); ls.set("qws_mkt_tf", tf);
     load(false);
-    const t = setInterval(() => { if (!document.hidden) load(true); }, 60000); // cập nhật nến mỗi phút
+    const t = setInterval(() => { if (!document.hidden && activeRef.current) load(true); }, 60000); // cập nhật nến mỗi phút
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [sym, tf]);
 
   const ta = useMemo(() => (data.ltf.length > 30 ? analyze(data.ltf) : null), [data.ltf]);
   const s = ta?.summary;
-  const price = tick?.price || s?.price;
+  const stale = data.key !== key; // đang hiện nến/giá của coin/khung cũ → làm mờ + hiện đang tải
+  const price = (tick?.sym === sym ? tick.price : null) || (data.key.startsWith(sym + "-") ? s?.price : null);
   const prec = precisionOf(price);
   const ai = cache[key];
 
@@ -212,16 +219,25 @@ export default function CoinMarket() {
     return out;
   }, [ai, ta]);
 
-  const pickSym = (v) => {
+  // Gõ mã mới → kiểm tra có cặp X/USDT trên Binance rồi mới chuyển + thêm vào danh sách theo dõi
+  const pickSym = async (v) => {
     const x = (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
-    if (!x) return;
+    if (!x || qBusy) return;
+    setQErr("");
+    if (!watch.includes(x)) {
+      setQBusy(true);
+      let ok = false, net = false;
+      try { const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${x}USDT`); ok = r.ok; } catch { net = true; }
+      setQBusy(false);
+      if (!ok) { setQErr(net ? "Không kiểm tra được mã (lỗi mạng) — thử lại" : `Không có cặp ${x}/USDT trên Binance`); return; }
+      const nw = [...extraWatch, x].slice(-12); setExtraWatch(nw); ls.set("qws_mkt_watch", nw);
+    }
     setSym(x); setQ("");
-    if (!watch.includes(x)) { const nw = [...extraWatch, x].slice(-12); setExtraWatch(nw); ls.set("qws_mkt_watch", nw); }
   };
   const removeWatch = (x) => { const nw = extraWatch.filter((w) => w !== x); setExtraWatch(nw); ls.set("qws_mkt_watch", nw); };
 
   const runAI = async () => {
-    if (!s) return;
+    if (!s || stale) return; // chưa tải xong coin mới → không gửi dữ liệu coin cũ cho AI
     setAiBusy(true); setAiErr("");
     try {
       const r = await aiMarketAnalysis({ symbol: sym, tf: TF[tf].label, htf: TF[tf].htf, summary: s, htfSummary: htfContext(data.htf), candles: compactCandles(data.ltf, 40), apiKey: settings.openaiKey, model: "gpt-4o" });
@@ -256,7 +272,8 @@ export default function CoinMarket() {
         <div className="flex items-center gap-2">
           <div className="flex w-36 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 sm:w-52">
             <Search size={14} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder="Mã coin + Enter" className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
+            <input value={q} onChange={(e) => { setQ(e.target.value); setQErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder="Mã coin + Enter" className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
+            {qBusy && <Loader2 size={13} className="shrink-0 animate-spin text-slate-400" />}
           </div>
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
             {watch.map((w) => (
@@ -267,6 +284,7 @@ export default function CoinMarket() {
             ))}
           </div>
         </div>
+        {qErr && <div className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-rose-600"><AlertTriangle size={13} className="shrink-0" /> {qErr}</div>}
       </Card>
 
       <div className="grid gap-3 xl:grid-cols-3">
@@ -275,8 +293,8 @@ export default function CoinMarket() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-baseline gap-2">
               <span className="text-[12px] font-extrabold text-slate-400">{sym}/USDT</span>
-              <span className="text-2xl font-extrabold tabular-nums text-slate-900">{fmtP(price, prec)}</span>
-              {tick && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtPct(tick.chg)} <span className="font-semibold text-slate-400">24h</span></span>}
+              <span className={`text-2xl font-extrabold tabular-nums text-slate-900 transition-opacity ${stale ? "opacity-30" : ""}`}>{fmtP(price, prec)}</span>
+              {tick?.sym === sym && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{fmtPct(tick.chg)} <span className="font-semibold text-slate-400">24h</span></span>}
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex rounded-lg bg-slate-100 p-0.5">
@@ -290,7 +308,8 @@ export default function CoinMarket() {
           {err ? (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>
           ) : (
-            <div className="mt-2">
+            <div className="relative mt-2">
+              {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
               <CandleChart candles={data.ltf} e20={ta?.series.e20 || []} e50={ta?.series.e50 || []} events={ta?.series.events || []} lines={lines} precision={prec} fitKey={data.key} />
               <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-semibold text-slate-400">
                 <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span><span><span className="text-yellow-500">┅</span> Key Volume</span><span><span className="text-rose-400">┅</span>/<span className="text-emerald-400">┅</span> Protected</span><span><span className="text-slate-400">┅</span> POC</span>
@@ -304,7 +323,7 @@ export default function CoinMarket() {
         <Card className="!p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-[14px] font-extrabold text-slate-800"><Sparkles size={15} className="text-indigo-500" /> AI · {sym} {TF[tf].label}</div>
-            <button onClick={runAI} disabled={aiBusy || !hasKey || !s} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[12px] font-bold text-white shadow disabled:opacity-40">
+            <button onClick={runAI} disabled={aiBusy || !hasKey || !s || stale} className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1.5 text-[12px] font-bold text-white shadow disabled:opacity-40">
               {aiBusy ? <><Loader2 size={13} className="animate-spin" /> Đang phân tích…</> : <><Sparkles size={13} /> {ai ? "Phân tích lại" : "Phân tích"}</>}
             </button>
           </div>
@@ -350,7 +369,7 @@ export default function CoinMarket() {
       <div className="grid gap-3 xl:grid-cols-3">
         {/* Chỉ báo gọn theo nhóm */}
         {s && (
-          <Card className="!p-3">
+          <Card className={`!p-3 transition-opacity ${stale ? "opacity-40" : ""}`}>
             <div className="space-y-2.5">
               <Group title="Xu hướng">
                 <Row label="Cấu trúc" value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />

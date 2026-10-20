@@ -1,12 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, CheckCircle2, Lightbulb, Search, MousePointerClick, Users, Target, Info } from "lucide-react";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
+import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, CheckCircle2, Lightbulb, Search, MousePointerClick, Users, Target, Info, Download } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { loadSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
-import { setGoogleProxy } from "../lib/google.js";
+import { buildSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
+import { setGoogleProxy, listGoogleProps } from "../lib/google.js";
 import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
+import { downloadCSV } from "../lib/format.js";
 
 // ---------- định dạng ----------
 export const int = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN"));
@@ -31,12 +33,30 @@ export function periodRange(key) {
   return { since: shiftIso(t, -29), until: t }; // 30d
 }
 export const makePeriod = (key) => ({ key, ...periodRange(key) });
+// Kỳ đã chọn nhớ CHUNG cho Quảng cáo / Website / Fanpage (1 khoá localStorage) — chọn ở đâu, mở module khác vẫn giữ
+const PERIOD_KEY = "qws-period";
+const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+export function loadPeriod(def = "30d") {
+  try {
+    const p = JSON.parse(localStorage.getItem(PERIOD_KEY) || "null");
+    if (p?.key === "custom" && isDay(p.since) && isDay(p.until)) return { key: "custom", since: p.since, until: p.until };
+    if (p?.key && PERIODS.some(([kk]) => kk === p.key)) return makePeriod(p.key); // kỳ có sẵn → tính lại theo hôm nay
+  } catch { /* bỏ qua */ }
+  return makePeriod(def);
+}
+export function usePeriod(def) {
+  const [p, setP] = useState(() => loadPeriod(def));
+  const set = (v) => { setP(v); try { localStorage.setItem(PERIOD_KEY, JSON.stringify({ key: v.key, since: v.since, until: v.until })); } catch { /* bỏ qua */ } };
+  return [p, set];
+}
 
 // value = { key, since, until } · onChange(value mới)
 export function RangePicker({ value, onChange }) {
   const [open, setOpen] = useState(value?.key === "custom");
   const [draft, setDraft] = useState({ since: value?.since, until: value?.until });
-  const btn = (on) => `shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
+  // kỳ bị đổi từ bên ngoài (vd nút "Xem 7 ngày") → đóng ô tuỳ chọn cho nút sáng đúng kỳ
+  useEffect(() => { if (value?.key !== "custom") setOpen(false); }, [value?.key]);
+  const btn =(on) => `shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
   return (
     <>
       {PERIODS.map(([k, l]) => <button key={k} onClick={() => { setOpen(false); onChange(makePeriod(k)); }} className={btn(!open && value?.key === k)}>{l}</button>)}
@@ -71,28 +91,34 @@ export function Spark({ data, field = "clicks" }) {
 }
 
 // ---------- cache trong phiên (10 phút) ----------
+// Lưu cả lời hứa đang chạy → 2 nơi cùng hỏi 1 khoá chỉ tải 1 lần; lỗi thì bỏ khỏi cache để lần sau thử lại
 const CACHE = new Map();
-const cached = async (key, fn) => {
+const cached = (key, fn) => {
   const c = CACHE.get(key);
-  if (c && Date.now() - c.at < 600000) return c.v;
-  const v = await fn();
-  CACHE.set(key, { at: Date.now(), v });
-  return v;
+  if (c && Date.now() - c.at < 600000) return c.p;
+  const p = Promise.resolve().then(fn);
+  CACHE.set(key, { at: Date.now(), p });
+  p.catch(() => { if (CACHE.get(key)?.p === p) CACHE.delete(key); });
+  return p;
 };
 
-// Thanh tỉ lệ nguồn truy cập (theo phiên) + chú thích
+// Thanh tỉ lệ nguồn truy cập (theo phiên) + chú thích — chạm vào màu/nhãn để xem số phiên (điện thoại không rê chuột được)
 function SourceBar({ groups, max = 5, big }) {
+  const [pick, setPick] = useState(null);
   if (!groups?.length) return null;
   const ai = groups.find((g) => g.key === "ai");
+  const sel = pick && groups.find((g) => g.key === pick);
+  const tap = (kk) => (e) => { e.stopPropagation(); setPick((p) => (p === kk ? null : kk)); };
   return (
     <div>
       <div className={`flex w-full overflow-hidden rounded-full bg-slate-100 ${big ? "h-3" : "h-2"}`}>
-        {groups.filter((g) => g.share >= 0.5).map((g) => <div key={g.key} title={`${g.label}: ${int(g.cur.sessions)} phiên (${pct1(g.share)})`} style={{ width: g.share + "%", background: g.color }} />)}
+        {groups.filter((g) => g.share >= 0.5).map((g) => <div key={g.key} role="button" onClick={tap(g.key)} title={`${g.label}: ${int(g.cur.sessions)} phiên (${pct1(g.share)})`} className="cursor-pointer" style={{ width: g.share + "%", background: g.color }} />)}
       </div>
       <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10.5px] text-slate-500">
-        {groups.slice(0, max).map((g) => <span key={g.key} className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: g.color }} />{g.label.replace(/ \(.*\)/, "")} <b className="text-slate-700">{pct1(g.share)}</b></span>)}
-        {ai && groups.indexOf(ai) >= max && <span className="flex items-center gap-1 font-bold text-violet-600"><Bot size={11} />AI {pct1(ai.share)}</span>}
+        {groups.slice(0, max).map((g) => <span key={g.key} role="button" onClick={tap(g.key)} className={`flex cursor-pointer items-center gap-1 ${pick === g.key ? "font-bold text-slate-800" : ""}`}><span className="h-2 w-2 rounded-full" style={{ background: g.color }} />{g.label.replace(/ \(.*\)/, "")} <b className="text-slate-700">{pct1(g.share)}</b></span>)}
+        {ai && groups.indexOf(ai) >= max && <span role="button" onClick={tap(ai.key)} className="flex cursor-pointer items-center gap-1 font-bold text-violet-600"><Bot size={11} />AI {pct1(ai.share)}</span>}
       </div>
+      {sel && <div className="mt-0.5 text-[10.5px] font-semibold text-slate-600">{sel.label}: {int(sel.cur.sessions)} phiên ({pct1(sel.share)}){sel.cur.keyEvents ? ` · ${int(sel.cur.keyEvents)} chuyển đổi` : ""}</div>}
     </div>
   );
 }
@@ -132,18 +158,62 @@ function SiteCard({ site, sum, onOpen }) {
   );
 }
 
-export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ" }) {
+// ---------- sắp xếp theo cột + xuất CSV (dùng chung Website / Fanpage / Quảng cáo) ----------
+const numOf = (x) => (typeof x === "number" ? (isFinite(x) ? x : null) : typeof x === "string" && x.trim() !== "" && !isNaN(+x) ? +x : null);
+const blank = (x) => x == null || x === "" || (typeof x === "number" && !isFinite(x));
+// Ô trống luôn xuống cuối; số so theo số, chữ so theo tiếng Việt (có số bên trong: "trang 2" < "trang 10")
+export function sortRows(rows, get, dir = "desc") {
+  return [...(rows || [])].sort((x, y) => {
+    const a = get(x), b = get(y);
+    if (blank(a)) return blank(b) ? 0 : 1;
+    if (blank(b)) return -1;
+    const na = numOf(a), nb = numOf(b);
+    const r = na != null && nb != null ? na - nb : String(a).localeCompare(String(b), "vi", { numeric: true, sensitivity: "base" });
+    return dir === "asc" ? r : -r;
+  });
+}
+// sort = { i, dir } · bấm cột số lần đầu = giảm dần, cột chữ = A→Z; bấm lại đảo chiều
+export function useSort() {
+  const [st, setSt] = useState(null);
+  const toggle = (i, numeric) => setSt((s) => (s?.i === i ? { i, dir: s.dir === "asc" ? "desc" : "asc" } : { i, dir: numeric ? "desc" : "asc" }));
+  return [st, toggle, () => setSt(null)];
+}
+export function SortTh({ label, on, dir, onClick, className = "" }) {
+  return <th className={className}><button type="button" onClick={onClick} className={`inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-slate-600 ${on ? "text-slate-700" : ""}`}>{label}{on && <span className="text-[8px]">{dir === "asc" ? "▲" : "▼"}</span>}</button></th>;
+}
+export const CsvButton = ({ onClick }) => (
+  <button type="button" onClick={onClick} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700"><Download size={12} /> Xuất CSV</button>
+);
+
+// cols: { h, v(r), right, sm, wide } + tuỳ chọn s(r) = giá trị để xếp (có s mới bấm xếp được),
+// csv(r) / csvH = giá trị / tiêu đề khi xuất, csvOnly = chỉ có trong CSV. csvName → hiện nút "Xuất CSV". resetKey đổi → bỏ xếp theo cột.
+export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ", csvName, resetKey }) {
+  const [st, toggle, reset] = useSort();
+  useEffect(() => { reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resetKey]);
   if (!rows?.length) return <div className="py-4 text-center text-xs text-slate-400">{empty}</div>;
+  const shown = cols.filter((c) => !c.csvOnly);
+  const sc = st && shown[st.i]?.s ? shown[st.i] : null;
+  const list = sc ? sortRows(rows, sc.s, st.dir) : rows;
+  const exportCsv = () => {
+    const prim = (x) => (typeof x === "string" || typeof x === "number" ? x : "");
+    downloadCSV(csvName, [cols.map((c) => c.csvH || prim(c.h)), ...list.map((r) => cols.map((c) => (c.csv ? c.csv(r) : c.s ? c.s(r) : prim(c.v(r)))))]);
+  };
   // Bảng nhiều cột mới cần bề rộng tối thiểu (cuộn ngang); bảng ít cột co theo khung để không bị khuất cột
-  const wideTable = cols.length > 4;
+  const wideTable = shown.length > 4;
   return (
-    <div className="overflow-x-auto">
-      <table className={`w-full text-[12px] ${wideTable ? "sm:min-w-[620px]" : ""}`}>
-        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{cols.map((c, i) => <th key={i} className={`py-2 pr-3 ${c.right ? "text-right" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => (
-          <tr key={i} className="border-b border-slate-50 align-top">{cols.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${c.right ? "text-right tabular-nums" : ""} ${c.wide ? "max-w-[180px] sm:max-w-[360px]" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.v(r)}</td>)}</tr>
-        ))}</tbody>
-      </table>
+    <div>
+      {csvName && <div className="-mt-1 mb-0.5 flex justify-end"><CsvButton onClick={exportCsv} /></div>}
+      <div className="overflow-x-auto">
+        <table className={`w-full text-[12px] ${wideTable ? "sm:min-w-[620px]" : ""}`}>
+          <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{shown.map((c, i) => {
+            const cls = `py-2 pr-3 ${c.right ? "text-right" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`;
+            return c.s ? <SortTh key={i} label={c.h} on={st?.i === i} dir={st?.dir} onClick={() => toggle(i, !!c.right)} className={cls} /> : <th key={i} className={cls}>{c.h}</th>;
+          })}</tr></thead>
+          <tbody>{list.map((r, i) => (
+            <tr key={i} className="border-b border-slate-50 align-top">{shown.map((c, i) => <td key={i} className={`py-1.5 pr-3 ${c.right ? "text-right tabular-nums" : ""} ${c.wide ? "max-w-[180px] sm:max-w-[360px]" : ""} ${c.sm ? "hidden sm:table-cell" : ""}`}>{c.v(r)}</td>)}</tr>
+          ))}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -232,17 +302,21 @@ function aiPayload(site, sum, det, R) {
   };
 }
 
-function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack, aiState, setAiState, apiKey, aiReady }) {
+function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, onBack, aiState, setAiState, apiKey, aiReady }) {
   const [det, setDet] = useState(null);
   const [err, setErr] = useState("");
+  const [retry, setRetry] = useState(0);
   const [tab, setTab] = useState(site.ga ? "sources" : "opp");
   const [openSrc, setOpenSrc] = useState(null);
   const [showAuto, setShowAuto] = useState(false);
+  const [srcSort, toggleSrc] = useSort();
+  // tick (Làm mới) nằm trong khoá cache → bấm Làm mới là tải lại cả bảng chi tiết
   useEffect(() => {
     let alive = true; setDet(null); setErr("");
-    cached(`d|${site.domain}|${site.gsc}|${site.ga}|${R.key}`, () => loadSiteDetail(site, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message));
+    cached(`d|${site.domain}|${site.gsc}|${site.ga}|${R.key}|${tick}`, () => loadSiteDetail(site, R)).then((v) => alive && setDet(v)).catch((e) => alive && setErr(e.message || String(e)));
     return () => { alive = false; };
-  }, [site.domain, site.gsc, site.ga, R.key]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [site.domain, site.gsc, site.ga, R.key, tick, retry]);
   const g = sum?.gsc, a = sum?.ga;
   const chart = useMemo(() => {
     const m = new Map();
@@ -266,12 +340,20 @@ function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack
     site.gsc && ["opp", "Cơ hội SEO"], site.gsc && ["queries", "Từ khoá"], site.gsc && ["pages", "Trang (Google)"], site.ga && ["channels", "Nhóm kênh GA4"], site.ga && ["landing", "Trang đích"], ["device", "Thiết bị & khu vực"],
   ].filter(Boolean);
   const qCols = [
-    { h: "Từ khoá", v: (q) => <Name t={q.name} />, wide: true },
-    { h: "Click", right: true, v: (q) => <span>{int(q.clicks)} {q.prev ? <Delta cur={q.clicks} prev={q.prev.clicks} /> : <Badge tone="indigo">mới</Badge>}</span> },
-    { h: "Hiển thị", right: true, sm: true, v: (q) => int(q.impressions) },
-    { h: "CTR", right: true, sm: true, v: (q) => pct1(q.ctr) },
-    { h: "Vị trí", right: true, v: (q) => <span>{pos1(q.position)} {q.prev && <Delta cur={q.position} prev={q.prev.position} lowerBetter abs />}</span> },
+    { h: "Từ khoá", v: (q) => <Name t={q.name} />, wide: true, s: (q) => q.name },
+    { h: "Click", right: true, v: (q) => <span>{int(q.clicks)} {q.prev ? <Delta cur={q.clicks} prev={q.prev.clicks} /> : <Badge tone="indigo">mới</Badge>}</span>, s: (q) => q.clicks },
+    { h: "Hiển thị", right: true, sm: true, v: (q) => int(q.impressions), s: (q) => q.impressions },
+    { h: "CTR", right: true, sm: true, v: (q) => pct1(q.ctr), s: (q) => q.ctr, csvH: "CTR %" },
+    { h: "Vị trí", right: true, v: (q) => <span>{pos1(q.position)} {q.prev && <Delta cur={q.position} prev={q.prev.position} lowerBetter abs />}</span>, s: (q) => q.position },
   ];
+  const csvOf = (name) => `${name}-${site.domain}-${R.key}`;
+  const er100 = (c) => (c?.engagementRate != null && c.engagementRate !== "" ? c.engagementRate * 100 : "");
+  // Bảng nguồn truy cập (có dòng con) — xếp theo cột + xuất CSV cả nhóm lẫn nguồn chi tiết
+  const SRC_COLS = [["Nguồn", (g) => g.label], ["Phiên", (g) => g.cur.sessions, 1], ["Tỉ trọng", (g) => g.share, 1, 1], ["Người dùng", (g) => g.cur.activeUsers, 1, 1], ["Tương tác", (g) => g.cur.engagementRate, 1], ["Chuyển đổi", (g) => g.cur.keyEvents, 1]];
+  const srcRows = srcSort ? sortRows(det?.sources, SRC_COLS[srcSort.i][1], srcSort.dir) : det?.sources || [];
+  const srcCsv = () => downloadCSV(csvOf("nguon-truy-cap"), [["Nhóm nguồn", "Nguồn / phương tiện", "Phiên", "Tỉ trọng %", "Người dùng", "Tương tác %", "Chuyển đổi", "Phiên kỳ trước"],
+    ...srcRows.flatMap((g) => [[g.label, "(cả nhóm)", g.cur.sessions || 0, g.share, g.cur.activeUsers || 0, er100(g.cur), g.cur.keyEvents || 0, g.prev?.sessions || 0],
+      ...g.items.map((it) => [g.label, `${it.src} / ${it.med}`, it.cur.sessions || 0, "", it.cur.activeUsers || 0, er100(it.cur), it.cur.keyEvents || 0, it.prev?.sessions || 0])])]);
 
   return (
     <div className="space-y-3">
@@ -354,41 +436,45 @@ function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack
       {ai?.r && <Card className="!p-3"><AiBox r={ai.r} /></Card>}
 
       <Card className="!p-3">
-        {err && <div className="mb-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
         {det?.errors?.length > 0 && <div className="mb-2 text-[11px] text-amber-600">⚠ {det.errors.join(" · ")}</div>}
         <div className="mb-2 flex gap-1 overflow-x-auto">
           {TABS.map(([kk, l]) => <button key={kk} onClick={() => setTab(kk)} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold ${tab === kk ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>)}
         </div>
-        {!det ? <div className="h-40 animate-pulse rounded-lg bg-slate-50" /> : (<>
+        {err ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-2.5 text-[12px] text-rose-600">
+            <AlertTriangle size={14} className="shrink-0" /><span className="min-w-0 flex-1">Không tải được chi tiết: {err}</span>
+            <button onClick={() => setRetry((n) => n + 1)} className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-[12px] font-bold text-white">Thử lại</button>
+          </div>
+        ) : !det ? <div className="h-40 animate-pulse rounded-lg bg-slate-50" /> : (<>
           {tab === "opp" && (
             <div className="space-y-4">
               <div>
                 <div className="mb-1 flex items-center gap-1 text-[12px] font-extrabold text-slate-700"><TrendingUp size={14} className="text-emerald-500" /> Đẩy lên top 3 (đang vị trí 4–20, nhiều người tìm)</div>
-                <Table rows={det.opportunities?.near} empty="Chưa có từ khoá nào ở vị trí 4–20 đủ hiển thị." cols={[...qCols.slice(0, 1), { h: "Hiển thị", right: true, v: (q) => int(q.impressions) }, { h: "Vị trí", right: true, v: (q) => pos1(q.position) }, { h: "CTR", right: true, v: (q) => pct1(q.ctr) }, { h: "Thêm nếu top 3", right: true, v: (q) => <b className="text-emerald-600">+{int(q.gain)} click</b> }]} />
+                <Table rows={det.opportunities?.near} empty="Chưa có từ khoá nào ở vị trí 4–20 đủ hiển thị." cols={[...qCols.slice(0, 1), { h: "Hiển thị", right: true, v: (q) => int(q.impressions), s: (q) => q.impressions }, { h: "Vị trí", right: true, v: (q) => pos1(q.position), s: (q) => q.position }, { h: "CTR", right: true, v: (q) => pct1(q.ctr), s: (q) => q.ctr }, { h: "Thêm nếu top 3", right: true, v: (q) => <b className="text-emerald-600">+{int(q.gain)} click</b>, s: (q) => q.gain }]} />
               </div>
               <div>
                 <div className="mb-1 flex items-center gap-1 text-[12px] font-extrabold text-slate-700"><Info size={14} className="text-amber-500" /> Top 3 nhưng ít người bấm → sửa tiêu đề / mô tả</div>
-                <Table rows={det.opportunities?.lowCtr} empty="Không có từ khoá top 3 bị CTR thấp." cols={[...qCols.slice(0, 1), { h: "Vị trí", right: true, v: (q) => pos1(q.position) }, { h: "CTR", right: true, v: (q) => <span className="text-rose-600">{pct1(q.ctr)}</span> }, { h: "CTR thường gặp", right: true, v: (q) => pct1(expectedCtr(q.position)) }, { h: "Thêm nếu đạt", right: true, v: (q) => <b className="text-emerald-600">+{int(q.gain)} click</b> }]} />
+                <Table rows={det.opportunities?.lowCtr} empty="Không có từ khoá top 3 bị CTR thấp." cols={[...qCols.slice(0, 1), { h: "Vị trí", right: true, v: (q) => pos1(q.position), s: (q) => q.position }, { h: "CTR", right: true, v: (q) => <span className="text-rose-600">{pct1(q.ctr)}</span>, s: (q) => q.ctr }, { h: "CTR thường gặp", right: true, v: (q) => pct1(expectedCtr(q.position)) }, { h: "Thêm nếu đạt", right: true, v: (q) => <b className="text-emerald-600">+{int(q.gain)} click</b>, s: (q) => q.gain }]} />
               </div>
               {det.losingPages?.length > 0 && (
                 <div>
                   <div className="mb-1 flex items-center gap-1 text-[12px] font-extrabold text-slate-700"><TrendingDown size={14} className="text-rose-500" /> Trang đang tụt click</div>
-                  <Table rows={det.losingPages} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} /> }, { h: "Click", right: true, v: (p) => <span>{int(p.clicks)} <span className="text-slate-400">/ trước {int(p.prev.clicks)}</span></span> }, { h: "Vị trí", right: true, v: (p) => <span>{pos1(p.position)} <Delta cur={p.position} prev={p.prev.position} lowerBetter abs /></span> }]} />
+                  <Table rows={det.losingPages} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} />, s: (p) => p.name }, { h: "Click", right: true, v: (p) => <span>{int(p.clicks)} <span className="text-slate-400">/ trước {int(p.prev.clicks)}</span></span>, s: (p) => p.clicks }, { h: "Vị trí", right: true, v: (p) => <span>{pos1(p.position)} <Delta cur={p.position} prev={p.prev.position} lowerBetter abs /></span>, s: (p) => p.position }]} />
                 </div>
               )}
             </div>
           )}
-          {tab === "queries" && <Table rows={det.queries?.slice(0, 100)} cols={qCols} />}
-          {tab === "pages" && <Table rows={det.pages?.slice(0, 100)} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} /> }, ...qCols.slice(1)]} />}
-          {tab === "channels" && <Table rows={det.channels} cols={[{ h: "Kênh", v: (c) => <b className="text-slate-700">{c.name}</b> }, { h: "Phiên", right: true, v: (c) => <span>{int(c.cur.sessions)} <Delta cur={c.cur.sessions} prev={c.prev.sessions} /></span> }, { h: "Người dùng", right: true, sm: true, v: (c) => int(c.cur.activeUsers) }, { h: "Tương tác", right: true, v: (c) => (c.cur.engagementRate != null ? pct1(c.cur.engagementRate * 100) : "—") }, { h: "Chuyển đổi", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span> }]} />}
-          {tab === "landing" && <Table rows={det.landing} cols={[{ h: "Trang đích", wide: true, v: (l) => <Name t={l.landingPagePlusQueryString} href={`https://${site.domain}${l.landingPagePlusQueryString}`} /> }, { h: "Phiên", right: true, v: (l) => int(l.sessions) }, { h: "Tương tác", right: true, v: (l) => <span className={l.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}>{pct1(l.engagementRate * 100)}</span> }, { h: "TG TB", right: true, sm: true, v: (l) => dur(l.averageSessionDuration) }, { h: "Chuyển đổi", right: true, v: (l) => int(l.keyEvents) }]} />}
+          {tab === "queries" && <Table rows={det.queries?.slice(0, 100)} csvName={csvOf("tu-khoa")} cols={[...qCols, { h: "Click kỳ trước", csvOnly: true, csv: (q) => q.prev?.clicks ?? "" }]} />}
+          {tab === "pages" && <Table rows={det.pages?.slice(0, 100)} csvName={csvOf("trang-google")} cols={[{ h: "Trang", wide: true, v: (p) => <Name t={short(p.name)} href={p.name} />, s: (p) => p.name }, ...qCols.slice(1)]} />}
+          {tab === "channels" && <Table rows={det.channels} csvName={csvOf("nhom-kenh")} cols={[{ h: "Kênh", v: (c) => <b className="text-slate-700">{c.name}</b>, s: (c) => c.name }, { h: "Phiên", right: true, v: (c) => <span>{int(c.cur.sessions)} <Delta cur={c.cur.sessions} prev={c.prev.sessions} /></span>, s: (c) => c.cur.sessions }, { h: "Người dùng", right: true, sm: true, v: (c) => int(c.cur.activeUsers), s: (c) => c.cur.activeUsers }, { h: "Tương tác", right: true, v: (c) => (c.cur.engagementRate != null ? pct1(c.cur.engagementRate * 100) : "—"), s: (c) => c.cur.engagementRate, csv: (c) => er100(c.cur), csvH: "Tương tác %" }, { h: "Chuyển đổi", right: true, v: (c) => <span>{int(c.cur.keyEvents)} <Delta cur={c.cur.keyEvents} prev={c.prev.keyEvents} /></span>, s: (c) => c.cur.keyEvents }]} />}
+          {tab === "landing" && <Table rows={det.landing} csvName={csvOf("trang-dich")} cols={[{ h: "Trang đích", wide: true, v: (l) => <Name t={l.landingPagePlusQueryString} href={`https://${site.domain}${l.landingPagePlusQueryString}`} />, s: (l) => l.landingPagePlusQueryString }, { h: "Phiên", right: true, v: (l) => int(l.sessions), s: (l) => l.sessions }, { h: "Tương tác", right: true, v: (l) => <span className={l.engagementRate < 0.4 ? "font-bold text-rose-600" : ""}>{pct1(l.engagementRate * 100)}</span>, s: (l) => l.engagementRate, csv: (l) => er100(l), csvH: "Tương tác %" }, { h: "TG TB", right: true, sm: true, v: (l) => dur(l.averageSessionDuration), s: (l) => l.averageSessionDuration, csvH: "TG TB (giây)" }, { h: "Chuyển đổi", right: true, v: (l) => int(l.keyEvents), s: (l) => l.keyEvents }]} />}
           {tab === "sources" && (
             <div>
-              <div className="mb-2 text-[11px] text-slate-400">Bấm 1 dòng để xem nguồn gốc chi tiết (nguồn / phương tiện GA4). Tương tác thấp (&lt;40%) = khách vào rồi thoát nhanh.</div>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400"><span className="min-w-0 flex-1">Bấm 1 dòng để xem nguồn gốc chi tiết (nguồn / phương tiện GA4). Tương tác thấp (&lt;40%) = khách vào rồi thoát nhanh.</span>{srcRows.length > 0 && <CsvButton onClick={srcCsv} />}</div>
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px] sm:min-w-[640px]">
-                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400"><th className="py-2 pr-3">Nguồn</th><th className="py-2 pr-3 text-right">Phiên</th><th className="hidden py-2 pr-3 text-right sm:table-cell">Tỉ trọng</th><th className="hidden py-2 pr-3 text-right sm:table-cell">Người dùng</th><th className="py-2 pr-3 text-right">Tương tác</th><th className="py-2 pr-3 text-right">Chuyển đổi</th></tr></thead>
-                  <tbody>{(det.sources || []).map((g) => (<Fragment key={g.key}>
+                  <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">{SRC_COLS.map(([h, , num, sm], i) => <SortTh key={h} label={h} on={srcSort?.i === i} dir={srcSort?.dir} onClick={() => toggleSrc(i, !!num)} className={`py-2 pr-3 ${num ? "text-right" : ""} ${sm ? "hidden sm:table-cell" : ""}`} />)}</tr></thead>
+                  <tbody>{srcRows.map((g) => (<Fragment key={g.key}>
                     <tr onClick={() => setOpenSrc(openSrc === g.key ? null : g.key)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50">
                       <td className="py-1.5 pr-3"><span className="flex items-center gap-1.5 font-bold text-slate-700"><span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />{g.label}<span className="text-[10px] font-semibold text-slate-400">{openSrc === g.key ? "▾" : "▸"} {g.items.length}</span></span></td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{int(g.cur.sessions)} <Delta cur={g.cur.sessions} prev={g.prev.sessions} /></td>
@@ -419,12 +505,14 @@ function Detail({ owner, site, sum, R, gaProps, gaOverride, onGa, onHide, onBack
                   <span><Star size={11} className="inline text-amber-500" /> = sự kiện chính (GA4 tính là chuyển đổi)</span>
                   <label className="ml-auto flex items-center gap-1 font-semibold text-slate-500"><input type="checkbox" checked={showAuto} onChange={(e) => setShowAuto(e.target.checked)} /> Hiện cả sự kiện tự động (xem trang, cuộn…)</label>
                 </div>
-                <Table rows={ev} empty="Chưa có sự kiện hành động nào (ngoài xem trang). Nên cài đo: bấm gọi, bấm Zalo, gửi form, đặt hàng…" cols={[
-                  { h: "Sự kiện", wide: true, v: (e) => <div className="min-w-0"><div className="flex items-center gap-1 font-bold text-slate-700">{e.key && <Star size={12} className="shrink-0 fill-amber-400 text-amber-500" />}{e.label || e.name}{e.auto && <span className="text-[10px] font-semibold text-slate-400">tự động</span>}</div>{e.label && <div className="text-[10.5px] text-slate-400">{e.name}</div>}</div> },
-                  { h: "Số lần", right: true, v: (e) => <span>{int(e.cur.eventCount)} <Delta cur={e.cur.eventCount} prev={e.prev.eventCount} /></span> },
-                  { h: "Số người", right: true, v: (e) => int(e.cur.totalUsers) },
-                  { h: "Lần/người", right: true, sm: true, v: (e) => (e.cur.totalUsers ? (e.cur.eventCount / e.cur.totalUsers).toFixed(1).replace(".", ",") : "—") },
-                  { h: "Kỳ trước", right: true, sm: true, v: (e) => int(e.prev.eventCount) },
+                <Table rows={ev} csvName={csvOf("su-kien")} empty="Chưa có sự kiện hành động nào (ngoài xem trang). Nên cài đo: bấm gọi, bấm Zalo, gửi form, đặt hàng…" cols={[
+                  { h: "Sự kiện", wide: true, v: (e) => <div className="min-w-0"><div className="flex items-center gap-1 font-bold text-slate-700">{e.key && <Star size={12} className="shrink-0 fill-amber-400 text-amber-500" />}{e.label || e.name}{e.auto && <span className="text-[10px] font-semibold text-slate-400">tự động</span>}</div>{e.label && <div className="text-[10.5px] text-slate-400">{e.name}</div>}</div>, s: (e) => e.label || e.name },
+                  { h: "Tên GA4", csvOnly: true, csv: (e) => e.name },
+                  { h: "Sự kiện chính", csvOnly: true, csv: (e) => (e.key ? "Có" : "") },
+                  { h: "Số lần", right: true, v: (e) => <span>{int(e.cur.eventCount)} <Delta cur={e.cur.eventCount} prev={e.prev.eventCount} /></span>, s: (e) => e.cur.eventCount },
+                  { h: "Số người", right: true, v: (e) => int(e.cur.totalUsers), s: (e) => e.cur.totalUsers },
+                  { h: "Lần/người", right: true, sm: true, v: (e) => (e.cur.totalUsers ? (e.cur.eventCount / e.cur.totalUsers).toFixed(1).replace(".", ",") : "—"), s: (e) => (e.cur.totalUsers ? e.cur.eventCount / e.cur.totalUsers : null) },
+                  { h: "Kỳ trước", right: true, sm: true, v: (e) => int(e.prev.eventCount), s: (e) => e.prev.eventCount },
                 ]} />
                 {(det.events || []).some((e) => e.name === "form_submit" && e.key && (e.cur.eventCount || 0) > (e.cur.totalUsers || 0) * 2) && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[11.5px] text-amber-800">⚠ "Gửi form" đang là sự kiện chính nhưng mỗi người gửi trung bình nhiều lần → có thể GA4 đếm cả ô tìm kiếm/form phụ. Nên kiểm tra lại cấu hình sự kiện chính.</div>}
               </div>
@@ -450,33 +538,45 @@ export default function Web() {
   const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
   const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ khoá)
   const canView = isOwner || perms.includes("web");
-  const [days, setDays] = useState(() => makePeriod("30d")); // { key, since, until }
-  const [sites, setSites] = useState(null);
-  const [meta, setMeta] = useState({ hiddenSites: [], gaProps: [], conn: null });
-  const [sums, setSums] = useState({});
+  const [days, setDays] = usePeriod("30d"); // { key, since, until } — nhớ chung với Quảng cáo / Fanpage
+  const [raw, setRaw] = useState(null); // { props, conn } từ Google — ẩn web / đổi GA4 chỉ ghép lại tại chỗ, không tải lại
+  const [sums, setSums] = useState({}); // theo khoá sk(site)
   const [err, setErr] = useState("");
-  const [sel, setSel] = useState(null);
+  // Web đang xem nằm trên URL (?site=…) → nút Back điện thoại quay về danh sách, mở link thẳng vào chi tiết
+  const [sp, setSp] = useSearchParams();
+  const loc = useLocation(), nav = useNavigate();
+  const sel = sp.get("site");
   const [tick, setTick] = useState(0);
   const [aiState, setAiState] = useState({});
   const [showHidden, setShowHidden] = useState(false);
   const hidden = settings.webHidden || [];
   const gaOverride = settings.webGa || {};
+  const hidKey = JSON.stringify(hidden), gaKey = JSON.stringify(gaOverride);
   const R = useMemo(() => rangesOf(days), [days]);
+  const meta = useMemo(() => (raw ? buildSites(raw.props, raw.conn, { hidden, gaOverride }) : { sites: null, hiddenSites: [], gaProps: [], conn: null }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [raw, hidKey, gaKey]);
+  const sites = meta.sites;
+  const sk = (s) => `${s.domain}|${s.gsc}|${s.ga}|${R.key}|${tick}`;
 
   useEffect(() => {
     if (!canView || !ownerId) return;
     setGoogleProxy(member); CACHE.clear();
     let alive = true; setErr("");
-    loadSites({ hidden, gaOverride }).then((r) => { if (!alive) return; setSites(r.sites); setMeta(r); }).catch((e) => alive && setErr(e.message));
+    listGoogleProps().then((r) => alive && setRaw(r)).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, member, ownerId, tick, JSON.stringify(hidden), JSON.stringify(gaOverride)]);
+  }, [canView, member, ownerId, tick]);
 
+  // Chỉ tải web chưa có số cho kỳ này (đổi GA4 1 web → chỉ web đó tải lại)
   useEffect(() => {
     if (!sites) return;
-    let alive = true; setSums({});
-    sites.forEach((s) => cached(`s|${s.domain}|${s.gsc}|${s.ga}|${R.key}|${tick}`, () => loadSiteSummary(s, R)).then((v) => alive && setSums((o) => ({ ...o, [s.domain]: v }))));
-    return () => { alive = false; };
+    for (const s of sites) {
+      const key = sk(s);
+      if (sums[key]) continue;
+      cached(`s|${key}`, () => loadSiteSummary(s, R))
+        .then((v) => setSums((o) => (o[key] ? o : { ...o, [key]: v })))
+        .catch((e) => setSums((o) => ({ ...o, [key]: { domain: s.domain, gsc: null, ga: null, errors: [e.message || String(e)] } })));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, R.key, tick]);
 
@@ -484,17 +584,23 @@ export default function Web() {
 
   const tot = useMemo(() => {
     const t = { clicks: 0, pClicks: 0, users: 0, pUsers: 0, conv: 0, pConv: 0 };
-    for (const v of Object.values(sums)) {
+    for (const s of sites || []) {
+      const v = sums[sk(s)]; if (!v) continue;
       t.clicks += v.gsc?.cur.clicks || 0; t.pClicks += v.gsc?.prev.clicks || 0;
       t.users += v.ga?.cur.activeUsers || 0; t.pUsers += v.ga?.prev.activeUsers || 0;
       t.conv += v.ga?.cur.keyEvents || 0; t.pConv += v.ga?.prev.keyEvents || 0;
     }
     return t;
-  }, [sums]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sums, sites, R.key, tick]);
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Hiệu quả Website.</div></Card>;
   const site = sel && sites?.find((s) => s.domain === sel);
   const setHidden = (list) => setSettings({ webHidden: list });
+  const openSite = (d) => { const n = new URLSearchParams(sp); n.set("site", d); setSp(n, { state: { qwsList: true } }); };
+  const closeSite = () => { if (loc.state?.qwsList) nav(-1); else { const n = new URLSearchParams(sp); n.delete("site"); setSp(n, { replace: true }); } };
+  // Bỏ cache riêng 1 web (đổi GA4) — các web khác giữ nguyên số
+  const dropSite = (d) => { for (const key of [...CACHE.keys()]) if (key.startsWith(`s|${d}|`) || key.startsWith(`d|${d}|`)) CACHE.delete(key); };
 
   return (
     <div className="space-y-3">
@@ -509,9 +615,9 @@ export default function Web() {
       </Card>
 
       {site ? (
-        <Detail owner={isOwner} site={site} sum={sums[site.domain]} R={R} gaProps={meta.gaProps} gaOverride={gaOverride} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
-          onGa={(v) => { setSettings({ webGa: { ...gaOverride, [site.domain]: v } }); CACHE.clear(); }}
-          onHide={() => { setHidden([...hidden, site.domain]); setSel(null); }} onBack={() => setSel(null)} aiState={aiState} setAiState={setAiState} />
+        <Detail owner={isOwner} site={site} sum={sums[sk(site)]} R={R} tick={tick} gaProps={meta.gaProps} gaOverride={gaOverride} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
+          onGa={(v) => { dropSite(site.domain); setSettings({ webGa: { ...gaOverride, [site.domain]: v } }); }}
+          onHide={() => { setHidden([...hidden, site.domain]); closeSite(); }} onBack={closeSite} aiState={aiState} setAiState={setAiState} />
       ) : (<>
         <div className="grid grid-cols-3 gap-px bg-slate-100">
           {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick], ["Người dùng", tot.users, tot.pUsers, Users], ["Chuyển đổi", tot.conv, tot.pConv, Target]].map(([l, c, p, I]) => (
@@ -522,7 +628,7 @@ export default function Web() {
           <Card><div className="py-8 text-center text-sm text-slate-500">Chưa có web nào. Vào <b>Văn phòng AI → Kết nối → Google</b>, thêm email robot vào Search Console / GA4 của web rồi bấm Làm mới.</div></Card>
         ) : (
           <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
-            {sites.map((s) => <SiteCard key={s.domain} site={s} sum={sums[s.domain]} onOpen={() => setSel(s.domain)} />)}
+            {sites.map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}
           </div>
         )}
         {meta.hiddenSites?.length > 0 && (

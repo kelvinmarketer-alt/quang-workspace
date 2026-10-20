@@ -71,3 +71,8 @@ body {
 
 /* Lưới không bị phình theo chữ dài (truncate) → hết tràn ngang trên điện thoại */
 .qws-full .grid > * { min-width: 0; }
+
+/* Màn cảm ứng (điện thoại, iPad): không có "rê chuột" → các nút chỉ hiện khi hover phải luôn hiện */
+@media (hover: none) {
+  .group-hover\:opacity-100, .sm\:group-hover\:opacity-100, .lg\:group-hover\:opacity-100, .group-hover\/item\:opacity-100 { opacity: 1 !important; }
+}

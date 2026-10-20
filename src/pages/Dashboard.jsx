@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { supabase } from "../lib/supabase.js";
+import { todayISO } from "../lib/format.js";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
   BarChart, Bar, Cell,
 } from "recharts";
-import { Wallet, TrendingUp, AlertCircle, Users, CalendarDays, ArrowUpRight } from "lucide-react";
+import { Wallet, TrendingUp, AlertCircle, Users, CalendarDays, ArrowUpRight, Megaphone, Loader2 } from "lucide-react";
 import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, allInstallments } from "../lib/selectors.js";
@@ -69,6 +72,8 @@ export default function Dashboard() {
         <StatCard icon={Users} label="Khách hàng" value={customerList.length} money={false} tone="amber" />
       </div>
 
+      <MarketingToday />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <SectionTitle action={<Badge tone="indigo">Doanh thu / LN gộp</Badge>}>Doanh thu theo tháng</SectionTitle>
@@ -130,7 +135,7 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <SectionTitle action={<a className="flex items-center gap-1 text-xs font-bold text-indigo-600" href="/ke-toan">Tất cả <ArrowUpRight size={14} /></a>}>Phiếu thu gần đây</SectionTitle>
+          <SectionTitle action={<Link className="flex items-center gap-1 text-xs font-bold text-indigo-600" to="/ke-toan">Tất cả <ArrowUpRight size={14} /></Link>}>Phiếu thu gần đây</SectionTitle>
           {recent.length === 0 ? <div className="py-10 text-center text-sm text-slate-400">Chưa có phiếu thu.</div> : (
             <div className="divide-y divide-slate-100">
               {recent.map((x) => (
@@ -153,3 +158,44 @@ export default function Dashboard() {
     </div>
   );
 }
+
+// Khối "Marketing hôm nay": chi phí quảng cáo hôm nay + tài khoản sắp hết tiền (cache 10 phút để mở Tổng quan không tốn API)
+const MK_CACHE = "qws-mk-today";
+function MarketingToday() {
+  const { isOwner, ownerId, perms = [] } = useData();
+  const canView = isOwner || (!!ownerId && perms.includes("ads"));
+  const [d, setD] = useState(() => { try { const c = JSON.parse(sessionStorage.getItem(MK_CACHE) || "null"); return c && Date.now() - c.at < 600000 && c.day === todayISO() ? c : null; } catch { return null; } });
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!canView || d) return;
+    const day = todayISO();
+    supabase.functions.invoke("qws-meta-ads", { body: { since: day, until: day, compare: false } }).then(({ data, error }) => {
+      if (error || data?.error) throw new Error(error?.message || data.error);
+      const accs = (data.accounts || []).filter((a) => !a.error);
+      const vnd = accs.filter((a) => !a.currency || a.currency === "VND");
+      const v = { at: Date.now(), day,
+        spend: vnd.reduce((x, a) => x + (a.totals?.spend || 0), 0), results: vnd.reduce((x, a) => x + (a.totals?.results || 0), 0),
+        active: accs.filter((a) => (a.totals?.spend || 0) > 0).length, total: accs.length,
+        low: accs.filter((a) => a.bal && (a.bal.balance <= 0 || (a.bal.daysLeft != null && a.bal.daysLeft < 2))).map((a) => ({ name: a.name, balance: a.bal.balance, days: a.bal.daysLeft })) };
+      try { sessionStorage.setItem(MK_CACHE, JSON.stringify(v)); } catch { /* bỏ qua */ }
+      setD(v);
+    }).catch((e) => setErr(e.message || String(e)));
+  }, [canView, d]);
+  if (!canView) return null;
+  return (
+    <Card>
+      <SectionTitle action={<Link className="flex items-center gap-1 text-xs font-bold text-indigo-600" to="/quang-cao">Mở Quảng cáo <ArrowUpRight size={14} /></Link>}><span className="inline-flex items-center gap-1.5"><Megaphone size={16} className="text-violet-500" /> Marketing hôm nay</span></SectionTitle>
+      {!d ? (err ? <div className="text-[12.5px] text-amber-700">Chưa tải được số quảng cáo: {err} <button onClick={() => { setErr(""); setD(null); }} className="ml-1 font-bold text-indigo-600 underline">Thử lại</button></div>
+        : <div className="flex items-center gap-2 py-3 text-[12.5px] text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang lấy số quảng cáo hôm nay…</div>) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div><div className="text-[11px] font-bold uppercase text-slate-400">Chi phí hôm nay</div><div className="text-lg font-extrabold tabular-nums text-slate-900">{formatVND(d.spend)}</div></div>
+          <div><div className="text-[11px] font-bold uppercase text-slate-400">Kết quả</div><div className="text-lg font-extrabold tabular-nums text-slate-900">{d.results.toLocaleString("vi-VN")}</div><div className="text-[11px] text-slate-400">{d.results ? `${formatShort(d.spend / d.results)}/KQ` : "—"}</div></div>
+          <div><div className="text-[11px] font-bold uppercase text-slate-400">Tài khoản đang tiêu</div><div className="text-lg font-extrabold tabular-nums text-slate-900">{d.active}/{d.total}</div></div>
+          <div><div className="text-[11px] font-bold uppercase text-slate-400">Sắp hết tiền</div><div className={`text-lg font-extrabold tabular-nums ${d.low.length ? "text-rose-600" : "text-emerald-600"}`}>{d.low.length ? `${d.low.length} tài khoản` : "Ổn"}</div></div>
+          {d.low.length > 0 && <div className="col-span-2 space-y-0.5 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-800 sm:col-span-4">{d.low.map((a) => <div key={a.name}>• <b>{a.name}</b>: còn {formatShort(a.balance)}{a.days != null ? ` · ~${a.days.toLocaleString("vi-VN", { maximumFractionDigits: 1 })} ngày` : ""}</div>)}</div>}
+        </div>
+      )}
+    </Card>
+  );
+}
+

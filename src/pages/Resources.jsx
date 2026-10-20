@@ -57,6 +57,9 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
   const [open, setOpen] = useState(false);
   const t = RES_TYPES[r.type] || RES_TYPES.web;
   const hasCred = !!(r.username || r.password);
+  const hasUrl = !!(r.url || "").trim();
+  // Không có link (chỉ lưu tài khoản) → bấm dòng = xổ TK/MK thay vì mở tab trống
+  const go = () => (hasUrl ? openUrl(r.url) : hasCred ? setOpen((v) => !v) : canW && onEdit ? onEdit(r) : null);
   const doCopy = async (e) => { e.stopPropagation(); if (await copy(r.url)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
   return (
     <div className={`rounded-xl border ${checked ? "border-indigo-300 bg-indigo-50/40" : "border-slate-100 hover:border-indigo-200"}`}>
@@ -66,17 +69,17 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
             <Check size={14} />
           </button>
         )}
-        <button onClick={() => (select ? onCheck && onCheck(r.id) : openUrl(r.url))} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title="Mở link">
+        <button onClick={() => (select ? onCheck && onCheck(r.id) : go())} className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br ${TONE_GRAD[t.tone] || TONE_GRAD.slate} text-white`} title={hasUrl ? "Mở link" : "Xem tài khoản"}>
           <t.icon size={16} />
         </button>
-        <button onClick={() => openUrl(r.url)} className="min-w-0 flex-1 text-left">
+        <button onClick={go} className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-1.5"><span className="truncate text-sm font-bold text-slate-800">{r.title || t.label}</span>{hasCred && <KeyRound size={12} className="shrink-0 text-amber-500" />}</div>
-          <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hostOf(r.url) || r.url}</div>
+          <div className="truncate text-[11px] text-slate-400">{subLabel ? subLabel + " · " : ""}{hasUrl ? hostOf(r.url) || r.url : r.username || "Không có link"}</div>
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
           {hasCred && <button onClick={() => setOpen((v) => !v)} className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-[11px] font-bold sm:py-1 ${open ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-700 hover:bg-amber-200"}`} title="Xem & copy tài khoản / mật khẩu"><KeyRound size={13} /><span className="hidden sm:inline"> TK/MK</span></button>}
-          <button onClick={() => openUrl(r.url)} className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 sm:block" title="Mở"><ExternalLink size={14} /></button>
-          <button onClick={doCopy} className={`rounded-lg p-2 sm:p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>
+          {hasUrl && <button onClick={() => openUrl(r.url)} className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600 sm:block" title="Mở"><ExternalLink size={14} /></button>}
+          {hasUrl && <button onClick={doCopy} className={`rounded-lg p-2 sm:p-1.5 ${done ? "text-emerald-600" : "text-slate-400 hover:bg-white hover:text-indigo-600"}`} title="Copy link">{done ? <Check size={14} /> : <Copy size={14} />}</button>}
           {canW && onEdit && <button onClick={() => onEdit(r)} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>}
           {canW && onDelete && <button onClick={async () => { if (await ask("Xoá tài nguyên này?")) onDelete(r.id); }} className="rounded-lg p-2 text-slate-400 sm:p-1.5 hover:bg-white hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>}
         </div>
@@ -99,9 +102,11 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
   const [typeTouched, setTypeTouched] = useState(!!initial?.id);
   const onUrl = (v) => setF((p) => ({ ...p, url: v, type: typeTouched ? p.type : detectResType(v) }));
   const projOptions = projects.filter((p) => !f.customerId || p.customerId === f.customerId).map((p) => ({ value: p.id, label: p.name, sub: p.customerName }));
+  // Link TUỲ CHỌN (tài khoản app không có URL vẫn lưu được) — cần ít nhất link / tên / tài khoản
   const save = () => {
-    const url = (f.url || "").trim(); if (!url) return;
-    onSave({ ...f, url, title: (f.title || "").trim() || guessTitle(url) });
+    const url = (f.url || "").trim(), title = (f.title || "").trim(), user = (f.username || "").trim();
+    if (!url && !title && !user) return;
+    onSave({ ...f, url, title: title || (url ? guessTitle(url) : user || "Tài khoản") });
     onClose();
   };
   return (
@@ -112,8 +117,8 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa tài nguyên" : "Thêm tài nguyên"}</h3>
           <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Link *</span><input value={f.url} onChange={(e) => onUrl(e.target.value)} autoFocus className={inputCls} placeholder="Dán link Drive / Figma / Sheet…" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên gọi</span><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={inputCls} placeholder={f.url ? guessTitle(f.url) : "Tự đặt theo link nếu bỏ trống"} /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Link <span className="text-[11px] font-medium text-slate-400">(tuỳ chọn)</span></span><input value={f.url} onChange={(e) => onUrl(e.target.value)} autoFocus className={inputCls} placeholder="Dán link Drive / Figma / Sheet… (bỏ trống nếu chỉ lưu tài khoản)" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên gọi</span><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={inputCls} placeholder={f.url ? guessTitle(f.url) : "VD: Tài khoản Canva / Hosting…"} /></label>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Loại</span>
             <select value={f.type} onChange={(e) => { setTypeTouched(true); setF({ ...f, type: e.target.value }); }} className={inputCls}>
@@ -121,11 +126,11 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
             </select>
           </label>
           <div className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Khách</span>
-            <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={f.customerId} onChange={(v) => setF({ ...f, customerId: v, projectId: "" })} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
+            <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={f.customerId} onChange={(v) => setF({ ...f, customerId: v, projectId: "" })} placeholder="Chung / chọn khách" emptyText="Chưa có khách" allowEmpty emptyLabel="— Chung (không gắn khách) —" />
           </div>
         </div>
         <div className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Dự án (JOB)</span>
-          <Combobox options={projOptions} value={f.projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setF((s) => ({ ...s, projectId: v, customerId: p?.customerId || s.customerId })); }} placeholder="Không gắn / chọn dự án" emptyText="Khách này chưa có dự án" />
+          <Combobox options={projOptions} value={f.projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setF((s) => ({ ...s, projectId: v, customerId: p?.customerId || s.customerId })); }} placeholder="Không gắn / chọn dự án" emptyText="Khách này chưa có dự án" allowEmpty />
         </div>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Tài khoản</span><input value={f.username || ""} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} placeholder="Đăng nhập (nếu có)" autoComplete="off" /></label>
@@ -164,10 +169,10 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
           {!preset.projectId && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
-                <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
+                <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" allowEmpty emptyLabel="— Chung (không gắn khách) —" />
               </div>
               <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
-                <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" />
+                <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" allowEmpty />
               </div>
             </div>
           )}
@@ -238,10 +243,10 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
           {!preset.projectId && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Khách (áp cho tất cả)</div>
-                <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" />
+                <Combobox options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))} value={customerId} onChange={(v) => { setCustomerId(v); setProjectId(""); }} placeholder="Chung / chọn khách" emptyText="Chưa có khách" allowEmpty emptyLabel="— Chung (không gắn khách) —" />
               </div>
               <div className="min-w-0"><div className="mb-1 text-sm font-semibold text-slate-600">Dự án (áp cho tất cả)</div>
-                <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" />
+                <Combobox options={projOptions} value={projectId} onChange={(v) => { const p = projects.find((x) => x.id === v); setProjectId(v); if (p) setCustomerId(p.customerId); }} placeholder="Không gắn / chọn dự án" emptyText="Chưa có dự án" allowEmpty />
               </div>
             </div>
           )}
@@ -378,7 +383,7 @@ export default function Resources() {
     const lq = q.trim().toLowerCase();
     return resources
       .filter((r) => (typeF === "all" || r.type === typeF) && (custF === "all" || r.customerId === custF)
-        && (!lq || (r.title + r.url + (custName[r.customerId] || "") + (projName[r.projectId] || "")).toLowerCase().includes(lq)))
+        && (!lq || [r.title, r.url, r.username, r.note, custName[r.customerId], projName[r.projectId]].filter(Boolean).join(" ").toLowerCase().includes(lq)))
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [resources, q, typeF, custF, custName, projName]);
 
@@ -415,7 +420,7 @@ export default function Resources() {
       <div className="flex flex-wrap items-center gap-2 px-3 sm:px-0">
         <div className="flex min-w-[160px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
           <Search size={16} className="shrink-0 text-slate-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / link / khách / dự án…" className="w-full text-sm outline-none" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / link / tài khoản / ghi chú / khách…" className="w-full text-sm outline-none" />
         </div>
         <select value={custF} onChange={(e) => setCustF(e.target.value)} className="max-w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
           <option value="all">Tất cả khách</option>

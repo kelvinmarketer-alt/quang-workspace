@@ -77,6 +77,7 @@ async function getJson(url, tries = 4) {
   if (!r.ok) throw new Error(`Binance ${r.status}`);
   return r.json();
 }
+let pageHook = null; // runSession đếm số trang nến đang tải để báo tiến độ
 const INFLIGHT = new Map();
 export function loadKlines(symbol, tf, fromTs) {
   const key = `${symbol}|${tf}|${fromTs}`;
@@ -91,6 +92,7 @@ async function loadKlines0(symbol, tf, fromTs) {
   for (let guard = 0; guard < 80 && start < now - step; guard++) {
     const limit = Math.min(1500, Math.max(2, Math.ceil((now - start) / step) + 1)); // phần mới ít → limit nhỏ (trọng số API thấp)
     const j = await getJson(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=${limit}&startTime=${start}`);
+    pageHook?.(j.length);
     if (!j.length) break;
     for (const k of j) if (k[6] < now) rows.push([k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]);
     start = j[j.length - 1][0] + step;
@@ -329,8 +331,11 @@ export async function runSession(session, onProgress = () => {}) {
     if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
   }
   onProgress(`Tải nến ${need.size} luồng…`);
-  let done = 0;
-  await Promise.all([...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => onProgress(`Tải nến ${++done}/${need.size}…`))));
+  let done = 0, bars = 0;
+  const say = () => onProgress(`Tải nến ${done}/${need.size} luồng${bars ? ` · đã tải ${bars.toLocaleString("vi-VN")} nến mới` : ""}…`);
+  pageHook = (n) => { bars += n; say(); };
+  try { await Promise.all([...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => { done++; say(); }))); }
+  finally { pageHook = null; }
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
     const symbol = SYMBOLS[coin], step = TFS[tf].ms, key = `${coin}|${tf}`;
     const K = (await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);

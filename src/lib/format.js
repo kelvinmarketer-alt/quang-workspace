@@ -20,6 +20,30 @@ export function formatShort(n) {
   return String(v);
 }
 
+// Số thập phân kiểu Việt (dấu phẩy): fmtNum(2.5, 2) → "2,50" · fmtNum(2.5, 2, 0) → "2,5"
+export function fmtNum(v, digits = 0, minDigits = digits) {
+  if (v == null || v === "" || !isFinite(Number(v))) return "—";
+  return Number(v).toLocaleString("vi-VN", { minimumFractionDigits: minDigits, maximumFractionDigits: digits });
+}
+export const fmtPct = (v, digits = 1) => (v == null || v === "" || !isFinite(Number(v)) ? "—" : fmtNum(v, digits) + "%");
+// formatShort nhưng dấu phẩy thập phân ("1,5 tr")
+export const fmtShort = (n) => formatShort(n).replace(".", ",");
+
+// Xuất CSV (UTF-8 có BOM để Excel hiện đúng tiếng Việt). rows = [[ô, ô…], …], dòng đầu là tiêu đề
+export function downloadCSV(name, rows) {
+  const cell = (v) => {
+    if (v == null) return "";
+    const s = typeof v === "number" ? (isFinite(v) ? String(Math.round(v * 100) / 100) : "") : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = "﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = String(name || "bang").replace(/[\\/:*?"<>|]+/g, "-").slice(0, 120) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 export const MONTHS_VI = [
   "Th 1", "Th 2", "Th 3", "Th 4", "Th 5", "Th 6",
   "Th 7", "Th 8", "Th 9", "Th 10", "Th 11", "Th 12",

@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3, ChevronDown } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3, ChevronDown, Search } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -48,6 +48,7 @@ function nextOcc(sc, today) {
   return null;
 }
 
+const plainVi = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d");
 const catTone = (cats, name) => (cats || []).find((c) => c.name === name)?.color || "slate";
 
 /* ---- Bộ chọn danh mục chi (chips) + link sửa ---- */
@@ -578,10 +579,10 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
           <div className={`text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
           <div className="text-[10px] text-slate-400">dư {formatShort(t.run)}</div>
         </div>
-        {t.synthetic ? <span className="w-7 shrink-0" /> : (
-          <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-            <button onClick={() => onEditTx(t)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-            <button onClick={() => onDelTx(t.id)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+        {t.synthetic ? <span className="w-[66px] shrink-0" /> : (
+          <span className="-mr-2 flex shrink-0 items-center">{/* luôn hiện (iPad không có hover) */}
+            <button onClick={() => onEditTx(t)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+            <button onClick={() => onDelTx(t.id)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
           </span>
         )}
       </div>
@@ -644,7 +645,9 @@ function FundsMain() {
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
-  const [year, setYear] = useState(curY);
+  // Năm đang xem — nhớ localStorage, mặc định năm hiện tại
+  const [yearSel, setYearSel] = useState(() => { try { return Number(localStorage.getItem("qws_funds_year")) || curY; } catch { return curY; } });
+  const setYear = (y) => { setYearSel(y); try { localStorage.setItem("qws_funds_year", String(y)); } catch {} };
   const [fundModal, setFundModal] = useState(null); // null | {} | fund
   const [txModal, setTxModal] = useState(null);      // { fund, type }
   const [allocOpen, setAllocOpen] = useState(false);
@@ -660,6 +663,7 @@ function FundsMain() {
     for (const t of fundTx || []) if (t.date) ys.add(new Date(t.date).getFullYear());
     return [...ys].sort((a, b) => b - a);
   }, [projects, fundTx, curY]);
+  const year = years.includes(yearSel) ? yearSel : curY; // năm đã nhớ không còn dữ liệu → về năm nay
 
   // Quỹ công ty (nguồn = LN gộp) vs các quỹ cá nhân
   const grossTotal = useMemo(() => grossProfitToDate(projects, today), [projects, today]);
@@ -702,16 +706,35 @@ function FundsMain() {
   // Biểu đồ: LN gộp vs đã phân bổ theo tháng
   const chart = useMemo(() => Array.from({ length: 12 }, (_, i) => ({ name: "T" + (i + 1), thu: gpMonths[i], pb: personalFunds.reduce((a, f) => a + ((inflow.byFund[f.id] || [])[i] || 0), 0) })).filter((x) => x.thu || x.pb), [gpMonths, inflow, personalFunds]);
 
-  // Lịch sử TOÀN BỘ giao dịch quỹ, gom theo NGÀY (mới → cũ) — hiển thị dạng xổ (accordion)
+  // Lịch sử giao dịch quỹ: mặc định THEO NĂM đang chọn (có "Tất cả năm") + lọc quỹ / danh mục / tìm ghi chú
+  const [hAllYears, setHAllYears] = useState(false);
+  const [hFund, setHFund] = useState("");
+  const [hCat, setHCat] = useState("");
+  const [hQ, setHQ] = useState("");
+  const histTx = useMemo(() => {
+    const q = plainVi(hQ.trim());
+    const fname = (id) => (funds || []).find((f) => f.id === id)?.name || "";
+    return (fundTx || []).filter((t) => {
+      if (!hAllYears && (t.date || "").slice(0, 4) !== String(year)) return false;
+      if (hFund && t.fundId !== hFund) return false;
+      if (hCat && (hCat === "_none" ? !!t.cat : t.cat !== hCat)) return false;
+      return !q || plainVi(`${t.note || ""} ${fname(t.fundId)} ${t.cat || ""}`).includes(q);
+    });
+  }, [fundTx, funds, hAllYears, year, hFund, hCat, hQ]);
+  const histFiltered = !!(hFund || hCat || hQ.trim());
+  const histIn = histTx.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0);
+  const histOut = histTx.filter((t) => t.type === "out").reduce((a, t) => a + num(t.amount), 0);
+  const histCats = useMemo(() => [...new Set([...(spendCats || []).map((c) => c.name), ...(fundTx || []).map((t) => t.cat).filter(Boolean)])], [spendCats, fundTx]);
+  // Gom theo NGÀY (mới → cũ) — hiển thị dạng xổ (accordion)
   const txByDate = useMemo(() => {
     const map = new Map();
-    for (const t of (fundTx || [])) { const d = (t.date || "").slice(0, 10) || "—"; if (!map.has(d)) map.set(d, []); map.get(d).push(t); }
+    for (const t of histTx) { const d = (t.date || "").slice(0, 10) || "—"; if (!map.has(d)) map.set(d, []); map.get(d).push(t); }
     return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([date, txs]) => ({
       date, txs, count: txs.length,
       inSum: txs.filter((t) => t.type !== "out").reduce((a, t) => a + num(t.amount), 0),
       outSum: txs.filter((t) => t.type === "out").reduce((a, t) => a + num(t.amount), 0),
     }));
-  }, [fundTx]);
+  }, [histTx]);
   const [openDates, setOpenDates] = useState(() => { const latest = (fundTx || []).reduce((mx, t) => { const d = (t.date || "").slice(0, 10); return d > mx ? d : mx; }, ""); return new Set(latest ? [latest] : []); });
   const toggleDate = (d) => setOpenDates((prev) => { const n = new Set(prev); n.has(d) ? n.delete(d) : n.add(d); return n; });
   const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "—";
@@ -990,25 +1013,45 @@ function FundsMain() {
         <div className="flex items-center justify-between p-4 pb-3 sm:p-5">
           <div>
             <h2 className="text-base font-extrabold text-slate-900">Lịch sử giao dịch quỹ</h2>
-            <p className="mt-0.5 text-[11px] text-slate-400">Bấm vào ngày để xem chi tiết giao dịch</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">{hAllYears ? "Tất cả năm" : `Năm ${year}`} · bấm vào ngày để xem chi tiết</p>
           </div>
-          <Badge tone="slate">{(fundTx || []).length}</Badge>
+          <Badge tone="slate">{histTx.length}{histTx.length !== (fundTx || []).length ? `/${(fundTx || []).length}` : ""}</Badge>
         </div>
+        {(fundTx || []).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-4 pb-3 sm:px-5">
+            <div className="flex min-w-0 flex-1 basis-full items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 py-1.5 sm:basis-48">
+              <Search size={14} className="shrink-0 text-slate-400" />
+              <input value={hQ} onChange={(e) => setHQ(e.target.value)} placeholder="Tìm ghi chú, tên quỹ…" className="w-full min-w-0 bg-transparent text-sm outline-none" />
+              {hQ && <button onClick={() => setHQ("")} className="-m-1 shrink-0 rounded p-1 text-slate-400 hover:text-slate-600" title="Xoá tìm"><X size={14} /></button>}
+            </div>
+            <select value={hAllYears ? "all" : "year"} onChange={(e) => setHAllYears(e.target.value === "all")} className="rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600">
+              <option value="year">Năm {year}</option><option value="all">Tất cả năm</option>
+            </select>
+            <select value={hFund} onChange={(e) => setHFund(e.target.value)} className="max-w-[45%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:max-w-none">
+              <option value="">Mọi quỹ</option>{(funds || []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            <select value={hCat} onChange={(e) => setHCat(e.target.value)} className="max-w-[45%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:max-w-none">
+              <option value="">Mọi danh mục</option>{histCats.map((c) => <option key={c} value={c}>{c}</option>)}<option value="_none">Không danh mục</option>
+            </select>
+            {(histFiltered || hAllYears) && <button onClick={() => { setHQ(""); setHFund(""); setHCat(""); setHAllYears(false); }} className="text-xs font-bold text-indigo-500 hover:underline">Bỏ lọc</button>}
+            {histTx.length > 0 && <div className="basis-full text-[11px] font-bold text-slate-500">{histTx.length} giao dịch · <span className="text-emerald-600">+{formatVND(histIn)}</span> · <span className="text-rose-600">−{formatVND(histOut)}</span></div>}
+          </div>
+        )}
         {txByDate.length === 0 ? (
-          <div className="px-4 pb-8 pt-2 text-center text-sm text-slate-400">Chưa có giao dịch. Bấm "Phân bổ" hoặc "Nạp" trên từng quỹ.</div>
+          <div className="px-4 pb-8 pt-2 text-center text-sm text-slate-400">{(fundTx || []).length ? (histFiltered ? "Không có giao dịch khớp bộ lọc." : `Năm ${year} chưa có giao dịch — chọn "Tất cả năm" để xem năm khác.`) : 'Chưa có giao dịch. Bấm "Phân bổ" hoặc "Nạp" trên từng quỹ.'}</div>
         ) : (
           <div className="divide-y divide-slate-100">
             {txByDate.map((g) => {
-              const open = openDates.has(g.date);
+              const open = openDates.has(g.date) !== histFiltered; // đang lọc/tìm → mặc định xổ hết, bấm để thu
               return (
                 <div key={g.date}>
                   <button onClick={() => toggleDate(g.date)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 sm:px-5 ${open ? "bg-slate-50/60" : ""}`}>
                     <ChevronDown size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                     <span className="text-sm font-extrabold text-slate-700">{fmtDateVI(g.date)}</span>
                     <Badge tone="slate">{g.count}</Badge>
-                    <span className="ml-auto flex items-center gap-2 text-sm font-bold">
-                      {g.inSum > 0 && <span className="text-emerald-600">+{formatShort(g.inSum)}</span>}
-                      {g.outSum > 0 && <span className="text-rose-600">−{formatShort(g.outSum)}</span>}
+                    <span className="ml-auto flex items-center gap-2 text-sm font-bold tabular-nums">
+                      {g.inSum > 0 && <span className="text-emerald-600">+<span className="sm:hidden">{formatShort(g.inSum)}</span><span className="hidden sm:inline">{formatVND(g.inSum)}</span></span>}
+                      {g.outSum > 0 && <span className="text-rose-600">−<span className="sm:hidden">{formatShort(g.outSum)}</span><span className="hidden sm:inline">{formatVND(g.outSum)}</span></span>}
                     </span>
                   </button>
                   {open && (
@@ -1016,16 +1059,16 @@ function FundsMain() {
                       {g.txs.map((t) => {
                         const isIn = t.type !== "out";
                         return (
-                          <div key={t.id} className="group flex items-center gap-3 py-2.5 pl-10 pr-4 hover:bg-white sm:pl-14 sm:pr-5">
+                          <div key={t.id} className="group flex items-center gap-2 py-2.5 pl-5 pr-4 hover:bg-white sm:gap-3 sm:pl-14 sm:pr-5">
                             <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${isIn ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>{isIn ? <ArrowDownToLine size={15} /> : <ArrowUpFromLine size={15} />}</span>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span>{t.cat && <Badge tone={catTone(spendCats, t.cat)}>{t.cat}</Badge>}</div>
                               {t.note && <div className="truncate text-[11px] text-slate-400">{t.note}</div>}
                             </div>
-                            <div className={`shrink-0 text-sm font-extrabold ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatShort(t.amount)}</div>
-                            <span className="flex shrink-0 items-center transition sm:opacity-0 sm:group-hover:opacity-100">
-                              <button onClick={() => setEditTx(t)} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={14} /></button>
-                              <button onClick={async () => { if (await ask("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600"><Trash2 size={14} /></button>
+                            <div className={`shrink-0 text-right text-sm font-extrabold tabular-nums ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatVND(t.amount)}</div>
+                            <span className="-mr-2 flex shrink-0 items-center">{/* luôn hiện (iPad không có hover) */}
+                              <button onClick={() => setEditTx(t)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+                              <button onClick={async () => { if (await ask("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
                             </span>
                           </div>
                         );
@@ -1055,10 +1098,17 @@ function FundsMain() {
 
 const FUND_TABS = [["funds", "Quỹ & Dòng tiền", PiggyBank], ["stats", "Thống kê chi tiêu", BarChart3]];
 
-export default function Funds({ initialTab = "funds" }) {
-  const [tab, setTab] = useState(initialTab);
+const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
+export default function Funds({ initialTab }) {
+  const { fundSchedules } = useData();
+  // Có lịch chuyển quỹ đến hạn → mở tab Quỹ (banner xác nhận nằm ở đó, link từ "Hôm nay" trỏ về /quy)
+  const hasDue = (fundSchedules || []).some((sc) => pendingOccs(sc, todayISO()).length > 0);
+  const startTab = () => initialTab || (hasDue ? "funds" : fundTabLS());
+  // Route chỉ định tab (vd /quy-thong-ke) → theo route; /quy → mở lại tab đã xem lần trước (nhớ localStorage)
+  const [tab, setTab0] = useState(startTab);
+  const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_funds_tab", v); } catch {} };
   // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
-  useEffect(() => { setTab(initialTab); }, [initialTab]);
+  useEffect(() => { setTab0(startTab()); /* eslint-disable-next-line */ }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
       <Card className="!p-2">
