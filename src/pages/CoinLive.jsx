@@ -60,7 +60,7 @@ export default function CoinLive({ active }) {
               : <button disabled={busy} onClick={() => setStop(true)} className="flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-[12px] font-bold text-white"><Square size={12} /> Dừng bot</button>}
           </div>
         </div>
-        <div className="mt-1 text-[11.5px] text-slate-500">Rủi ro {st.risk}%/lệnh · tối đa {st.maxOpen} lệnh · dừng ngày -{st.dailyStop ?? 6}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
+        <div className="mt-1 text-[11.5px] text-slate-500">Luật: {st.rules || "mặc định"} · rủi ro {st.risk}%/lệnh · tối đa {st.maxOpen} lệnh · dừng ngày -{st.dailyStop ?? 6}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
         {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
       </Card>
 

@@ -216,11 +216,11 @@ function findSignals(K, setups) {
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
 function simTrade(K, s, cfg, atr, endIdx, e50, f) {
-  const e0 = s.i + 1; if (e0 > endIdx) return null; // chưa có nến để vào
+  const e0 = s.i + 1; if (e0 > endIdx && cfg.entryMode !== "limit") return null; // chưa có nến để vào (lệnh chờ thì vẫn đặt ngay khi nến tín hiệu đóng)
   const slip = cfg.slipPct / 100, side = s.side, a = atr[s.i];
   const limit = cfg.entryMode === "limit", maker = (cfg.makerPct ?? 0.02) / 100, taker = cfg.feePct / 100;
   // Vào lệnh: thị trường ở giá mở nến kế (trả phí taker + trượt) · hoặc LỆNH CHỜ ở giá đóng nến tín hiệu, chờ tối đa 3 nến (phí maker, không trượt)
-  let e = e0, entry = K[e0][1] * (1 + side * slip);
+  let e = e0, entry = e0 <= endIdx ? K[e0][1] * (1 + side * slip) : null;
   if (limit) {
     // Điểm vào đẹp: "close" = giá đóng nến tín hiệu · "mid" = hồi 50% thân nến tín hiệu (giá tốt hơn, khó khớp hơn)
     const [, so, , , sc] = K[s.i], lim = cfg.limitAt === "mid" ? (so + sc) / 2 : sc, win = Math.max(1, cfg.fillBars || 3); e = -1;
@@ -229,7 +229,14 @@ function simTrade(K, s, cfg, atr, endIdx, e50, f) {
     if (cfg.minSlAtr > 0 && ((lim - s.sl) * side) / a < cfg.minSlAtr && ((lim - s.sl) * side) > 0) return { skip: `SL sát < ${cfg.minSlAtr} ATR` };
     if (cfg.keyVolume > 0 && f && !atKeyVolume(f, s.i, cfg.keyVolume, lim)) return { skip: cfg.keyVolume === 1 ? "không ở vùng nến volume lớn nhất 100 nến" : `không ở vùng Key Volume (top ${cfg.keyVolume})` }; // bộ kiến thức: chỉ vào TẠI vùng có lý do
     for (let k = e0; k <= Math.min(endIdx, e0 + win - 1); k++) if ((side === 1 ? K[k][3] < lim : K[k][2] > lim)) { e = k; break; } // giá phải xuyên qua (không chỉ chạm) mới tính khớp — thận trọng về hàng chờ
-    if (e < 0) return e0 + win - 1 <= endIdx ? { skip: "giá không về điểm vào" } : { pending: { side, lim, sl: s.sl, until: K[e0][0] + win * (K[e0][0] - K[s.i][0]) } };
+    if (e < 0) {
+      if (e0 + win - 1 <= endIdx) return { skip: "giá không về điểm vào" };
+      // CHỜ KHỚP (cửa sổ còn mở) → lệnh chờ đặt lên sàn ngay; kiểm tra rủi ro như khi khớp
+      const r0 = (lim - s.sl) * side, step = K[s.i][0] - K[s.i - 1][0];
+      if (!(r0 > 0) || r0 > 4 * a) return { skip: r0 > 0 ? "SL xa > 4 ATR" : "giá vào đã qua SL" };
+      if (cfg.maxFeeR > 0 && (2 * taker * lim) / r0 > cfg.maxFeeR) return { skip: "SL quá sát (phí > " + cfg.maxFeeR + "R)" };
+      return { pending: { side, lim, sl: s.sl, until: K[s.i][0] + (1 + win) * step } };
+    }
     entry = lim;
   }
   const risk = (entry - s.sl) * side;
@@ -399,7 +406,7 @@ export async function runSession(session, onProgress = () => {}) {
       if (veto) { if (live0) bump(veto); continue; }
       const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50, found));
       if (!sims[0]) continue;
-      if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], ...sims[0].pending }); continue; }
+      if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], tags, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, ...sims[0].pending }); continue; }
       if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
       // PHÍ FUNDING: giữ lệnh qua mốc funding → LONG trả khi tỉ lệ dương (SHORT nhận), tính theo R; cộng vào tổng phí
       for (const t of sims) {
@@ -516,6 +523,13 @@ export async function runSession(session, onProgress = () => {}) {
     if (st) t.lesson = `${lessonLabel(st.k)}: ${st.n} lệnh gần nhất thắng ${st.win.toFixed(0)}%, TB ${st.exp >= 0 ? "+" : ""}${st.exp.toFixed(2)}R${st.bad ? " → đã thành bài học, sẽ tránh" : st.exp < 0 ? " → đang theo dõi" : " → chưa đủ xấu, có thể do ngẫu nhiên"}`;
   }
   const metaNow = { lesson: cfg.learnLoss ? works("lesson", until) : null, opt: cfg.verifyOpt ? works("opt", until) : null };
+  // Lệnh chờ đang mở (bot thật đặt lên sàn) đi qua ĐÚNG bộ quyết định như demo: bài học + bộ tối ưu (khi đã được kiểm chứng) + R:R chọn
+  if (cfg.adaptive) for (const p of pending) {
+    const sh = { tags: p.tags, setup: p.setup, cell: p.cell, grp: p.grp }, L = lessonsAt(sh, p.signalAt), d = decide(keysOf(sh), p.signalAt, p.tf);
+    if (L.length && metaNow.lesson?.ok) { p.blocked = `bài học: ${L.map((x) => lessonLabel(x.k)).join("; ")}`; continue; }
+    if (!d.take && (!cfg.verifyOpt || metaNow.opt?.ok)) { p.blocked = d.why === "khung" ? `khung ${p.tf} đang âm` : `bộ tối ưu: kỳ vọng ${d.exp?.toFixed(2)}R`; continue; }
+    p.rr = d.take && d.level >= 0 ? V[d.vi].rr : cfg.rr;
+  }
   const lessonsActive = [...lessonOn].filter(([, on]) => on).map(([k]) => ({ k, label: lessonLabel(k), ...lessonStat(k, until) }));
   const tfState = cfg.tfs.map((tf) => ({ tf, ...(tfExp(tf, until) || { exp: null, n: 0 }), pause: cfg.tfGate && (tfExp(tf, until)?.exp ?? 0) < 0 }));
   return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, lessons, lessonsActive, metaNow, metaEvents, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
