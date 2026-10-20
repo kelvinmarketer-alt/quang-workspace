@@ -17,10 +17,10 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 6,
-  capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
+  cfgVer: 7,
+  capital: 1000, riskPct: 2, maxOpen: 3, maxLev: 20, dailyStopPct: 6, // v7 (user chốt 20/10): rủi ro 2%/lệnh, dừng ngày -6% (= 3 lệnh thua)
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
-  sigVol: true, noEngulf: true, d1Bias: false, // v6: nến tín hiệu volume > TB20 · bỏ vào ngay sau engulfing lớn · (tuỳ chọn) chỉ thuận D1
+  sigVol: true, noEngulf: true, d1Bias: true, // v6: nến tín hiệu volume > TB20 · bỏ vào ngay sau engulfing lớn · (tuỳ chọn) chỉ thuận D1
   keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
   maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
@@ -33,6 +33,7 @@ export const DEFAULT_CFG = {
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V7_KEYS = ["riskPct", "dailyStopPct", "d1Bias"];
 const V6_KEYS = ["sigVol", "noEngulf", "d1Bias"];
 const V5_KEYS = ["keyVolume"];
 const V4_KEYS = ["learnLoss", "lessonN", "lessonMin", "verifyOpt", "optVariants", "warmupDays"];
@@ -45,6 +46,7 @@ export function cfgOf(session) {
   if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 7) for (const k of V7_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
