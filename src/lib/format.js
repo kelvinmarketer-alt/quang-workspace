@@ -69,3 +69,10 @@ export function parsePayDate(str, year) {
   if (mon < 1 || mon > 12 || day < 1 || day > 31) return null;
   return new Date(year, mon - 1, day);
 }
+
+// ===== Tiền USD & giá coin — MỘT kiểu chung cho cả module Coin (Đầu tư · Thị trường · Demo · Bot thật) =====
+// "$1.234,56" (âm: "-$1.234,56") · giá coin tự chọn số lẻ theo độ lớn: 82.799,7 · 2.454,61 · 0,2235
+export const fmtUsd = (v, d = 2) => (v == null || !isFinite(Number(v)) ? "—" : `${Number(v) < 0 ? "-" : ""}$${Math.abs(Number(v)).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
+export const fmtUsdSigned = (v, d = 2) => (v == null || !isFinite(Number(v)) ? "—" : `${Number(v) >= 0 ? "+" : "-"}$${Math.abs(Number(v)).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
+export const fmtPx = (v) => { if (v == null || !isFinite(Number(v))) return "—"; const n = Number(v), a = Math.abs(n); return n.toLocaleString("vi-VN", { maximumFractionDigits: a >= 1000 ? 1 : a >= 10 ? 2 : a >= 1 ? 4 : 6 }); };
+export const fmtQty = (v) => (v == null || !isFinite(Number(v)) ? "—" : Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 8 }));
