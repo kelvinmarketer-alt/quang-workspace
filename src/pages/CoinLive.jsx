@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server } from "lucide-react";
+import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { supabase } from "../lib/supabase.js";
 import { ask } from "../components/ConfirmDialog.jsx";
@@ -25,7 +25,7 @@ export default function CoinLive({ active }) {
   const setStop = async (stop) => {
     if (!(await ask(stop ? "Dừng bot?\nBot huỷ các lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho bot chạy lại?\nBot sẽ tiếp tục đặt lệnh theo tín hiệu mới.", { ok: stop ? "Dừng bot" : "Chạy lại", danger: stop }))) return;
     setBusy(true);
-    const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { stop, at: Date.now() }, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { ...(cmd || {}), stop, at: Date.now() }, updated_at: new Date().toISOString() });
     setBusy(false); if (error) setErr(error.message); else load();
   };
 
@@ -34,7 +34,8 @@ export default function CoinLive({ active }) {
       <div className="flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Server size={17} className="text-indigo-500" /> Bot thật chưa được kết nối</div>
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12.5px] leading-snug text-slate-600">
         <li>Chạy file <b>supabase.sql</b> (trong thư mục bot <code>qws-live-bot</code>) ở Supabase → SQL Editor để tạo bảng báo cáo.</li>
-        <li>Cài bot trên VPS theo <b>README</b> (Testnet trước): điền khoá Testnet + SUPABASE_SERVICE_KEY vào <code>.env</code>, chạy <code>npm run check</code> rồi <code>npm start</code>.</li>
+        <li>Trên máy bàn bật 24/7: tải bot (repo <code>qws-live-bot</code> → Download ZIP), bấm <b>cai-dat-windows.bat</b>, dán <b>SUPABASE_SERVICE_KEY</b> khi Notepad mở.</li>
+        <li>Quay lại đây → <b>Cài đặt bot</b>: chọn Testnet, dán khoá API Binance (mã hoá ngay trên máy này, chỉ máy bot giải được).</li>
         <li>Quay lại đây: trạng thái, lệnh chờ, vị thế và lịch sử lệnh thật sẽ hiện tự động.</li>
       </ol>
     </Card>
@@ -61,8 +62,11 @@ export default function CoinLive({ active }) {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">Luật: {st.rules || "mặc định"} · rủi ro {st.risk}%/lệnh · tối đa {st.maxOpen} lệnh · dừng ngày -{st.dailyStop ?? 6}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
+        {st.waiting && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[12.5px] font-bold text-amber-800">⏸ {st.waiting}</div>}
         {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
       </Card>
+
+      <BotSettings st={st} cmd={cmd} onSaved={load} defaultOpen={!!st.waiting} />
 
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
         {[["Vốn tính lệnh", usd(st.lastScan?.eq)], ["Lãi/lỗ hôm nay", usd(st.lastScan?.pnl), st.lastScan?.pnl >= 0 ? "text-emerald-600" : "text-rose-600"], ["Lệnh chờ / đang mở", `${act.filter((a) => a.stage === "entry").length} / ${act.filter((a) => a.stage === "open").length}`], ["Lệnh đã đóng (gần đây)", closes.length ? `${closes.length} · thắng ${Math.round((wins / closes.length) * 100)}%` : "—"]].map(([l, v, t]) => (
@@ -100,3 +104,97 @@ export default function CoinLive({ active }) {
     </div>
   );
 }
+
+// ---------- Cài đặt bot ngay trong app: chế độ, rủi ro, vốn + khoá API (mã hoá bằng khoá CÔNG KHAI của máy bot) ----------
+const b64ToBytes = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+const bytesToB64 = (u) => { let s = ""; new Uint8Array(u).forEach((x) => { s += String.fromCharCode(x); }); return btoa(s); };
+async function encryptFor(pubB64, text) {
+  const pk = await crypto.subtle.importKey("spki", b64ToBytes(pubB64), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
+  return bytesToB64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pk, new TextEncoder().encode(text)));
+}
+function BotSettings({ st, cmd, onSaved, defaultOpen }) {
+  const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, ...(st.settings || {}), ...(cmd?.config || {}) };
+  const [open, setOpen] = useState(defaultOpen);
+  const [f, setF] = useState(c0), [k, setK] = useState({ key: "", secret: "" }), [confirm, setConfirm] = useState(""), [msg, setMsg] = useState(null), [saving, setSaving] = useState(false);
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+  const live = f.mode === "live", saved = cmd?.keys?.[f.mode], stale = saved && saved.pubFp && st.pubFp && saved.pubFp !== st.pubFp;
+  const inp = "w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm";
+  const num = (key, label, step, suffix, hint) => (
+    <label className="block text-[12px]"><span className="mb-1 block font-semibold text-slate-500">{label}</span>
+      <div className="flex items-center gap-1"><input type="number" inputMode="decimal" step={step} value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} className={inp} />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
+      {hint && <span className="mt-0.5 block text-[10.5px] text-slate-400">{hint}</span>}
+    </label>
+  );
+  const save = async () => {
+    setMsg(null);
+    const v = { mode: f.mode, riskPct: Number(f.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(f.maxOpen)), dailyStopPct: Number(f.dailyStopPct), maxLev: Math.round(Number(f.maxLev)) };
+    if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
+    if (!(v.maxOpen >= 1 && v.maxOpen <= 5)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–5" });
+    if (!(v.dailyStopPct >= 1 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 1–20%" });
+    if (!(v.maxLev >= 1 && v.maxLev <= 20)) return setMsg({ bad: true, t: "Đòn bẩy tối đa: 1–20x" });
+    const hasNewKey = k.key.trim() && k.secret.trim();
+    if ((k.key.trim() || k.secret.trim()) && !hasNewKey) return setMsg({ bad: true, t: "Cần điền đủ cả API Key và Secret Key" });
+    if (!hasNewKey && (!saved || stale)) return setMsg({ bad: true, t: `Chưa có khoá API ${live ? "THẬT" : "Testnet"} — dán API Key + Secret Key rồi lưu` });
+    if (!st.pubKey) return setMsg({ bad: true, t: "Bot trên máy bàn là bản cũ — tải bản mới (Download ZIP, chép đè) rồi thử lại" });
+    if (live && cmd?.config?.mode !== "live") {
+      if (confirm.trim().toUpperCase() !== "TIỀN THẬT" && confirm.trim().toUpperCase() !== "TIEN THAT") return setMsg({ bad: true, t: 'Gõ đúng chữ "TIỀN THẬT" vào ô xác nhận để bật chế độ tiền thật' });
+      if (!(await ask(`Bật chạy TIỀN THẬT?\nBot sẽ đặt lệnh THẬT trên Binance: rủi ro ${v.riskPct}%/lệnh, vốn tính lệnh tối đa ${v.capitalCap ? v.capitalCap + "$" : "toàn bộ ví Futures"}, tối đa ${v.maxOpen} lệnh, dừng ngày -${v.dailyStopPct}%.\nKết quả quá khứ/testnet không đảm bảo lợi nhuận.`, { ok: "Bật tiền thật", danger: true }))) return;
+    }
+    setSaving(true);
+    try {
+      const keys = { ...(cmd?.keys || {}) };
+      if (hasNewKey) keys[f.mode] = { key: await encryptFor(st.pubKey, k.key.trim()), secret: await encryptFor(st.pubKey, k.secret.trim()), last4: k.key.trim().slice(-4), pubFp: st.pubFp, savedAt: Date.now() };
+      const config = { ...(cmd?.config || {}), ...v, liveConfirmedAt: live ? cmd?.config?.liveConfirmedAt || Date.now() : null };
+      const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { ...(cmd || {}), config, keys, at: Date.now() }, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      setK({ key: "", secret: "" }); setConfirm("");
+      setMsg({ t: `Đã lưu. Bot áp dụng trong ~15 giây${cmd?.config?.mode && cmd.config.mode !== f.mode ? " (đổi chế độ → bot tự khởi động lại)" : ""}.` });
+      onSaved?.();
+    } catch (e) { setMsg({ bad: true, t: e.message || String(e) }); }
+    setSaving(false);
+  };
+  const removeKey = async () => {
+    if (!(await ask(`Xoá khoá API ${live ? "THẬT" : "Testnet"} đã lưu?\nBot sẽ ngừng giao dịch ở chế độ này cho tới khi nhập khoá mới. Lệnh đang mở trên sàn vẫn giữ SL/TP.`, { ok: "Xoá khoá", danger: true }))) return;
+    const keys = { ...(cmd?.keys || {}) }; delete keys[f.mode];
+    const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { ...(cmd || {}), keys, at: Date.now() }, updated_at: new Date().toISOString() });
+    setMsg(error ? { bad: true, t: error.message } : { t: "Đã xoá khoá." }); onSaved?.();
+  };
+  return (
+    <Card className="!p-3">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800"><Settings2 size={16} className="text-indigo-500" /> Cài đặt bot<span className="ml-1 text-[11.5px] font-semibold text-slate-400">{(cmd?.config?.mode || st.mode) === "live" ? "Tiền thật" : "Testnet"} · rủi ro {c0.riskPct}% · {cmd?.keys?.[c0.mode] ? `khoá …${cmd.keys[c0.mode].last4}` : "chưa có khoá"}</span><ChevronDown size={16} className={`ml-auto text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+            {[["testnet", "Testnet (tiền ảo)"], ["live", "Tiền thật"]].map(([m, l]) => <button key={m} onClick={() => { setF({ ...f, mode: m }); setMsg(null); }} className={`rounded-lg py-2 text-[13px] font-bold ${f.mode === m ? (m === "live" ? "bg-rose-600 text-white" : "bg-white text-slate-900 shadow-sm") : "text-slate-500"}`}>{l}</button>)}
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <div className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-700"><KeyRound size={14} /> Khoá API {live ? "Binance THẬT" : "Binance Testnet"}</div>
+            <div className="mt-0.5 text-[11.5px] text-slate-500">{live ? "Tạo ở Binance → API Management: CHỈ bật Futures, TẮT rút tiền, khoá theo IP máy bàn." : "Tạo ở testnet.binancefuture.com → API Key."} Khoá được <b>mã hoá ngay trên máy này</b> bằng khoá công khai của máy bot — app và Supabase không đọc lại được. Chế độ vị thế trên sàn: <b>Một chiều</b>.</div>
+            {saved && !stale && <div className="mt-2 flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[12px] text-emerald-800">Đã lưu khoá …{saved.last4} · {new Date(saved.savedAt).toLocaleDateString("vi-VN")}<button onClick={removeKey} className="ml-auto font-bold text-rose-600">Xoá khoá</button></div>}
+            {stale && <div className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] font-bold text-amber-800">Khoá đã lưu được mã hoá cho máy bot cũ (máy đã cài lại) — dán lại khoá bên dưới.</div>}
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <input type="password" autoComplete="off" placeholder={saved && !stale ? "API Key mới (để trống = giữ khoá cũ)" : "API Key"} value={k.key} onChange={(e) => setK({ ...k, key: e.target.value })} className={inp} />
+              <input type="password" autoComplete="off" placeholder={saved && !stale ? "Secret Key mới" : "Secret Key"} value={k.secret} onChange={(e) => setK({ ...k, secret: e.target.value })} className={inp} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+            {num("riskPct", "Rủi ro / lệnh", 0.25, "%", live ? "tháng đầu nên 1%" : null)}
+            {num("capitalCap", "Vốn tính lệnh tối đa", 50, "$", "0 = cả ví Futures")}
+            {num("maxOpen", "Tối đa lệnh mở", 1)}
+            {num("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}
+            {num("maxLev", "Đòn bẩy tối đa", 1, "x")}
+          </div>
+          {live && cmd?.config?.mode !== "live" && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] text-rose-800">
+              <b>Bật TIỀN THẬT:</b> bot sẽ đặt lệnh thật bằng tiền trong ví Futures. Khuyên: đã chạy Testnet ổn 2–4 tuần, tháng đầu vốn 100–200$ và rủi ro 1%.
+              <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder='Gõ "TIỀN THẬT" để xác nhận' className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-sm" />
+            </div>
+          )}
+          {msg && <div className={`rounded-lg p-2 text-[12.5px] font-bold ${msg.bad ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{msg.t}</div>}
+          <button disabled={saving} onClick={save} className={`w-full rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-50 ${live ? "bg-rose-600" : "bg-indigo-600"}`}>{saving ? "Đang lưu…" : live ? "Lưu & chạy TIỀN THẬT" : "Lưu & chạy Testnet"}</button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
