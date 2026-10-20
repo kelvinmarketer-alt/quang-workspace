@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
+import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
@@ -13,11 +14,11 @@ import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEV
 // nên mở app lúc nào cũng ra đúng kết quả như bot chạy liên tục 24/7).
 // Realtime: WebSocket Binance Futures (nến đang chạy) → lệnh mở nhảy lãi/lỗ từng giây, chạm SL/TP đóng ngay; nến đóng → bot xét tín hiệu mới.
 // Tự tối ưu: walk-forward (paperBot.js) — chạy song song "Luật gốc" để so sánh.
-const usd = (v, d = 2) => (v == null || !isFinite(v) ? "—" : (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
-const pct = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`);
-const rr = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}R`);
-const f2 = (v) => (v == null || !isFinite(v) ? "—" : v.toFixed(2));
-const px = (v) => (v == null ? "—" : Number(v).toLocaleString("en-US", { maximumFractionDigits: v >= 1000 ? 1 : v >= 10 ? 2 : 4 }));
+const usd = (v, d = 2) => fmtUsd(v, d); // một kiểu tiền chung cho module Coin ("$1.234,56")
+const pct = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 1, 1)}%`);
+const rr = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2, 2)}R`);
+const f2 = (v) => (v == null || !isFinite(v) ? "—" : fmtNum(v, 2, 2));
+const px = (v) => fmtPx(v);
 const dt = (t) => { const d = new Date(t); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`; };
 const ago = (t) => { const d = (Date.now() - t) / 86400000; return d >= 1 ? `${Math.floor(d)} ngày ${Math.floor((d % 1) * 24)} giờ` : `${Math.floor(d * 24)} giờ`; };
@@ -164,13 +165,13 @@ function SetupForm({ initial, onStart, onCancel }) {
         </div>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
           <div className="text-[13px] font-extrabold text-emerald-800">Chỉ vào LỆNH CHỜ (limit) — đúng điểm đẹp mới vào, không thì bỏ</div>
-          <div className="mt-1 text-[11.5px] leading-snug text-emerald-900/70">Đặt lệnh chờ ở giá đóng nến tín hiệu (phí maker 0,02%, không trượt). Chỉ khớp khi giá <b>xuyên qua</b> mức đặt trong số nến chờ; hết hạn không khớp → huỷ. Trước khi đặt còn kiểm tra: <b>không đuổi giá</b> (giá vào không xa EMA50 quá N ATR) và <b>SL ngoài vùng nhiễu</b> (≥ N ATR). Kiểm tra 180 ngày: tỉ lệ thắng 35% → 44%, R TB −0,12 → +0,13.</div>
+          <div className="mt-1 text-[11.5px] leading-snug text-emerald-900/70">Đặt lệnh chờ ở giá đóng nến tín hiệu (phí maker 0,02%, không trượt). Chỉ khớp khi giá <b>xuyên qua</b> mức đặt trong số nến chờ; hết hạn không khớp → huỷ. Trước khi đặt còn kiểm tra: <b>không đuổi giá</b> (giá vào không xa EMA50 quá N ATR) và <b>SL ngoài vùng nhiễu</b> (≥ N ATR). Lúc thiết lập (chạy lại quá khứ) hai luật này nâng rõ tỉ lệ thắng — xem hiệu quả thật ở Thống kê → “Luật vào đẹp có hiệu quả không?”.</div>
           <div className="mt-2 text-[12px] font-semibold text-emerald-900">Vùng Key Volume (bộ kiến thức: chỉ vào TẠI vùng có lý do)</div>
           <div className="mt-1 flex flex-wrap gap-1.5">{[[1, "Nến volume lớn nhất 100 nến (khuyên dùng)"], [3, "Top 3 nến volume"], [0, "Tắt"]].map(([k, l]) => <button key={k} onClick={() => setC({ ...c, keyVolume: k })} className={chip(c.keyVolume === k)}>{l}</button>)}</div>
-          <div className="mt-1 text-[11px] text-emerald-900/60">Giá vào phải nằm trong vùng nến Key Volume (nến volume ≥ 2,5× TB20 lớn nhất 100 nến). 3 tháng gần nhất: thắng 39% → 47%, vốn 921$ → 1.183$, sụt vốn 22% → 6%.</div>
+          <div className="mt-1 text-[11px] text-emerald-900/60">Giá vào phải nằm trong vùng nến Key Volume (nến volume ≥ 2,5× TB20 lớn nhất 100 nến). Đây là luật lọc mạnh nhất lúc thiết lập; hiệu quả thật xem ở Thống kê.</div>
           <div className="mt-2 text-[12px] font-semibold text-emerald-900">Xác nhận theo bộ kiến thức (VSA · Price Action · đa khung)</div>
-          {[["sigVol", "Nến tín hiệu phải có volume > TB20 (VSA: có lực xác nhận)"], ["noEngulf", "Không vào ngay sau nến engulfing lớn (tránh đuổi giá sau nến mạnh)"], ["d1Bias", "Chỉ vào thuận xu hướng D1 (đang bật — ít lệnh hơn, thắng cao hơn)"]].map(([k, l]) => <label key={k} className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-emerald-900"><input type="checkbox" checked={!!c[k]} onChange={(e) => setC({ ...c, [k]: e.target.checked })} /> {l}</label>)}
-          <div className="mt-1 text-[11px] text-emerald-900/60">3 tháng gần nhất (M5+M15, Key Volume): thắng 50% → 57%, R TB +0,28 → +0,54; bật thêm D1: thắng 64% nhưng chỉ ~22 lệnh/3 tháng.</div>
+          {[["sigVol", "Nến tín hiệu phải có volume > TB20 (VSA: có lực xác nhận)"], ["noEngulf", "Không vào ngay sau nến engulfing lớn (tránh đuổi giá sau nến mạnh)"], ["d1Bias", "Chỉ vào thuận xu hướng D1 (ít lệnh hơn, thắng cao hơn)"]].map(([k, l]) => <label key={k} className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-emerald-900"><input type="checkbox" checked={!!c[k]} onChange={(e) => setC({ ...c, [k]: e.target.checked })} /> {l}</label>)}
+          <div className="mt-1 text-[11px] text-emerald-900/60">Càng nhiều bộ lọc → ít lệnh hơn nhưng chọn lọc hơn (bật D1 thường chỉ vài lệnh mỗi tuần).</div>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("maxExtAtr", "Không đuổi: xa EMA50 ≤ (0=tắt)", 0.5, "ATR")}{field("minSlAtr", "SL tối thiểu (0=tắt)", 0.5, "ATR")}{field("fillBars", "Chờ khớp tối đa", 1, "nến")}</div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", `Chốt 50% ở (0=tắt, ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}</div>
@@ -237,7 +238,7 @@ function useLive(active, coins, tfs, onClose) {
   return { live, shown, ver, status };
 }
 
-export default function CoinBot() {
+export default function CoinBot({ active: visible = true }) {
   const { settings = {}, setSettings, isOwner } = useData();
   const session = settings.paperBot || null;
   const [raw, setRaw] = useState(null);
@@ -258,7 +259,7 @@ export default function CoinBot() {
   const [toast, setToast] = useState(null);
   const running = useRef(false), lastRun = useRef(0), hits = useRef(new Map()), prevSt = useRef(null), debounce = useRef(null);
   const cfg = cfgOf(session);
-  const active = !!session && !session.stoppedAt && isOwner;
+  const active = !!session && !session.stoppedAt && isOwner && visible; // tab ẩn → tắt giá realtime + tính lại (đỡ tốn pin)
 
   const sessRef = useRef(session); sessRef.current = session;
   const again = useRef(false);
@@ -301,6 +302,7 @@ export default function CoinBot() {
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [active, status, session?.createdAt]);
   useEffect(() => () => clearTimeout(debounce.current), []);
+  useEffect(() => { if (visible && session && Date.now() - lastRun.current > 60000) run(); /* eslint-disable-next-line */ }, [visible]); // mở lại tab → cập nhật ngay
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const res = useMemo(() => finalize(raw, active ? live.current : null, hits.current), [raw, ver, active]);
@@ -433,6 +435,21 @@ export default function CoinBot() {
         </div>
 
         {tab === "chart" && (<>
+        {(() => { // Vì sao chưa có lệnh: 48 giờ không có lệnh mới → tổng hợp tín hiệu bị bỏ 7 ngày qua theo lý do
+          const lastEntry = Math.max(0, ...P.trades.filter((t) => t.status !== "skip").map((t) => t.entryAt));
+          if (Date.now() - lastEntry < 48 * 3600000 || !res.skipLog?.length) return null;
+          const wk = res.skipLog.filter((x) => Date.now() - x.t < 7 * 86400000), by = {};
+          for (const x of wk) by[x.why] = (by[x.why] || 0) + 1;
+          const near = wk.filter((x) => x.why !== "ngược xu hướng khung lớn").slice(0, 5);
+          return (
+            <Card className="!p-3">
+              <Title icon={Info}>Vì sao chưa có lệnh?</Title>
+              <div className="text-[12.5px] text-slate-600">Lệnh gần nhất: <b>{lastEntry ? dt(lastEntry) : "chưa có"}</b>. 7 ngày qua có <b>{wk.length}</b> tín hiệu thô nhưng đều bị luật lọc bỏ — bình thường khi thị trường không có điểm vào đẹp (bot chỉ vào khi đủ mọi điều kiện).</div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">{Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] text-slate-600">{k}: <b>{v}</b></span>)}</div>
+              {near.length > 0 && <div className="mt-2 space-y-0.5">{near.map((x, i) => <div key={i} className="text-[11.5px] text-slate-500"><span className="tabular-nums text-slate-400">{dt(x.t)}</span> {side(x.side)} <b>{x.coin} {TFS[x.tf].label}</b> {setupName(x.setup)} — bỏ vì {x.why}</div>)}</div>}
+            </Card>
+          );
+        })()}
         <Card className="!p-0 overflow-hidden">
           <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-3 py-2">
             {cfg.coins.flatMap((c) => cfg.tfs.map((t) => [c, t])).map(([c, t]) => { const on = sel.coin === c && sel.tf === t, n = P.trades.filter((x) => x.coin === c && x.tf === t && x.status !== "skip").length, op = P.trades.some((x) => x.coin === c && x.tf === t && x.status === "open"); return (
@@ -597,7 +614,7 @@ export default function CoinBot() {
           <div className="grid gap-x-6 gap-y-1.5 text-[12px] leading-snug text-slate-600 md:grid-cols-2">
             {all.n < 100 && <div>• Mới {all.n} lệnh đã đóng — cần ≥ 100 lệnh để tỉ lệ thắng đáng tin.</div>}
             <div>• Hoà vốn ở R:R 2 cần thắng ≥ <b>33%</b>, R:R 3 cần ≥ <b>25%</b>; hiện {all.winRate?.toFixed(0) ?? "—"}% với payoff {f2(all.payoff)}.</div>
-            <div>• Phí + trượt giá ăn TB <b>{f2(all.feeR)}R</b>/lệnh{all.feeR > 0.2 ? " — lớn (SL sát ở khung nhỏ), nên ưu tiên H1/H4." : "."}</div>
+            <div>• Phí + trượt giá ăn TB <b>{f2(all.feeR)}R</b>/lệnh{all.feeR > 0.2 ? " — lớn (SL sát), nên tăng SL tối thiểu theo ATR hoặc ưu tiên khung M15." : "."}</div>
             {all.mfeLoss != null && <div>• Lệnh thua từng lời TB <b>{rr(all.mfeLoss)}</b> trước khi quay đầu{all.mfeLoss >= 0.8 ? " — nhiều lệnh đã gần đúng hướng, chốt sớm/dời hoà vốn sớm có thể cứu." : " — phần lớn sai hướng ngay từ đầu, cần lọc điểm vào chặt hơn."}</div>}
             {(() => { const segs = [...by("tf", cfg.tfs, (x) => TFS[x].label), ...by("setup", cfg.setups, setupName), ...by("coin", cfg.coins)].filter(([, s]) => s.n >= 10).sort((a, b) => b[1].avgR - a[1].avgR); return segs.length ? <><div>• Tốt nhất: <b className="text-emerald-700">{segs[0][0]}</b> ({rr(segs[0][1].avgR)}/lệnh, {segs[0][1].n} lệnh)</div><div>• Kém nhất: <b className="text-rose-700">{segs[segs.length - 1][0]}</b> ({rr(segs[segs.length - 1][1].avgR)}/lệnh)</div></> : null; })()}
             {Object.keys(res.skipped).length > 0 && <div className="text-slate-400">• Luật bỏ qua: {Object.entries(res.skipped).map(([k, v]) => `${v} tín hiệu ${k.toLowerCase()}`).join(", ")}.</div>}

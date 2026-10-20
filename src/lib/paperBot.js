@@ -352,7 +352,7 @@ export async function runSession(session, onProgress = () => {}) {
   const until = session.stoppedAt || Date.now(), startAt = session.startAt;
   const learnFrom = cfg.adaptive ? startAt - cfg.warmupDays * 86400000 : startAt;
   const V = variantsOf(cfg), baseVi = V.findIndex((v) => v.rr === cfg.rr && v.beAtR === cfg.beAtR);
-  const skipped = {}, streams = [], shadows = [], pending = [];
+  const skipped = {}, streams = [], shadows = [], pending = [], skipLog = []; // skipLog: tín hiệu gần đây bị bỏ + lý do (giải thích 'vì sao chưa có lệnh')
   const bump = (k, n = 1) => { if (n) skipped[k] = (skipped[k] || 0) + n; };
   // tải song song mọi cặp × khung (kể cả khung lớn để lọc) — lần sau chỉ tải phần nến mới
   const need = new Map();
@@ -387,6 +387,7 @@ export async function runSession(session, onProgress = () => {}) {
       const biasAt = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
       const keep = sig.filter((x) => biasAt(K[x.i][0] + step) === x.side);
       bump("Ngược xu hướng khung lớn", sig.filter((x) => K[x.i][0] >= startAt).length - keep.filter((x) => K[x.i][0] >= startAt).length);
+      const kept = new Set(keep); for (const x of sig) if (!kept.has(x) && K[x.i][0] >= startAt) skipLog.push({ t: K[x.i][0], coin, tf, setup: x.setup, side: x.side, why: "ngược xu hướng khung lớn" });
       sig = keep;
     }
     // Bias các khung lớn (H1, H4, D1) tại lúc nến tín hiệu đóng — chỉ để xác định xu hướng
@@ -403,11 +404,11 @@ export async function runSession(session, onProgress = () => {}) {
       const veto = cfg.sigVol && tags.includes("svol:lo") ? "nến tín hiệu volume thấp (VSA: thiếu xác nhận)"
         : cfg.noEngulf && tags.includes("pa:engulf") ? "vào ngay sau nến engulfing lớn (đuổi giá)"
         : cfg.d1Bias && tags.includes("d1:against") ? "ngược xu hướng D1" : null;
-      if (veto) { if (live0) bump(veto); continue; }
+      if (veto) { if (live0) { bump(veto); skipLog.push({ t: K[s.i][0], coin, tf, setup: s.setup, side: s.side, why: veto }); } continue; }
       const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50, found));
       if (!sims[0]) continue;
       if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], tags, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, ...sims[0].pending }); continue; }
-      if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
+      if (sims[0].skip) { if (K[s.i][0] >= startAt) { bump(sims[0].skip); skipLog.push({ t: K[s.i][0], coin, tf, setup: s.setup, side: s.side, why: sims[0].skip }); } continue; }
       // PHÍ FUNDING: giữ lệnh qua mốc funding → LONG trả khi tỉ lệ dương (SHORT nhận), tính theo R; cộng vào tổng phí
       for (const t of sims) {
         if (!t || t.skip) continue;
@@ -532,7 +533,9 @@ export async function runSession(session, onProgress = () => {}) {
   }
   const lessonsActive = [...lessonOn].filter(([, on]) => on).map(([k]) => ({ k, label: lessonLabel(k), ...lessonStat(k, until) }));
   const tfState = cfg.tfs.map((tf) => ({ tf, ...(tfExp(tf, until) || { exp: null, n: 0 }), pause: cfg.tfGate && (tfExp(tf, until)?.exp ?? 0) < 0 }));
-  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, lessons, lessonsActive, metaNow, metaEvents, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
+  for (const r of rejected) skipLog.push({ t: r.signalAt, coin: r.coin, tf: r.tf, setup: r.setup, side: r.side, why: r.why || "bộ tối ưu loại" });
+  skipLog.sort((a, b) => b.t - a.t); skipLog.length = Math.min(skipLog.length, 400);
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, skipLog, lessons, lessonsActive, metaNow, metaEvents, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
 }
 
 // Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.

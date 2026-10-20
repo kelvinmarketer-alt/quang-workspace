@@ -2,20 +2,53 @@
 // nến Binance → EMA/RSI/MACD/ATR, khối lượng (delta mua/bán), cấu trúc SMC (swing HH/HL, BOS/CHoCH,
 // order block, FVG, thanh khoản), premium/discount, mẫu nến price action. Kết quả gọn để gửi AI.
 
-export const TF = { "1h": { api: "1h", htf: "4h", label: "1H" }, "4h": { api: "4h", htf: "1d", label: "4H" }, "1d": { api: "1d", htf: "1w", label: "1D" }, "1w": { api: "1w", htf: "1M", label: "1W" } };
+// Khung giờ: htf = khung lớn làm bối cảnh (giống bot demo: M5→H1, M15→H4). ms = độ dài 1 nến.
+export const TF = {
+  "5m": { api: "5m", htf: "1h", label: "M5", ms: 300000 },
+  "15m": { api: "15m", htf: "4h", label: "M15", ms: 900000 },
+  "1h": { api: "1h", htf: "4h", label: "1H", ms: 3600000 },
+  "4h": { api: "4h", htf: "1d", label: "4H", ms: 14400000 },
+  "1d": { api: "1d", htf: "1w", label: "1D", ms: 86400000 },
+  "1w": { api: "1w", htf: "1M", label: "1W", ms: 604800000 },
+};
+
+// Nguồn giá Binance: Futures USDⓈ-M (bot trade ở đây, có cả XAUUSDT) hoặc Spot — cùng đường dẫn klines / ticker
+export const MARKETS = {
+  futures: { label: "Futures", base: "https://fapi.binance.com/fapi/v1" },
+  spot: { label: "Spot", base: "https://api.binance.com/api/v3" },
+};
+export const pairOf = (symbol) => (symbol || "").toUpperCase().replace(/USDT$/, "") + "USDT";
 
 const rp = (x) => (x == null || !isFinite(x) ? null : Number(Number(x).toPrecision(6)));
 
 // Nến Binance: [openTime, open, high, low, close, volume, closeTime, quoteVol, trades, takerBuyBase, ...]
-export async function fetchKlines(symbol, interval, limit = 300) {
-  const pair = (symbol || "").toUpperCase().replace(/USDT$/, "") + "USDT";
-  const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`);
-  if (!r.ok) throw new Error(r.status === 400 ? `Không tìm thấy cặp ${pair} trên Binance` : `Binance lỗi ${r.status}`);
+// opts: { market: "futures"|"spot", startTime, endTime } (ms). Mã không có trên sàn → lỗi có badSymbol = true.
+export async function fetchKlines(symbol, interval, limit = 300, opts = {}) {
+  const pair = pairOf(symbol), m = MARKETS[opts.market] || MARKETS.spot;
+  const q = `symbol=${pair}&interval=${interval}&limit=${limit}${opts.startTime != null ? `&startTime=${Math.floor(opts.startTime)}` : ""}${opts.endTime != null ? `&endTime=${Math.floor(opts.endTime)}` : ""}`;
+  const r = await fetch(`${m.base}/klines?${q}`);
+  if (!r.ok) { const e = new Error(r.status === 400 ? `Không tìm thấy cặp ${pair} trên Binance ${m.label}` : `Binance lỗi ${r.status}`); e.badSymbol = r.status === 400; throw e; }
   const data = await r.json();
   return data.map((k) => {
     const volume = +k[5], buy = +k[9];
     return { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume, buy, sell: Math.max(0, volume - buy) };
   });
+}
+
+// Giá 24h (lastPrice, priceChangePercent, quoteVolume) — cùng định dạng ở Futures & Spot
+export async function fetchTicker24(symbol, market) {
+  const r = await fetch(`${(MARKETS[market] || MARKETS.spot).base}/ticker/24hr?symbol=${pairOf(symbol)}`);
+  if (!r.ok) return null;
+  const t = await r.json();
+  return { price: +t.lastPrice, chg: +t.priceChangePercent, vol: +t.quoteVolume };
+}
+
+// Mã có trên sàn không: true / false (400 = không có cặp) · lỗi mạng → ném lỗi
+export async function symbolExists(symbol, market) {
+  const r = await fetch(`${(MARKETS[market] || MARKETS.spot).base}/ticker/price?symbol=${pairOf(symbol)}`);
+  if (r.ok) return true;
+  if (r.status === 400) return false;
+  throw new Error(`Binance lỗi ${r.status}`);
 }
 
 export function ema(vals, p) {

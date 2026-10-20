@@ -1,9 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
+import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "../lib/format.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 // Đọc số kiểu VN: phẩy = thập phân ("0,5"); chấm + đúng 3 số = phân cách nghìn ("60.000", "1.234.567");
@@ -27,10 +30,23 @@ const n = (v) => {
 const viNum = (x) => Number(x || 0).toLocaleString("vi-VN", { maximumFractionDigits: 10 });
 // Số đã lưu → chuỗi để sửa (phẩy thập phân, không nhóm nghìn) — tránh "1234.567" bị đọc thành 1.234.567
 const toInput = (x) => (x === "" || x == null ? "" : typeof x === "number" ? x.toLocaleString("vi-VN", { useGrouping: false, maximumFractionDigits: 12 }) : x);
-const fmtUSD = (v) => (v == null ? "—" : (Math.abs(v) >= 1 ? v.toLocaleString("en-US", { maximumFractionDigits: 2 }) : v.toPrecision(4)) + " $");
-const fmtVND = (v) => (Math.round(Number(v) || 0)).toLocaleString("vi-VN") + "đ";
 const pair = (s) => (s || "").toUpperCase().replace(/USDT$/, "") + "USDT";
-const qtyFmt = (q) => Number(q || 0).toLocaleString("en-US", { maximumFractionDigits: 6 });
+// Tiền: MỘT kiểu chung module Coin (fmtUsd "$1.234,56" · fmtUsdSigned "+$12,30" · giá "$" + fmtPx · VND phụ bằng formatVND)
+const STABLES = new Set(["USDT", "USDC", "FDUSD", "BUSD", "TUSD", "USDP", "DAI"]); // coi như 1 $, không tính lãi/lỗ
+const usdPx = (v) => (v == null || !isFinite(Number(v)) ? "—" : "$" + fmtPx(v));
+const sPct = (v) => (v == null || !isFinite(v) ? "" : (v >= 0 ? "+" : "") + fmtPct(v, 1));
+const sVnd = (v) => (v >= 0 ? "+" : "-") + formatVND(Math.abs(v));
+const toneOf = (v) => (v == null ? "text-slate-500" : v >= 0 ? "text-emerald-600" : "text-rose-600");
+const fmtWhen = (t) => {
+  const d = new Date(Number(t));
+  if (!isFinite(d.getTime())) return "—";
+  const p = (x) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const TICKER = "https://api.binance.com/api/v3/ticker/24hr";
+// Bảng màu phân loại (thứ tự cố định, đã kiểm tra mù màu) — màu GẮN THEO COIN (xếp A→Z), không theo thứ hạng giá trị
+const SLICE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+const FUT_COLOR = "#334155", OTHER_COLOR = "#cbd5e1";
 
 function CoinModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(() => ({ ...initial, qty: toInput(initial.qty), buyPrice: toInput(initial.buyPrice ?? initial.avgCost) })); // dòng danh mục chỉ có avgCost
@@ -63,27 +79,206 @@ const CoinBot = lazy(() => import("./CoinBot.jsx"));
 // Tab "Bot thật": theo dõi bot giao dịch chạy trên VPS (chỉ chủ)
 const CoinLive = lazy(() => import("./CoinLive.jsx"));
 
+const COIN_TABS = ["invest", "market", "bot", "live"];
+
 export default function Coin() {
   const { isOwner } = useData();
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
+  // ?tab=live|bot|market|invest (vd link từ thông báo đẩy) → mở đúng tab; không có thì nhớ tab lần trước
+  const [sp, setSp] = useSearchParams();
+  const qTab = sp.get("tab");
+  const [tab, setTab] = useState(() => { if (COIN_TABS.includes(qTab)) return qTab; try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
   // Tab đã mở thì GIỮ mounted (ẩn bằng class hidden) → Demo tự động/Thị trường không phải tính lại khi quay lại
   const [seen, setSeen] = useState(() => ({ [tab]: true }));
   const pick = (t) => { setTab(t); setSeen((s) => (s[t] ? s : { ...s, [t]: true })); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
+  // Đang ở trang Coin mà bấm link ?tab=… → chuyển tab, rồi xoá tham số để lần bấm sau (cùng link) vẫn ăn
+  useEffect(() => {
+    if (!qTab) return;
+    if (COIN_TABS.includes(qTab)) pick(qTab);
+    const nx = new URLSearchParams(sp); nx.delete("tab"); setSp(nx, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qTab]);
+  // "Bot thật" chỉ chủ xem → người khác (hoặc lúc chưa xác định chủ) rơi về Đầu tư
+  const cur = tab === "live" && !isOwner ? "invest" : tab;
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
     <div className="space-y-3 sm:space-y-4">
       <div className={`grid ${isOwner ? "grid-cols-4" : "grid-cols-3"} gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl`}>
         {[["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ...(isOwner ? [["live", "Bot thật", Radio, "Bot thật"]] : [])].map(([k, label, Icon, short]) => (
-          <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1 rounded-xl px-1 py-2 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
+          <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1 rounded-xl px-1 py-2 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${cur === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
         ))}
       </div>
-      {seen.invest && <div className={tab === "invest" ? "" : "hidden"}><CoinInvest active={tab === "invest"} /></div>}
-      {seen.market && <div className={tab === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={tab === "market"} /></Suspense></div>}
-      {seen.bot && <div className={tab === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot /></Suspense></div>}
-      {isOwner && seen.live && <div className={tab === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={tab === "live"} /></Suspense></div>}
+      {(seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><CoinInvest active={cur === "invest"} /></div>}
+      {seen.market && <div className={cur === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={cur === "market"} /></Suspense></div>}
+      {seen.bot && <div className={cur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "bot"} /></Suspense></div>}
+      {isOwner && seen.live && <div className={cur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "live"} /></Suspense></div>}
     </div>
+  );
+}
+
+// Ô số trên khung tổng (nền tối)
+function HeadChip({ label, hint, value, sub, subTone }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-white/10 px-2 py-1.5 sm:px-3 sm:py-2">
+      <div className="truncate text-[10px] font-bold uppercase tracking-wide text-amber-200">{label}{hint && <span className="hidden font-semibold normal-case tracking-normal text-amber-100/60 sm:inline"> · {hint}</span>}</div>
+      {hint && <div className="truncate text-[10px] leading-tight text-amber-100/60 sm:hidden">{hint}</div>}
+      <div className="truncate text-[13px] font-extrabold tabular-nums sm:text-base">{value}</div>
+      {sub && <div className={`truncate text-[10px] font-semibold ${subTone || "text-amber-100/60"}`}>{sub}</div>}
+    </div>
+  );
+}
+
+// Ô lãi/lỗ (nền sáng)
+function PnlTile({ label, value, tone = "text-slate-800", sub }) {
+  return (
+    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2">
+      <div className="text-[10.5px] font-semibold leading-tight text-slate-500">{label}</div>
+      <div className={`mt-0.5 truncate text-[15px] font-extrabold tabular-nums sm:text-base ${tone}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[10.5px] leading-snug text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+
+// Biểu đồ phân bổ (donut) + chú thích có %
+function Allocation({ slices, total }) {
+  if (!(total > 0) || !slices.length) return null;
+  return (
+    <Card className="!p-3 sm:!p-4">
+      <div className="mb-2 flex items-center gap-1.5 text-[13px] font-extrabold text-slate-800"><ChartPie size={15} className="text-amber-500" /> Phân bổ tài sản Binance</div>
+      <div className="flex items-center gap-3 sm:gap-5">
+        <div className="relative h-[124px] w-[124px] shrink-0 sm:h-[150px] sm:w-[150px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={slices} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="100%" paddingAngle={slices.length > 1 ? 2 : 0} stroke="#fff" strokeWidth={2} isAnimationActive={false}>
+                {slices.map((s) => <Cell key={s.name} fill={s.color} />)}
+              </Pie>
+              <Tooltip formatter={(v, name) => [`${fmtUsd(v)} · ${fmtPct((v / total) * 100, 1)}`, name]} contentStyle={{ borderRadius: 12, fontSize: 12, padding: "6px 10px" }} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+            <div><div className="text-[10px] font-semibold text-slate-400">Tổng</div><div className="text-[12px] font-extrabold tabular-nums text-slate-800">{fmtUsd(total, 0)}</div></div>
+          </div>
+        </div>
+        <ul className="min-w-0 flex-1 space-y-1">
+          {slices.map((s) => (
+            <li key={s.name} className="flex items-center gap-2 text-[12px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
+              <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{s.name}</span>
+              <span className="shrink-0 tabular-nums text-slate-400">{fmtUsd(s.value, 0)}</span>
+              <span className="w-12 shrink-0 text-right font-bold tabular-nums text-slate-800">{fmtPct((s.value / total) * 100, 1)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Card>
+  );
+}
+
+// Lịch sử khớp lệnh gần nhất của 1 coin (Spot + Convert)
+function Fills({ list, sym }) {
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl border border-slate-100">
+      <div className="bg-slate-50 px-2.5 py-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">{list.length} giao dịch gần nhất</div>
+      <ul className="divide-y divide-slate-100">
+        {list.map((f, i) => {
+          const buy = f.side === "BUY";
+          return (
+            <li key={i} className="px-2.5 py-1.5 text-[11.5px]">
+              <div className="flex items-center gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${buy ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{buy ? "Mua" : "Bán"}</span>
+                {f.src === "convert" && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold text-sky-700">Convert</span>}
+                <span className="truncate tabular-nums text-slate-400">{fmtWhen(f.time)}</span>
+                <span className="ml-auto shrink-0 font-bold tabular-nums text-slate-800">{fmtUsd(f.quote)}</span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 tabular-nums text-slate-500">
+                <span>{fmtQty(f.qty)} {sym} @ {usdPx(f.price)}{f.quoteAsset && f.quoteAsset !== "USDT" ? ` (${f.quoteAsset})` : ""}</span>
+                {f.fee > 0 && <span className="text-slate-400">phí {fmtQty(f.fee)} {f.feeAsset || ""}</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// 1 dòng coin — dùng chung điện thoại & máy tính (Tailwind sm: đổi bố cục)
+function CoinRow({ r, vnd, canW, onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const hasHist = r.recent?.length > 0;
+  const pnlPct = r.pnl != null && r.invested > 0 ? (r.pnl / r.invested) * 100 : null;
+  const priceTone = r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700";
+  const btns = r.manual && canW && (
+    <>
+      <button onClick={onEdit} className="-my-2 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
+      <button onClick={onDelete} className="-my-2 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
+    </>
+  );
+  const showExtra = r.realized != null || r.fees > 0 || hasHist;
+  return (
+    <Card className="!p-3">
+      <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-[12px] font-extrabold text-white sm:h-10 sm:w-10 sm:text-[13px]">{(r.symbol || "?").slice(0, 4)}</div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate font-extrabold text-slate-800">{r.symbol}</span>
+            {r.manual && <Badge tone="slate">tay</Badge>}
+            {r.chg != null && <Badge tone={r.chg >= 0 ? "emerald" : "rose"}>{sPct(r.chg)}</Badge>}
+            {btns && <span className="ml-auto hidden gap-0.5 sm:flex">{btns}</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-slate-400">
+            <span className="whitespace-nowrap">Số lượng {fmtQty(r.qty)}</span>
+            {r.earnQty > 0 && <span className="whitespace-nowrap rounded bg-violet-50 px-1 font-semibold text-violet-600">Earn {fmtQty(r.earnQty)}</span>}
+            {btns && <span className="flex sm:hidden">{btns}</span>}
+          </div>
+          {!r.stable && (
+            <div className="mt-1 hidden flex-wrap items-center gap-1.5 text-[11px] sm:flex">
+              <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">Vốn đang giữ {r.invested != null ? <>{fmtUsd(r.invested)} <span className="font-semibold text-indigo-500">≈ {formatVND(r.invested * vnd)}</span></> : "—"}</span>
+              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600">Giá vốn TB {usdPx(r.avgCost)}</span>
+              <span className={`rounded-md px-1.5 py-0.5 font-bold ${priceTone}`}>Giá {r.price != null ? usdPx(r.price) : "…"}</span>
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-[10px] font-semibold uppercase text-slate-400">Hiện có</div>
+          <div className="text-sm font-extrabold tabular-nums text-slate-800">{r.value != null ? fmtUsd(r.value) : "…"}</div>
+          {r.pnl != null && !r.stable && <div className={`text-[11px] font-bold tabular-nums ${toneOf(r.pnl)}`}>{fmtUsdSigned(r.pnl)}{pnlPct != null ? ` (${sPct(pnlPct)})` : ""}</div>}
+        </div>
+      </div>
+      {!r.stable && (
+        <div className="mt-2 grid grid-cols-3 gap-1.5 sm:hidden">
+          <div className="min-w-0 rounded-lg bg-indigo-50 px-2 py-1.5">
+            <div className="truncate text-[10px] font-semibold text-indigo-500">Vốn đang giữ</div>
+            <div className="truncate text-[12px] font-bold tabular-nums text-indigo-700">{r.invested != null ? fmtUsd(r.invested) : "—"}</div>
+            {r.invested != null && <div className="truncate text-[10px] font-semibold text-indigo-500">≈ {formatVND(r.invested * vnd)}</div>}
+          </div>
+          <div className="min-w-0 rounded-lg bg-slate-100 px-2 py-1.5">
+            <div className="truncate text-[10px] font-semibold text-slate-400">Giá vốn TB</div>
+            <div className="truncate text-[12px] font-bold tabular-nums text-slate-600">{usdPx(r.avgCost)}</div>
+          </div>
+          <div className={`min-w-0 rounded-lg px-2 py-1.5 ${priceTone}`}>
+            <div className="truncate text-[10px] font-semibold opacity-70">Giá hiện tại</div>
+            <div className="truncate text-[12px] font-bold tabular-nums">{r.price != null ? usdPx(r.price) : "…"}</div>
+          </div>
+        </div>
+      )}
+      {showExtra && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px]">
+          {r.realized != null && <span className="text-slate-500">Lãi đã chốt <b className={`tabular-nums ${toneOf(r.realized)}`}>{fmtUsdSigned(r.realized)}</b></span>}
+          {r.fees > 0 && <span className="text-slate-500">Phí <b className="tabular-nums text-slate-700">{fmtUsd(r.fees)}</b></span>}
+          {r.tradeCount > 0 && <span className="hidden text-slate-400 sm:inline">{fmtNum(r.tradeCount)} lệnh</span>}
+          {hasHist && (
+            <button onClick={() => setOpen((o) => !o)} className="-my-1 ml-auto flex items-center gap-1 rounded-lg px-2 py-1.5 font-bold text-indigo-600 hover:bg-indigo-50" title="Lịch sử giao dịch">
+              <History size={13} className="shrink-0" /> <span className="sm:hidden">Lịch sử{r.tradeCount > 0 ? ` (${fmtNum(r.tradeCount)})` : ""}</span><span className="hidden sm:inline">Lịch sử giao dịch</span> <ChevronDown size={13} className={`shrink-0 transition ${open ? "rotate-180" : ""}`} />
+            </button>
+          )}
+        </div>
+      )}
+      {r.unmatched > 0 && <div className="mt-1 text-[10.5px] leading-snug text-amber-600">Đã bán {fmtQty(r.unmatched)} {r.symbol} không rõ giá vốn (vd nạp từ ví ngoài) — phần này không tính vào lãi đã chốt.</div>}
+      {r.truncated && <div className="mt-1 text-[10.5px] leading-snug text-amber-600">Quá 5.000 lệnh/cặp — chỉ đọc 5.000 lệnh đầu, giá vốn có thể lệch.</div>}
+      {open && hasHist && <Fills list={r.recent} sym={r.symbol} />}
+    </Card>
   );
 }
 
@@ -92,14 +287,18 @@ function CoinInvest({ active = true }) {
   const activeRef = useRef(active); activeRef.current = active; // tab ẩn → ngừng poll giá
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
-  const [wallet, setWallet] = useState(null);
-  const [deposited, setDeposited] = useState(null);
+  // Phản hồi qws-binance: bản cũ = { balances, deposited }; bản mới (version 2) thêm futures/earn/lãi đã chốt
+  const [bn, setBn] = useState(null);
   const [wErr, setWErr] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [modal, setModal] = useState(null);
   const [vnd, setVnd] = useState(26000);
+  const badSyms = useRef(new Set()); // mã không có cặp USDT trên Binance → bỏ qua khi lấy giá
 
-  const px = (asset) => { const a = (asset || "").toUpperCase(); return a === "USDT" ? 1 : prices[a]?.price; };
+  const wallet = bn?.balances || null;
+  const isV2 = !!bn && (Number(bn.version) >= 2 || "futures" in bn);
+  const fut = isV2 ? bn.futures || null : null;
+  const px = (asset) => { const a = (asset || "").toUpperCase(); return STABLES.has(a) ? 1 : prices[a]?.price; };
 
   // Tỉ giá USD→VND tự động
   useEffect(() => {
@@ -110,29 +309,38 @@ function CoinInvest({ active = true }) {
   const walletAssets = (wallet || []).map((b) => b.asset);
   const symKey = [...coins.map((c) => c.symbol), ...walletAssets].join(",");
   const loadPrices = async () => {
-    const syms = [...new Set([...coins.map((c) => (c.symbol || "").toUpperCase()), ...walletAssets.map((a) => (a || "").toUpperCase())].filter((s) => s && s !== "USDT"))];
+    const syms = [...new Set([...coins.map((c) => (c.symbol || "").toUpperCase()), ...walletAssets.map((a) => (a || "").toUpperCase())])]
+      .filter((s) => s && !STABLES.has(s) && !badSyms.current.has(s));
     if (!syms.length) return;
+    const map = {};
+    const put = (d) => { if (d?.symbol) map[d.symbol.replace(/USDT$/, "")] = { price: Number(d.lastPrice), chg: Number(d.priceChangePercent) }; };
     try {
-      const url = "https://api.binance.com/api/v3/ticker/24hr?symbols=" + encodeURIComponent(JSON.stringify(syms.map(pair)));
-      const r = await fetch(url); if (!r.ok) throw new Error();
-      const data = await r.json();
-      const map = {};
-      for (const d of Array.isArray(data) ? data : [data]) map[d.symbol.replace(/USDT$/, "")] = { price: Number(d.lastPrice), chg: Number(d.priceChangePercent) };
-      setPrices(map);
+      const r = await fetch(TICKER + "?symbols=" + encodeURIComponent(JSON.stringify(syms.map(pair))));
+      if (r.ok) {
+        const data = await r.json();
+        for (const d of Array.isArray(data) ? data : [data]) put(d);
+      } else {
+        // 1 mã không có cặp USDT (coin delist, mã gõ sai…) làm hỏng cả lô → lấy lẻ từng mã, mã lỗi nhớ lại để lần sau bỏ qua
+        const each = await Promise.all(syms.map((s) => fetch(TICKER + "?symbol=" + pair(s)).then((x) => {
+          if (x.ok) return x.json();
+          if (x.status === 400) badSyms.current.add(s);
+          return null;
+        }).catch(() => null)));
+        each.forEach(put);
+      }
+      if (Object.keys(map).length) setPrices((p) => ({ ...p, ...map }));
     } catch { /* giữ giá cũ */ }
   };
   useEffect(() => { if (!active) return; loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey, active]);
 
-  // Đồng bộ ví Binance (số dư + giá vốn TB + đã nạp) — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm);
-  // giá thị trường vẫn realtime 15s ở trên. Tạm dừng khi tab ẩn để đỡ tốn request.
+  // Đồng bộ ví Binance — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm); giá thị trường vẫn realtime 15s ở trên.
   const syncBinance = async (silent) => {
     if (!silent) setSyncing(true); setWErr("");
     try {
       const { data, error } = await supabase.functions.invoke("qws-binance");
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      setWallet(data.balances || []);
-      setDeposited(data.deposited || null);
+      setBn(data || {});
     } catch (e) { if (!silent) setWErr("Đồng bộ lỗi: " + (e.message || String(e))); }
     if (!silent) setSyncing(false);
   };
@@ -143,65 +351,190 @@ function CoinInvest({ active = true }) {
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [isOwner]);
 
-  // Gộp ví + thủ công thành danh mục
-  const rows = useMemo(() => {
-    const out = [];
+  // Dòng Binance (Spot + Earn) và dòng nhập tay (ngoài Binance) — TÁCH RIÊNG
+  const { binRows, manRows } = useMemo(() => {
+    const bin = [], man = [];
     for (const b of wallet || []) {
-      const price = px(b.asset);
-      const value = price != null ? b.qty * price : null;
-      const invested = b.invested != null ? b.invested : (b.avgCost != null ? b.qty * b.avgCost : null);
-      const pnl = value != null && invested != null ? value - invested : null;
-      out.push({ key: "w" + b.asset, src: "Ví", symbol: b.asset, qty: b.qty, avgCost: b.avgCost, invested, price, value, pnl, chg: prices[b.asset]?.chg });
+      const a = (b.asset || "").toUpperCase();
+      const stable = STABLES.has(a);
+      const price = px(a);
+      const spotQty = Number(b.qty) || 0, earnQty = Number(b.earnQty) || 0;
+      const qty = b.totalQty != null ? Number(b.totalQty) || 0 : spotQty + earnQty;
+      const value = price != null ? qty * price : null;
+      const avgCost = b.avgCost != null ? Number(b.avgCost) : null;
+      const invested = avgCost != null ? qty * avgCost : b.invested != null ? Number(b.invested) : null;
+      const pnl = stable ? 0 : value != null && invested != null ? value - invested : null;
+      bin.push({
+        key: "w" + a, symbol: a, stable, qty, spotQty, earnQty, avgCost, invested, price, value, pnl, chg: prices[a]?.chg,
+        realized: b.realizedPnl != null ? Number(b.realizedPnl) : null, fees: Number(b.fees) || 0, tradeCount: Number(b.tradeCount) || 0,
+        recent: Array.isArray(b.recent) ? b.recent : [], unmatched: Number(b.unmatchedSellQty) || 0, truncated: !!b.truncated,
+      });
     }
     for (const c of coins) {
       const price = px(c.symbol);
-      const value = price != null ? c.qty * price : null;
-      const invested = c.qty * c.buyPrice;
-      out.push({ key: c.id, id: c.id, src: "Tay", symbol: c.symbol, qty: c.qty, avgCost: c.buyPrice, invested, price, value, pnl: value != null ? value - invested : null, chg: prices[(c.symbol || "").toUpperCase()]?.chg, manual: true });
+      const qty = Number(c.qty) || 0;
+      const value = price != null ? qty * price : null;
+      const invested = qty * (Number(c.buyPrice) || 0);
+      man.push({ key: c.id, id: c.id, symbol: c.symbol, qty, avgCost: c.buyPrice, invested, price, value, pnl: value != null ? value - invested : null, chg: prices[(c.symbol || "").toUpperCase()]?.chg, manual: true });
     }
-    return out.sort((a, b) => (b.value || 0) - (a.value || 0));
+    const byVal = (x, y) => (y.value || 0) - (x.value || 0);
+    return { binRows: bin.sort(byVal), manRows: man.sort(byVal) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, coins, prices]);
 
   const tot = useMemo(() => {
-    let value = 0, invested = 0, valueWithCost = 0;
-    for (const r of rows) { value += r.value || 0; if (r.invested != null) { invested += r.invested; valueWithCost += r.value || 0; } }
-    return { value, invested, pnl: valueWithCost - invested };
-  }, [rows]);
-  const totPct = tot.invested > 0 ? (tot.pnl / tot.invested) * 100 : 0;
-  // "Đã nạp" thật bằng VND (P2P + fiat từ Binance) — ưu tiên so sánh theo VND
-  const valueVnd = tot.value * vnd;
-  const depVnd = deposited?.vnd || 0;
-  const pnlVnd = depVnd > 0 ? valueVnd - depVnd : null;
-  const pnlVndPct = depVnd > 0 ? (pnlVnd / depVnd) * 100 : 0;
-  const up = (pnlVnd != null ? pnlVnd : tot.pnl) >= 0;
+    let spot = 0, earn = 0, upnl = 0, upnlCost = 0, realized = 0, fees = 0, missing = 0;
+    for (const r of binRows) {
+      if (r.realized != null) realized += r.realized;
+      fees += r.fees || 0;
+      if (r.price == null) { missing++; continue; }
+      spot += r.spotQty * r.price; earn += r.earnQty * r.price;
+      if (!r.stable && r.pnl != null) { upnl += r.pnl; upnlCost += r.invested || 0; }
+    }
+    const futV = fut ? (Number(fut.wallet) || 0) + (Number(fut.unrealized) || 0) : 0;
+    let manVal = 0, manPnl = 0, manInv = 0;
+    for (const r of manRows) { manVal += r.value || 0; if (r.pnl != null) { manPnl += r.pnl; manInv += r.invested || 0; } }
+    return { spot, earn, fut: futV, binance: spot + earn + futV, upnl, upnlPct: upnlCost > 0 ? (upnl / upnlCost) * 100 : null, realized, fees, missing, manVal, manPnl, manPct: manInv > 0 ? (manPnl / manInv) * 100 : null };
+  }, [binRows, manRows, fut]);
+
+  // So với tiền VND đã nạp (P2P + fiat) — CHỈ tài sản Binance, không gồm coin nhập tay
+  const depVnd = Number(bn?.deposited?.vnd) || 0;
+  const hasDep = depVnd > 0 && tot.missing === 0;
+  const vsDepVnd = hasDep ? tot.binance * vnd - depVnd : null;
+  const vsDep = hasDep ? vsDepVnd / vnd : null;
+  const vsDepPct = hasDep ? (vsDepVnd / depVnd) * 100 : null;
+
+  // Phân bổ: mỗi coin (Spot + Earn, gồm USDT) + lát "Futures"; coin < 1,5% gộp "Khác"
+  const alloc = useMemo(() => {
+    const items = binRows.filter((r) => r.value > 0).map((r) => ({ name: r.symbol, value: r.value }));
+    if (tot.fut > 0) items.push({ name: "Futures", value: tot.fut, fut: true });
+    const total = items.reduce((s, x) => s + x.value, 0);
+    if (!(total > 0)) return { slices: [], total: 0 };
+    items.sort((a, b) => b.value - a.value);
+    const named = [], rest = [];
+    for (const x of items) {
+      if (x.fut || (named.filter((n) => !n.fut).length < 7 && x.value / total >= 0.015)) named.push(x); else rest.push(x);
+    }
+    const az = named.filter((x) => !x.fut).map((x) => x.name).sort();
+    const slices = named.map((x) => ({ ...x, color: x.fut ? FUT_COLOR : SLICE[az.indexOf(x.name) % SLICE.length] }));
+    if (rest.length) slices.push({ name: "Khác", value: rest.reduce((s, x) => s + x.value, 0), color: OTHER_COLOR });
+    return { slices, total };
+  }, [binRows, tot.fut]);
+
+  const rowsCount = binRows.length + manRows.length;
+  const positions = Array.isArray(fut?.positions) ? fut.positions : [];
+  const headPnl = isOwner ? vsDep : manRows.length ? tot.manPnl : null;
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      {/* Tổng quan danh mục */}
-      <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-amber-900/80 sm:rounded-2xl p-4 text-white shadow-xl sm:p-5">
+    <div className="space-y-3 sm:space-y-4">
+      {/* Tổng quan: tài sản Binance (Spot + Earn + Futures) — coin nhập tay tách riêng */}
+      <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-amber-900/80 p-4 text-white shadow-xl sm:rounded-2xl sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-200"><Coins size={14} /> Danh mục coin · Binance</div>
-            <div className="mt-1 text-3xl font-extrabold sm:text-4xl">{fmtUSD(tot.value)}</div>
-            <div className="mt-0.5 text-xs text-amber-100/80">≈ {fmtVND(tot.value * vnd)}</div>
-            <div className={`mt-2 flex flex-wrap items-center gap-x-2 text-sm font-bold ${up ? "text-emerald-300" : "text-rose-300"}`}>
-              {up ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-              {depVnd > 0 ? (
-                <>{pnlVnd >= 0 ? "+" : ""}{fmtUSD(pnlVnd / vnd)} · {pnlVnd >= 0 ? "+" : ""}{fmtVND(pnlVnd)} ({pnlVndPct >= 0 ? "+" : ""}{pnlVndPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· đã nạp {fmtUSD(depVnd / vnd)} · {fmtVND(depVnd)}</span></>
-              ) : (
-                <>{tot.pnl >= 0 ? "+" : ""}{fmtUSD(tot.pnl)} ({totPct >= 0 ? "+" : ""}{totPct.toFixed(1)}%)<span className="font-medium text-amber-100/70">· vốn {fmtUSD(tot.invested)}</span></>
-              )}
-            </div>
+            <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-200"><Coins size={14} /> {isOwner ? "Tổng tài sản Binance" : "Danh mục coin (nhập tay)"}</div>
+            <div className="mt-1 text-3xl font-extrabold tabular-nums sm:text-4xl">{fmtUsd(isOwner ? tot.binance : tot.manVal)}</div>
+            <div className="mt-0.5 text-xs text-amber-100/80">≈ {formatVND((isOwner ? tot.binance : tot.manVal) * vnd)}{isOwner && bn && !isV2 ? " · chưa gồm Earn/Futures" : ""}</div>
+            {headPnl != null && (
+              <div className="mt-2">
+                <div className={`flex items-center gap-1.5 text-sm font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                  {headPnl >= 0 ? <TrendingUp size={16} className="shrink-0" /> : <TrendingDown size={16} className="shrink-0" />}
+                  {isOwner ? `${fmtUsdSigned(vsDep)} (${sPct(vsDepPct)})` : `${fmtUsdSigned(tot.manPnl)}${tot.manPct != null ? ` (${sPct(tot.manPct)})` : ""}`}
+                </div>
+                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)}</div>}
+              </div>
+            )}
           </div>
-          <button onClick={() => { syncBinance(); loadPrices(); }} disabled={syncing} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-50"><RefreshCw size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "…" : "Làm mới"}</button>
+          {isOwner && <button onClick={() => { syncBinance(); loadPrices(); }} disabled={syncing} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-50"><RefreshCw size={14} className={syncing ? "animate-spin" : ""} /> {syncing ? "…" : "Làm mới"}</button>}
         </div>
-        <div className="mt-3 text-[11px] text-amber-100/70">Tự cập nhật giá mỗi 15s · ví mỗi 5 phút · tỉ giá {Math.round(vnd).toLocaleString("vi-VN")}đ/$ (tự động)</div>
+        {isOwner && (
+          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
+            <HeadChip label="Spot" hint="bạn tự quản lý" value={fmtUsd(tot.spot)} />
+            <HeadChip label="Earn" hint="gửi sinh lời" value={isV2 ? fmtUsd(tot.earn) : "—"} sub={!isV2 && bn ? "cần cập nhật hàm" : bn?.earnError && !bn?.earn ? "không đọc được" : null} />
+            <HeadChip label="Futures" hint="ví bot giao dịch" value={fut ? fmtUsd(tot.fut) : "—"}
+              sub={fut ? `chưa chốt ${fmtUsdSigned(fut.unrealized)}` : bn?.futuresError ? "không đọc được" : !isV2 && bn ? "cần cập nhật hàm" : null}
+              subTone={fut ? (Number(fut.unrealized) >= 0 ? "text-emerald-300" : "text-rose-300") : undefined} />
+          </div>
+        )}
+        {isOwner && manRows.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-1.5 rounded-xl bg-white/5 px-2.5 py-1.5 text-[11.5px] text-amber-100/70">
+            <span className="font-bold text-white">Ngoài Binance (nhập tay) <span className="tabular-nums">{fmtUsd(tot.manVal)}</span></span>
+            <span className={`font-bold tabular-nums ${tot.manPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{fmtUsdSigned(tot.manPnl)}</span>
+            <span>· tách riêng, không tính vào tổng Binance & so với đã nạp</span>
+          </div>
+        )}
+        <div className="mt-3 text-[11px] text-amber-100/70">Giá cập nhật mỗi 15s{isOwner ? " · ví mỗi 5 phút" : ""} · tỉ giá {fmtNum(vnd, 0)} đ/$ (tự động)</div>
       </div>
 
-      {wErr && rows.length > 0 && <div className="mx-3 flex items-center gap-2 rounded-xl bg-amber-50 sm:mx-0 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
+      {/* Hàm qws-binance bản cũ → nhắc cập nhật (app vẫn chạy với dữ liệu cũ) */}
+      {isOwner && bn && !isV2 && (
+        <div className="mx-3 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-[12px] text-sky-800 sm:mx-0">
+          <div className="flex items-start gap-2">
+            <Info size={15} className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="font-bold">Cập nhật hàm qws-binance để thấy Futures/Earn & lãi đã chốt</div>
+              <details className="mt-0.5">
+              <summary className="cursor-pointer text-[11.5px] font-semibold text-sky-700 underline-offset-2 hover:underline">Cách cập nhật (2 phút)</summary>
+              <ol className="mt-1 list-decimal space-y-0.5 pl-4 leading-snug">
+                <li>Supabase Dashboard → Edge Functions → <b>qws-binance</b> → Code.</li>
+                <li>Dán toàn bộ file <code className="rounded bg-white/70 px-1">supabase/functions/qws-binance/index.ts</code> (bản mới) → Deploy.</li>
+                <li>Quay lại đây bấm <b>Làm mới</b>. Futures báo lỗi quyền → tạo API key chỉ đọc mới (chỉ tick Enable Reading) và cập nhật BINANCE_KEY/BINANCE_SECRET.</li>
+              </ol>
+              </details>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wErr && rowsCount > 0 && <div className="mx-3 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700 sm:mx-0"><AlertTriangle size={15} className="shrink-0" /> {wErr}</div>}
+
+      {/* Lãi/lỗ tách bạch + phân bổ */}
+      {isOwner && bn && (
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-5">
+          <Card className="!p-3 sm:!p-4 lg:col-span-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <div className="text-[13px] font-extrabold text-slate-800">Lãi/lỗ tách bạch</div>
+              <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10.5px] font-bold text-indigo-600"><Bot size={12} className="shrink-0" /> Bot chỉ giao dịch bằng ví Futures · Spot bạn tự quản lý</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <PnlTile label="So với tiền đã nạp" value={vsDep != null ? fmtUsdSigned(vsDep) : "—"} tone={toneOf(vsDep)}
+                sub={vsDep != null ? `${sPct(vsDepPct)} · nạp ${fmtUsd(depVnd / vnd, 0)}${!isV2 ? " · chưa tính Earn/Futures" : ""}` : depVnd > 0 ? "đang tải giá…" : "chưa có dữ liệu nạp VND"} />
+              <PnlTile label="Lãi đã chốt" value={isV2 ? fmtUsdSigned(tot.realized) : "—"} tone={isV2 ? toneOf(tot.realized) : "text-slate-400"}
+                sub={isV2 ? `bán Spot/Convert${tot.fees > 0 ? ` · phí ${fmtUsd(tot.fees)}` : ""}` : "cần cập nhật hàm"} />
+              <PnlTile label="Lãi/lỗ đang giữ (Spot)" value={fmtUsdSigned(tot.upnl)} tone={toneOf(tot.upnl)}
+                sub={`${tot.upnlPct != null ? sPct(tot.upnlPct) + " · " : ""}giá nay vs giá vốn TB${tot.earn > 0 ? " (gồm Earn)" : ""}`} />
+              <PnlTile label="Futures (bot)" value={fut ? fmtUsd(fut.wallet) : "—"} tone={fut ? "text-slate-800" : "text-slate-400"}
+                sub={fut ? <>số dư ví · chưa chốt <b className={toneOf(fut.unrealized)}>{fmtUsdSigned(fut.unrealized)}</b>{positions.length ? ` · ${positions.length} lệnh mở` : ""}</> : bn.futuresError ? "không đọc được ví Futures" : "cần cập nhật hàm"} />
+            </div>
+            {positions.length > 0 && (
+              <div className="mt-2 overflow-hidden rounded-xl border border-slate-100">
+                <div className="bg-slate-50 px-2.5 py-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Lệnh Futures đang mở (bot)</div>
+                {positions.map((p) => (
+                  <div key={p.symbol + p.side} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-slate-100 px-2.5 py-1.5 text-[11.5px]">
+                    <b className="shrink-0 text-slate-800">{p.symbol}</b>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold ${p.side === "SHORT" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{p.side}{p.leverage ? ` x${p.leverage}` : ""}</span>
+                    <span className="order-last w-full truncate tabular-nums text-slate-500 sm:order-none sm:w-auto sm:min-w-0 sm:flex-1">KL {fmtQty(Math.abs(p.amt))} · vào {fmtPx(p.entry)} → giá {fmtPx(p.mark)}</span>
+                    <b className={`ml-auto shrink-0 tabular-nums ${toneOf(p.upnl)}`}>{fmtUsdSigned(p.upnl)}</b>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-2 text-[11px] leading-snug text-slate-500">
+              <b className="text-slate-600">Vì sao khác nhau?</b> “So với đã nạp” = toàn bộ tài sản Binance (cả USDT, Earn, Futures, lãi đã chốt; quy VND theo tỉ giá hôm nay) trừ tiền VND đã nạp. Lãi/lỗ từng coin chỉ so giá hiện tại với giá vốn TB của chính coin đó.
+            </div>
+            {(bn.futuresError || bn.cost?.convertError || (bn.earnError && !bn.earn)) && (
+              <div className="mt-2 space-y-0.5 text-[10.5px] leading-snug text-amber-700">
+                {bn.futuresError && <div className="break-words">⚠ Futures: {bn.futuresError}</div>}
+                {bn.cost?.convertError && <div className="break-words">⚠ Lịch sử Convert: {bn.cost.convertError} — giá vốn chỉ tính lệnh Spot.</div>}
+                {bn.earnError && !bn.earn && <div className="break-words">⚠ Earn: {bn.earnError}</div>}
+              </div>
+            )}
+          </Card>
+          <div className="lg:col-span-2"><Allocation slices={alloc.slices} total={alloc.total} /></div>
+        </div>
+      )}
 
       {/* Danh sách coin */}
-      {rows.length === 0 ? (
+      {rowsCount === 0 ? (
         isOwner && wErr && !syncing ? (
           // Đồng bộ lỗi → báo lỗi + nút thử lại thay vì kẹt "Đang tải…"
           <Card><div className="py-10 text-center"><AlertTriangle size={28} className="mx-auto text-amber-400" /><div className="mt-2 text-sm font-bold text-slate-600">Không tải được ví Binance</div><div className="mx-auto mt-1 max-w-sm break-words text-xs text-slate-400">{wErr}</div><button onClick={() => { syncBinance(); loadPrices(); }} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-bold text-white shadow"><RefreshCw size={14} /> Thử lại</button></div></Card>
@@ -209,88 +542,26 @@ function CoinInvest({ active = true }) {
           <Card><div className="py-12 text-center"><Coins size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">{isOwner && (syncing || wallet == null) ? "Đang tải ví Binance…" : "Chưa có coin"}</div><div className="mt-1 text-xs text-slate-400">{isOwner ? "Số dư & giá vốn tự đồng bộ từ Binance." : "Bạn chỉ có quyền xem."}</div></div></Card>
         )
       ) : (
-        <div className="space-y-2">
-          {rows.map((r) => (
-            <Card key={r.key} className="!p-3">
-              {/* MOBILE: dòng 1 = logo + mã + 24h … Hiện có + lãi/lỗ; dòng 2 = lưới 3 cột Đã đầu tư / Giá TB / Giá hiện tại */}
-              <div className="sm:hidden">
-                <div className="flex items-center gap-2.5">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-[12px] font-extrabold text-white">{(r.symbol || "?").slice(0, 4)}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate font-extrabold text-slate-800">{r.symbol}</span>
-                      {r.manual && <Badge tone="slate">tay</Badge>}
-                      {r.chg != null && <Badge tone={r.chg >= 0 ? "emerald" : "rose"}>{r.chg >= 0 ? "+" : ""}{r.chg.toFixed(1)}%</Badge>}
-                    </div>
-                    <div className="flex items-center gap-0.5 text-[11px] text-slate-400">
-                      <span className="truncate">SL {qtyFmt(r.qty)}</span>
-                      {r.manual && canW && (
-                        <>
-                          <button onClick={() => setModal(r)} className="-my-2 ml-1 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
-                          <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="-my-2 shrink-0 rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-[10px] font-semibold uppercase text-slate-400">Hiện có</div>
-                    <div className="text-sm font-extrabold text-slate-800">{r.value != null ? fmtUSD(r.value) : "…"}</div>
-                    {r.pnl != null && <div className={`text-[11px] font-bold ${r.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{r.pnl >= 0 ? "+" : ""}{fmtUSD(r.pnl)}{r.invested > 0 ? ` (${r.pnl >= 0 ? "+" : ""}${((r.pnl / r.invested) * 100).toFixed(1)}%)` : ""}</div>}
-                  </div>
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
-                  <div className="min-w-0 rounded-lg bg-indigo-50 px-2 py-1.5">
-                    <div className="truncate text-[10px] font-semibold text-indigo-500">Đã đầu tư</div>
-                    <div className="truncate text-[12px] font-bold text-indigo-700">{r.invested != null ? fmtUSD(r.invested) : "—"}</div>
-                    {r.invested != null && <div className="truncate text-[10px] font-semibold text-indigo-500">≈ {fmtVND(r.invested * vnd)}</div>}
-                  </div>
-                  <div className="min-w-0 rounded-lg bg-slate-100 px-2 py-1.5">
-                    <div className="truncate text-[10px] font-semibold text-slate-400">Giá TB</div>
-                    <div className="truncate text-[12px] font-bold text-slate-600">{r.avgCost != null ? fmtUSD(r.avgCost) : "—"}</div>
-                  </div>
-                  <div className={`min-w-0 rounded-lg px-2 py-1.5 ${r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
-                    <div className="truncate text-[10px] font-semibold opacity-70">Giá hiện tại</div>
-                    <div className="truncate text-[12px] font-bold">{r.price != null ? fmtUSD(r.price) : "…"}</div>
-                  </div>
-                </div>
-              </div>
-              {/* DESKTOP: giữ bố cục cũ */}
-              <div className="hidden items-center gap-3 sm:flex">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-[13px] font-extrabold text-white">{(r.symbol || "?").slice(0, 4)}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-slate-800">{r.symbol}</span>
-                    {r.manual && <Badge tone="slate">tay</Badge>}
-                    {r.chg != null && <Badge tone={r.chg >= 0 ? "emerald" : "rose"}>{r.chg >= 0 ? "+" : ""}{r.chg.toFixed(1)}%</Badge>}
-                    {r.manual && canW && (
-                      <span className="-my-2 ml-auto flex gap-0.5">
-                        <button onClick={() => setModal(r)} className="rounded-lg p-2.5 text-slate-300 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
-                        <button onClick={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} className="rounded-lg p-2.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <span className="text-slate-400">SL {qtyFmt(r.qty)}</span>
-                    <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">Đã đầu tư {r.invested != null ? <>{fmtUSD(r.invested)} <span className="font-semibold text-indigo-500">≈ {fmtVND(r.invested * vnd)}</span></> : "—"}</span>
-                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600">TB {r.avgCost != null ? fmtUSD(r.avgCost) : "—"}</span>
-                    <span className={`rounded-md px-1.5 py-0.5 font-bold ${r.price == null ? "bg-slate-100 text-slate-500" : r.avgCost != null && r.price < r.avgCost ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>Giá {r.price != null ? fmtUSD(r.price) : "…"}</span>
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[10px] font-semibold uppercase text-slate-400">Hiện có</div>
-                  <div className="text-sm font-extrabold text-slate-800">{r.value != null ? fmtUSD(r.value) : "…"}</div>
-                  {r.pnl != null && <div className={`text-[11px] font-bold ${r.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{r.pnl >= 0 ? "+" : ""}{fmtUSD(r.pnl)}{r.invested > 0 ? ` (${r.pnl >= 0 ? "+" : ""}${((r.pnl / r.invested) * 100).toFixed(1)}%)` : ""}</div>}
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+        <>
+          {binRows.length > 0 && (
+            <div className="space-y-2">
+              <div className="px-3 text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:px-0">Coin trên Binance · Spot + Earn</div>
+              {binRows.map((r) => <CoinRow key={r.key} r={r} vnd={vnd} canW={canW} />)}
+            </div>
+          )}
+          {manRows.length > 0 && (
+            <div className="space-y-2">
+              <div className="px-3 text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:px-0">Ngoài Binance · nhập tay</div>
+              {manRows.map((r) => <CoinRow key={r.key} r={r} vnd={vnd} canW={canW} onEdit={() => setModal(r)} onDelete={async () => { if (await ask(`Xoá ${r.symbol}?`)) deleteCoin(r.id); }} />)}
+            </div>
+          )}
+        </>
       )}
 
       {canW && (
         <div className="px-3 sm:px-0"><button onClick={() => setModal({ symbol: "", qty: "", buyPrice: "" })} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-2.5 text-sm font-bold text-slate-500 hover:border-amber-300 hover:text-amber-600"><Plus size={15} /> Thêm coin thủ công (ngoài Binance)</button></div>
       )}
-      <div className="px-3 text-center text-[11px] text-slate-400 sm:px-0">Giá & tỉ giá realtime từ Binance/thị trường. Ví thật đồng bộ qua API key read-only (bảo mật server-side, chỉ chủ).</div>
+      <div className="px-3 text-center text-[11px] text-slate-400 sm:px-0">Giá & tỉ giá realtime từ Binance/thị trường. Ví thật đồng bộ qua API key read-only (bảo mật server-side, chỉ chủ). Giá vốn TB tính theo thời gian: mua cộng vốn, bán chốt lãi tại giá TB.</div>
 
       {modal && <CoinModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateCoin(modal.id, data) : addCoin(data))} />}
     </div>
