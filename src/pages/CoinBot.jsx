@@ -50,7 +50,7 @@ function StatTable({ title, rows }) {
 }
 
 function SetupForm({ initial, onStart, onCancel }) {
-  const [days, setDays] = useState(60);
+  const [days, setDays] = useState(90);
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
   const tog = (k, v) => setC((o) => ({ ...o, [k]: o[k].includes(v) ? o[k].filter((x) => x !== v) : [...o[k], v] }));
   const chip = (on) => `rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
@@ -64,7 +64,7 @@ function SetupForm({ initial, onStart, onCancel }) {
     <Card className="!p-4">
       <div className="mb-3 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Cấu hình phiên demo</div>
       <div className="space-y-3">
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 45, 60].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><div className="flex flex-wrap gap-1.5">{Object.keys(SYMBOLS).map((k) => <button key={k} onClick={() => tog("coins", k)} className={chip(c.coins.includes(k))}>{k}USDT</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{["5m", "15m", "1h", "4h"].map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Setup theo bộ kiến thức</div>
@@ -91,9 +91,10 @@ function SetupForm({ initial, onStart, onCancel }) {
           <div className="mt-1 text-[11.5px] leading-snug text-violet-900/70">Mỗi tín hiệu được thử song song 6 cấu hình (R:R 1.5/2/3 × có/không dời hoà vốn). Khi có tín hiệu mới, bot chỉ nhìn các lệnh <b>đã đóng trước đó</b> (không nhìn trước tương lai) → chọn cấu hình kỳ vọng cao nhất, kỳ vọng thấp hơn ngưỡng thì <b>bỏ tín hiệu</b>. Thiếu mẫu ở cặp+khung+setup thì học từ nhóm rộng hơn. Luôn chạy kèm “Luật gốc” để so sánh.</div>
           {c.adaptive && <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("warmupDays", "Học trước ngày bắt đầu", 5, "ngày")}{field("lookback", "Xét N lệnh gần nhất", 5)}{field("minSample", "Cần tối thiểu", 1, "mẫu")}{field("minExp", "Vào khi điểm ≥", 0.05, "R")}{field("confK", "Độ thận trọng (0=tắt)", 0.25, "× sai số")}</div>}
           {c.adaptive && <label className="mt-2 flex items-center gap-2 text-[12px] font-semibold text-violet-900"><input type="checkbox" checked={c.tfGate} onChange={(e) => setC({ ...c, tfGate: e.target.checked })} /> Nghỉ cả khung giờ khi khung đó đang lỗ (kỳ vọng gần đây âm)</label>}
+          {c.adaptive && <label className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-violet-900"><input type="checkbox" checked={c.learnLoss} onChange={(e) => setC({ ...c, learnLoss: e.target.checked })} /> Rút kinh nghiệm sau mỗi lệnh thua (tự kiểm chứng: bài học chỉ áp dụng khi chứng minh được là giúp)</label>}
         </div>
         <div className="rounded-lg bg-slate-50 p-2.5 text-[11.5px] leading-snug text-slate-500">
-          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát), vào bằng <b>lệnh chờ</b>, không dời hoà vốn (dữ liệu cho thấy dời hoà vốn làm giảm lợi nhuận). Bộ tối ưu: học 90 ngày, xét 60 lệnh gần nhất, độ thận trọng 1 — chỉ vào khi lợi thế đã được chứng minh. <b>R:R tối thiểu 1:{String(MIN_RR).replace(".", ",")}</b> — bộ tối ưu chỉ chọn trong R:R 1,5 / 2 / 3. Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL.
+          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát), vào bằng <b>lệnh chờ</b>, không dời hoà vốn (dữ liệu cho thấy dời hoà vốn làm giảm lợi nhuận). Chạy lại 3 tháng gần nhất; bộ tối ưu + bài học từ lệnh thua TỰ KIỂM CHỨNG — chỉ được chặn lệnh khi chứng minh được là giúp. <b>R:R tối thiểu 1:{String(MIN_RR).replace(".", ",")}</b> — bộ tối ưu chỉ chọn trong R:R 1,5 / 2 / 3. Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL.
         </div>
         <div className="flex gap-2">
           {onCancel && <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Huỷ</button>}
@@ -177,6 +178,13 @@ export default function CoinBot() {
   };
   const { live, shown, ver, status } = useLive(active, cfg.coins, cfg.tfs, () => { clearTimeout(debounce.current); debounce.current = setTimeout(run, 2500); });
 
+  // Nâng phiên đang chạy lên v4 theo yêu cầu (20/10): chạy lại 3 tháng gần nhất, bỏ H4 (kiểm tra: bỏ H4 tốt hơn nhẹ)
+  useEffect(() => {
+    if (!isOwner || !session || session.stoppedAt || (session.cfg?.cfgVer || 1) >= 4) return;
+    const c = cfgOf(session), tfs = c.tfs.filter((x) => x !== "4h");
+    setSettings({ paperBot: { ...session, startAt: Date.now() - 90 * 86400000, createdAt: Date.now(), cfg: { ...c, tfs: tfs.length ? tfs : c.tfs, cfgVer: 4 } } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.createdAt]);
   useEffect(() => { setRaw(null); setRawOld(null); hits.current = new Map(); prevSt.current = null; if (session) run(); /* eslint-disable-next-line */ }, [session?.createdAt, session?.stoppedAt]);
   // Dự phòng khi mất WebSocket: mỗi phút xét nến mới (đang có realtime thì 5 phút/lần)
   useEffect(() => {
@@ -394,6 +402,31 @@ export default function CoinBot() {
           );
         })()}
 
+        {cfg.adaptive && cfg.learnLoss && (
+          <Card className="!p-3">
+            <Title icon={Brain}>Rút kinh nghiệm từ lệnh thua</Title>
+            {(() => {
+              const m = res.metaNow || {}, line = (x, name) => !x ? null : x.mb == null
+                ? <div className="text-[12px] text-slate-500">• {name}: <b>đang thu thập</b> ({x.b || 0} tín hiệu bị chặn, cần ≥ {cfg.lessonMin} để kiểm chứng)</div>
+                : <div className={`text-[12px] ${x.ok ? "text-emerald-700" : "text-amber-700"}`}>• {name}: <b>{x.ok ? "ĐANG ÁP DỤNG" : "CHỈ QUAN SÁT"}</b> — tín hiệu bị chặn TB <b>{rr(x.mb)}</b> so với tín hiệu được vào <b>{rr(x.mk)}</b> ({x.b} lệnh gần nhất){x.ok ? " → chặn đúng, giúp giảm lỗ." : " → chặn chưa đúng (lệnh bị chặn lại tốt hơn), nên chưa dùng để chặn."}</div>;
+              return <div className="space-y-1 rounded-lg bg-slate-50 p-2.5">{line(m.lesson, "Bài học từ lệnh thua")}{line(m.opt, "Bộ tối ưu (tắt ô / nghỉ khung)")}
+                <div className="text-[11px] text-slate-400">Mỗi lệnh thua, hệ thống xem đặc điểm của lệnh (ADX, biến động, khoảng cách EMA50, độ rộng SL, phiên, hướng, độ dốc EMA50, thân nến…). Đặc điểm nào {cfg.lessonN} lệnh gần nhất thua rõ (≤ −0,2R) thành bài học. Bài học chỉ được dùng để chặn khi chính nó chứng minh được là đúng.</div></div>;
+            })()}
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Bài học hiện có ({res.lessonsActive.length})</div>
+                {res.lessonsActive.length ? <div className="space-y-0.5">{res.lessonsActive.map((l) => <div key={l.k} className="flex items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{l.label}</span><span className="shrink-0 tabular-nums text-slate-400">{l.n} lệnh · thắng {l.win?.toFixed(0)}%</span><span className={`shrink-0 font-bold tabular-nums ${tone(l.exp)}`}>{rr(l.exp)}</span></div>)}</div> : <div className="text-[12px] text-slate-400">Chưa có đặc điểm nào thua rõ rệt.</div>}
+              </div>
+              <div>
+                <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Nhật ký học ({res.lessons.length})</div>
+                <div className="max-h-44 space-y-0.5 overflow-y-auto">{[...res.lessons].reverse().slice(0, 40).map((l, i) => (
+                  <div key={i} className="text-[11.5px] leading-snug"><span className="tabular-nums text-slate-400">{dt(l.t)}</span> <b className={l.on ? "text-rose-700" : "text-emerald-700"}>{l.on ? "Học" : "Gỡ"}</b> {l.label} <span className="text-slate-400">({l.n} lệnh, {rr(l.exp)}){l.from ? ` · từ lệnh thua ${l.from}` : ""}</span></div>
+                ))}</div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <Card className="!p-3">
           <Title icon={Activity}>So sánh khung giờ — khung nào hiệu quả nhất</Title>
           <div className="overflow-x-auto">
@@ -508,7 +541,7 @@ export default function CoinBot() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-[12px]">
               <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase tracking-wide text-slate-400">
-                <th className="py-1.5 pr-2">Vào lúc</th><th className="py-1.5 pr-2">Cặp</th><th className="py-1.5 pr-2">Setup</th><th className="py-1.5 pr-2 text-right">Vào</th><th className="py-1.5 pr-2 text-right">SL</th><th className="py-1.5 pr-2 text-right">TP</th><th className="py-1.5 pr-2">Kết thúc</th><th className="py-1.5 pr-2 text-right">R</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ</th><th className="py-1.5">Tối ưu chấm</th>
+                <th className="py-1.5 pr-2">Vào lúc</th><th className="py-1.5 pr-2">Cặp</th><th className="py-1.5 pr-2">Setup</th><th className="py-1.5 pr-2 text-right">Vào</th><th className="py-1.5 pr-2 text-right">SL</th><th className="py-1.5 pr-2 text-right">TP</th><th className="py-1.5 pr-2">Kết thúc</th><th className="py-1.5 pr-2 text-right">R</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ</th><th className="py-1.5">Rút kinh nghiệm / tối ưu</th>
               </tr></thead>
               <tbody>{taken.slice(0, showN).map((t) => (
                 <tr key={t.id} className={`border-b border-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""}`}>
@@ -521,7 +554,7 @@ export default function CoinBot() {
                   <td className="py-1.5 pr-2 text-slate-500">{t.status === "skip" ? <span className="text-slate-400">bỏ: {t.why}</span> : t.status === "reject" ? <span className="text-slate-400">loại · nếu vào: {t.reason}</span> : <>{t.reason}{t.liveExit ? <span className="font-bold text-amber-600"> · realtime</span> : ""}{t.exitAt ? <span className="text-slate-400"> · {dt(t.exitAt)}</span> : ""}</>}</td>
                   <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${t.status === "reject" ? "text-slate-400" : tone(t.r ?? t.uR)}`}>{rr(t.r ?? t.uR)}</td>
                   <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(t.pnl)}`}>{t.status === "skip" || t.status === "reject" ? "—" : usd(t.pnl)}</td>
-                  <td className="py-1.5 text-[11px] text-slate-400">{t.score ? (t.score.level < 0 ? "chưa đủ mẫu" : <><span className={tone(t.score.exp)}>{rr(t.score.exp)}</span>/{t.score.n} · {t.score.variant}</>) : "—"}</td>
+                  <td className="max-w-[320px] py-1.5 text-[11px] leading-snug text-slate-400">{t.lesson ? <span className="text-rose-700/80">{t.lesson}</span> : t.score ? (t.score.level < 0 ? "chưa đủ mẫu" : <><span className={tone(t.score.exp)}>{rr(t.score.exp)}</span>/{t.score.n} · {t.score.variant}</>) : "—"}</td>
                 </tr>
               ))}</tbody>
             </table>

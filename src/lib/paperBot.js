@@ -17,7 +17,7 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 3,
+  cfgVer: 4,
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
   maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
@@ -25,11 +25,13 @@ export const DEFAULT_CFG = {
   partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
   // Tự tối ưu: học thêm 90 ngày trước ngày bắt đầu; xét 60 lệnh gần nhất, cần ≥20 mẫu; điểm thận trọng = kỳ vọng − 1×sai số chuẩn ≥ 0 mới vào;
   // cổng khung giờ: cả khung đang âm thì nghỉ khung đó. Kiểm tra 30–150 ngày: vốn giữ 959–1.073$ trong khi luật gốc còn 530–813$.
-  adaptive: true, warmupDays: 90, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
+  learnLoss: true, lessonN: 30, lessonMin: 15, verifyOpt: true, optVariants: false, // v4: tự kiểm chứng — bộ lọc chỉ được chặn khi tín hiệu nó chặn thật sự tệ hơn; giữ R:R cố định (chọn R:R theo kết quả gần đây làm giảm tỉ lệ thắng) // v4: rút kinh nghiệm từ lệnh thua (30 lệnh gần nhất có cùng đặc điểm, cần ≥15)
+  adaptive: true, warmupDays: 0, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
   htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
-  coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h", "4h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"],
+  coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V4_KEYS = ["learnLoss", "lessonN", "lessonMin", "verifyOpt", "optVariants", "warmupDays"];
 const V3_KEYS = ["maxExtAtr", "minSlAtr", "limitAt", "fillBars", "entryMode", "minExp", "confK"];
 const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
 export const MIN_RR = 1.5; // luật của Quang: R:R tối thiểu 1:1,5 — mọi mức chốt lời (kể cả chốt 1 nửa) không thấp hơn
@@ -38,6 +40,7 @@ export function cfgOf(session) {
   const ver = session?.cfg?.cfgVer || 1;
   if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
   c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
   c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
   if (c.partialAtR > 0 && c.partialAtR < MIN_RR) c.partialAtR = MIN_RR;
@@ -174,7 +177,7 @@ function findSignals(K, setups) {
       }
     }
   }
-  return { sig, atr, e50 };
+  return { sig, atr, e50, adx };
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
@@ -223,10 +226,38 @@ const uRof = (part, entry, px, side, risk, feeR) => (part ? 0.5 * part + (0.5 * 
 
 // Các cấu hình bộ tối ưu được thử (R:R × dời hoà vốn) — luôn gồm cấu hình gốc của phiên
 function variantsOf(cfg) {
-  const v = [[1.5, 0], [1.5, 1], [2, 0], [2, 1], [3, 0], [3, 1]];
+  const v = cfg.optVariants === false ? [] : [[1.5, 0], [1.5, 1], [2, 0], [2, 1], [3, 0], [3, 1]];
   if (!v.some(([r, b]) => r === cfg.rr && b === cfg.beAtR)) v.push([cfg.rr, cfg.beAtR]);
   return v.filter(([rr]) => rr >= MIN_RR).map(([rr, beAtR]) => ({ rr, beAtR, label: `R:R ${rr}${beAtR ? ` · hoà vốn ${beAtR}R` : ""}` }));
 }
+// ---------------- Rút kinh nghiệm từ lệnh thua ----------------
+// Mỗi tín hiệu được gắn "đặc điểm" lúc ra tín hiệu (không nhìn tương lai). Sau mỗi lệnh thua, hệ thống xem các đặc điểm của lệnh đó:
+// đặc điểm nào trong N lệnh gần nhất (đã đóng) thua rõ rệt (kỳ vọng ≤ -0.2R và vẫn âm khi cộng 1 sai số chuẩn) → thành BÀI HỌC,
+// các tín hiệu sau có đặc điểm đó bị bỏ. Tín hiệu bị bỏ vẫn được theo dõi "bóng": khi đặc điểm hết xấu, bài học tự gỡ.
+export const TAGS = {
+  "adx:<20": "thị trường đi ngang (ADX < 20)", "adx:20-30": "xu hướng vừa (ADX 20–30)", "adx:>30": "xu hướng mạnh (ADX > 30)",
+  "vol:low": "biến động thấp", "vol:mid": "biến động trung bình", "vol:high": "biến động cao",
+  "ext:0-1": "giá sát EMA50 (< 1 ATR)", "ext:1-2": "giá cách EMA50 1–2 ATR",
+  "sl:2-3": "SL 2–3 ATR", "sl:>3": "SL rộng > 3 ATR",
+  "ses:A": "phiên Á (7h–14h VN)", "ses:EU": "phiên Âu (14h–19h VN)", "ses:US": "phiên Mỹ (19h–7h VN)",
+  "side:L": "lệnh LONG", "side:S": "lệnh SHORT",
+  "slope:with": "EMA50 dốc cùng hướng lệnh", "slope:against": "EMA50 dốc NGƯỢC hướng lệnh",
+  "body:weak": "nến tín hiệu thân yếu (< 40% biên độ)", "body:strong": "nến tín hiệu thân mạnh",
+};
+function tagsOf(K, i, side, sl, f) {
+  const a = f.atr[i], [, o, h, l, c] = K[i], t = [];
+  const adx = f.adx[i]; t.push(adx < 20 ? "adx:<20" : adx <= 30 ? "adx:20-30" : "adx:>30");
+  const w = f.atr.slice(Math.max(0, i - 100), i).sort((x, y) => x - y), pc = w.length ? w.filter((x) => x < a).length / w.length : 0.5;
+  t.push(pc < 0.33 ? "vol:low" : pc > 0.67 ? "vol:high" : "vol:mid");
+  const ext = Math.abs(c - f.e50[i]) / a; t.push(ext < 1 ? "ext:0-1" : "ext:1-2");
+  const sa = Math.abs(c - sl) / a; t.push(sa <= 3 ? "sl:2-3" : "sl:>3");
+  const hr = new Date(K[i][0] + (K[1][0] - K[0][0])).getUTCHours(); t.push(hr < 7 ? "ses:A" : hr < 12 ? "ses:EU" : "ses:US");
+  t.push(side === 1 ? "side:L" : "side:S");
+  t.push((f.e50[i] - f.e50[Math.max(0, i - 10)]) * side >= 0 ? "slope:with" : "slope:against");
+  t.push(Math.abs(c - o) / (h - l || 1e-9) < 0.4 ? "body:weak" : "body:strong");
+  return t;
+}
+
 export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "setup (mọi cặp, khung)", "cả khung giờ đang âm"];
 
 // ---------------- Chạy cả phiên ----------------
@@ -280,7 +311,7 @@ export async function runSession(session, onProgress = () => {}) {
           r: t.r, part: t.part, uR: t.open ? uRof(t.part, t.entry, last, s.side, t.risk, t.feeR) : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
         };
       };
-      shadows.push({ key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
+      shadows.push({ tags: tagsOf(K, s.i, s.side, s.sl, found), key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
     }
     streams.push({ coin, tf, bars: K.length, signals: sig.filter((x) => K[x.i][0] >= startAt).length, lastBar: lastBarAt });
   }
@@ -315,20 +346,56 @@ export async function runSession(session, onProgress = () => {}) {
     return { level: -1, vi: baseVi, exp: null, n: 0, win: null, take: true };
   };
 
+  // Chỉ mục bài học: (phạm vi = tất cả | setup) × đặc điểm → [{x: lúc đóng, r}] theo cấu hình gốc
+  const lessIdx = new Map(), lkeys = (sh) => sh.tags.flatMap((g) => [`*|${g}`, `${sh.setup}|${g}`]);
+  for (const sh of shadows) { if (sh.r[baseVi] == null) continue; for (const k of lkeys(sh)) { let a = lessIdx.get(k); if (!a) lessIdx.set(k, (a = [])); a.push({ x: sh.x[baseVi], r: sh.r[baseVi] }); } }
+  for (const a of lessIdx.values()) a.sort((p, q) => p.x - q.x);
+  const lessonStat = (k, T) => {
+    const a = lessIdx.get(k) || [], c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lessonN), c), n = w.length;
+    if (n < cfg.lessonMin) return null;
+    const m = w.reduce((x, y) => x + y.r, 0) / n, sd = Math.sqrt(w.reduce((x, y) => x + (y.r - m) ** 2, 0) / (n - 1));
+    return { n, exp: m, win: (w.filter((y) => y.r > 0.05).length / n) * 100, bad: m <= -0.2 && m + sd / Math.sqrt(n) < 0 };
+  };
+  const lessonsAt = (sh, T) => (cfg.learnLoss ? lkeys(sh).map((k) => ({ k, ...lessonStat(k, T) })).filter((x) => x.bad) : []);
+  const lessonLabel = (k) => { const [sc, g] = k.split("|"); return `${TAGS[g] || g}${sc === "*" ? "" : ` · ${SETUPS[sc]?.label.split(" (")[0] || sc}`}`; };
+  const lessonOn = new Map(), lessons = [];
+  // Tự kiểm chứng bài học: so kết quả (bóng) của tín hiệu BỊ bài học chặn với tín hiệu không bị chặn — chỉ ÁP DỤNG khi chặn thật sự giúp
+  // Áp dụng chung cho BỘ TỐI ƯU (tắt ô / nghỉ khung): bộ lọc nào chặn mà tín hiệu bị chặn lại thắng hơn → tự tắt bộ lọc đó.
+  const metaLog = []; // {x: lúc đóng, r, lesson: bị bài học chặn?, opt: bị bộ tối ưu chặn?}
+  const works = (kind, T) => {
+    const done = metaLog.filter((m) => m.x <= T), b = done.filter((m) => m[kind]).slice(-cfg.lessonN), k = done.filter((m) => !m[kind]).slice(-cfg.lessonN);
+    if (b.length < cfg.lessonMin || k.length < cfg.lessonMin) return { ok: false, b: b.length, why: "đang thu thập" };
+    const mb = b.reduce((x, y) => x + y.r, 0) / b.length, mk = k.reduce((x, y) => x + y.r, 0) / k.length;
+    return { ok: mb < mk - 0.15, mb, mk, b: b.length };
+  };
+  const metaOn = { lesson: null, opt: null }, metaEvents = [];
+  for (const sh of shadows) if (!sh.live && sh.r[baseVi] != null) metaLog.push({ x: sh.x[baseVi], r: sh.r[baseVi], lesson: lessonsAt(sh, sh.entryAt).length > 0, opt: !decide(keysOf(sh), sh.entryAt, sh.tf).take }); // tín hiệu trước ngày bắt đầu cũng được dùng để kiểm chứng
   const trades = [], baseTrades = [], rejected = [], optLog = [], cellState = new Map(), busyA = {}, busyB = {};
   for (const sh of shadows) {
     if (!sh.live) continue;
     if (!(sh.entryAt < (busyB[sh.key] ?? -1))) { const t = sh.build(baseVi); baseTrades.push(t); busyB[sh.key] = t.exitAt ?? Infinity; }
     if (!cfg.adaptive || sh.entryAt < (busyA[sh.key] ?? -1)) continue;
+    const L = lessonsAt(sh, sh.entryAt);
+    for (const x of L) if (!lessonOn.get(x.k)) { // bài học mới: gắn với lệnh thua gần nhất có đặc điểm này
+      const lost = [...trades].reverse().find((t) => t.r != null && t.r < 0 && t.exitAt <= sh.entryAt && lkeys({ tags: t.tags, setup: t.setup }).includes(x.k));
+      lessons.push({ t: sh.entryAt, k: x.k, label: lessonLabel(x.k), exp: x.exp, n: x.n, win: x.win, on: true, from: lost ? `${lost.coin} ${TFS[lost.tf].label} ${lost.side === 1 ? "LONG" : "SHORT"} ${(lost.r).toFixed(2)}R lúc ${new Date(lost.exitAt + 7 * 3600000).toISOString().slice(5, 16).replace("T", " ")}` : null });
+      lessonOn.set(x.k, true);
+    }
+    for (const [k, on] of lessonOn) if (on && sh.tags && lkeys(sh).includes(k) && !L.some((x) => x.k === k)) { const st = lessonStat(k, sh.entryAt); lessons.push({ t: sh.entryAt, k, label: lessonLabel(k), exp: st?.exp, n: st?.n, win: st?.win, on: false }); lessonOn.set(k, false); }
     const d = decide(keysOf(sh), sh.entryAt, sh.tf);
+    if (sh.r[baseVi] != null) metaLog.push({ x: sh.x[baseVi], r: sh.r[baseVi], lesson: L.length > 0, opt: !d.take });
+    const mw = { lesson: cfg.learnLoss ? works("lesson", sh.entryAt) : { ok: false }, opt: cfg.verifyOpt ? works("opt", sh.entryAt) : { ok: true } };
+    for (const kind of ["lesson", "opt"]) if (mw[kind].ok !== metaOn[kind]) { if (metaOn[kind] != null || mw[kind].ok) metaEvents.push({ t: sh.entryAt, kind, on: mw[kind].ok, ...mw[kind] }); metaOn[kind] = mw[kind].ok; }
+    if (L.length && mw.lesson.ok) { rejected.push(sh.build(baseVi, { tags: sh.tags, status: "reject", why: `bài học: ${L.map((x) => lessonLabel(x.k)).join("; ")}` })); continue; }
+    if (!d.take && !mw.opt.ok) { d.take = true; d.vi = baseVi; d.overruled = true; } // bộ tối ưu muốn bỏ nhưng chưa chứng minh được là đúng → vẫn vào theo luật gốc
     const prev = cellState.get(sh.cell), cur = d.take ? `on:${d.vi}` : "off";
     if (prev !== cur) {
       optLog.push({ t: sh.entryAt, cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, take: d.take, variant: V[d.vi].label, exp: d.exp, n: d.n, level: d.level, first: prev == null, prevOn: prev ? prev !== "off" : null });
       cellState.set(sh.cell, cur);
     }
-    const score = { exp: d.exp, n: d.n, level: d.level, variant: V[d.vi].label };
-    if (d.take) { const t = sh.build(d.vi, { score }); trades.push(t); busyA[sh.key] = t.exitAt ?? Infinity; }
-    else rejected.push(sh.build(baseVi, { score, status: "reject", why: d.why === "khung" ? `khung ${sh.tf} đang âm ${d.exp.toFixed(2)}R` : `kỳ vọng ${d.exp.toFixed(2)}R / ${d.n} lệnh gần nhất` }));
+    const score = { exp: d.exp, n: d.n, level: d.level, variant: V[d.vi].label, overruled: d.overruled };
+    if (d.take) { const t = sh.build(d.vi, { score, tags: sh.tags }); trades.push(t); busyA[sh.key] = t.exitAt ?? Infinity; }
+    else rejected.push(sh.build(baseVi, { score, tags: sh.tags, status: "reject", why: d.why === "khung" ? `khung ${sh.tf} đang âm ${d.exp.toFixed(2)}R` : `kỳ vọng ${d.exp.toFixed(2)}R / ${d.n} lệnh gần nhất` }));
   }
 
   // Trạng thái bộ tối ưu tại hiện tại cho từng ô đã có tín hiệu
@@ -336,8 +403,15 @@ export async function runSession(session, onProgress = () => {}) {
   const optState = [...seen.values()].map((sh) => { const d = decide(keysOf(sh), until, sh.tf); return { cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, ...d, variant: V[d.vi].label }; })
     .sort((a, b) => (b.take - a.take) || ((b.exp ?? -9) - (a.exp ?? -9)));
 
+  // Rút kinh nghiệm từng lệnh thua: đặc điểm nào của lệnh có lịch sử tệ nhất tại lúc đóng lệnh
+  for (const t of trades) if (t.r != null && t.r < -0.05) {
+    const st = lkeys({ tags: t.tags || [], setup: t.setup }).map((k) => ({ k, ...lessonStat(k, t.exitAt) })).filter((x) => x.n).sort((p, q) => p.exp - q.exp)[0];
+    if (st) t.lesson = `${lessonLabel(st.k)}: ${st.n} lệnh gần nhất thắng ${st.win.toFixed(0)}%, TB ${st.exp >= 0 ? "+" : ""}${st.exp.toFixed(2)}R${st.bad ? " → đã thành bài học, sẽ tránh" : st.exp < 0 ? " → đang theo dõi" : " → chưa đủ xấu, có thể do ngẫu nhiên"}`;
+  }
+  const metaNow = { lesson: cfg.learnLoss ? works("lesson", until) : null, opt: cfg.verifyOpt ? works("opt", until) : null };
+  const lessonsActive = [...lessonOn].filter(([, on]) => on).map(([k]) => ({ k, label: lessonLabel(k), ...lessonStat(k, until) }));
   const tfState = cfg.tfs.map((tf) => ({ tf, ...(tfExp(tf, until) || { exp: null, n: 0 }), pause: cfg.tfGate && (tfExp(tf, until)?.exp ?? 0) < 0 }));
-  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, lessons, lessonsActive, metaNow, metaEvents, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
 }
 
 // Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.
