@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
@@ -60,8 +60,11 @@ function CoinModal({ initial, onClose, onSave }) {
 const CoinMarket = lazy(() => import("./CoinMarket.jsx"));
 // Tab "Demo tự động" (bot giao dịch giả lập theo phương pháp) — tải lười
 const CoinBot = lazy(() => import("./CoinBot.jsx"));
+// Tab "Bot thật": theo dõi bot giao dịch chạy trên VPS (chỉ chủ)
+const CoinLive = lazy(() => import("./CoinLive.jsx"));
 
 export default function Coin() {
+  const { isOwner } = useData();
   const [tab, setTab] = useState(() => { try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
   // Tab đã mở thì GIỮ mounted (ẩn bằng class hidden) → Demo tự động/Thị trường không phải tính lại khi quay lại
   const [seen, setSeen] = useState(() => ({ [tab]: true }));
@@ -69,16 +72,17 @@ export default function Coin() {
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className="grid grid-cols-3 gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl">
-        {[["invest", "Đầu tư", Wallet], ["market", "Thị trường", CandlestickChart], ["bot", "Demo tự động", Bot]].map(([k, label, Icon]) => (
-          <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-extrabold transition ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
-            <Icon size={16} /> {label}
+      <div className={`grid ${isOwner ? "grid-cols-4" : "grid-cols-3"} gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl`}>
+        {[["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ...(isOwner ? [["live", "Bot thật", Radio, "Bot thật"]] : [])].map(([k, label, Icon, short]) => (
+          <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1 rounded-xl px-1 py-2 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
+            <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
         ))}
       </div>
       {seen.invest && <div className={tab === "invest" ? "" : "hidden"}><CoinInvest active={tab === "invest"} /></div>}
       {seen.market && <div className={tab === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={tab === "market"} /></Suspense></div>}
       {seen.bot && <div className={tab === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot /></Suspense></div>}
+      {isOwner && seen.live && <div className={tab === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={tab === "live"} /></Suspense></div>}
     </div>
   );
 }
