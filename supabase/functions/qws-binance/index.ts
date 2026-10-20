@@ -235,28 +235,32 @@ async function fiatDeposits(KEY, SECRET) {
   return { totalVND, byCur, count: items.length, items: items.sort((a, b) => b.date - a.date).slice(0, 30) };
 }
 
-// Lịch sử P2P (mua/bán USDT bằng VND) — nguồn "nạp tiền" chính ở VN
+// Lịch sử P2P (mua/bán USDT bằng VND) — nguồn "nạp tiền" chính ở VN.
+// ⚠ API này KHÔNG truyền thời gian thì chỉ trả ~30 ngày gần nhất → khoản nạp cũ "rơi" khỏi tổng (đã nạp giảm dần).
+// → Quét lùi từng cửa sổ 30 ngày (tối đa 24 tháng), trả cả danh sách có mã lệnh để app lưu sổ cộng dồn.
 async function p2pHistory(KEY, SECRET) {
-  let buyVND = 0, sellVND = 0, count = 0; const items = [];
+  const DAY = 86400000, now = Date.now(), seen = new Map();
   for (const tradeType of ["BUY", "SELL"]) {
-    for (let page = 1; page <= 15; page++) {
-      let list = [];
-      try {
-        const r = await signedGet("/sapi/v1/c2c/orderMatch/listUserOrderHistory", "tradeType=" + tradeType + "&page=" + page + "&rows=100", KEY, SECRET);
-        list = r.ok && r.data && Array.isArray(r.data.data) ? r.data.data : [];
-      } catch (_) { break; }
-      if (!list.length) break;
-      for (const o of list) {
-        if ((o.orderStatus || "") !== "COMPLETED") continue;
-        const tp = Number(o.totalPrice || 0);
-        if (o.fiat === "VND") { if (tradeType === "BUY") buyVND += tp; else sellVND += tp; }
-        count++;
-        if (items.length < 40) items.push({ t: tradeType, asset: o.asset, fiat: o.fiat, totalPrice: tp, amount: Number(o.amount), date: o.createTime });
+    for (let w = 0; w < 24; w++) {
+      const end = now - w * 30 * DAY, start = end - 30 * DAY + 1;
+      for (let page = 1; page <= 10; page++) {
+        let list = [];
+        try {
+          const r = await signedGet("/sapi/v1/c2c/orderMatch/listUserOrderHistory", "tradeType=" + tradeType + "&startTimestamp=" + start + "&endTimestamp=" + end + "&page=" + page + "&rows=100", KEY, SECRET);
+          list = r.ok && r.data && Array.isArray(r.data.data) ? r.data.data : [];
+        } catch (_) { break; }
+        for (const o of list) {
+          if ((o.orderStatus || "") !== "COMPLETED" || o.fiat !== "VND") continue;
+          const id = String(o.orderNumber || `${tradeType}|${o.createTime}|${o.totalPrice}`);
+          seen.set(id, { id, t: tradeType, vnd: Number(o.totalPrice || 0), amount: Number(o.amount || 0), asset: o.asset, date: o.createTime });
+        }
+        if (list.length < 100) break;
       }
-      if (list.length < 100) break;
     }
   }
-  return { buyVND, sellVND, netVND: buyVND - sellVND, count, items };
+  const items = [...seen.values()].sort((a, b) => b.date - a.date);
+  const buyVND = items.filter((x) => x.t === "BUY").reduce((s, x) => s + x.vnd, 0), sellVND = items.filter((x) => x.t === "SELL").reduce((s, x) => s + x.vnd, 0);
+  return { buyVND, sellVND, netVND: buyVND - sellVND, count: items.length, items: items.slice(0, 500) };
 }
 
 Deno.serve(async (req) => {
@@ -341,7 +345,7 @@ Deno.serve(async (req) => {
     const out = {
       version: 2,
       balances,
-      deposited: { vnd: depositedVND, fiatVND: dep.totalVND, p2pBuyVND: p2p.buyVND, p2pSellVND: p2p.sellVND, count: dep.count + p2p.count },
+      deposited: { vnd: depositedVND, fiatVND: dep.totalVND, p2pBuyVND: p2p.buyVND, p2pSellVND: p2p.sellVND, count: dep.count + p2p.count, p2pItems: p2p.items, fiatItems: dep.items },
       earn: earn.qty ? { detail: earn.detail } : null,
       earnError: earn.error || null,
       futures: fut.data || null,

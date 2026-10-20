@@ -283,7 +283,7 @@ function CoinRow({ r, vnd, canW, onEdit, onDelete }) {
 }
 
 function CoinInvest({ active = true }) {
-  const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner } = useData();
+  const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner, settings = {}, setSettings } = useData();
   const activeRef = useRef(active); activeRef.current = active; // tab ẩn → ngừng poll giá
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
@@ -333,14 +333,30 @@ function CoinInvest({ active = true }) {
   };
   useEffect(() => { if (!active) return; loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey, active]);
 
+  // SỔ NẠP TIỀN CỘNG DỒN: Binance chỉ trả lịch sử P2P ~30 ngày gần nhất → khoản nạp cũ "rơi" khỏi tổng (đã nạp giảm dần).
+  // Mỗi lần đồng bộ: lệnh nạp/rút nào đã thấy thì LƯU MÃI vào settings.coinDeposits (khoá = loại|thời điểm|số tiền), không bao giờ xoá.
+  const ledger = settings.coinDeposits || { items: {}, extraVnd: 0 };
+  const mergeDeposits = (data) => {
+    const d = data?.deposited || {}, add = {};
+    const p2p = d.p2pItems || data?.depositItems?.p2p || [], fiat = d.fiatItems || data?.depositItems?.fiat || [];
+    for (const x of p2p) { const vndAmt = Number(x.vnd ?? x.totalPrice) || 0; if (!vndAmt || (x.fiat && x.fiat !== "VND")) continue; const k = `${x.t}|${x.date}|${vndAmt}`; if (!ledger.items?.[k]) add[k] = { t: x.t, vnd: vndAmt, date: x.date }; }
+    for (const x of fiat) { if (x.fiat !== "VND" || !x.amount) continue; const k = `FIAT|${x.date}|${x.amount}`; if (!ledger.items?.[k]) add[k] = { t: "FIAT", vnd: Number(x.amount), date: x.date }; }
+    if (Object.keys(add).length) setSettings({ coinDeposits: { ...ledger, items: { ...(ledger.items || {}), ...add } } });
+  };
+  const ledgerList = Object.values(ledger.items || {});
+  const ledgerVnd = ledgerList.reduce((s, x) => s + (x.t === "SELL" ? -x.vnd : x.vnd), 0);
+  const ledgerFrom = ledgerList.length ? Math.min(...ledgerList.map((x) => x.date)) : null;
+  const [depEdit, setDepEdit] = useState(null);
+
   // Đồng bộ ví Binance — nặng hơn nên GIÃN 5 phút (số dư/giá vốn đổi chậm); giá thị trường vẫn realtime 15s ở trên.
   const syncBinance = async (silent) => {
     if (!silent) setSyncing(true); setWErr("");
     try {
-      const { data, error } = await supabase.functions.invoke("qws-binance");
+      const { data, error } = await supabase.functions.invoke("qws-binance?debug=1");
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setBn(data || {});
+      mergeDeposits(data);
     } catch (e) { if (!silent) setWErr("Đồng bộ lỗi: " + (e.message || String(e))); }
     if (!silent) setSyncing(false);
   };
@@ -398,7 +414,7 @@ function CoinInvest({ active = true }) {
   }, [binRows, manRows, fut]);
 
   // So với tiền VND đã nạp (P2P + fiat) — CHỈ tài sản Binance, không gồm coin nhập tay
-  const depVnd = Number(bn?.deposited?.vnd) || 0;
+  const depVnd = Math.max(Number(bn?.deposited?.vnd) || 0, ledgerVnd) + (Number(ledger.extraVnd) || 0); // sổ cộng dồn (không rơi khoản cũ) + điều chỉnh tay
   const hasDep = depVnd > 0 && tot.missing === 0;
   const vsDepVnd = hasDep ? tot.binance * vnd - depVnd : null;
   const vsDep = hasDep ? vsDepVnd / vnd : null;
@@ -440,7 +456,14 @@ function CoinInvest({ active = true }) {
                   {headPnl >= 0 ? <TrendingUp size={16} className="shrink-0" /> : <TrendingDown size={16} className="shrink-0" />}
                   {isOwner ? `${fmtUsdSigned(vsDep)} (${sPct(vsDepPct)})` : `${fmtUsdSigned(tot.manPnl)}${tot.manPct != null ? ` (${sPct(tot.manPct)})` : ""}`}
                 </div>
-                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)}</div>}
+                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)} <button onClick={() => setDepEdit(depEdit == null ? String(ledger.extraVnd || "") : null)} className="ml-1 font-bold text-amber-200 underline">{depEdit == null ? "Sửa" : "Đóng"}</button></div>}
+                {isOwner && depEdit != null && (
+                  <div className="mt-2 rounded-xl bg-white/10 p-3 text-[12px] text-amber-50">
+                    <div><b>Đã nạp</b> = sổ nạp tự ghi <b>{formatVND(ledgerVnd)}</b> ({ledgerList.length} lệnh P2P/nạp{ledgerFrom ? ` từ ${new Date(ledgerFrom).toLocaleDateString("vi-VN")}` : ""}) + khoản bạn tự thêm. Binance chỉ cho xem lịch sử P2P khoảng 30 ngày gần nhất nên các lần nạp CŨ HƠN cần nhập vào đây (app sẽ giữ mãi, không còn tự giảm). Nếu sau này sổ tự tìm thấy thêm lệnh cũ, nhớ giảm phần tự thêm để khỏi tính 2 lần.</div>
+                    <div className="mt-2 flex items-center gap-2"><span className="shrink-0">Nạp thêm ngoài sổ:</span><input inputMode="numeric" value={depEdit} onChange={(e) => setDepEdit(e.target.value.replace(/[^\d]/g, ""))} placeholder="vd 11650000" className="w-full rounded-lg bg-white px-2.5 py-1.5 text-sm text-slate-900" /><span>đ</span></div>
+                    <button onClick={() => { setSettings({ coinDeposits: { ...ledger, extraVnd: Number(depEdit) || 0 } }); setDepEdit(null); }} className="mt-2 rounded-lg bg-amber-400 px-3 py-1.5 text-[12px] font-extrabold text-slate-900">Lưu</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
