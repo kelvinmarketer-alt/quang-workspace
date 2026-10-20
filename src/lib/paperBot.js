@@ -15,14 +15,26 @@ export const SETUPS = {
   SMC: { label: "Đảo chiều SMC (CHoCH → OB)", desc: "Cấu trúc đang giảm (tăng) bị phá bằng nến đóng vượt đỉnh (đáy) swing = CHoCH; chờ giá hồi về Order Block khởi nguồn + nến từ chối → vào." },
 };
 
-// Mặc định đề xuất cho vốn 1.000$
+// Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
+  cfgVer: 2,
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
-  rr: 2, beAtR: 1, timeStopBars: 96, feePct: 0.05, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát — phí ăn hết lợi thế)
-  adaptive: true, warmupDays: 30, lookback: 20, minSample: 8, minExp: 0.05, // tự tối ưu: học thêm 30 ngày trước ngày bắt đầu, xét 20 lệnh gần nhất, cần ≥8 mẫu, kỳ vọng ≥ +0.05R mới vào
+  rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
+  entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
+  partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
+  // Tự tối ưu: học thêm 90 ngày trước ngày bắt đầu; xét 60 lệnh gần nhất, cần ≥20 mẫu; điểm thận trọng = kỳ vọng − 1×sai số chuẩn ≥ 0 mới vào;
+  // cổng khung giờ: cả khung đang âm thì nghỉ khung đó. Kiểm tra 30–150 ngày: vốn giữ 959–1.073$ trong khi luật gốc còn 530–813$.
+  adaptive: true, warmupDays: 90, lookback: 60, minSample: 20, minExp: 0, confK: 1, tfGate: true,
   htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h", "4h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"],
 };
+// Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
+export function cfgOf(session) {
+  const c = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
+  if ((session?.cfg?.cfgVer || 1) < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
+  return c;
+}
 
 // ---------------- Dữ liệu nến Futures (cache IndexedDB, chỉ tải phần mới) ----------------
 const DB = "qws-paperbot", STORE = "klines";
@@ -33,7 +45,11 @@ async function idbSet(k, v) { try { const d = await idb(); await new Promise((ok
 // mảng nến: [openTime, open, high, low, close, volume] — chỉ nến ĐÃ ĐÓNG
 const MEM = new Map();
 async function getJson(url, tries = 4) {
-  const r = await fetch(url);
+  let r;
+  try { r = await fetch(url); } catch (e) { // mạng chập chờn → thử lại
+    if (tries <= 1) throw new Error("Không tải được dữ liệu Binance (mạng): " + (e.message || e));
+    await new Promise((ok) => setTimeout(ok, 2000)); return getJson(url, tries - 1);
+  }
   if (r.status === 429 || r.status === 418) { // Binance giới hạn tần suất → chờ rồi thử lại
     if (tries <= 1) throw new Error("Binance đang giới hạn tần suất, thử lại sau 1 phút");
     await new Promise((ok) => setTimeout(ok, (Number(r.headers.get("retry-after")) || 5) * 1000));
@@ -155,28 +171,43 @@ function findSignals(K, setups) {
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
 function simTrade(K, s, cfg, atr, endIdx) {
-  const e = s.i + 1; if (e > endIdx) return null; // chưa có nến để vào
-  const slip = cfg.slipPct / 100, side = s.side;
-  const entry = K[e][1] * (1 + side * slip);
+  const e0 = s.i + 1; if (e0 > endIdx) return null; // chưa có nến để vào
+  const slip = cfg.slipPct / 100, side = s.side, a = atr[s.i];
+  const limit = cfg.entryMode === "limit", maker = (cfg.makerPct ?? 0.02) / 100, taker = cfg.feePct / 100;
+  // Vào lệnh: thị trường ở giá mở nến kế (trả phí taker + trượt) · hoặc LỆNH CHỜ ở giá đóng nến tín hiệu, chờ tối đa 3 nến (phí maker, không trượt)
+  let e = e0, entry = K[e0][1] * (1 + side * slip);
+  if (limit) {
+    const lim = K[s.i][4]; e = -1;
+    for (let k = e0; k <= Math.min(endIdx, e0 + 2); k++) if ((side === 1 ? K[k][3] < lim : K[k][2] > lim)) { e = k; break; } // giá phải xuyên qua (không chỉ chạm) mới tính khớp — thận trọng về hàng chờ
+    if (e < 0) return e0 + 2 <= endIdx ? { skip: "lệnh chờ không khớp" } : null;
+    entry = lim;
+  }
   const risk = (entry - s.sl) * side;
-  const a = atr[s.i];
   if (!(risk > 0) || risk > 4 * a) return { skip: risk > 0 ? "SL xa > 4 ATR" : "giá vào đã qua SL" }; // luật EA: huỷ lệnh đuổi giá
-  if (cfg.maxFeeR > 0 && (2 * (cfg.feePct / 100) * entry) / risk > cfg.maxFeeR) return { skip: "SL quá sát (phí > " + cfg.maxFeeR + "R)" }; // phí ăn quá nhiều so với rủi ro
-  const tp = entry + side * cfg.rr * risk;
-  let sl = s.sl, be = false, exit = null, reason = null, exitIdx = null, maxR = 0, mae = 0;
+  if (cfg.maxFeeR > 0 && (2 * taker * entry) / risk > cfg.maxFeeR) return { skip: "SL quá sát (phí > " + cfg.maxFeeR + "R)" }; // phí ăn quá nhiều so với rủi ro
+  const tp = entry + side * cfg.rr * risk, pAt = cfg.partialAtR > 0 ? entry + side * cfg.partialAtR * risk : null;
+  const inFee = limit ? maker : taker;
+  let sl = s.sl, be = false, exit = null, reason = null, exitIdx = null, maxR = 0, mae = 0, part = 0, exitFee = taker; // part: R đã chốt 1 nửa
   for (let k = e; k <= endIdx; k++) {
     const [, , h, l, c] = K[k];
-    const adv = side === 1 ? l : h, fav = side === 1 ? h : l;
+    const adv = side === 1 ? l : h, fav = side === 1 ? h : l, fillBar = limit && k === e;
     mae = Math.max(mae, Math.min(((entry - adv) * side) / risk, 1.2));
-    if ((adv - sl) * side <= 0) { exit = sl * (1 - side * slip); reason = be ? "Hoà vốn" : "Cắt lỗ"; exitIdx = k; break; }
-    if ((fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; maxR = cfg.rr; break; }
+    if ((adv - sl) * side <= 0) { exit = sl * (1 - side * slip); reason = be ? (part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ"; exitIdx = k; break; }
+    if (fillBar) { maxR = Math.max(maxR, ((c - entry) * side) / risk); continue; } // nến khớp lệnh chờ: không tính chạm TP (không biết thứ tự)
+    if ((fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; maxR = cfg.rr; exitFee = maker; break; }
     maxR = Math.max(maxR, ((fav - entry) * side) / risk);
+    if (pAt != null && !part && (fav - pAt) * side >= 0) { part = cfg.partialAtR; be = true; sl = entry + side * 0.05 * risk; } // chốt 50% + dời SL hoà vốn
     if (!be && cfg.beAtR > 0 && maxR >= cfg.beAtR) { be = true; sl = entry + side * 0.05 * risk; } // dời SL về hoà vốn (dương nhẹ) từ nến sau
     if (k - e >= cfg.timeStopBars) { exit = c; reason = "Hết thời gian"; exitIdx = k; break; }
   }
-  const feeR = (2 * (cfg.feePct / 100) * entry) / risk;
-  return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp, risk, rr: cfg.rr, beAtR: cfg.beAtR, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r: exit == null ? null : ((exit - entry) * side) / risk - feeR };
+  const w = part ? 0.5 : 1; // khối lượng còn lại khi thoát
+  const feeR = ((inFee + (part ? 0.5 * maker + 0.5 * exitFee : exitFee)) * entry) / risk;
+  const r = exit == null ? null : (part ? 0.5 * part : 0) + (w * (exit - entry) * side) / risk - feeR;
+  return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp, risk, rr: cfg.rr, beAtR: cfg.beAtR, part, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r };
 }
+
+// R của lệnh (đã chốt 1 nửa ở part R thì nửa còn lại tính theo giá px)
+const uRof = (part, entry, px, side, risk, feeR) => (part ? 0.5 * part + (0.5 * (px - entry) * side) / risk : ((px - entry) * side) / risk) - feeR;
 
 // Các cấu hình bộ tối ưu được thử (R:R × dời hoà vốn) — luôn gồm cấu hình gốc của phiên
 function variantsOf(cfg) {
@@ -184,13 +215,13 @@ function variantsOf(cfg) {
   if (!v.some(([r, b]) => r === cfg.rr && b === cfg.beAtR)) v.push([cfg.rr, cfg.beAtR]);
   return v.map(([rr, beAtR]) => ({ rr, beAtR, label: `R:R ${rr}${beAtR ? ` · hoà vốn ${beAtR}R` : ""}` }));
 }
-export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "setup (mọi cặp, khung)"];
+export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "setup (mọi cặp, khung)", "cả khung giờ đang âm"];
 
 // ---------------- Chạy cả phiên ----------------
 // session: { startAt, stoppedAt?, cfg } · onProgress(text)
 // Trả về dữ liệu THÔ (lệnh theo R); finalize() ghép giá realtime + tính danh mục.
 export async function runSession(session, onProgress = () => {}) {
-  const cfg = { ...DEFAULT_CFG, ...(session.cfg || {}) };
+  const cfg = cfgOf(session);
   const until = session.stoppedAt || Date.now(), startAt = session.startAt;
   const learnFrom = cfg.adaptive ? startAt - cfg.warmupDays * 86400000 : startAt;
   const V = variantsOf(cfg), baseVi = V.findIndex((v) => v.rr === cfg.rr && v.beAtR === cfg.beAtR);
@@ -233,7 +264,7 @@ export async function runSession(session, onProgress = () => {}) {
           id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, side: s.side, note: s.note,
           signalAt: K[s.i][0], entryAt, entry: t.entry, sl: t.sl, curSl: t.curSl, tp: t.tp, risk: t.risk, rr: t.rr, beAtR: t.beAtR,
           exitAt: t.open ? null : K[t.exitIdx][0] + step, exit: t.open ? null : t.exit, reason: t.open ? "Đang mở" : t.reason, be: t.be,
-          r: t.r, uR: t.open ? ((last - t.entry) * s.side) / t.risk - t.feeR : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
+          r: t.r, part: t.part, uR: t.open ? uRof(t.part, t.entry, last, s.side, t.risk, t.feeR) : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
         };
       };
       shadows.push({ key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
@@ -251,14 +282,22 @@ export async function runSession(session, onProgress = () => {}) {
   });
   for (const lv of idx) for (const m of lv.values()) for (const a of m) a.sort((p, q) => p.x - q.x);
   const upTo = (a, T) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m].x <= T) lo = m + 1; else hi = m; } return lo; };
+  // Cổng theo KHUNG GIỜ: kỳ vọng gần đây của cả khung (mọi cặp, setup; cấu hình gốc) âm → tạm nghỉ khung đó
+  const tfIdx = new Map();
+  for (const sh of shadows) { if (sh.r[baseVi] == null) continue; let a = tfIdx.get(sh.tf); if (!a) tfIdx.set(sh.tf, (a = [])); a.push({ x: sh.x[baseVi], r: sh.r[baseVi] }); }
+  for (const a of tfIdx.values()) a.sort((p, q) => p.x - q.x);
+  const tfExp = (tf, T) => { const a = tfIdx.get(tf) || [], c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lookback * 3), c); return w.length >= cfg.minSample * 2 ? { exp: w.reduce((s, x) => s + x.r, 0) / w.length, n: w.length } : null; };
+  // Điểm 1 cấu hình = kỳ vọng − confK × sai số chuẩn (thận trọng: mẫu ít / dao động lớn → điểm thấp)
+  const scoreOf = (w) => { const n = w.length, m = w.reduce((s, x) => s + x.r, 0) / n; if (!cfg.confK || n < 2) return { m, sc: m }; const sd = Math.sqrt(w.reduce((s, x) => s + (x.r - m) ** 2, 0) / (n - 1)); return { m, sc: m - (cfg.confK * sd) / Math.sqrt(n) }; };
   // Quyết định tại thời điểm T: chỉ dùng lệnh bóng đã ĐÓNG trước T (walk-forward)
-  const decide = (keys, T) => {
+  const decide = (keys, T, tf) => {
+    if (cfg.tfGate) { const g = tfExp(tf, T); if (g && g.exp < 0) return { level: 3, vi: baseVi, exp: g.exp, n: g.n, win: null, take: false, why: "khung" }; }
     for (let l = 0; l < 3; l++) {
       const m = idx[l].get(keys[l]); if (!m) continue;
-      const ev = m.map((a, vi) => { const c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lookback), c); return { vi, n: w.length, exp: w.length ? w.reduce((s, x) => s + x.r, 0) / w.length : -Infinity, win: w.length ? w.filter((x) => x.r > 0.05).length / w.length : 0 }; }).filter((e) => e.n >= cfg.minSample);
+      const ev = m.map((a, vi) => { const c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lookback), c); if (!w.length) return { vi, n: 0 }; const { m: mean, sc } = scoreOf(w); return { vi, n: w.length, exp: mean, sc, win: w.filter((x) => x.r > 0.05).length / w.length }; }).filter((e) => e.n >= cfg.minSample);
       if (!ev.length) continue;
-      const best = ev.sort((a, b) => b.exp - a.exp)[0];
-      return { level: l, vi: best.vi, exp: best.exp, n: best.n, win: best.win * 100, take: best.exp >= cfg.minExp };
+      const best = ev.sort((a, b) => b.sc - a.sc)[0];
+      return { level: l, vi: best.vi, exp: best.exp, n: best.n, win: best.win * 100, take: best.sc >= cfg.minExp };
     }
     return { level: -1, vi: baseVi, exp: null, n: 0, win: null, take: true };
   };
@@ -268,7 +307,7 @@ export async function runSession(session, onProgress = () => {}) {
     if (!sh.live) continue;
     if (!(sh.entryAt < (busyB[sh.key] ?? -1))) { const t = sh.build(baseVi); baseTrades.push(t); busyB[sh.key] = t.exitAt ?? Infinity; }
     if (!cfg.adaptive || sh.entryAt < (busyA[sh.key] ?? -1)) continue;
-    const d = decide(keysOf(sh), sh.entryAt);
+    const d = decide(keysOf(sh), sh.entryAt, sh.tf);
     const prev = cellState.get(sh.cell), cur = d.take ? `on:${d.vi}` : "off";
     if (prev !== cur) {
       optLog.push({ t: sh.entryAt, cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, take: d.take, variant: V[d.vi].label, exp: d.exp, n: d.n, level: d.level, first: prev == null, prevOn: prev ? prev !== "off" : null });
@@ -276,15 +315,16 @@ export async function runSession(session, onProgress = () => {}) {
     }
     const score = { exp: d.exp, n: d.n, level: d.level, variant: V[d.vi].label };
     if (d.take) { const t = sh.build(d.vi, { score }); trades.push(t); busyA[sh.key] = t.exitAt ?? Infinity; }
-    else rejected.push(sh.build(baseVi, { score, status: "reject", why: `kỳ vọng ${d.exp.toFixed(2)}R / ${d.n} lệnh gần nhất` }));
+    else rejected.push(sh.build(baseVi, { score, status: "reject", why: d.why === "khung" ? `khung ${sh.tf} đang âm ${d.exp.toFixed(2)}R` : `kỳ vọng ${d.exp.toFixed(2)}R / ${d.n} lệnh gần nhất` }));
   }
 
   // Trạng thái bộ tối ưu tại hiện tại cho từng ô đã có tín hiệu
   const seen = new Map(); for (const sh of shadows) seen.set(sh.cell, sh);
-  const optState = [...seen.values()].map((sh) => { const d = decide(keysOf(sh), until); return { cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, ...d, variant: V[d.vi].label }; })
+  const optState = [...seen.values()].map((sh) => { const d = decide(keysOf(sh), until, sh.tf); return { cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, ...d, variant: V[d.vi].label }; })
     .sort((a, b) => (b.take - a.take) || ((b.exp ?? -9) - (a.exp ?? -9)));
 
-  return { cfg, startAt, until, stopped: !!session.stoppedAt, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
+  const tfState = cfg.tfs.map((tf) => ({ tf, ...(tfExp(tf, until) || { exp: null, n: 0 }), pause: cfg.tfGate && (tfExp(tf, until)?.exp ?? 0) < 0 }));
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
 }
 
 // Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.
@@ -296,9 +336,9 @@ function applyTick(t, bar, cfg, hits) {
   if (hitSl || hitTp) { // cùng chạm trong 1 nến → tính THUA như luật chung
     const exit = hitSl ? t.curSl * (1 - side * slip) : t.tp;
     if (!hits.has(t.id)) hits.set(t.id, Date.now());
-    return { ...t, exit, exitAt: hits.get(t.id), reason: hitSl ? (t.be ? "Hoà vốn" : "Cắt lỗ") : "Chốt lời", r: ((exit - t.entry) * side) / t.risk - t.feeR, uR: null, last: bar.c, liveExit: true };
+    return { ...t, exit, exitAt: hits.get(t.id), reason: hitSl ? (t.be ? (t.part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ") : "Chốt lời", r: uRof(t.part, t.entry, exit, side, t.risk, t.feeR), uR: null, last: bar.c, liveExit: true };
   }
-  return { ...t, last: bar.c, uR: ((bar.c - t.entry) * side) / t.risk - t.feeR, mfe: Math.max(t.mfe || 0, (((side === 1 ? bar.h : bar.l) - t.entry) * side) / t.risk) };
+  return { ...t, last: bar.c, uR: uRof(t.part, t.entry, bar.c, side, t.risk, t.feeR), mfe: Math.max(t.mfe || 0, (((side === 1 ? bar.h : bar.l) - t.entry) * side) / t.risk) };
 }
 export function finalize(raw, live, hits = new Map()) {
   if (!raw) return null;

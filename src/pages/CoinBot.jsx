@@ -4,7 +4,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
-import { runSession, finalize, statsOf, DEFAULT_CFG, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
+import { runSession, finalize, statsOf, cfgOf, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -51,7 +51,7 @@ function StatTable({ title, rows }) {
 
 function SetupForm({ initial, onStart, onCancel }) {
   const [days, setDays] = useState(60);
-  const [c, setC] = useState({ ...DEFAULT_CFG, ...(initial || {}) });
+  const [c, setC] = useState(() => cfgOf({ cfg: initial }));
   const tog = (k, v) => setC((o) => ({ ...o, [k]: o[k].includes(v) ? o[k].filter((x) => x !== v) : [...o[k], v] }));
   const chip = (on) => `rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
   const field = (k, label, step = 1, suffix = "") => (
@@ -79,14 +79,20 @@ function SetupForm({ initial, onStart, onCancel }) {
           {field("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}{field("rr", "Chốt lời gốc (R:R)", 0.5, "R")}{field("beAtR", "Dời hoà vốn ở (0=tắt)", 0.5, "R")}{field("feePct", "Phí mỗi chiều", 0.01, "%")}
           {field("maxFeeR", "Bỏ lệnh khi phí > (0=tắt)", 0.05, "R")}
         </div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cách vào lệnh</div>
+          <div className="flex flex-wrap gap-1.5">{[["limit", "Lệnh chờ ở giá đóng nến (maker 0,02%)"], ["market", "Giá thị trường nến kế (taker 0,05% + trượt)"]].map(([k, l]) => <button key={k} onClick={() => setC({ ...c, entryMode: k })} className={chip(c.entryMode === k)}>{l}</button>)}</div>
+          <div className="mt-1 text-[11px] text-slate-400">Lệnh chờ chỉ khớp khi giá xuyên qua mức đặt trong 3 nến, không khớp thì huỷ. Kiểm tra 180 ngày: lỗ TB giảm từ −0,23R xuống −0,11R/lệnh.</div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", "Chốt 50% ở (0=tắt)", 0.5, "R")}</div>
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700"><input type="checkbox" checked={c.htfFilter} onChange={(e) => setC({ ...c, htfFilter: e.target.checked })} /> Chỉ đánh thuận xu hướng khung lớn (đa khung — luật cốt lõi)</label>
         <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
           <label className="flex items-center gap-2 text-[13px] font-extrabold text-violet-800"><input type="checkbox" checked={c.adaptive} onChange={(e) => setC({ ...c, adaptive: e.target.checked })} /><Brain size={15} /> Tự tối ưu dần (walk-forward)</label>
           <div className="mt-1 text-[11.5px] leading-snug text-violet-900/70">Mỗi tín hiệu được thử song song 6 cấu hình (R:R 1.5/2/3 × có/không dời hoà vốn). Khi có tín hiệu mới, bot chỉ nhìn các lệnh <b>đã đóng trước đó</b> (không nhìn trước tương lai) → chọn cấu hình kỳ vọng cao nhất, kỳ vọng thấp hơn ngưỡng thì <b>bỏ tín hiệu</b>. Thiếu mẫu ở cặp+khung+setup thì học từ nhóm rộng hơn. Luôn chạy kèm “Luật gốc” để so sánh.</div>
-          {c.adaptive && <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("warmupDays", "Học trước ngày bắt đầu", 5, "ngày")}{field("lookback", "Xét N lệnh gần nhất", 5)}{field("minSample", "Cần tối thiểu", 1, "mẫu")}{field("minExp", "Vào khi kỳ vọng ≥", 0.05, "R")}</div>}
+          {c.adaptive && <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("warmupDays", "Học trước ngày bắt đầu", 5, "ngày")}{field("lookback", "Xét N lệnh gần nhất", 5)}{field("minSample", "Cần tối thiểu", 1, "mẫu")}{field("minExp", "Vào khi điểm ≥", 0.05, "R")}{field("confK", "Độ thận trọng (0=tắt)", 0.25, "× sai số")}</div>}
+          {c.adaptive && <label className="mt-2 flex items-center gap-2 text-[12px] font-semibold text-violet-900"><input type="checkbox" checked={c.tfGate} onChange={(e) => setC({ ...c, tfGate: e.target.checked })} /> Nghỉ cả khung giờ khi khung đó đang lỗ (kỳ vọng gần đây âm)</label>}
         </div>
         <div className="rounded-lg bg-slate-50 p-2.5 text-[11.5px] leading-snug text-slate-500">
-          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát). Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL. Phí taker Futures 0,05%/chiều + trượt giá 0,02%.
+          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát), vào bằng <b>lệnh chờ</b>, không dời hoà vốn (dữ liệu cho thấy dời hoà vốn làm giảm lợi nhuận). Bộ tối ưu: học 90 ngày, xét 60 lệnh gần nhất, độ thận trọng 1 — chỉ vào khi lợi thế đã được chứng minh. Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL.
         </div>
         <div className="flex gap-2">
           {onCancel && <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Huỷ</button>}
@@ -153,7 +159,7 @@ export default function CoinBot() {
   const [optAll, setOptAll] = useState(false);
   const [toast, setToast] = useState(null);
   const running = useRef(false), lastRun = useRef(0), hits = useRef(new Map()), prevSt = useRef(null), debounce = useRef(null);
-  const cfg = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
+  const cfg = cfgOf(session);
   const active = !!session && !session.stoppedAt && isOwner;
 
   const run = async () => {
@@ -242,7 +248,7 @@ export default function CoinBot() {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · {cfg.entryMode === "limit" ? "vào lệnh chờ" : "vào giá thị trường"}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
         </div>
@@ -347,6 +353,35 @@ export default function CoinBot() {
             })}</div>
           </Card>
         )}
+
+        <Card className="!p-3">
+          <Title icon={Activity}>So sánh khung giờ — khung nào hiệu quả nhất</Title>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-[12px]">
+              <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400">
+                <th className="py-1.5 pr-2">Khung</th><th className="py-1.5 pr-2 text-right">Lệnh (gốc)</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right">R TB</th><th className="py-1.5 pr-2 text-right">PF</th><th className="py-1.5 pr-2 text-right">Phí TB</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ gốc</th>{cfg.adaptive && <><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5">Bot hiện tại</th></>}
+              </tr></thead>
+              <tbody>{(() => {
+                const rows = cfg.tfs.map((tf) => ({ tf, b: statsOf(res.baseTrades.filter((t) => t.tf === tf)), a: statsOf(res.trades.filter((t) => t.tf === tf)), usdB: res.basePortfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), usdA: res.portfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), st: res.tfState?.find((x) => x.tf === tf) }));
+                const best = rows.filter((r) => r.b.n >= 10).sort((x, y) => y.b.avgR - x.b.avgR)[0]?.tf;
+                return rows.map(({ tf, b, a, usdB, usdA, st }) => (
+                  <tr key={tf} className={`border-b border-slate-50 ${tf === best ? "bg-emerald-50/60" : ""}`}>
+                    <td className="py-1.5 pr-2 font-extrabold text-slate-800">{TFS[tf].label}{tf === best ? " 🏆" : ""}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{b.n}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{b.winRate == null ? "—" : `${b.winRate.toFixed(0)}%`}</td>
+                    <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(b.avgR)}`}>{rr(b.avgR)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{b.pf === Infinity ? "∞" : f2(b.pf)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{f2(b.feeR)}R</td>
+                    <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(usdB)}`}>{usd(usdB, 0)}</td>
+                    {cfg.adaptive && <><td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${a.n ? tone(usdA) : "text-slate-400"}`}>{a.n ? <>{usd(usdA, 0)} <span className="font-normal text-slate-400">· {a.n} lệnh</span></> : "không vào"}</td>
+                      <td className="py-1.5 text-[11px]">{st?.pause ? <span className="font-bold text-rose-600">Tạm nghỉ (khung đang {rr(st.exp)})</span> : st?.exp != null ? <span className="font-bold text-emerald-700">Đang đánh ({rr(st.exp)})</span> : <span className="text-slate-400">đang học</span>}</td></>}
+                  </tr>
+                ));
+              })()}</tbody>
+            </table>
+          </div>
+          <div className="mt-1.5 text-[11px] leading-snug text-slate-400">Lãi/lỗ gốc = mọi tín hiệu của khung theo luật gốc trong danh mục. "Bot hiện tại" = kỳ vọng {cfg.lookback * 3} lệnh gần nhất của cả khung; âm thì bot tự nghỉ khung đó tới khi hồi lại.</div>
+        </Card>
 
         {cfg.adaptive && (
           <div className="grid gap-3 xl:grid-cols-3">
@@ -456,7 +491,7 @@ export default function CoinBot() {
 
         <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
           <ShieldAlert size={13} className="mt-0.5 shrink-0" />
-          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, vào ở giá mở nến kế tiếp, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát, có phí + trượt giá. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
+          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, vào bằng lệnh chờ ở giá đóng nến tín hiệu (chỉ khớp khi giá xuyên qua) hoặc giá mở nến kế tiếp, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát, có phí + trượt giá. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
         </div>
       </>)}
     </div>
