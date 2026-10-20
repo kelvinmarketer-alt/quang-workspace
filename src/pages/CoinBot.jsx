@@ -585,7 +585,7 @@ export default function CoinBot() {
           <Num label="Kỳ vọng / lệnh ($)" v={usd(expUsd)} sub="lãi/lỗ TB mỗi lệnh" tone={tone(expUsd)} />
           <Num label="Thắng TB / Thua TB" v={<>{rr(all.avgWin)} <span className="text-slate-300">/</span> <span className="text-rose-600">{rr(all.avgLoss)}</span></>} sub={`payoff ${f2(all.payoff)} · lớn nhất ${rr(all.maxWin)}`} />
           <Num label="SQN (chất lượng hệ)" v={f2(all.sqn)} sub="<1.6 kém · 2–3 tốt" tone={all.sqn >= 1.6 ? "text-emerald-600" : all.sqn != null ? "text-rose-600" : undefined} />
-          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R / lệnh`} />
+          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R/lệnh · trong đó funding ${all.fundR == null ? "—" : `${all.fundR >= 0 ? "" : "nhận "}${Math.abs(all.fundR).toFixed(3)}R`}`} />
           <Num label="Recovery factor" v={f2(recovery)} sub="lãi ròng ÷ sụt vốn, >2 tốt" tone={tone(recovery)} />
           <Num label="Giữ lệnh TB" v={all.holdH == null ? "—" : all.holdH >= 24 ? `${(all.holdH / 24).toFixed(1)} ngày` : `${all.holdH.toFixed(1)} giờ`} sub={Object.entries(all.reasons).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"} />
           <Num label="Long / Short" v={<><span className={tone(longS.avgR)}>{longS.winRate?.toFixed(0) ?? "—"}%</span> <span className="text-slate-300">/</span> <span className={tone(shortS.avgR)}>{shortS.winRate?.toFixed(0) ?? "—"}%</span></>} sub={`${longS.n} long ${rr(longS.avgR)} · ${shortS.n} short ${rr(shortS.avgR)}`} />
@@ -749,7 +749,7 @@ export default function CoinBot() {
 
         <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
           <ShieldAlert size={13} className="mt-0.5 shrink-0" />
-          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, chỉ vào lệnh chờ ở giá đóng nến tín hiệu (khớp khi giá xuyên qua, hết hạn thì huỷ), không đuổi giá, SL ngoài vùng nhiễu, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát, có phí + trượt giá. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
+          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, chỉ vào lệnh chờ ở giá đóng nến tín hiệu (khớp khi giá xuyên qua, hết hạn thì huỷ), không đuổi giá, SL ngoài vùng nhiễu, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát. Phí: vào lệnh chờ 0,02%, chốt lời 0,02%, cắt lỗ 0,05% + trượt giá, và phí FUNDING thật của Binance (BTC/ETH mỗi 8h, XAU mỗi 4h) khi giữ lệnh qua mốc funding. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
         </div>
       </>)}
     </div>

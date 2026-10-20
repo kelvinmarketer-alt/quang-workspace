@@ -79,6 +79,30 @@ async function getJson(url, tries = 4) {
 }
 let pageHook = null; // runSession đếm số trang nến đang tải để báo tiến độ
 const INFLIGHT = new Map();
+// Lịch sử FUNDING thật của Binance (BTC/ETH mỗi 8h, XAU mỗi 4h) — [[fundingTime, rate]], cache như nến
+const FMEM = new Map();
+export async function loadFunding(symbol, fromTs) {
+  const key = `fund|${symbol}`, now = Date.now();
+  let rows = FMEM.get(key) || (await idbGet(key)) || [];
+  if (!rows.length || rows[0][0] > fromTs + 8 * 3600000) rows = [];
+  let start = rows.length ? rows[rows.length - 1][0] + 1 : fromTs;
+  for (let guard = 0; guard < 20 && start < now; guard++) {
+    const j = await getJson(`https://fapi.binance.com/fapi/v1/fundingRate?symbol=${symbol}&startTime=${start}&limit=1000`);
+    if (!Array.isArray(j) || !j.length) break;
+    for (const f of j) rows.push([f.fundingTime, Number(f.fundingRate)]);
+    start = j[j.length - 1].fundingTime + 1;
+    if (j.length < 1000) break;
+  }
+  FMEM.set(key, rows); await idbSet(key, rows);
+  return rows;
+}
+// Tổng tỉ lệ funding trong khoảng (from, to] — giữ vị thế qua mốc funding nào thì tính mốc đó
+function fundingSum(rows) {
+  const t = rows.map((r) => r[0]), ps = [0]; for (const r of rows) ps.push(ps[ps.length - 1] + r[1]);
+  const upTo = (x) => { let lo = 0, hi = t.length; while (lo < hi) { const m = (lo + hi) >> 1; if (t[m] <= x) lo = m + 1; else hi = m; } return lo; };
+  return (from, to) => ps[upTo(to)] - ps[upTo(from)];
+}
+
 export function loadKlines(symbol, tf, fromTs) {
   const key = `${symbol}|${tf}|${fromTs}`;
   if (!INFLIGHT.has(key)) INFLIGHT.set(key, loadKlines0(symbol, tf, fromTs).finally(() => INFLIGHT.delete(key)));
@@ -334,7 +358,13 @@ export async function runSession(session, onProgress = () => {}) {
   let done = 0, bars = 0;
   const say = () => onProgress(`Tải nến ${done}/${need.size} luồng${bars ? ` · đã tải ${bars.toLocaleString("vi-VN")} nến mới` : ""}…`);
   pageHook = (n) => { bars += n; say(); };
-  try { await Promise.all([...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => { done++; say(); }))); }
+  const fund = {};
+  try {
+    await Promise.all([
+      ...[...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => { done++; say(); })),
+      ...cfg.coins.map((c) => loadFunding(SYMBOLS[c], learnFrom - 86400000).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })), // lỗi tải funding → bỏ qua (không chặn bot)
+    ]);
+  }
   finally { pageHook = null; }
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
     const symbol = SYMBOLS[coin], step = TFS[tf].ms, key = `${coin}|${tf}`;
@@ -371,6 +401,13 @@ export async function runSession(session, onProgress = () => {}) {
       if (!sims[0]) continue;
       if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], ...sims[0].pending }); continue; }
       if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
+      // PHÍ FUNDING: giữ lệnh qua mốc funding → LONG trả khi tỉ lệ dương (SHORT nhận), tính theo R; cộng vào tổng phí
+      for (const t of sims) {
+        if (!t || t.skip) continue;
+        const from = K[t.entryIdx][0], to = t.open ? until : K[t.exitIdx][0] + step;
+        const fR = (fund[coin] ? fund[coin](from, to) : 0) * s.side * t.entry / t.risk;
+        t.fundR = fR; t.feeR += fR; if (t.r != null) t.r -= fR;
+      }
       const entryAt = K[sims[0].entryIdx][0];
       const build = (vi, extra) => {
         const t = sims[vi];
@@ -378,7 +415,7 @@ export async function runSession(session, onProgress = () => {}) {
           id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, side: s.side, note: s.note,
           signalAt: K[s.i][0], entryAt, entry: t.entry, sl: t.sl, curSl: t.curSl, tp: t.tp, risk: t.risk, rr: t.rr, beAtR: t.beAtR,
           exitAt: t.open ? null : K[t.exitIdx][0] + step, exit: t.open ? null : t.exit, reason: t.open ? "Đang mở" : t.reason, be: t.be,
-          r: t.r, part: t.part, uR: t.open ? uRof(t.part, t.entry, last, s.side, t.risk, t.feeR) : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
+          r: t.r, part: t.part, fundR: t.fundR || 0, uR: t.open ? uRof(t.part, t.entry, last, s.side, t.risk, t.feeR) : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
         };
       };
       shadows.push({ tags, key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
@@ -567,6 +604,6 @@ export function statsOf(list) {
     holdH: avg(done, (t) => (t.exitAt - t.entryAt) / 3600000),
     mfeLoss: avg(losses, (t) => t.mfe || 0), // lệnh thua từng lời được bao nhiêu R trước khi quay đầu
     maeWin: avg(wins, (t) => t.mae || 0), // lệnh thắng từng âm bao nhiêu R
-    feeR: avg(done, (t) => t.feeR), reasons,
+    feeR: avg(done, (t) => t.feeR), fundR: avg(done, (t) => t.fundR || 0), reasons,
   };
 }
