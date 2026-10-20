@@ -220,7 +220,7 @@ function UpdateBox({ st, cmd, onSaved }) {
   return (
     <div className="rounded-xl border border-slate-200 p-3">
       <div className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-700"><RefreshCw size={14} /> Tự cập nhật bot</div>
-      <div className="mt-1 text-[11.5px] text-slate-500">Mỗi khi luật/bot được cải tiến, máy bàn tự tải bản mới (30 phút/lần), kiểm tra rồi tự chạy lại; bản mới lỗi → tự quay về bản cũ.</div>
+      <div className="mt-1 text-[11.5px] text-slate-500">Mỗi khi luật/bot được cải tiến, máy bàn tự tải bản mới (5 phút/lần), kiểm tra rồi tự chạy lại; bản mới lỗi → tự quay về bản cũ.</div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
         <span>Đang chạy: <b className="tabular-nums">{v.sha ? v.sha.slice(0, 7) : "bản tải tay"}</b>{v.date ? ` (${ago2(v.date)})` : ""}</span>
         {behind && <span className="font-bold text-amber-700">Có bản mới {v.latest.sha.slice(0, 7)}</span>}
