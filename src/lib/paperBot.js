@@ -17,9 +17,10 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 4,
+  cfgVer: 5,
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
+  keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
   maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
   partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
@@ -31,6 +32,7 @@ export const DEFAULT_CFG = {
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V5_KEYS = ["keyVolume"];
 const V4_KEYS = ["learnLoss", "lessonN", "lessonMin", "verifyOpt", "optVariants", "warmupDays"];
 const V3_KEYS = ["maxExtAtr", "minSlAtr", "limitAt", "fillBars", "entryMode", "minExp", "confK"];
 const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
@@ -41,6 +43,7 @@ export function cfgOf(session) {
   if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
   c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
   if (c.partialAtR > 0 && c.partialAtR < MIN_RR) c.partialAtR = MIN_RR;
@@ -177,11 +180,11 @@ function findSignals(K, setups) {
       }
     }
   }
-  return { sig, atr, e50, adx };
+  return { sig, atr, e50, adx, vma, V, H, L, C };
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
-function simTrade(K, s, cfg, atr, endIdx, e50) {
+function simTrade(K, s, cfg, atr, endIdx, e50, f) {
   const e0 = s.i + 1; if (e0 > endIdx) return null; // chưa có nến để vào
   const slip = cfg.slipPct / 100, side = s.side, a = atr[s.i];
   const limit = cfg.entryMode === "limit", maker = (cfg.makerPct ?? 0.02) / 100, taker = cfg.feePct / 100;
@@ -193,6 +196,7 @@ function simTrade(K, s, cfg, atr, endIdx, e50) {
     // Luật vào đẹp (biết trước khi đặt lệnh): không đuổi giá xa EMA50, SL không quá sát vùng nhiễu
     if (cfg.maxExtAtr > 0 && e50 && Math.abs(lim - e50[s.i]) / a > cfg.maxExtAtr) return { skip: `đuổi giá (xa EMA50 > ${cfg.maxExtAtr} ATR)` };
     if (cfg.minSlAtr > 0 && ((lim - s.sl) * side) / a < cfg.minSlAtr && ((lim - s.sl) * side) > 0) return { skip: `SL sát < ${cfg.minSlAtr} ATR` };
+    if (cfg.keyVolume > 0 && f && !atKeyVolume(f, s.i, cfg.keyVolume, lim)) return { skip: cfg.keyVolume === 1 ? "không ở vùng nến volume lớn nhất 100 nến" : `không ở vùng Key Volume (top ${cfg.keyVolume})` }; // bộ kiến thức: chỉ vào TẠI vùng có lý do
     for (let k = e0; k <= Math.min(endIdx, e0 + win - 1); k++) if ((side === 1 ? K[k][3] < lim : K[k][2] > lim)) { e = k; break; } // giá phải xuyên qua (không chỉ chạm) mới tính khớp — thận trọng về hàng chờ
     if (e < 0) return e0 + win - 1 <= endIdx ? { skip: "giá không về điểm vào" } : { pending: { side, lim, sl: s.sl, until: K[e0][0] + win * (K[e0][0] - K[s.i][0]) } };
     entry = lim;
@@ -243,7 +247,18 @@ export const TAGS = {
   "side:L": "lệnh LONG", "side:S": "lệnh SHORT",
   "slope:with": "EMA50 dốc cùng hướng lệnh", "slope:against": "EMA50 dốc NGƯỢC hướng lệnh",
   "body:weak": "nến tín hiệu thân yếu (< 40% biên độ)", "body:strong": "nến tín hiệu thân mạnh",
+  "kv:yes": "tại vùng Key Volume (top 3 volume 100 nến)", "kv:top1": "tại nến volume lớn nhất 100 nến", "kv:no": "KHÔNG ở vùng Key Volume (lơ lửng)",
+  "pull:low": "nhịp hồi volume thấp (test cạn cung/cầu)", "pull:high": "nhịp hồi volume cao (chưa cạn)",
+  "sig:climax": "nến tín hiệu volume siêu cao + râu ngược (climax ngược hướng)",
 };
+// Key Volume (bộ kiến thức): nến volume đột biến — mạnh nhất là nến volume LỚN NHẤT 100 nến ("dấu chân cá mập"); SM vào đâu sẽ bảo vệ ở đó.
+// Lấy `top` nến volume lớn nhất trong 100 nến trước (≥ 2.5× TB20); true nếu GIÁ VÀO (đóng nến tín hiệu) nằm trong vùng [low, high] của nến đó (đệm 0.1 ATR).
+export function atKeyVolume(f, i, top = 3, px = null) {
+  const a = f.atr[i], p = px ?? f.C[i], idx = [];
+  for (let k = Math.max(1, i - 100); k <= i - 3; k++) if (f.V[k] >= 2.5 * f.vma[k]) idx.push(k);
+  idx.sort((x, y) => f.V[y] - f.V[x]);
+  return idx.slice(0, top).some((k) => p >= f.L[k] - 0.1 * a && p <= f.H[k] + 0.1 * a);
+}
 function tagsOf(K, i, side, sl, f) {
   const a = f.atr[i], [, o, h, l, c] = K[i], t = [];
   const adx = f.adx[i]; t.push(adx < 20 ? "adx:<20" : adx <= 30 ? "adx:20-30" : "adx:>30");
@@ -255,6 +270,11 @@ function tagsOf(K, i, side, sl, f) {
   t.push(side === 1 ? "side:L" : "side:S");
   t.push((f.e50[i] - f.e50[Math.max(0, i - 10)]) * side >= 0 ? "slope:with" : "slope:against");
   t.push(Math.abs(c - o) / (h - l || 1e-9) < 0.4 ? "body:weak" : "body:strong");
+  t.push(atKeyVolume(f, i, 3) ? "kv:yes" : "kv:no");
+  if (atKeyVolume(f, i, 1)) t.push("kv:top1");
+  t.push((f.V[i - 1] + f.V[i - 2] + f.V[i - 3]) / 3 < 0.8 * f.vma[i] ? "pull:low" : "pull:high");
+  const wickAgainst = side === 1 ? h - Math.max(o, c) : Math.min(o, c) - l;
+  if (f.V[i] >= 3 * f.vma[i] && wickAgainst / (h - l || 1e-9) >= 0.5) t.push("sig:climax");
   return t;
 }
 
@@ -297,7 +317,7 @@ export async function runSession(session, onProgress = () => {}) {
     }
     const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
-      const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50));
+      const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50, found));
       if (!sims[0]) continue;
       if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], ...sims[0].pending }); continue; }
       if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
