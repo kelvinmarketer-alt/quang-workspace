@@ -1,0 +1,15 @@
+{
+  "name": "qws-live-bot",
+  "private": true,
+  "type": "module",
+  "description": "Bot giao dịch Futures theo bộ luật Demo tự động của Quang Workspace — chạy nền 24/7 trên máy chạy bot (máy bàn Windows hoặc VPS; Testnet trước, tiền thật sau)",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env bot.js",
+    "dry": "node --env-file-if-exists=.env bot.js --dry",
+    "once": "node --env-file-if-exists=.env bot.js --once",
+    "check": "node --env-file-if-exists=.env check.js",
+    "release": "node scripts/release.mjs",
+    "sync-rules": "node -e \"require('fs').copyFileSync('../quang-workspace/src/lib/paperBot.js','lib/paperBot.js');console.log('Đã chép luật mới từ app')\""
+  },
+  "engines": { "node": ">=22" }
+}

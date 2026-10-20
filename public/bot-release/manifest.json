@@ -1,0 +1,71 @@
+{
+  "sha": "826a618850c8a66f5717bba0a2dbb1562f4cb503",
+  "date": "2026-10-21T00:16:00+07:00",
+  "msg": "Bot: Đóng hết vị thế từ app, lưu lịch sử lệnh lên app (history), thông báo đẩy (khớp/đóng/lỗi/dừng ngày/chạy lại/cập nhật), báo luật đang chạy (cfgSummary, rulesHash), TỰ CẬP NHẬT TỪ TRANG APP không cần token (GitHub chỉ dự phòng), scripts/release.mjs; luật mới từ app (tín hiệu bị bỏ + lý do)",
+  "files": [
+    {
+      "path": "README.md",
+      "sha": "bce7d392eed42c1f21e048d1d79e7c98c2d27d64"
+    },
+    {
+      "path": "bot.js",
+      "sha": "f3698a645f657fe147206a4a6d22a37facc01af2"
+    },
+    {
+      "path": "cai-dat-windows.bat",
+      "sha": "e488f7e2975719fc3111a84e13b748f60edcb690"
+    },
+    {
+      "path": "check.js",
+      "sha": "a83ef6751252172489481f76a6587e16acd3a16a"
+    },
+    {
+      "path": "go-cai-dat.bat",
+      "sha": "b150134fead539bc870093658c98bbbc3d239689"
+    },
+    {
+      "path": "lib/binance.js",
+      "sha": "a4e12f870cb24699f42cc22c50a313019d16e837"
+    },
+    {
+      "path": "lib/main.js",
+      "sha": "126dc10059fd36416ed174d0376164332622bd83"
+    },
+    {
+      "path": "lib/paperBot.js",
+      "sha": "e7b24682151135dc56d3875107893893254deb3c"
+    },
+    {
+      "path": "lib/report.js",
+      "sha": "c7758ab7830c5f3fb79cf74800d7964fa08bdf77"
+    },
+    {
+      "path": "lib/updater.js",
+      "sha": "1b1e177f43db804ce14a5ffb936c6a85b081f522"
+    },
+    {
+      "path": "package.json",
+      "sha": "af32dee80e470d9b8a8c23e650a2a957ff363efb"
+    },
+    {
+      "path": "scripts/release.mjs",
+      "sha": "fe528c7a4906fd9d820c1d2e51dd57714c867bd0"
+    },
+    {
+      "path": "supabase.sql",
+      "sha": "439a6857c7cba98d5964f6a4e099f49664a39e94"
+    },
+    {
+      "path": "windows/install.ps1",
+      "sha": "a4bb8864616f8c40435f33f4bad3b04f768d4a80"
+    },
+    {
+      "path": "windows/uninstall.ps1",
+      "sha": "a233105fdc5156c6e6a7a3d57fd1ed7bdefd167a"
+    },
+    {
+      "path": "xem-log.bat",
+      "sha": "d3b8f6317e67c3b82930b5103078712d6df9ec11"
+    }
+  ]
+}

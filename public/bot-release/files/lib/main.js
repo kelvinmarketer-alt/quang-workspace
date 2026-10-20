@@ -1,0 +1,375 @@
+// BOT GIAO DỊCH FUTURES theo đúng bộ luật tab "Demo tự động" của Quang Workspace (lib/paperBot.js chép từ app).
+// - Tín hiệu tính trên GIÁ THẬT (fapi.binance.com), lệnh đặt lên MODE=testnet (tiền ảo) hoặc live (tiền thật).
+// - Mỗi tín hiệu = LỆNH CHỜ (limit) ở giá đóng nến tín hiệu, hết hạn 3 nến chưa khớp → huỷ. Khớp → đặt SL (Stop-Market) + TP (Take-Profit-Market) đóng toàn bộ vị thế.
+// - Quản lý rủi ro: % vốn/lệnh, tối đa N vị thế, 1 vị thế/cặp, đòn bẩy trần, dừng ngày khi lỗ X%, đóng khi giữ quá lâu (time stop).
+// - Dừng khẩn: tạo file data/STOP (hoặc lệnh "Dừng" từ app) → huỷ lệnh chờ, không mở lệnh mới (vị thế đang mở giữ nguyên SL/TP).
+// - "Đóng tất cả" từ app (command.closeAllAt): huỷ mọi lệnh + đóng vị thế BTC/ETH/XAU của ví Futures (KHÔNG đụng Spot).
+// - Báo về app: trạng thái (dòng 'status'), lịch sử lệnh đã đóng (dòng 'history'), thông báo đẩy về điện thoại (qws-send-push).
+// Chạy: npm start · thử không đặt lệnh: npm run dry · 1 vòng: npm run once
+import fs from "node:fs";
+import crypto from "node:crypto";
+import { makeClient, MAIN, sleep } from "./binance.js";
+import { runSession, cfgOf, SYMBOLS, TFS } from "./paperBot.js";
+import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify } from "./report.js";
+import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
+
+const DRY = process.argv.includes("--dry"), ONCE = process.argv.includes("--once");
+const ENV = (k, d) => (process.env[k] && process.env[k].trim() !== "" ? Number(process.env[k]) : d);
+const num = (v, d) => (v === undefined || v === null || v === "" || !isFinite(Number(v)) ? d : Number(v));
+// Cài đặt chạy: ƯU TIÊN cài đặt trong app (Coin → Bot thật → Cài đặt), không có thì lấy .env
+let MODE = (process.env.MODE || "testnet").trim(), RISK = ENV("RISK_PCT", 2), MAX_OPEN = ENV("MAX_OPEN", 3), DAILY_STOP = ENV("DAILY_STOP_PCT", 6), MAX_LEV = ENV("MAX_LEV", 20), CAP = ENV("CAPITAL_CAP", 0);
+const STATE_F = "data/state.json", LOG_F = "data/trades.jsonl", STOP_F = "data/STOP", KEY_F = "data/bot-key.json";
+const VN = 7 * 3600000;
+const now = () => Date.now();
+const stamp = (t = now()) => new Date(t + VN).toISOString().slice(0, 19).replace("T", " ");
+const log = (...a) => console.log(`[${stamp()}]`, ...a);
+fs.mkdirSync("data", { recursive: true });
+// Định dạng số kiểu Việt Nam (1.234,56) cho thông báo
+const vn = (v, d) => Number(v).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const px = (v) => Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 8 });
+const sgn = (v, d) => `${v > 0 ? "+" : ""}${vn(v, d)}`;
+const dur = (ms) => { const m = Math.round(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24); return d ? `${d} ngày ${h % 24} giờ` : h ? `${h} giờ ${m % 60} phút` : `${m} phút`; };
+const dirStr = (s) => (s === 1 ? "LONG" : "SHORT");
+const modeLbl = (m) => ((m || MODE) === "live" ? "Tiền thật" : "Testnet");
+// Mã luật đang chạy (12 ký tự đầu sha256 của lib/paperBot.js) → app so với luật Demo hiện tại
+const RULES_HASH = (() => { try { return crypto.createHash("sha256").update(fs.readFileSync(new URL("./paperBot.js", import.meta.url))).digest("hex").slice(0, 12); } catch { return null; } })();
+
+// Cặp khoá mã hoá RIÊNG của máy này: app mã hoá khoá API bằng khoá CÔNG KHAI, chỉ máy này (khoá bí mật) giải được
+function machineKeys() {
+  try { return JSON.parse(fs.readFileSync(KEY_F, "utf8")); } catch { /* tạo mới */ }
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const k = { pub: publicKey.export({ type: "spki", format: "der" }).toString("base64"), priv: privateKey.export({ type: "pkcs8", format: "pem" }) };
+  fs.writeFileSync(KEY_F, JSON.stringify(k)); return k;
+}
+const MK = machineKeys(), PUB_FP = crypto.createHash("sha256").update(MK.pub).digest("hex").slice(0, 16);
+const decrypt = (b64) => crypto.privateDecrypt({ key: MK.priv, padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(b64, "base64")).toString("utf8");
+
+// Thông báo đẩy về điện thoại: tắt được trong app (config.notify = false); chống gửi trùng theo tag; chế độ thử chỉ ghi log
+const sentTags = new Set();
+function note(title, body, tag) {
+  if (appCfg.notify === false || (tag && sentTags.has(tag))) return;
+  if (tag) { if (sentTags.size > 2000) sentTags.clear(); sentTags.add(tag); }
+  if (DRY) { log(`🔔 [thử, không gửi] ${title} — ${body}`); return; }
+  notify(title, body, tag).catch(() => {});
+}
+
+let ghToken = null, healthy = false, lastForce = 0;
+let ex = DRY ? makeClient({ mode: MODE }) : null, curKey = "", waiting = null, keySrc = null, appCfg = {}, lastCmd = null;
+// Đọc lệnh + cài đặt từ app → áp dụng; đổi chế độ testnet↔thật thì THOÁT để vòng chạy khởi động lại sạch
+async function resolveRun(first) {
+  const cmd = await readCommand().catch(() => null); lastCmd = cmd;
+  const c = (appCfg = cmd?.config || {});
+  const mode = c.mode === "live" || c.mode === "testnet" ? c.mode : (process.env.MODE || "testnet").trim();
+  if (!first && mode !== MODE) { log(`🔁 App đổi chế độ ${MODE} → ${mode}: khởi động lại bot`); await pushStatus({ mode: MODE, at: now(), waiting: "Đang khởi động lại để đổi chế độ…", pubKey: MK.pub, pubFp: PUB_FP }, true).catch(() => {}); process.exit(0); }
+  MODE = mode;
+  RISK = num(c.riskPct, ENV("RISK_PCT", 2)); MAX_OPEN = num(c.maxOpen, ENV("MAX_OPEN", 3)); DAILY_STOP = num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)); MAX_LEV = num(c.maxLev, ENV("MAX_LEV", 20)); CAP = num(c.capitalCap, ENV("CAPITAL_CAP", 0));
+  // token GitHub (chỉ đọc) cho tự cập nhật: từ app (mã hoá) hoặc GITHUB_TOKEN trong .env
+  ghToken = process.env.GITHUB_TOKEN?.trim() || null;
+  const g = cmd?.keys?.github; if (g?.token && (!g.pubFp || g.pubFp === PUB_FP)) { try { ghToken = decrypt(g.token); } catch { /* bỏ qua */ } }
+  if (DRY) { waiting = null; return cmd; }
+  let key = null, secret = null, src = null; waiting = null;
+  const k = cmd?.keys?.[MODE];
+  if (k?.key && k?.secret) {
+    if (k.pubFp && k.pubFp !== PUB_FP) waiting = "Khoá API trong app được mã hoá cho MÁY KHÁC (máy bot đã cài lại) — nhập lại khoá trong app";
+    else { try { key = decrypt(k.key); secret = decrypt(k.secret); src = "app"; } catch { waiting = "Không giải mã được khoá API — nhập lại khoá trong app"; } }
+  } else if (process.env.BINANCE_KEY && process.env.BINANCE_SECRET && (process.env.MODE || "testnet").trim() === MODE) { key = process.env.BINANCE_KEY.trim(); secret = process.env.BINANCE_SECRET.trim(); src = ".env"; }
+  if (MODE === "live" && !(c.liveConfirmedAt || process.env.I_UNDERSTAND_REAL_MONEY)) waiting = "Chưa xác nhận chạy TIỀN THẬT trong app";
+  if (!key && !waiting) waiting = `Chưa có khoá API ${MODE === "live" ? "THẬT" : "Testnet"} — nhập trong app: Coin → Bot thật → Cài đặt`;
+  if (waiting) { if (ex) log(`⏸ ${waiting}`); ex = null; curKey = ""; return cmd; }
+  if (key + secret !== curKey) { // khoá mới → kết nối + kiểm tra
+    const cli = makeClient({ mode: MODE, key, secret });
+    try {
+      await cli.syncTime(); await cli.balance();
+      const dual = await cli.positionMode();
+      if (dual.dualSidePosition) { waiting = "Tài khoản đang ở chế độ Hedge (2 chiều) — vào Binance Futures → Cài đặt → Chế độ vị thế → Một chiều"; ex = null; curKey = ""; return cmd; }
+      ex = cli; curKey = key + secret; keySrc = src;
+      log(`🔑 Đã kết nối ${MODE === "live" ? "SÀN THẬT" : "Testnet"} bằng khoá từ ${src === "app" ? "app" : ".env"} (…${key.slice(-4)}) · vốn tính khối lượng ${(await equityUsd()).toFixed(2)} USDT`);
+    } catch (e) { waiting = `Khoá API ${MODE === "live" ? "thật" : "Testnet"} không dùng được: ${e.message}`; ex = null; curKey = ""; }
+  }
+  return cmd;
+}
+
+// Trạng thái lưu đĩa: không mất khi khởi động lại máy
+let S = { handled: {}, active: {} };
+function initState() {
+  try { S = JSON.parse(fs.readFileSync(STATE_F, "utf8")); } catch { S = { handled: {}, active: {}, startedAt: now() }; }
+  // Đổi chế độ (testnet ↔ tiền thật) → cất trạng thái cũ, bắt đầu sạch (không đem lệnh testnet sang sàn thật)
+  if (S.mode && S.mode !== MODE) { const old = S.mode; fs.renameSync(STATE_F, `data/state-${old}-${Date.now()}.json`); S = { handled: {}, active: {}, startedAt: Date.now() }; console.log(`Đổi chế độ ${old} → ${MODE}: đã cất trạng thái cũ, bắt đầu sạch`); }
+  S.mode = MODE;
+  // Lệnh "Đóng tất cả" đã có từ trước khi bot có trạng thái này (cài mới/đổi chế độ/bản cũ) mà đã quá 10 phút → coi như đã xử lý, không chạy lại
+  if (S.closeAllHandled == null) { const c = Number(lastCmd?.closeAllAt) || 0; S.closeAllHandled = c && now() - c > 600000 ? c : 0; }
+}
+const save = () => fs.writeFileSync(STATE_F, JSON.stringify(S, null, 2));
+const journal = (o) => { const e = { at: stamp(), ...o }; fs.appendFileSync(LOG_F, JSON.stringify(e) + "\n"); S.events = [e, ...(S.events || [])].slice(0, 60); };
+
+// Lịch sử lệnh ĐÃ ĐÓNG (mới nhất trước, tối đa 1000) → dòng 'history' trên Supabase. Khởi động: dựng lại từ data/trades.jsonl
+const HIST_MAX = 1000;
+let HIST = [], histDirty = true, histTry = 0;
+const vnMs = (s) => { const t = Date.parse(`${String(s).replace(" ", "T")}Z`); return isFinite(t) ? t - VN : null; }; // "2026-10-20 23:58:01" (giờ VN) → ms
+const r4 = (v, d = 4) => (v == null || !isFinite(Number(v)) ? null : Number(Number(v).toFixed(d)));
+const histRow = (e, exitAt) => ({ id: e.id, coin: e.coin, tf: e.tf, setup: e.setup, side: e.side, lim: e.lim, exit: e.exit ?? null, sl: e.sl, tp: e.tp, qty: e.filledQty || e.qty, riskUsd: r4(e.riskUsd), openedAt: e.openedAt || null, exitAt, pnl: r4(e.pnl), R: r4(e.R, 3), reason: e.reason || null, mode: e.mode || null });
+function loadHistory() {
+  let txt = ""; try { txt = fs.readFileSync(LOG_F, "utf8"); } catch { return; }
+  const out = [];
+  for (const l of txt.split("\n")) {
+    if (!l.includes('"ev":"close"')) continue;
+    try { const e = JSON.parse(l); if (e.ev === "close") out.push(histRow(e, e.exitAt || vnMs(e.at))); } catch { /* dòng hỏng → bỏ */ }
+  }
+  HIST = out.sort((a, b) => (b.exitAt || 0) - (a.exitAt || 0)).slice(0, HIST_MAX);
+}
+const addHist = (row) => { HIST = [row, ...HIST].slice(0, HIST_MAX); histDirty = true; };
+async function syncHistory() { // chỉ ghi khi có thay đổi; lỗi → thử lại sau ≥ 60 giây. Chế độ thử không ghi (tránh đè lịch sử thật)
+  if (DRY || !histDirty || now() - histTry < 60000) return;
+  histTry = now();
+  if (await pushHistory(HIST)) { histDirty = false; histTry = 0; }
+}
+
+// Luật = cấu hình phiên Demo trong app (đọc lại mỗi lần quét ≈5 phút); vốn/rủi ro/giới hạn lấy từ .env (an toàn tiền thật)
+let cfg = { ...cfgOf({ cfg: {} }), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV }, cfgAt = 0, cfgSrc = "mặc định";
+async function refreshCfg() {
+  if (Date.now() - cfgAt < 240000) return; cfgAt = Date.now(); // đọc cấu hình Demo mỗi lần quét (≈5 phút)
+  const demo = await readDemoSession().catch(() => null);
+  if (!demo) return;
+  const next = { ...cfgOf(demo), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
+  if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; cfgSrc = "phiên Demo trong app"; console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}`); }
+}
+const symCoin = Object.fromEntries(Object.entries(SYMBOLS).map(([c, s]) => [s, c]));
+const sideStr = (s) => (s === 1 ? "BUY" : "SELL"), closeSide = (s) => (s === 1 ? "SELL" : "BUY");
+const cid = (p, kind) => `qws${kind}${Math.floor(p.signalAt / 1000).toString(36)}${p.coin}${p.tf}`.slice(0, 36);
+
+async function equityUsd() {
+  if (DRY) return CAP || 1000;
+  const b = await ex.balance(); const u = b.find((x) => x.asset === "USDT") || {};
+  const eq = Number(u.balance || 0) + Number(u.crossUnPnl || 0);
+  return CAP > 0 ? Math.min(CAP, eq) : eq;
+}
+// Lãi/lỗ đã chốt hôm nay (giờ VN) — phục vụ "dừng ngày"
+async function todayPnl() {
+  if (DRY) return 0;
+  const d = new Date(now() + VN); d.setUTCHours(0, 0, 0, 0); const from = d.getTime() - VN;
+  const rows = await ex.income({ startTime: from, limit: 1000 });
+  return rows.filter((r) => ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(r.incomeType)).reduce((s, r) => s + Number(r.income), 0);
+}
+
+// ---------- 1) Quản lý lệnh đang chờ / vị thế đang mở ----------
+async function manage(posMap) {
+  for (const [symbol, a] of Object.entries(S.active)) {
+    try {
+      const amt = posMap[symbol] || 0;
+      if (a.stage === "entry") {
+        if (DRY) { if (now() > a.until) { log(`⌛ [thử] ${a.coin} ${a.tf} lệnh chờ hết hạn`); delete S.active[symbol]; } continue; }
+        const o = await ex.order(symbol, a.entryCid).catch(() => null);
+        const filled = Number(o?.executedQty || 0);
+        if (o && o.status === "FILLED") await protect(symbol, a, Math.abs(amt) || filled, "khớp đủ");
+        else if (o && ["CANCELED", "EXPIRED", "REJECTED"].includes(o.status)) { log(`✖ ${a.coin} ${a.tf} lệnh chờ ${o.status}`); delete S.active[symbol]; }
+        else if (now() > a.until) {
+          await ex.cancel(symbol, a.entryCid).catch(() => {});
+          if (filled > 0) await protect(symbol, a, Math.abs(amt) || filled, "khớp một phần, huỷ phần còn lại");
+          else { log(`⌛ ${a.coin} ${a.tf} giá không về điểm vào — huỷ lệnh chờ`); journal({ ev: "expired", ...a }); delete S.active[symbol]; }
+        }
+      } else if (a.stage === "open") {
+        if (amt === 0) { await closed(symbol, a); continue; }
+        // giữ lệnh quá lâu (time stop như demo) → đóng theo giá thị trường
+        if (now() - a.openedAt > cfg.timeStopBars * TFS[a.tf].ms) {
+          log(`⏱ ${a.coin} ${a.tf} giữ quá ${cfg.timeStopBars} nến → đóng thị trường`);
+          a.closeWhy = "Hết giờ";
+          await ex.marketClose({ symbol, side: closeSide(a.side), quantity: Math.abs(amt) });
+          continue;
+        }
+        // bảo đảm luôn có SL (bị huỷ/thiếu → đặt lại)
+        const oo = await ex.openOrders(symbol), algo = await ex.openAlgo(symbol);
+        const hasSl = [...oo, ...algo].some((x) => /STOP/.test(x.type || x.orderType || "") && !/TAKE/.test(x.type || x.orderType || ""));
+        if (!hasSl) { log(`⚠ ${a.coin} thiếu SL → đặt lại`); await placeProtection(symbol, a); }
+      }
+    } catch (e) { log(`Lỗi quản lý ${symbol}:`, e.message); }
+  }
+  save();
+}
+async function placeProtection(symbol, a) {
+  const sl = await ex.conditional({ symbol, side: closeSide(a.side), type: "STOP_MARKET", stopPrice: a.sl, clientId: a.entryCid.replace("qwsE", "qwsS") });
+  const tp = await ex.conditional({ symbol, side: closeSide(a.side), type: "TAKE_PROFIT_MARKET", stopPrice: a.tp, clientId: a.entryCid.replace("qwsE", "qwsT") });
+  a.slRef = sl.algoId || sl.orderId; a.tpRef = tp.algoId || tp.orderId; a.protKind = sl.kind;
+}
+async function protect(symbol, a, qty, why) {
+  a.stage = "open"; a.openedAt = now(); a.filledQty = qty;
+  note(`✅ Khớp ${dirStr(a.side)} ${a.coin} ${TFS[a.tf].label} @ ${px(a.lim)} · SL ${px(a.sl)} · TP ${px(a.tp)}`, `KL ${px(qty)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${why} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
+  try { await placeProtection(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/TP ${a.coin} ${TFS[a.tf].label}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); throw e; }
+  log(`✅ ${a.coin} ${a.tf} ${a.side === 1 ? "LONG" : "SHORT"} ${why} @ ${a.lim} · KL ${qty} · SL ${a.sl} · TP ${a.tp}`);
+  journal({ ev: "open", ...a });
+}
+async function closed(symbol, a, why = null) {
+  // Vị thế đã đóng (chạm SL/TP/đóng tay) → dọn lệnh còn treo + ghi kết quả
+  await ex.cancelAll(symbol).catch(() => {});
+  for (const x of await ex.openAlgo(symbol)) await ex.cancelAlgo(x.algoId).catch(() => {});
+  let pnl = 0, fee = 0, exit = null;
+  try {
+    const tr = await ex.userTrades(symbol, { startTime: a.openedAt - 60000 });
+    for (const t of tr) { pnl += Number(t.realizedPnl); fee += Number(t.commission); }
+    const last = tr.filter((t) => Number(t.realizedPnl) !== 0).pop(); exit = last ? Number(last.price) : null;
+  } catch { /* bỏ qua */ }
+  const net = pnl - fee, R = a.riskUsd ? net / a.riskUsd : null, exitAt = now(), d = Math.abs(a.lim - a.sl);
+  // lý do đóng: biết trước (hết giờ / đóng tất cả) hoặc đoán theo giá thoát gần TP hay SL (±0,25R)
+  const reason = why || a.closeWhy || (exit == null || !d ? null : Math.abs(exit - a.tp) <= 0.25 * d ? "TP" : Math.abs(exit - a.sl) <= 0.25 * d ? "SL" : "Khác");
+  log(`🏁 ${a.coin} ${a.tf} đóng${exit ? ` @ ${exit}` : ""}${reason ? ` (${reason})` : ""} · lãi/lỗ ${net.toFixed(2)} USDT${R != null ? ` (${R.toFixed(2)}R)` : ""}`);
+  journal({ ev: "close", ...a, exit, pnl: net, R, reason, exitAt });
+  addHist(histRow({ ...a, exit, pnl: net, R, reason }, exitAt));
+  note(`🏁 Đóng ${a.coin} ${TFS[a.tf].label} · ${sgn(net, 2)}$${R != null ? ` (${sgn(R, 1)}R)` : ""}`, `${dirStr(a.side)} @ ${px(a.lim)}${exit ? ` → ${px(exit)}` : ""}${reason ? ` · ${reason}` : ""} · ${modeLbl(a.mode)}`, `qws-bot-close-${a.id}`);
+  delete S.active[symbol];
+}
+
+// ---------- 2) Tìm tín hiệu mới + đặt lệnh chờ ----------
+async function scan(posMap, halted) {
+  const raw = await runSession({ startAt: now() - 90 * 86400000, cfg }, () => {});
+  const fresh = (raw.pending || []).filter((p) => !S.handled[p.id] && now() < p.until);
+  // THỬ QUY TRÌNH (chỉ testnet/thử): FAKE_SIGNAL=BTC → 1 lệnh LONG giả sát giá hiện tại để kiểm tra đặt lệnh → khớp → SL/TP → đóng
+  const fc = (process.env.FAKE_SIGNAL || "").trim().toUpperCase();
+  if (fc && SYMBOLS[fc] && MODE !== "live" && !S.fakeDone) {
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[fc]}`).then((r) => r.json());
+    const px = Number(m.markPrice), lim = px * 0.9995;
+    fresh.push({ id: `fake-${now()}`, coin: fc, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.995, signalAt: now(), until: now() + 15 * 60000 });
+    S.fakeDone = true;
+    log(`🧪 Tạo tín hiệu GIẢ để thử quy trình: ${fc} LONG @ ~${lim.toFixed(2)} (SL -0,5%)`);
+  }
+  for (const p of fresh) {
+    S.handled[p.id] = now();
+    const symbol = SYMBOLS[p.coin];
+    if (p.blocked) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label}: ${p.blocked} (giống Demo)`); journal({ ev: "skip", why: p.blocked, ...p, tags: undefined }); continue; }
+    const why = halted || (S.active[symbol] || posMap[symbol] ? `đã có lệnh/vị thế ${p.coin}` : Object.keys(S.active).length >= MAX_OPEN ? `đủ ${MAX_OPEN} lệnh` : null);
+    if (why) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"}: ${why}`); journal({ ev: "skip", why, ...p, tags: undefined }); continue; }
+    try { await place(p, symbol); } catch (e) { log(`Lỗi đặt lệnh ${p.coin}:`, e.message); journal({ ev: "error", msg: e.message, ...p }); note(`⚠ Lỗi đặt lệnh ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}`, `${e.message} · ${modeLbl()}`, `qws-bot-err-${p.id}`); }
+  }
+  // dọn danh sách đã xử lý (> 2 ngày)
+  for (const [k, t] of Object.entries(S.handled)) if (now() - t > 2 * 86400000) delete S.handled[k];
+  save();
+  return raw;
+}
+async function place(p, symbol) {
+  const info = DRY ? { tick: 0.01, step: 0.001, minNotional: 5 } : await ex.symbolInfo(symbol);
+  // Testnet giá lệch nhẹ với sàn thật → quy đổi theo tỉ lệ giá mark hiện tại (giữ đúng khoảng cách SL/TP)
+  let k = 1;
+  if (MODE === "testnet" && !DRY) {
+    const [t, m] = await Promise.all([ex.markPrice(symbol), fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`).then((r) => r.json())]);
+    k = Number(t.markPrice) / Number(m.markPrice); if (!(k > 0.9 && k < 1.1)) k = 1;
+  }
+  const lim = ex.roundTo(p.lim * k, info.tick), sl = ex.roundTo(p.sl * k, info.tick);
+  const risk = Math.abs(lim - sl), tp = ex.roundTo(lim + p.side * (p.rr || cfg.rr) * risk, info.tick);
+  const eq = await equityUsd(), riskUsd = (eq * RISK) / 100;
+  let qty = riskUsd / risk; const maxQty = (MAX_LEV * eq) / lim; if (qty > maxQty) qty = maxQty;
+  qty = ex.roundTo(qty, info.step, "floor");
+  if (!(qty > 0) || qty * lim < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p }); return; }
+  const a = { id: p.id, coin: p.coin, tf: p.tf, setup: p.setup, side: p.side, lim, sl, tp, qty, riskUsd: qty * risk, until: p.until, signalAt: p.signalAt, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE };
+  if (!DRY) {
+    await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
+    await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+    await ex.placeLimit({ symbol, side: sideStr(p.side), quantity: qty, price: lim, clientId: a.entryCid });
+  }
+  S.active[symbol] = a;
+  log(`📌 ${DRY ? "[thử] " : ""}Lệnh chờ ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"} @ ${lim} · SL ${sl} · TP ${tp} · KL ${qty} · rủi ro ${(qty * risk).toFixed(2)}$ · huỷ lúc ${stamp(p.until)}`);
+  journal({ ev: "placed", ...a });
+}
+
+// ---------- 3) "Đóng tất cả" từ app ----------
+// CHỈ các cặp của bot (BTCUSDT/ETHUSDT/XAUUSDT) trong ví Futures. Đóng vị thế bằng MARKET reduceOnly rồi huỷ mọi lệnh (thường + algo/điều kiện).
+// Cặp nào đóng không được → giữ SL/TP + theo dõi tiếp, chỉ huỷ lệnh chờ vào; thử lại tối đa 5 vòng rồi báo lỗi.
+const CA = { tries: 0, done: [] };
+async function closeAll(at, posMap) {
+  if (!CA.tries) log("🧹 Nhận lệnh ĐÓNG TẤT CẢ từ app — đóng vị thế + huỷ mọi lệnh của bot (BTC/ETH/XAU, ví Futures; không đụng Spot)");
+  CA.tries++;
+  const errs = [];
+  if (!DRY) {
+    for (const symbol of Object.values(SYMBOLS)) {
+      const amt = posMap[symbol] || 0, coin = symCoin[symbol];
+      try {
+        if (amt) { await ex.marketClose({ symbol, side: amt > 0 ? "SELL" : "BUY", quantity: Math.abs(amt) }); if (!CA.done.includes(coin)) CA.done.push(coin); }
+        await ex.cancelAll(symbol);
+        for (const x of await ex.openAlgo(symbol)) await ex.cancelAlgo(x.algoId);
+      } catch (e) {
+        errs.push(`${coin}: ${e.message}`);
+        if (amt) for (const o of await ex.openOrders(symbol).catch(() => [])) if (!o.reduceOnly && !o.closePosition) await ex.cancel(symbol, o.clientOrderId).catch(() => {});
+      }
+    }
+    if (CA.done.length) await sleep(1500); // chờ sàn chốt khớp lệnh đóng
+    const left = {};
+    for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0 && symCoin[p.symbol]) left[p.symbol] = Number(p.positionAmt);
+    for (const [symbol, a] of Object.entries(S.active)) {
+      if (left[symbol]) continue; // còn vị thế → giữ để bot tiếp tục bảo vệ SL/TP
+      if (a.stage === "open" || posMap[symbol]) { if (!a.openedAt) a.openedAt = a.placedAt || now(); await closed(symbol, a, "Đóng tất cả").catch((e) => log(`Lỗi ghi kết quả ${symbol}:`, e.message)); }
+      delete S.active[symbol];
+    }
+    for (const symbol of Object.keys(left)) if (!errs.some((e) => e.startsWith(`${symCoin[symbol]}:`))) errs.push(`${symCoin[symbol]}: vẫn còn vị thế ${left[symbol]}`);
+  } else S.active = {};
+  if (errs.length && CA.tries < 5) { log(`⚠ Đóng tất cả chưa xong (lần ${CA.tries}/5): ${errs.join("; ")} — thử lại vòng sau`); save(); return false; }
+  S.closeAllHandled = at;
+  journal({ ev: "closeAll", closed: CA.done, errors: errs, mode: MODE });
+  if (errs.length) { log(`⚠ Đóng tất cả XONG MỘT PHẦN: ${errs.join("; ")} — kiểm tra trên Binance`); note("⚠ Đóng tất cả chưa xong", `${errs.join("; ")} — kiểm tra trên Binance · ${modeLbl()}`, `qws-bot-closeall-${at}`); }
+  else { log(`🧹 Đã đóng tất cả${CA.done.length ? `: ${CA.done.join(", ")}` : " (không có vị thế mở)"} · đã huỷ mọi lệnh chờ/SL/TP`); note("🧹 Đã đóng tất cả lệnh của bot", `${CA.done.length ? `Đóng ${CA.done.join(", ")} theo giá thị trường` : "Không có vị thế mở"} · đã huỷ mọi lệnh chờ/SL/TP · ${modeLbl()}${lastCmd?.stop ? " · Bot đang DỪNG, bấm “Chạy lại” trong app để chạy tiếp" : ""}`, `qws-bot-closeall-${at}`); }
+  CA.tries = 0; CA.done = [];
+  save();
+  return true;
+}
+const cfgSummary = () => { const { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, cfgVer } = cfg; return { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, cfgVer }; };
+
+// ---------- Vòng lặp ----------
+async function cycle(state) {
+  const cmd = await resolveRun(false);
+  const stop = fs.existsSync(STOP_F) || cmd?.stop;
+  const base = { mode: MODE, dry: DRY, at: now(), pubKey: MK.pub, pubFp: PUB_FP, keys: { testnet: !!cmd?.keys?.testnet, live: !!cmd?.keys?.live }, keySrc, settings: { riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV, capitalCap: CAP }, version: updateInfo(), github: !!ghToken, cfgSummary: cfgSummary(), rulesHash: RULES_HASH, closeAllHandled: S.closeAllHandled || 0, notify: appCfg.notify !== false, histCount: HIST.length };
+  if (!DRY && !ex) { await pushStatus({ ...base, waiting, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, events: (S.events || []).slice(0, 40) }, true).catch(() => {}); await syncHistory(); await maybeUpdate(cmd); return; } // chờ khoá / cài đặt từ app
+  let posMap = {};
+  const readPos = async () => { posMap = {}; if (!DRY) for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0) posMap[p.symbol] = Number(p.positionAmt); };
+  await readPos();
+  if (Number(cmd?.closeAllAt) > (S.closeAllHandled || 0)) { await closeAll(Number(cmd.closeAllAt), posMap); await readPos(); }
+  if (stop && !state.stopped) { // dừng khẩn: huỷ lệnh CHỜ vào, giữ SL/TP của vị thế đang mở
+    log("🛑 Nhận lệnh DỪNG — huỷ các lệnh chờ, không mở lệnh mới");
+    for (const [symbol, a] of Object.entries(S.active)) if (a.stage === "entry") { if (!DRY) await ex.cancel(symbol, a.entryCid).catch(() => {}); delete S.active[symbol]; }
+    save();
+  }
+  state.stopped = !!stop;
+  await manage(posMap);
+  const closedBar = Math.floor(now() / 300000); // mỗi nến M5 đóng (+8s cho sàn chốt nến) → quét tín hiệu
+  let raw = null;
+  if (closedBar !== state.lastBar && (ONCE || now() % 300000 > 8000)) {
+    state.lastBar = closedBar;
+    const eq = await equityUsd(), pnl = await todayPnl();
+    const dayHalt = pnl <= -(DAILY_STOP / 100) * eq ? `đã lỗ ${pnl.toFixed(2)}$ hôm nay (chạm dừng ngày -${DAILY_STOP}%)` : null;
+    const day = stamp().slice(0, 10);
+    if (dayHalt && S.dayStopNoted !== day) { S.dayStopNoted = day; save(); log(`⛔ Chạm dừng ngày: ${dayHalt} — không mở lệnh mới đến 0h (giờ VN)`); note(`⛔ Chạm dừng ngày -${DAILY_STOP}%`, `Đã lỗ ${vn(-pnl, 2)}$ hôm nay — bot không mở lệnh mới đến 0h (giờ VN) · ${modeLbl()}`, `qws-bot-daystop-${day}`); }
+    const halted = stop ? "đang DỪNG" : dayHalt;
+    await refreshCfg();
+    raw = await scan(posMap, halted);
+    state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
+  }
+  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, positions: posMap, events: (S.events || []).slice(0, 40) }).catch(() => {});
+  await syncHistory();
+}
+
+// Tự cập nhật: 5 phút/lần hoặc khi bấm "Cập nhật ngay" trong app; có bản mới → thoát để vòng chạy bật bản mới
+async function maybeUpdate(cmd) {
+  if (DRY || ONCE) return;
+  if (!healthy) {
+    healthy = true;
+    const p = markHealthy(log);
+    if (p) note(`⬆ Bot đã cập nhật bản ${p.sha.slice(0, 7)}`, `${p.msg || updateInfo().msg || ""} · tải từ ${p.source === "github" ? "GitHub" : "web"} · đang chạy tốt`, `qws-bot-update-${p.sha.slice(0, 7)}`);
+    if (rolledBack) note(`⚠ Bản cập nhật ${rolledBack.sha.slice(0, 7)} lỗi — đã quay về bản cũ`, "Bản mới khởi động lỗi 3 lần liên tiếp nên bot tự dùng lại bản trước", `qws-bot-rollback-${rolledBack.sha.slice(0, 7)}`);
+  }
+  const force = (cmd?.updateNow || 0) > lastForce; if (force) lastForce = cmd.updateNow;
+  if (await checkUpdate(ghToken, { force, log, intervalMs: 300000 })) { save(); await pushStatus({ mode: MODE, at: now(), waiting: "Đang cài bản cập nhật mới…", pubKey: MK.pub, pubFp: PUB_FP, version: updateInfo() }, true).catch(() => {}); process.exit(0); }
+}
+
+async function main() {
+  await resolveRun(true);
+  const prev = await readStatus(); // trạng thái lần trước → bot đã im lặng bao lâu
+  initState();
+  loadHistory();
+  log(`Bot khởi động · chế độ ${DRY ? "THỬ (không đặt lệnh)" : MODE.toUpperCase()} · rủi ro ${RISK}%/lệnh · tối đa ${MAX_OPEN} lệnh · dừng ngày -${DAILY_STOP}% · đòn bẩy ≤ ${MAX_LEV}x · luật: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")}`);
+  if (!DRY && !ex) log(`⏸ ${waiting}`);
+  if (HIST.length) log(`Lịch sử: ${HIST.length} lệnh đã đóng (dựng lại từ ${LOG_F})`);
+  if (prev?.at && now() - prev.at > 600000) note(`▶ Bot chạy lại sau ${dur(now() - prev.at)} im lặng`, `Máy chạy bot đã hoạt động trở lại · ${modeLbl()}${waiting && !DRY ? ` · ${waiting}` : ""}`, "qws-bot-start");
+  const state = { lastBar: null };
+  for (;;) {
+    try { await cycle(state); await maybeUpdate(lastCmd); } catch (e) { log("Lỗi vòng lặp:", e.message); }
+    if (ONCE) { log("Xong 1 vòng (--once)."); break; }
+    await sleep(15000);
+  }
+}
+main();
