@@ -109,7 +109,7 @@ export default function CoinBot() {
   }, [session?.createdAt, session?.stoppedAt]);
 
   const start = (s) => { setSettings({ paperBot: s }); setConfig(false); };
-  const stop = async () => { if (await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm "Phiên mới" để chạy lại.", { ok: "Dừng phiên", danger: true })) setSettings({ paperBot: { ...session, stoppedAt: Date.now() } }); };
+  const stop = async () => { if (await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.", { ok: "Dừng phiên", danger: true })) setSettings({ paperBot: { ...session, stoppedAt: Date.now() } }); };
 
   const P = res?.portfolio;
   const all = useMemo(() => (res ? statsOf(res.trades) : null), [res]);
