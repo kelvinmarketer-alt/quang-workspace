@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2 } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
@@ -36,22 +36,24 @@ function CoinModal({ initial, onClose, onSave }) {
 
 // Tab "Thị trường" (biểu đồ + AI) tải lười — không làm nặng tab Đầu tư
 const CoinMarket = lazy(() => import("./CoinMarket.jsx"));
+// Tab "Demo tự động" (bot giao dịch giả lập theo phương pháp) — tải lười
+const CoinBot = lazy(() => import("./CoinBot.jsx"));
 
 export default function Coin() {
   const [tab, setTab] = useState(() => { try { return localStorage.getItem("qws_coin_tab") || "invest"; } catch { return "invest"; } });
   const pick = (t) => { setTab(t); try { localStorage.setItem("qws_coin_tab", t); } catch {} };
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className="grid grid-cols-2 gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl">
-        {[["invest", "Đầu tư", Wallet], ["market", "Thị trường", CandlestickChart]].map(([k, label, Icon]) => (
+      <div className="grid grid-cols-3 gap-1 rounded-none bg-white/70 p-1 shadow-sm sm:rounded-2xl">
+        {[["invest", "Đầu tư", Wallet], ["market", "Thị trường", CandlestickChart], ["bot", "Demo tự động", Bot]].map(([k, label, Icon]) => (
           <button key={k} onClick={() => pick(k)} className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-extrabold transition ${tab === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} /> {label}
           </button>
         ))}
       </div>
       {tab === "invest" ? <CoinInvest /> : (
-        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải biểu đồ…</div>}>
-          <CoinMarket />
+        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>}>
+          {tab === "bot" ? <CoinBot /> : <CoinMarket />}
         </Suspense>
       )}
     </div>
