@@ -4,7 +4,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
-import { runSession, finalize, statsOf, cfgOf, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
+import { runSession, finalize, statsOf, cfgOf, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -54,9 +54,9 @@ function SetupForm({ initial, onStart, onCancel }) {
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
   const tog = (k, v) => setC((o) => ({ ...o, [k]: o[k].includes(v) ? o[k].filter((x) => x !== v) : [...o[k], v] }));
   const chip = (on) => `rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
-  const field = (k, label, step = 1, suffix = "") => (
+  const field = (k, label, step = 1, suffix = "", min) => (
     <label className="block text-[12px]"><span className="mb-1 block font-semibold text-slate-500">{label}</span>
-      <div className="flex items-center gap-1"><input type="number" step={step} value={c[k]} onChange={(e) => setC({ ...c, [k]: Number(e.target.value) })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
+      <div className="flex items-center gap-1"><input type="number" step={step} min={min} value={c[k]} onChange={(e) => setC({ ...c, [k]: Number(e.target.value) })} onBlur={() => { if (min != null && c[k] > 0 && c[k] < min) setC((o) => ({ ...o, [k]: min })); }} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
     </label>
   );
   const ok = c.coins.length && c.tfs.length && c.setups.length && c.capital > 0 && c.riskPct > 0;
@@ -76,14 +76,14 @@ function SetupForm({ initial, onStart, onCancel }) {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {field("capital", "Vốn ảo", 100, "$")}{field("riskPct", "Rủi ro / lệnh", 0.25, "%")}{field("maxOpen", "Tối đa lệnh mở")}{field("maxLev", "Đòn bẩy tối đa", 1, "x")}
-          {field("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}{field("rr", "Chốt lời gốc (R:R)", 0.5, "R")}{field("beAtR", "Dời hoà vốn ở (0=tắt)", 0.5, "R")}{field("feePct", "Phí mỗi chiều", 0.01, "%")}
+          {field("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}{field("rr", `Chốt lời gốc (R:R ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}{field("beAtR", "Dời hoà vốn ở (0=tắt)", 0.5, "R")}{field("feePct", "Phí mỗi chiều", 0.01, "%")}
           {field("maxFeeR", "Bỏ lệnh khi phí > (0=tắt)", 0.05, "R")}
         </div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cách vào lệnh</div>
           <div className="flex flex-wrap gap-1.5">{[["limit", "Lệnh chờ ở giá đóng nến (maker 0,02%)"], ["market", "Giá thị trường nến kế (taker 0,05% + trượt)"]].map(([k, l]) => <button key={k} onClick={() => setC({ ...c, entryMode: k })} className={chip(c.entryMode === k)}>{l}</button>)}</div>
           <div className="mt-1 text-[11px] text-slate-400">Lệnh chờ chỉ khớp khi giá xuyên qua mức đặt trong 3 nến, không khớp thì huỷ. Kiểm tra 180 ngày: lỗ TB giảm từ −0,23R xuống −0,11R/lệnh.</div>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", "Chốt 50% ở (0=tắt)", 0.5, "R")}</div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", `Chốt 50% ở (0=tắt, ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}</div>
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700"><input type="checkbox" checked={c.htfFilter} onChange={(e) => setC({ ...c, htfFilter: e.target.checked })} /> Chỉ đánh thuận xu hướng khung lớn (đa khung — luật cốt lõi)</label>
         <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
           <label className="flex items-center gap-2 text-[13px] font-extrabold text-violet-800"><input type="checkbox" checked={c.adaptive} onChange={(e) => setC({ ...c, adaptive: e.target.checked })} /><Brain size={15} /> Tự tối ưu dần (walk-forward)</label>
@@ -92,7 +92,7 @@ function SetupForm({ initial, onStart, onCancel }) {
           {c.adaptive && <label className="mt-2 flex items-center gap-2 text-[12px] font-semibold text-violet-900"><input type="checkbox" checked={c.tfGate} onChange={(e) => setC({ ...c, tfGate: e.target.checked })} /> Nghỉ cả khung giờ khi khung đó đang lỗ (kỳ vọng gần đây âm)</label>}
         </div>
         <div className="rounded-lg bg-slate-50 p-2.5 text-[11.5px] leading-snug text-slate-500">
-          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát), vào bằng <b>lệnh chờ</b>, không dời hoà vốn (dữ liệu cho thấy dời hoà vốn làm giảm lợi nhuận). Bộ tối ưu: học 90 ngày, xét 60 lệnh gần nhất, độ thận trọng 1 — chỉ vào khi lợi thế đã được chứng minh. Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL.
+          <b className="text-slate-700">Đề xuất cho vốn 1.000$:</b> rủi ro <b>1%/lệnh</b> (≈10$), tối đa <b>3 lệnh</b> cùng lúc, đòn bẩy ≤ <b>20x</b>, dừng ngày khi lỗ <b>3%</b>, bỏ lệnh khi phí &gt; <b>0,35R</b> (SL quá sát), vào bằng <b>lệnh chờ</b>, không dời hoà vốn (dữ liệu cho thấy dời hoà vốn làm giảm lợi nhuận). Bộ tối ưu: học 90 ngày, xét 60 lệnh gần nhất, độ thận trọng 1 — chỉ vào khi lợi thế đã được chứng minh. <b>R:R tối thiểu 1:{String(MIN_RR).replace(".", ",")}</b> — bộ tối ưu chỉ chọn trong R:R 1,5 / 2 / 3. Khối lượng tự tính = tiền rủi ro ÷ khoảng cách SL.
         </div>
         <div className="flex gap-2">
           {onCancel && <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Huỷ</button>}
@@ -248,7 +248,7 @@ export default function CoinBot() {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · {cfg.entryMode === "limit" ? "vào lệnh chờ" : "vào giá thị trường"}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · {cfg.entryMode === "limit" ? "vào lệnh chờ" : "vào giá thị trường"} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
         </div>

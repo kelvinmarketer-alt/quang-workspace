@@ -30,9 +30,12 @@ export const DEFAULT_CFG = {
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
 const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
+export const MIN_RR = 1.5; // luật của Quang: R:R tối thiểu 1:1,5 — mọi mức chốt lời (kể cả chốt 1 nửa) không thấp hơn
 export function cfgOf(session) {
   const c = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
   if ((session?.cfg?.cfgVer || 1) < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
+  c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
+  if (c.partialAtR > 0 && c.partialAtR < MIN_RR) c.partialAtR = MIN_RR;
   return c;
 }
 
@@ -213,7 +216,7 @@ const uRof = (part, entry, px, side, risk, feeR) => (part ? 0.5 * part + (0.5 * 
 function variantsOf(cfg) {
   const v = [[1.5, 0], [1.5, 1], [2, 0], [2, 1], [3, 0], [3, 1]];
   if (!v.some(([r, b]) => r === cfg.rr && b === cfg.beAtR)) v.push([cfg.rr, cfg.beAtR]);
-  return v.map(([rr, beAtR]) => ({ rr, beAtR, label: `R:R ${rr}${beAtR ? ` · hoà vốn ${beAtR}R` : ""}` }));
+  return v.filter(([rr]) => rr >= MIN_RR).map(([rr, beAtR]) => ({ rr, beAtR, label: `R:R ${rr}${beAtR ? ` · hoà vốn ${beAtR}R` : ""}` }));
 }
 export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "setup (mọi cặp, khung)", "cả khung giờ đang âm"];
 
