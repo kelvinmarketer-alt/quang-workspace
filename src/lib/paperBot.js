@@ -2,6 +2,9 @@
 // Luật CỐ ĐỊNH (deterministic): chạy lại bao nhiêu lần cũng ra cùng kết quả → đo được tỉ lệ thắng thật của phương pháp.
 // Chỉ dùng NẾN ĐÃ ĐÓNG, vào lệnh ở giá mở nến kế tiếp, SL & TP chạm cùng nến → tính THUA, có phí + trượt giá.
 // Phiên chạy từ ngày bắt đầu (lùi 1–2 tháng) tới hiện tại và tiếp tục mỗi khi có nến mới, cho tới khi chủ bấm Dừng.
+// TỰ TỐI ƯU (walk-forward, không nhìn trước tương lai): mỗi tín hiệu được mô phỏng "bóng" với 6 cấu hình (R:R × dời hoà vốn);
+// lúc có tín hiệu mới, bộ tối ưu CHỈ xét các lệnh bóng ĐÃ ĐÓNG trước thời điểm đó → chọn cấu hình kỳ vọng cao nhất,
+// kỳ vọng âm thì bỏ tín hiệu. Chạy song song "Luật gốc" để so sánh bộ tối ưu giúp hay hại.
 
 export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 } };
 export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" };
@@ -15,7 +18,8 @@ export const SETUPS = {
 // Mặc định đề xuất cho vốn 1.000$
 export const DEFAULT_CFG = {
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
-  rr: 2, beAtR: 1, timeStopBars: 96, feePct: 0.05, slipPct: 0.02,
+  rr: 2, beAtR: 1, timeStopBars: 96, feePct: 0.05, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát — phí ăn hết lợi thế)
+  adaptive: true, warmupDays: 30, lookback: 20, minSample: 8, minExp: 0.05, // tự tối ưu: học thêm 30 ngày trước ngày bắt đầu, xét 20 lệnh gần nhất, cần ≥8 mẫu, kỳ vọng ≥ +0.05R mới vào
   htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h", "4h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"],
 };
@@ -38,17 +42,24 @@ async function getJson(url, tries = 4) {
   if (!r.ok) throw new Error(`Binance ${r.status}`);
   return r.json();
 }
-export async function loadKlines(symbol, tf, fromTs) {
+const INFLIGHT = new Map();
+export function loadKlines(symbol, tf, fromTs) {
+  const key = `${symbol}|${tf}|${fromTs}`;
+  if (!INFLIGHT.has(key)) INFLIGHT.set(key, loadKlines0(symbol, tf, fromTs).finally(() => INFLIGHT.delete(key)));
+  return INFLIGHT.get(key);
+}
+async function loadKlines0(symbol, tf, fromTs) {
   const key = `${symbol}|${tf}`, step = TFS[tf].ms, now = Date.now();
   let rows = MEM.get(key) || (await idbGet(key)) || [];
-  if (!rows.length || rows[0][0] > fromTs) rows = [];
+  if (!rows.length || rows[0][0] > fromTs + step) rows = []; // cache bắt đầu muộn hơn mức cần → tải lại từ đầu
   let start = rows.length ? rows[rows.length - 1][0] + step : fromTs;
   for (let guard = 0; guard < 80 && start < now - step; guard++) {
-    const j = await getJson(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=1500&startTime=${start}`);
+    const limit = Math.min(1500, Math.max(2, Math.ceil((now - start) / step) + 1)); // phần mới ít → limit nhỏ (trọng số API thấp)
+    const j = await getJson(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=${limit}&startTime=${start}`);
     if (!j.length) break;
     for (const k of j) if (k[6] < now) rows.push([k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]);
     start = j[j.length - 1][0] + step;
-    if (j.length < 1500) break;
+    if (j.length < limit) break;
   }
   MEM.set(key, rows);
   await idbSet(key, rows);
@@ -82,6 +93,7 @@ function findSignals(K, setups) {
   const maxH = (a, b) => { let m = -Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.max(m, H[k]); return m; };
   const minL = (a, b) => { let m = Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.min(m, L[k]); return m; };
   let pendTrend = null, smc = null; const swept = new Set();
+  const lastSwing = (arr, i, ok) => { for (let q = arr.length - 1; q >= 0 && i - arr[q] <= 60; q--) if (ok(arr[q])) return arr[q]; return null; }; // swing gần nhất (≤60 nến) thoả điều kiện
   for (let i = 210; i < n; i++) {
     const j = i - 2; // nến j vừa được xác nhận là swing?
     if (H[j] > H[j - 1] && H[j] > H[j - 2] && H[j] >= H[j + 1] && H[j] >= H[j + 2]) swHi.push(j);
@@ -105,9 +117,9 @@ function findSignals(K, setups) {
 
     // 2) SFP: quét đỉnh/đáy swing đáng kể (cực trị 20 nến) + đóng quay lại + volume cao
     if (on("SFP") && V[i] >= 1.5 * vma[i]) {
-      const sh = swHi.filter((x) => i - x <= 60 && !swept.has("h" + x) && H[x] >= maxH(x - 20, x - 1)).pop();
+      const sh = lastSwing(swHi, i, (x) => !swept.has("h" + x) && H[x] >= maxH(x - 20, x - 1));
       if (sh != null && H[i] > H[sh] && C[i] < H[sh] && (H[i] - Math.max(O[i], C[i])) / rng >= 0.4 && maxH(sh + 1, i - 1) <= H[sh]) { swept.add("h" + sh); sig.push({ i, side: -1, sl: H[i] + 0.2 * a, setup: "SFP", note: "quét đỉnh swing + volume cao" }); }
-      const sl0 = swLo.filter((x) => i - x <= 60 && !swept.has("l" + x) && L[x] <= minL(x - 20, x - 1)).pop();
+      const sl0 = lastSwing(swLo, i, (x) => !swept.has("l" + x) && L[x] <= minL(x - 20, x - 1));
       if (sl0 != null && L[i] < L[sl0] && C[i] > L[sl0] && (Math.min(O[i], C[i]) - L[i]) / rng >= 0.4 && minL(sl0 + 1, i - 1) >= L[sl0]) { swept.add("l" + sl0); sig.push({ i, side: 1, sl: L[i] - 0.2 * a, setup: "SFP", note: "quét đáy swing + volume cao" }); }
     }
 
@@ -149,82 +161,170 @@ function simTrade(K, s, cfg, atr, endIdx) {
   const risk = (entry - s.sl) * side;
   const a = atr[s.i];
   if (!(risk > 0) || risk > 4 * a) return { skip: risk > 0 ? "SL xa > 4 ATR" : "giá vào đã qua SL" }; // luật EA: huỷ lệnh đuổi giá
+  if (cfg.maxFeeR > 0 && (2 * (cfg.feePct / 100) * entry) / risk > cfg.maxFeeR) return { skip: "SL quá sát (phí > " + cfg.maxFeeR + "R)" }; // phí ăn quá nhiều so với rủi ro
   const tp = entry + side * cfg.rr * risk;
-  let sl = s.sl, be = false, exit = null, reason = null, exitIdx = null, maxR = 0;
+  let sl = s.sl, be = false, exit = null, reason = null, exitIdx = null, maxR = 0, mae = 0;
   for (let k = e; k <= endIdx; k++) {
     const [, , h, l, c] = K[k];
     const adv = side === 1 ? l : h, fav = side === 1 ? h : l;
+    mae = Math.max(mae, Math.min(((entry - adv) * side) / risk, 1.2));
     if ((adv - sl) * side <= 0) { exit = sl * (1 - side * slip); reason = be ? "Hoà vốn" : "Cắt lỗ"; exitIdx = k; break; }
-    if ((fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; break; }
+    if ((fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; maxR = cfg.rr; break; }
     maxR = Math.max(maxR, ((fav - entry) * side) / risk);
     if (!be && cfg.beAtR > 0 && maxR >= cfg.beAtR) { be = true; sl = entry + side * 0.05 * risk; } // dời SL về hoà vốn (dương nhẹ) từ nến sau
     if (k - e >= cfg.timeStopBars) { exit = c; reason = "Hết thời gian"; exitIdx = k; break; }
   }
   const feeR = (2 * (cfg.feePct / 100) * entry) / risk;
-  return { entryIdx: e, entry, sl: s.sl, tp, risk, exitIdx, exit, reason, be, feeR, open: exit == null };
+  return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp, risk, rr: cfg.rr, beAtR: cfg.beAtR, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r: exit == null ? null : ((exit - entry) * side) / risk - feeR };
 }
+
+// Các cấu hình bộ tối ưu được thử (R:R × dời hoà vốn) — luôn gồm cấu hình gốc của phiên
+function variantsOf(cfg) {
+  const v = [[1.5, 0], [1.5, 1], [2, 0], [2, 1], [3, 0], [3, 1]];
+  if (!v.some(([r, b]) => r === cfg.rr && b === cfg.beAtR)) v.push([cfg.rr, cfg.beAtR]);
+  return v.map(([rr, beAtR]) => ({ rr, beAtR, label: `R:R ${rr}${beAtR ? ` · hoà vốn ${beAtR}R` : ""}` }));
+}
+export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "setup (mọi cặp, khung)"];
 
 // ---------------- Chạy cả phiên ----------------
 // session: { startAt, stoppedAt?, cfg } · onProgress(text)
+// Trả về dữ liệu THÔ (lệnh theo R); finalize() ghép giá realtime + tính danh mục.
 export async function runSession(session, onProgress = () => {}) {
   const cfg = { ...DEFAULT_CFG, ...(session.cfg || {}) };
-  const until = session.stoppedAt || Date.now();
-  const trades = [], skipped = {}, streams = [];
+  const until = session.stoppedAt || Date.now(), startAt = session.startAt;
+  const learnFrom = cfg.adaptive ? startAt - cfg.warmupDays * 86400000 : startAt;
+  const V = variantsOf(cfg), baseVi = V.findIndex((v) => v.rr === cfg.rr && v.beAtR === cfg.beAtR);
+  const skipped = {}, streams = [], shadows = [];
+  const bump = (k, n = 1) => { if (n) skipped[k] = (skipped[k] || 0) + n; };
+  // tải song song mọi cặp × khung (kể cả khung lớn để lọc) — lần sau chỉ tải phần nến mới
+  const need = new Map();
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
-    const symbol = SYMBOLS[coin], step = TFS[tf].ms;
-    onProgress(`Tải nến ${coin} ${TFS[tf].label}…`);
-    const K = (await loadKlines(symbol, tf, session.startAt - 260 * step)).filter((k) => k[0] + step <= until);
+    need.set(`${coin}|${tf}`, [SYMBOLS[coin], tf, learnFrom - 260 * TFS[tf].ms]);
+    if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
+  }
+  onProgress(`Tải nến ${need.size} luồng…`);
+  let done = 0;
+  await Promise.all([...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => onProgress(`Tải nến ${++done}/${need.size}…`))));
+  for (const coin of cfg.coins) for (const tf of cfg.tfs) {
+    const symbol = SYMBOLS[coin], step = TFS[tf].ms, key = `${coin}|${tf}`;
+    const K = (await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
     if (K.length < 260) { streams.push({ coin, tf, bars: K.length, note: "thiếu dữ liệu" }); continue; }
     const found = findSignals(K, cfg.setups);
-    const atr = found.atr; let sig = found.sig;
+    const atr = found.atr; let sig = found.sig.filter((x) => K[x.i][0] >= learnFrom);
     if (cfg.htfFilter) {
       const htf = TFS[tf].htf, hs = TFS[htf].ms;
-      const HK = (await loadKlines(symbol, htf, session.startAt - 260 * hs)).filter((k) => k[0] + hs <= until);
+      const HK = (await loadKlines(symbol, htf, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until);
       const he = emaArr(HK.map((k) => k[4]), 200);
       // xu hướng khung lớn tại thời điểm nến LTF đóng = nến khung lớn ĐÃ ĐÓNG gần nhất
       const biasAt = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
-      const before = sig.length;
-      sig = sig.filter((x) => biasAt(K[x.i][0] + step) === x.side);
-      skipped["Ngược xu hướng khung lớn"] = (skipped["Ngược xu hướng khung lớn"] || 0) + (before - sig.length);
+      const keep = sig.filter((x) => biasAt(K[x.i][0] + step) === x.side);
+      bump("Ngược xu hướng khung lớn", sig.filter((x) => K[x.i][0] >= startAt).length - keep.filter((x) => K[x.i][0] >= startAt).length);
+      sig = keep;
     }
-    const endIdx = K.length - 1;
-    let busyUntil = -1; // 1 lệnh / luồng tại 1 thời điểm
+    const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
-      if (K[s.i][0] < session.startAt || s.i + 1 <= busyUntil) continue;
-      const t = simTrade(K, s, cfg, atr, endIdx);
-      if (!t) continue;
-      if (t.skip) { skipped[t.skip] = (skipped[t.skip] || 0) + 1; continue; }
-      busyUntil = t.open ? Infinity : t.exitIdx;
-      const last = K[endIdx][4];
-      trades.push({
-        id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, coin, tf, setup: s.setup, side: s.side, note: s.note,
-        signalAt: K[s.i][0], entryAt: K[t.entryIdx][0], entry: t.entry, sl: t.sl, tp: t.tp, risk: t.risk,
-        exitAt: t.open ? null : K[t.exitIdx][0] + step, exit: t.open ? null : t.exit, reason: t.open ? "Đang mở" : t.reason, be: t.be,
-        r: t.open ? null : ((t.exit - t.entry) * s.side) / t.risk - t.feeR, uR: t.open ? ((last - t.entry) * s.side) / t.risk - t.feeR : null, last, feeR: t.feeR,
-      });
+      const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx));
+      if (!sims[0]) continue;
+      if (sims[0].skip) { if (K[s.i][0] >= startAt) bump(sims[0].skip); continue; }
+      const entryAt = K[sims[0].entryIdx][0];
+      const build = (vi, extra) => {
+        const t = sims[vi];
+        return {
+          id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, side: s.side, note: s.note,
+          signalAt: K[s.i][0], entryAt, entry: t.entry, sl: t.sl, curSl: t.curSl, tp: t.tp, risk: t.risk, rr: t.rr, beAtR: t.beAtR,
+          exitAt: t.open ? null : K[t.exitIdx][0] + step, exit: t.open ? null : t.exit, reason: t.open ? "Đang mở" : t.reason, be: t.be,
+          r: t.r, uR: t.open ? ((last - t.entry) * s.side) / t.risk - t.feeR : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
+        };
+      };
+      shadows.push({ key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
     }
-    streams.push({ coin, tf, bars: K.length, signals: sig.filter((x) => K[x.i][0] >= session.startAt).length, lastBar: K[endIdx][0] });
+    streams.push({ coin, tf, bars: K.length, signals: sig.filter((x) => K[x.i][0] >= startAt).length, lastBar: lastBarAt });
   }
-  onProgress("Tính danh mục…");
-  return { cfg, trades, skipped, streams, portfolio: portfolio(trades, cfg, session.startAt, until), at: Date.now() };
+  onProgress("Tối ưu & tính danh mục…");
+  shadows.sort((a, b) => a.entryAt - b.entryAt);
+
+  // Chỉ mục học: cấp (ô / nhóm / setup) → khoá → theo cấu hình: [{x: lúc đóng, r}] sắp theo x
+  const idx = [new Map(), new Map(), new Map()], keysOf = (sh) => [sh.cell, sh.grp, sh.setup];
+  for (const sh of shadows) keysOf(sh).forEach((k, l) => {
+    let m = idx[l].get(k); if (!m) idx[l].set(k, (m = V.map(() => [])));
+    sh.r.forEach((r, vi) => { if (r != null) m[vi].push({ x: sh.x[vi], r }); });
+  });
+  for (const lv of idx) for (const m of lv.values()) for (const a of m) a.sort((p, q) => p.x - q.x);
+  const upTo = (a, T) => { let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m].x <= T) lo = m + 1; else hi = m; } return lo; };
+  // Quyết định tại thời điểm T: chỉ dùng lệnh bóng đã ĐÓNG trước T (walk-forward)
+  const decide = (keys, T) => {
+    for (let l = 0; l < 3; l++) {
+      const m = idx[l].get(keys[l]); if (!m) continue;
+      const ev = m.map((a, vi) => { const c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lookback), c); return { vi, n: w.length, exp: w.length ? w.reduce((s, x) => s + x.r, 0) / w.length : -Infinity, win: w.length ? w.filter((x) => x.r > 0.05).length / w.length : 0 }; }).filter((e) => e.n >= cfg.minSample);
+      if (!ev.length) continue;
+      const best = ev.sort((a, b) => b.exp - a.exp)[0];
+      return { level: l, vi: best.vi, exp: best.exp, n: best.n, win: best.win * 100, take: best.exp >= cfg.minExp };
+    }
+    return { level: -1, vi: baseVi, exp: null, n: 0, win: null, take: true };
+  };
+
+  const trades = [], baseTrades = [], rejected = [], optLog = [], cellState = new Map(), busyA = {}, busyB = {};
+  for (const sh of shadows) {
+    if (!sh.live) continue;
+    if (!(sh.entryAt < (busyB[sh.key] ?? -1))) { const t = sh.build(baseVi); baseTrades.push(t); busyB[sh.key] = t.exitAt ?? Infinity; }
+    if (!cfg.adaptive || sh.entryAt < (busyA[sh.key] ?? -1)) continue;
+    const d = decide(keysOf(sh), sh.entryAt);
+    const prev = cellState.get(sh.cell), cur = d.take ? `on:${d.vi}` : "off";
+    if (prev !== cur) {
+      optLog.push({ t: sh.entryAt, cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, take: d.take, variant: V[d.vi].label, exp: d.exp, n: d.n, level: d.level, first: prev == null, prevOn: prev ? prev !== "off" : null });
+      cellState.set(sh.cell, cur);
+    }
+    const score = { exp: d.exp, n: d.n, level: d.level, variant: V[d.vi].label };
+    if (d.take) { const t = sh.build(d.vi, { score }); trades.push(t); busyA[sh.key] = t.exitAt ?? Infinity; }
+    else rejected.push(sh.build(baseVi, { score, status: "reject", why: `kỳ vọng ${d.exp.toFixed(2)}R / ${d.n} lệnh gần nhất` }));
+  }
+
+  // Trạng thái bộ tối ưu tại hiện tại cho từng ô đã có tín hiệu
+  const seen = new Map(); for (const sh of shadows) seen.set(sh.cell, sh);
+  const optState = [...seen.values()].map((sh) => { const d = decide(keysOf(sh), until); return { cell: sh.cell, coin: sh.coin, tf: sh.tf, setup: sh.setup, ...d, variant: V[d.vi].label }; })
+    .sort((a, b) => (b.take - a.take) || ((b.exp ?? -9) - (a.exp ?? -9)));
+
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
+}
+
+// Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.
+// live: { "BTC|5m": {t, h, l, c} } · hits: Map id → lúc phát hiện chạm (giữ thời điểm ổn định giữa các nhịp)
+function applyTick(t, bar, cfg, hits) {
+  if (t.exitAt != null || !bar || bar.t <= t.lastBarAt) return t;
+  const side = t.side, slip = cfg.slipPct / 100;
+  const hitSl = ((side === 1 ? bar.l : bar.h) - t.curSl) * side <= 0, hitTp = ((side === 1 ? bar.h : bar.l) - t.tp) * side >= 0;
+  if (hitSl || hitTp) { // cùng chạm trong 1 nến → tính THUA như luật chung
+    const exit = hitSl ? t.curSl * (1 - side * slip) : t.tp;
+    if (!hits.has(t.id)) hits.set(t.id, Date.now());
+    return { ...t, exit, exitAt: hits.get(t.id), reason: hitSl ? (t.be ? "Hoà vốn" : "Cắt lỗ") : "Chốt lời", r: ((exit - t.entry) * side) / t.risk - t.feeR, uR: null, last: bar.c, liveExit: true };
+  }
+  return { ...t, last: bar.c, uR: ((bar.c - t.entry) * side) / t.risk - t.feeR, mfe: Math.max(t.mfe || 0, (((side === 1 ? bar.h : bar.l) - t.entry) * side) / t.risk) };
+}
+export function finalize(raw, live, hits = new Map()) {
+  if (!raw) return null;
+  const until = raw.stopped ? raw.until : Math.max(raw.until, Date.now());
+  const adj = (list) => (live && !raw.stopped ? list.map((t) => applyTick(t, live[t.key], raw.cfg, hits)) : list);
+  const trades = adj(raw.trades), baseTrades = adj(raw.baseTrades);
+  return { ...raw, trades, baseTrades, portfolio: portfolio(trades, raw.cfg, raw.startAt, until), basePortfolio: portfolio(baseTrades, raw.cfg, raw.startAt, until) };
 }
 
 // Danh mục vốn thật: rủi ro % vốn/lệnh, tối đa N lệnh cùng lúc, đòn bẩy tối đa, dừng ngày khi lỗ X%
+const dayOf = (t) => new Date(t + 7 * 3600000).toISOString().slice(0, 10); // ngày giờ VN
 function portfolio(trades, cfg, startAt, until) {
-  let eq = cfg.capital, peak = eq, maxDD = 0;
+  let eq = cfg.capital, peak = eq, maxDD = 0, maxDDUsd = 0, fees = 0;
   const curve = [{ t: startAt, eq }], open = [], taken = [], dayPnl = {};
   const evs = [...trades].sort((a, b) => a.entryAt - b.entryAt);
   const settle = (t) => {
     open.sort((a, b) => (a.exitAt ?? Infinity) - (b.exitAt ?? Infinity));
     while (open.length && open[0].exitAt != null && open[0].exitAt <= t) {
-      const p = open.shift(); eq += p.pnl; peak = Math.max(peak, eq); maxDD = Math.max(maxDD, (peak - eq) / peak);
-      const d = new Date(p.exitAt + 7 * 3600000).toISOString().slice(0, 10); dayPnl[d] = (dayPnl[d] || 0) + p.pnl;
+      const p = open.shift(); eq += p.pnl; peak = Math.max(peak, eq); maxDD = Math.max(maxDD, (peak - eq) / peak); maxDDUsd = Math.max(maxDDUsd, peak - eq);
+      const d = dayOf(p.exitAt); dayPnl[d] = (dayPnl[d] || 0) + p.pnl;
       curve.push({ t: p.exitAt, eq });
     }
   };
   for (const tr of evs) {
     settle(tr.entryAt);
-    const day = new Date(tr.entryAt + 7 * 3600000).toISOString().slice(0, 10);
+    const day = dayOf(tr.entryAt);
     if (open.length >= cfg.maxOpen) { taken.push({ ...tr, status: "skip", why: `đủ ${cfg.maxOpen} lệnh mở` }); continue; }
     if ((dayPnl[day] || 0) <= -(cfg.dailyStopPct / 100) * eq) { taken.push({ ...tr, status: "skip", why: `chạm dừng ngày -${cfg.dailyStopPct}%` }); continue; }
     const riskUsd = eq * (cfg.riskPct / 100);
@@ -233,14 +333,17 @@ function portfolio(trades, cfg, startAt, until) {
     const lev = (qty * tr.entry) / eq;
     const R = tr.r ?? tr.uR ?? 0;
     const pnl = qty * tr.risk * R; // R đã trừ phí
-    const row = { ...tr, status: tr.exitAt == null ? "open" : "done", qty, lev, riskUsd: qty * tr.risk, pnl };
+    const fee = qty * tr.risk * tr.feeR;
+    if (tr.exitAt != null) fees += fee;
+    const row = { ...tr, status: tr.exitAt == null ? "open" : "done", qty, lev, riskUsd: qty * tr.risk, pnl, fee, notional: qty * tr.entry };
     taken.push(row);
-    if (tr.exitAt != null) open.push(row); else open.push({ ...row, exitAt: null });
+    open.push(row);
   }
   settle(until);
   const unreal = open.filter((p) => p.exitAt == null).reduce((s, p) => s + p.pnl, 0);
   curve.push({ t: until, eq: eq + unreal });
-  return { equity: eq, unrealized: unreal, maxDD: maxDD * 100, curve, trades: taken };
+  const days = Object.entries(dayPnl).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([d, v]) => ({ d, v }));
+  return { equity: eq, unrealized: unreal, maxDD: maxDD * 100, maxDDUsd, fees, curve, trades: taken, days };
 }
 
 // Thống kê theo R (chất lượng phương pháp, không phụ thuộc vốn)
@@ -248,11 +351,25 @@ export function statsOf(list) {
   const done = list.filter((t) => t.r != null);
   const wins = done.filter((t) => t.r > 0.05), losses = done.filter((t) => t.r < -0.05), bes = done.length - wins.length - losses.length;
   const sumW = wins.reduce((s, t) => s + t.r, 0), sumL = -losses.reduce((s, t) => s + t.r, 0);
-  let streak = 0, worst = 0; for (const t of [...done].sort((a, b) => a.exitAt - b.exitAt)) { if (t.r < -0.05) { streak++; worst = Math.max(worst, streak); } else if (t.r > 0.05) streak = 0; }
+  let streak = 0, worst = 0, ws = 0, bestWs = 0;
+  for (const t of [...done].sort((a, b) => a.exitAt - b.exitAt)) {
+    if (t.r < -0.05) { streak++; worst = Math.max(worst, streak); ws = 0; } else if (t.r > 0.05) { streak = 0; ws++; bestWs = Math.max(bestWs, ws); }
+  }
+  const n = done.length, mean = n ? done.reduce((s, t) => s + t.r, 0) / n : null;
+  const sd = n > 1 ? Math.sqrt(done.reduce((s, t) => s + (t.r - mean) ** 2, 0) / (n - 1)) : null;
+  const avg = (a, f) => (a.length ? a.reduce((s, t) => s + f(t), 0) / a.length : null);
+  const reasons = {}; for (const t of done) reasons[t.reason] = (reasons[t.reason] || 0) + 1;
   return {
-    n: done.length, open: list.length - done.length, wins: wins.length, losses: losses.length, bes,
-    winRate: done.length ? (wins.length / done.length) * 100 : null,
-    avgR: done.length ? done.reduce((s, t) => s + t.r, 0) / done.length : null,
-    totalR: done.reduce((s, t) => s + t.r, 0), pf: sumL ? sumW / sumL : sumW ? Infinity : null, worstStreak: worst,
+    n, open: list.length - n, wins: wins.length, losses: losses.length, bes,
+    winRate: n ? (wins.length / n) * 100 : null,
+    avgR: mean, totalR: done.reduce((s, t) => s + t.r, 0), pf: sumL ? sumW / sumL : sumW ? Infinity : null, worstStreak: worst, bestStreak: bestWs,
+    avgWin: wins.length ? sumW / wins.length : null, avgLoss: losses.length ? -sumL / losses.length : null,
+    payoff: wins.length && losses.length ? sumW / wins.length / (sumL / losses.length) : null,
+    maxWin: n ? Math.max(...done.map((t) => t.r)) : null, maxLoss: n ? Math.min(...done.map((t) => t.r)) : null,
+    sqn: sd ? (mean / sd) * Math.sqrt(Math.min(n, 100)) : null, // System Quality Number (Van Tharp): <1.6 kém · 1.6–2 trung bình · >2 tốt
+    holdH: avg(done, (t) => (t.exitAt - t.entryAt) / 3600000),
+    mfeLoss: avg(losses, (t) => t.mfe || 0), // lệnh thua từng lời được bao nhiêu R trước khi quay đầu
+    maeWin: avg(wins, (t) => t.mae || 0), // lệnh thắng từng âm bao nhiêu R
+    feeR: avg(done, (t) => t.feeR), reasons,
   };
 }
