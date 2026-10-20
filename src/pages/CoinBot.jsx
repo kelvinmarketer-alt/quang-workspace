@@ -66,7 +66,7 @@ function SetupForm({ initial, onStart, onCancel }) {
       <div className="space-y-3">
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><div className="flex flex-wrap gap-1.5">{Object.keys(SYMBOLS).map((k) => <button key={k} onClick={() => tog("coins", k)} className={chip(c.coins.includes(k))}>{k}USDT</button>)}</div></div>
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{["5m", "15m", "1h"].map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{["5m", "15m"].map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Setup theo bộ kiến thức</div>
           <div className="space-y-1">{Object.entries(SETUPS).map(([k, s]) => (
             <button key={k} onClick={() => tog("setups", k)} className={`block w-full rounded-lg border px-3 py-2 text-left ${c.setups.includes(k) ? "border-indigo-300 bg-indigo-50/60" : "border-slate-200 opacity-60"}`}>
@@ -85,10 +85,13 @@ function SetupForm({ initial, onStart, onCancel }) {
           <div className="mt-2 text-[12px] font-semibold text-emerald-900">Vùng Key Volume (bộ kiến thức: chỉ vào TẠI vùng có lý do)</div>
           <div className="mt-1 flex flex-wrap gap-1.5">{[[1, "Nến volume lớn nhất 100 nến (khuyên dùng)"], [3, "Top 3 nến volume"], [0, "Tắt"]].map(([k, l]) => <button key={k} onClick={() => setC({ ...c, keyVolume: k })} className={chip(c.keyVolume === k)}>{l}</button>)}</div>
           <div className="mt-1 text-[11px] text-emerald-900/60">Giá vào phải nằm trong vùng nến Key Volume (nến volume ≥ 2,5× TB20 lớn nhất 100 nến). 3 tháng gần nhất: thắng 39% → 47%, vốn 921$ → 1.183$, sụt vốn 22% → 6%.</div>
+          <div className="mt-2 text-[12px] font-semibold text-emerald-900">Xác nhận theo bộ kiến thức (VSA · Price Action · đa khung)</div>
+          {[["sigVol", "Nến tín hiệu phải có volume > TB20 (VSA: có lực xác nhận)"], ["noEngulf", "Không vào ngay sau nến engulfing lớn (tránh đuổi giá sau nến mạnh)"], ["d1Bias", "Chỉ vào thuận xu hướng D1 (ít lệnh hơn, thắng cao hơn)"]].map(([k, l]) => <label key={k} className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-emerald-900"><input type="checkbox" checked={!!c[k]} onChange={(e) => setC({ ...c, [k]: e.target.checked })} /> {l}</label>)}
+          <div className="mt-1 text-[11px] text-emerald-900/60">3 tháng gần nhất (M5+M15, Key Volume): thắng 50% → 57%, R TB +0,28 → +0,54; bật thêm D1: thắng 64% nhưng chỉ ~22 lệnh/3 tháng.</div>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{field("maxExtAtr", "Không đuổi: xa EMA50 ≤ (0=tắt)", 0.5, "ATR")}{field("minSlAtr", "SL tối thiểu (0=tắt)", 0.5, "ATR")}{field("fillBars", "Chờ khớp tối đa", 1, "nến")}</div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("partialAtR", `Chốt 50% ở (0=tắt, ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}</div>
-        <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700"><input type="checkbox" checked={c.htfFilter} onChange={(e) => setC({ ...c, htfFilter: e.target.checked })} /> Chỉ đánh thuận xu hướng khung lớn (đa khung — luật cốt lõi)</label>
+        <label className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-700"><input type="checkbox" checked={c.htfFilter} onChange={(e) => setC({ ...c, htfFilter: e.target.checked })} /> Chỉ đánh thuận xu hướng khung lớn — khung lớn CHỈ dùng xác định bias: M5 theo H1, M15 theo H4 (EMA200)</label>
         <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
           <label className="flex items-center gap-2 text-[13px] font-extrabold text-violet-800"><input type="checkbox" checked={c.adaptive} onChange={(e) => setC({ ...c, adaptive: e.target.checked })} /><Brain size={15} /> Tự tối ưu dần (walk-forward)</label>
           <div className="mt-1 text-[11.5px] leading-snug text-violet-900/70">Mỗi tín hiệu được thử song song 6 cấu hình (R:R 1.5/2/3 × có/không dời hoà vốn). Khi có tín hiệu mới, bot chỉ nhìn các lệnh <b>đã đóng trước đó</b> (không nhìn trước tương lai) → chọn cấu hình kỳ vọng cao nhất, kỳ vọng thấp hơn ngưỡng thì <b>bỏ tín hiệu</b>. Thiếu mẫu ở cặp+khung+setup thì học từ nhóm rộng hơn. Luôn chạy kèm “Luật gốc” để so sánh.</div>
@@ -179,7 +182,7 @@ export default function CoinBot() {
       const r = await runSession(ss, (m) => setBusy(m));
       if (same()) { setRaw(r); lastRun.current = Date.now(); }
       const c0 = cfgOf(ss);
-      const o = c0.maxExtAtr > 0 || c0.minSlAtr > 0 || c0.keyVolume > 0 ? await runSession({ ...ss, cfg: { ...c0, maxExtAtr: 0, minSlAtr: 0, keyVolume: 0 } }) : null;
+      const o = c0.maxExtAtr > 0 || c0.minSlAtr > 0 || c0.keyVolume > 0 ? await runSession({ ...ss, cfg: { ...c0, maxExtAtr: 0, minSlAtr: 0, keyVolume: 0, sigVol: false, noEngulf: false, d1Bias: false } }) : null;
       if (same()) setRawOld(o);
     }
     catch (e) { setErr(e.message || String(e)); }
@@ -272,7 +275,7 @@ export default function CoinBot() {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.map((x) => x + "USDT").join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh{cfg.htfFilter ? " · thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""} · bias {cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}{cfg.d1Bias ? " + D1" : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
         </div>
@@ -407,7 +410,7 @@ export default function CoinBot() {
                   ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
                 </table>
               </div>
-              <div className="mt-1.5 text-[11px] text-slate-400">Bản cũ = cùng tín hiệu, cùng lệnh chờ nhưng không kiểm tra đuổi giá / SL sát / Key Volume. {Object.entries(res.skipped).filter(([k]) => /đuổi|sát|không về|volume/i.test(k)).map(([k, v]) => `${v} tín hiệu bị bỏ vì ${k}`).join(" · ")}</div>
+              <div className="mt-1.5 text-[11px] text-slate-400">Bản cũ = cùng tín hiệu, cùng lệnh chờ nhưng không kiểm tra đuổi giá / SL sát / Key Volume / volume nến tín hiệu / engulfing. {Object.entries(res.skipped).filter(([k]) => /đuổi|sát|không về|volume|engulf|D1/i.test(k)).map(([k, v]) => `${v} tín hiệu bị bỏ vì ${k}`).join(" · ")}</div>
             </Card>
           );
         })()}

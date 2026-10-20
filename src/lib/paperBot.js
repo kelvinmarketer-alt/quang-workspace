@@ -17,9 +17,10 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 5,
+  cfgVer: 6,
   capital: 1000, riskPct: 1, maxOpen: 3, maxLev: 20, dailyStopPct: 3,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
+  sigVol: true, noEngulf: true, d1Bias: false, // v6: nến tín hiệu volume > TB20 · bỏ vào ngay sau engulfing lớn · (tuỳ chọn) chỉ thuận D1
   keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
   maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
@@ -29,9 +30,10 @@ export const DEFAULT_CFG = {
   learnLoss: true, lessonN: 30, lessonMin: 15, verifyOpt: true, optVariants: false, // v4: tự kiểm chứng — bộ lọc chỉ được chặn khi tín hiệu nó chặn thật sự tệ hơn; giữ R:R cố định (chọn R:R theo kết quả gần đây làm giảm tỉ lệ thắng) // v4: rút kinh nghiệm từ lệnh thua (30 lệnh gần nhất có cùng đặc điểm, cần ≥15)
   adaptive: true, warmupDays: 0, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
   htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
-  coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m", "1h"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
+  coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V6_KEYS = ["sigVol", "noEngulf", "d1Bias"];
 const V5_KEYS = ["keyVolume"];
 const V4_KEYS = ["learnLoss", "lessonN", "lessonMin", "verifyOpt", "optVariants", "warmupDays"];
 const V3_KEYS = ["maxExtAtr", "minSlAtr", "limitAt", "fillBars", "entryMode", "minExp", "confK"];
@@ -43,6 +45,7 @@ export function cfgOf(session) {
   if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
   c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
@@ -180,7 +183,7 @@ function findSignals(K, setups) {
       }
     }
   }
-  return { sig, atr, e50, adx, vma, V, H, L, C };
+  return { sig, atr, e50, adx, vma, V, H, L, C, O };
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
@@ -250,6 +253,14 @@ export const TAGS = {
   "kv:yes": "tại vùng Key Volume (top 3 volume 100 nến)", "kv:top1": "tại nến volume lớn nhất 100 nến", "kv:no": "KHÔNG ở vùng Key Volume (lơ lửng)",
   "pull:low": "nhịp hồi volume thấp (test cạn cung/cầu)", "pull:high": "nhịp hồi volume cao (chưa cạn)",
   "sig:climax": "nến tín hiệu volume siêu cao + râu ngược (climax ngược hướng)",
+  "box:mid": "giữa hộp sideway (biên 20 nến < 2.5 ATR)", "box:edge": "rìa hộp sideway", "box:no": "không sideway",
+  "room:low": "sát cản đối diện (< 2R tới đỉnh/đáy 50 nến)", "room:ok": "đủ chỗ chạy ≥ 2R",
+  "sweep:yes": "SM đã quét thanh khoản trước đó (20 nến)", "sweep:no": "chưa có cú quét thanh khoản",
+  "svol:hi": "nến tín hiệu volume > TB20", "svol:lo": "nến tín hiệu volume thấp",
+  "fvg:yes": "có FVG cùng hướng (10 nến)", "fvg:no": "không có FVG",
+  "pa:engulf": "nến xác nhận Engulfing", "pa:pin": "nến xác nhận Pin bar", "pa:none": "không có mẫu nến xác nhận",
+  "kv:react": "tại Key Volume + volume kích lại + từ chối giá",
+  "htf:all": "H1 + H4 + D1 cùng hướng", "htf:mixed": "khung lớn không đồng thuận", "d1:with": "D1 cùng hướng", "d1:against": "D1 ngược hướng",
 };
 // Key Volume (bộ kiến thức): nến volume đột biến — mạnh nhất là nến volume LỚN NHẤT 100 nến ("dấu chân cá mập"); SM vào đâu sẽ bảo vệ ở đó.
 // Lấy `top` nến volume lớn nhất trong 100 nến trước (≥ 2.5× TB20); true nếu GIÁ VÀO (đóng nến tín hiệu) nằm trong vùng [low, high] của nến đó (đệm 0.1 ATR).
@@ -275,6 +286,24 @@ function tagsOf(K, i, side, sl, f) {
   t.push((f.V[i - 1] + f.V[i - 2] + f.V[i - 3]) / 3 < 0.8 * f.vma[i] ? "pull:low" : "pull:high");
   const wickAgainst = side === 1 ? h - Math.max(o, c) : Math.min(o, c) - l;
   if (f.V[i] >= 3 * f.vma[i] && wickAgainst / (h - l || 1e-9) >= 0.5) t.push("sig:climax");
+  // Sideway: biên 20 nến < 2.5 ATR → chỉ đánh ở rìa (30% trên/dưới), giữa hộp = đứng ngoài
+  let bh = -Infinity, bl = Infinity; for (let k = i - 19; k <= i; k++) { bh = Math.max(bh, f.H[k]); bl = Math.min(bl, f.L[k]); }
+  if (bh - bl < 2.5 * a) { const pos = (c - bl) / (bh - bl || 1e-9); t.push(pos > 0.3 && pos < 0.7 ? "box:mid" : "box:edge"); } else t.push("box:no");
+  // Chỗ chạy tới cản đối diện (đỉnh/đáy 50 nến trước) tính theo R
+  const risk = Math.abs(c - sl) || 1e-9; let opp = side === 1 ? -Infinity : Infinity;
+  for (let k = i - 50; k <= i - 2; k++) opp = side === 1 ? Math.max(opp, f.H[k]) : Math.min(opp, f.L[k]);
+  const room = ((opp - c) * side) / risk; t.push(room > 0 && room < 2 ? "room:low" : "room:ok");
+  // SM đã quét thanh khoản (râu thủng đáy/đỉnh 20 nến rồi đóng lại) trong 20 nến trước, cùng phía với lệnh
+  let swept = false;
+  for (let k = i - 20; k <= i && !swept; k++) { let m = side === 1 ? Infinity : -Infinity; for (let q = k - 20; q < k; q++) m = side === 1 ? Math.min(m, f.L[q]) : Math.max(m, f.H[q]); if (side === 1 ? f.L[k] < m && f.C[k] > m : f.H[k] > m && f.C[k] < m) swept = true; }
+  t.push(swept ? "sweep:yes" : "sweep:no");
+  t.push(f.V[i] > f.vma[i] ? "svol:hi" : "svol:lo");
+  let fvg = false; for (let k = i - 9; k < i; k++) if (side === 1 ? f.L[k + 1] > f.H[k - 1] : f.H[k + 1] < f.L[k - 1]) fvg = true;
+  t.push(fvg ? "fvg:yes" : "fvg:no");
+  const pb = f.C[i - 1] - f.O[i - 1], engulf = (c - o) * side > 0 && pb * side < 0 && Math.abs(c - o) >= Math.abs(pb) && (side === 1 ? c >= f.O[i - 1] : c <= f.O[i - 1]);
+  const rejWick = side === 1 ? Math.min(o, c) - l : h - Math.max(o, c);
+  t.push(engulf ? "pa:engulf" : rejWick / (h - l || 1e-9) >= 0.5 ? "pa:pin" : "pa:none");
+  if (atKeyVolume(f, i, 1) && f.V[i] >= 1.5 * f.vma[i] && rejWick / (h - l || 1e-9) >= 0.3) t.push("kv:react");
   return t;
 }
 
@@ -294,6 +323,7 @@ export async function runSession(session, onProgress = () => {}) {
   const need = new Map();
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
     need.set(`${coin}|${tf}`, [SYMBOLS[coin], tf, learnFrom - 260 * TFS[tf].ms]);
+    for (const h of ["1h", "4h", "1d"]) need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]);
     if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
   }
   onProgress(`Tải nến ${need.size} luồng…`);
@@ -315,8 +345,21 @@ export async function runSession(session, onProgress = () => {}) {
       bump("Ngược xu hướng khung lớn", sig.filter((x) => K[x.i][0] >= startAt).length - keep.filter((x) => K[x.i][0] >= startAt).length);
       sig = keep;
     }
+    // Bias các khung lớn (H1, H4, D1) tại lúc nến tín hiệu đóng — chỉ để xác định xu hướng
+    const biasFns = {};
+    for (const h of ["1h", "4h", "1d"]) {
+      const hs = TFS[h].ms, HK = (await loadKlines(symbol, h, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until), he = emaArr(HK.map((k) => k[4]), 200);
+      biasFns[h] = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
+    }
+    const htfTags = (s) => { const t = K[s.i][0] + step, b = ["1h", "4h", "1d"].map((h) => biasFns[h](t)); return [b.every((x) => x === s.side) ? "htf:all" : "htf:mixed", b[2] === s.side ? "d1:with" : "d1:against"]; };
     const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
+      const tags = [...tagsOf(K, s.i, s.side, s.sl, found), ...htfTags(s)], live0 = K[s.i][0] >= startAt;
+      // v6: tiêu chí bộ kiến thức trước đây bot bỏ qua (đã kiểm chứng 90 & 180 ngày, cả 2 nửa kỳ)
+      const veto = cfg.sigVol && tags.includes("svol:lo") ? "nến tín hiệu volume thấp (VSA: thiếu xác nhận)"
+        : cfg.noEngulf && tags.includes("pa:engulf") ? "vào ngay sau nến engulfing lớn (đuổi giá)"
+        : cfg.d1Bias && tags.includes("d1:against") ? "ngược xu hướng D1" : null;
+      if (veto) { if (live0) bump(veto); continue; }
       const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50, found));
       if (!sims[0]) continue;
       if (sims[0].pending) { if (K[s.i][0] >= startAt) pending.push({ id: `${coin}-${tf}-${K[s.i][0]}-${s.setup}`, key, coin, tf, setup: s.setup, note: s.note, signalAt: K[s.i][0], ...sims[0].pending }); continue; }
@@ -331,7 +374,7 @@ export async function runSession(session, onProgress = () => {}) {
           r: t.r, part: t.part, uR: t.open ? uRof(t.part, t.entry, last, s.side, t.risk, t.feeR) : null, last, lastBarAt, feeR: t.feeR, mfe: t.mfe, mae: t.mae, ...extra,
         };
       };
-      shadows.push({ tags: tagsOf(K, s.i, s.side, s.sl, found), key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
+      shadows.push({ tags, key, cell: `${coin}|${tf}|${s.setup}`, grp: `${tf}|${s.setup}`, setup: s.setup, coin, tf, entryAt, live: entryAt >= startAt, build, x: sims.map((t) => (t.open ? Infinity : K[t.exitIdx][0] + step)), r: sims.map((t) => t.r) });
     }
     streams.push({ coin, tf, bars: K.length, signals: sig.filter((x) => K[x.i][0] >= startAt).length, lastBar: lastBarAt });
   }
