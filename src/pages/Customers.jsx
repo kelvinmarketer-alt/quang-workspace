@@ -7,7 +7,7 @@ import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -30,8 +30,8 @@ function CustomerModal({ initial, onClose, onSave }) {
   const pickLogo = async (e) => { await handleLogo(e.target.files); e.target.value = ""; };
   usePasteImages(handleLogo);
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial.id ? "Sửa khách hàng" : "Thêm khách hàng"}</h3>
@@ -73,8 +73,8 @@ function BulkAddModal({ onClose, onSave }) {
     return { name: parts[0] || "", phone: parts[1] || "", zalo: parts[2] || "", note: "" };
   }).filter((c) => c.name);
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm khách hàng số lượng lớn</h3>
@@ -212,7 +212,7 @@ export default function Customers() {
             <span className="text-sm font-bold text-indigo-700">Đã chọn {picked.size} khách</span>
             <div className="ml-auto flex gap-2">
               <button onClick={() => setPicked(new Set())} className="rounded-lg px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-white">Bỏ chọn</button>
-              <button onClick={async () => { if (await ask(`Xoá ${picked.size} khách đã chọn? Toàn bộ dự án của các khách này cũng bị xoá theo.`)) { deleteCustomers([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
+              <button onClick={async () => { if (await ask(`Xoá ${picked.size} khách đã chọn?\nToàn bộ DỰ ÁN và TÀI NGUYÊN (tài khoản, mật khẩu) của các khách này cũng bị xoá theo. Có thể bấm "Hoàn tác" trong 10 giây.`)) { deleteCustomers([...picked]); setPicked(new Set()); } }} className="flex items-center gap-1.5 rounded-lg bg-rose-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-rose-600"><Trash2 size={14} /> Xoá đã chọn</button>
             </div>
           </div>
         )}
@@ -273,7 +273,7 @@ export default function Customers() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       {canW && <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>}
                       {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
-                      {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(nP ? `Xoá khách "${c.name}" và ${nP} dự án của khách này?` : "Xoá khách hàng này?")) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
+                      {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
                       {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
                     {c.projects.length === 0 ? (

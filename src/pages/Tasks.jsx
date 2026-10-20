@@ -4,14 +4,15 @@ import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
+import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const PRIO = { high: ["rose", "Cao"], med: ["amber", "TB"], low: ["sky", "Thấp"] };
 
 function TaskModal({ onClose, onSave }) {
   const [f, setF] = useState({ title: "", date: todayISO(), time: "", priority: "med", note: "" });
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm công việc</h3>

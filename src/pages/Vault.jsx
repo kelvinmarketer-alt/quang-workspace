@@ -8,7 +8,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadVault, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 
@@ -156,8 +156,8 @@ function VaultBatchModal({ startType = "app", onClose, onSave }) {
   const valid = rows.filter((r) => (r.title || "").trim());
   const save = () => { if (valid.length) { onSave(valid.map(({ _k, ...r }) => ({ ...r, title: r.title.trim() }))); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="text-lg font-extrabold">Thêm hàng loạt</h3>
@@ -227,8 +227,8 @@ function VaultAiModal({ onClose, onAdd }) {
   const removeItem = (i) => setItems((it) => it.filter((_, j) => j !== i));
   const add = () => { if (items && items.length) { onAdd(items); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> Thêm bằng AI (đọc ảnh)</h3>
@@ -297,8 +297,8 @@ function VaultModal({ initial, onClose, onSave }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const save = () => { if ((f.title || "").trim()) { onSave({ ...f, title: f.title.trim() }); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa mục" : "Thêm mục"}</h3>

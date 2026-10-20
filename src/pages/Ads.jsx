@@ -9,6 +9,7 @@ import { diagnose, judge, baselineOf } from "../lib/adsDiagnose.js";
 import { loadAccountAds, statusOf, setAdsProxy, loadCampaignGoals } from "../lib/fbAds.js";
 import { GOALS, withGoal, goalBaselines, judgeGoal } from "../lib/adsGoals.js";
 import { todayISO, formatShort } from "../lib/format.js";
+import { ask } from "../components/ConfirmDialog.jsx";
 
 // ---------- định dạng ----------
 const vnd = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN") + "đ");
@@ -137,7 +138,7 @@ function RealResults({ acc, since, until, spend }) {
         <div className="flex flex-wrap gap-1.5">{list.map((r) => (
           <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] ring-1 ring-emerald-100">
             {dm(r.date)} · {r.customers} khách · {formatShort(r.revenue)}
-            {canW && <button onClick={() => deleteAdsResult(r.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={11} /></button>}
+            {canW && <button onClick={() => deleteAdsResult(r.id)} aria-label="Xoá kết quả" className="-m-1.5 p-1.5 text-slate-300 hover:text-rose-500"><Trash2 size={13} /></button>}
           </span>
         ))}</div>
       )}
@@ -197,7 +198,7 @@ function BalanceBox({ a, onChanged }) {
         <div className="mt-2 flex flex-wrap gap-1.5">{rows.slice(0, 10).map((r) => (
           <span key={r.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] ring-1 ring-sky-100">
             {new Date(r.at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} · {r.kind === "anchor" ? "số dư" : "nạp"} {formatShort(r.amount)}
-            <button onClick={() => del(r.id)} className="text-slate-300 hover:text-rose-500"><Trash2 size={11} /></button>
+            <button onClick={async () => { if (await ask(`Xoá lần ${r.kind === "anchor" ? "ghi số dư" : "nạp tiền"} ${formatShort(r.amount)}?`, { ok: "Xoá", danger: true })) del(r.id); }} aria-label="Xoá" className="-m-1.5 p-1.5 text-slate-300 hover:text-rose-500"><Trash2 size={13} /></button>
           </span>
         ))}</div>
       )}

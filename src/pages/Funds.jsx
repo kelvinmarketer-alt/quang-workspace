@@ -9,7 +9,7 @@ import { todayISO, fmtDateVI } from "../lib/format.js";
 import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import FundStats from "./FundStats.jsx";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
 const TONE_GRAD = { indigo: "from-indigo-500 to-violet-500", emerald: "from-emerald-500 to-teal-500", rose: "from-rose-500 to-pink-500", sky: "from-sky-500 to-cyan-500", amber: "from-amber-500 to-orange-500", violet: "from-violet-500 to-purple-500", teal: "from-teal-500 to-emerald-500", pink: "from-pink-500 to-rose-500" };
@@ -78,8 +78,8 @@ function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
   const [color, setColor] = useState("amber");
   const next = (c) => FUND_COLORS[(FUND_COLORS.indexOf(c) + 1) % FUND_COLORS.length];
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">Danh mục chi tiêu</h3>
@@ -117,8 +117,8 @@ function FundModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial || { name: "", color: "indigo", percent: "", note: "" });
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa quỹ" : "Thêm quỹ"}</h3>
@@ -156,8 +156,8 @@ function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
   const total = valid.reduce((a, r) => a + num(r.amount), 0);
   const save = () => { if (!valid.length) return; onSave(valid.map((r) => ({ fundId: fund.id, amount: num(r.amount), date: r.date, type, note: r.note.trim() || (isIn ? "Nạp tiền" : "Khoản chi"), ...(isIn ? {} : { cat: r.cat || "" }) }))); onClose(); };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">{isIn ? "Nạp vào" : "Chi tiêu từ"} quỹ {fund.name}</h3>
@@ -208,8 +208,8 @@ function TxEditModal({ tx, fund, cats, onManage, onClose, onSave }) {
     onClose();
   };
   return (
-    <div className="fixed inset-0 z-[55] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[55] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Sửa giao dịch{fund ? ` · ${fund.name}` : ""}</h3>
@@ -259,8 +259,8 @@ function TransferModal({ funds, initialFrom, onClose, onSave }) {
   const over = total > balance;
   const save = () => { if (!valid.length) return; onSave(from, valid.map((r) => ({ toId: r.to, amount: num(r.amount), note: r.note.trim() })), date); onClose(); };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">Chuyển tiền giữa quỹ</h3>
@@ -313,8 +313,8 @@ function ScheduleModal({ initial, funds, onClose, onSave }) {
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const bad = !f.fromId || !f.toId || f.fromId === f.toId || num(f.amount) <= 0;
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa lịch chuyển" : "Lịch chuyển định kỳ"}</h3>
@@ -368,8 +368,8 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
   const total = num(amount);
   const over = allocated > cap; // chia nhiều hơn số dư quỹ công ty
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Phân bổ từ Quỹ công ty</h3>
@@ -445,8 +445,8 @@ function ExpenseImageModal({ fund, apiKey, aiReady, model, cats, onManage, onClo
   const nOut = valid.length - nIn;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <div>
@@ -588,8 +588,8 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
     );
   };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className={`relative bg-gradient-to-br p-5 text-white ${TONE_GRAD[fund.color] || TONE_GRAD.indigo}`}>
           <button onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/80 hover:bg-white/20"><X size={18} /></button>

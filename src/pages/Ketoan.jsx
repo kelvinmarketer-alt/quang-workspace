@@ -6,7 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -335,7 +335,7 @@ function CollectModal({ item, onClose, onSave }) {
   const [amt, setAmt] = useState(String(remain));
   const val = Math.min(remain, Math.max(0, num(amt)));
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={guardClose(onClose)} onInputCapture={markDirty}>
       <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="text-base font-extrabold text-slate-900">Thu hồi công nợ</div>
         <div className="mt-0.5 truncate text-sm text-slate-500">{item.customerName} · {item.projectName} · {item.label}</div>

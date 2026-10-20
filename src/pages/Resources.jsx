@@ -6,7 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { aiReadResources, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import { RES_TYPES, RES_TYPE_KEYS, detectResType, guessTitle, hostOf } from "../lib/resources.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const TONE_GRAD = {
@@ -105,8 +105,8 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
     onClose();
   };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa tài nguyên" : "Thêm tài nguyên"}</h3>
@@ -153,8 +153,8 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
   const projOptions = projects.filter((p) => !customerId || p.customerId === customerId).map((p) => ({ value: p.id, label: p.name, sub: p.customerName }));
   const save = () => { if (parsed.length) { onSave(parsed.map((r) => ({ ...r, customerId, projectId }))); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="text-lg font-extrabold">Thêm hàng loạt</h3>
@@ -226,8 +226,8 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
   const removeItem = (i) => setItems((it) => it.filter((_, j) => j !== i));
   const add = () => { if (items && items.length) { onAdd(items.map((r) => ({ ...r, customerId, projectId }))); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> Thêm bằng AI (đọc ảnh)</h3>

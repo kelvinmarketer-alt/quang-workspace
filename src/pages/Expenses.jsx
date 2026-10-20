@@ -5,7 +5,7 @@ import { useData } from "../lib/store.jsx";
 import { EXPENSE_CATEGORIES } from "../data/seed.js";
 import { monthlyOperatingCost, expensesInRange } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { "AI": "violet", "App": "indigo", "Khác": "slate" };
 const REC = { monthly: ["Hằng tháng", "rose"], yearly: ["Hằng năm", "amber"], once: ["1 lần", "slate"] };
@@ -17,8 +17,8 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
   const [plan, setPlan] = useState(null); // đổi gói: null | { date, amount }
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa chi phí" : "Thêm chi phí"}</h3>
@@ -89,8 +89,8 @@ function ExpenseBatchModal({ onClose, onSave }) {
   const valid = rows.filter((r) => r.name.trim() && num(r.amount) > 0);
   const save = () => { if (!valid.length) return; onSave(valid.map((r) => ({ name: r.name.trim(), category: r.category, amount: num(r.amount), recurring: r.recurring, date: r.date, active: true }))); onClose(); };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <div><h3 className="text-lg font-extrabold">Thêm nhiều chi phí</h3><p className="mt-0.5 text-xs text-slate-400">Nhập một loạt rồi lưu 1 lần</p></div>

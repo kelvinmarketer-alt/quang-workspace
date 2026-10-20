@@ -35,7 +35,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// Đăng ký Service Worker cho Web Push nền
+// App mở lâu qua 1 lần cập nhật → file trang cũ đã bị thay → tải lại 1 lần (thay vì màn trắng)
+window.addEventListener("vite:preloadError", (e) => {
+  try { if (sessionStorage.getItem("qws-chunk-reload")) return; sessionStorage.setItem("qws-chunk-reload", "1"); } catch { /* bỏ qua */ }
+  e.preventDefault();
+  window.location.reload();
+});
+// Mở ổn định 10 giây → cho phép lần sau tự tải lại tiếp
+setTimeout(() => { try { sessionStorage.removeItem("qws-chunk-reload"); } catch { /* bỏ qua */ } }, 10000);
+
+// Đăng ký Service Worker (Web Push nền + mở app khi mất mạng)
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }

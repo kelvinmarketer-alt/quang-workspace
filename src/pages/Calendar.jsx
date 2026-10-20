@@ -5,7 +5,7 @@ import { useData } from "../lib/store.jsx";
 import { solarToLunar, canChiDay, canChiYear } from "../lib/lunar.js";
 import { generateCalendarEvents, upcomingEvents, parseEventsCSV, normEvent } from "../lib/events.js";
 import { MY_EVENTS } from "../data/myEvents.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const DOW = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 const KIND_COLOR = {
@@ -38,8 +38,8 @@ function EventModal({ initial, onClose, onSave }) {
   const editing = !!initial?.id;
   const monthly = f.repeat === "month";
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{editing ? "Sửa sự kiện" : "Thêm sự kiện"}</h3>
@@ -106,8 +106,8 @@ function ImportModal({ onClose, onImport }) {
   const [text, setText] = useState("");
   const parsed = useMemo(() => { try { return parseEventsCSV(text); } catch { return []; } }, [text]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Nhập sự kiện từ Google Sheet</h3>

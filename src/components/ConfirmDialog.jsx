@@ -51,3 +51,10 @@ export function ConfirmHost() {
     </div>
   );
 }
+
+// Form dạng hộp nổi: đã gõ gì đó (onInputCapture={markDirty} ở khung ngoài) mà lỡ chạm ra ngoài → hỏi lại thay vì mất hết nội dung
+export const markDirty = (e) => { e.currentTarget.dataset.dirty = "1"; };
+export const guardClose = (onClose) => async (e) => {
+  const el = e.currentTarget, dirty = el.dataset.dirty || el.parentElement?.dataset?.dirty;
+  if (!dirty || (await ask("Bỏ nội dung đang nhập?\nNhững gì bạn vừa nhập trong form này sẽ mất.", { ok: "Bỏ nội dung", danger: true }))) onClose();
+};

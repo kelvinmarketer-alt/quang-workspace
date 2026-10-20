@@ -11,7 +11,7 @@ import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
 import { projectMetrics, installmentMetrics, projectsMonthly, projectYears } from "../lib/selectors.js";
 import { todayISO, fmtDateVI, MONTHS_VI } from "../lib/format.js";
-import { ask } from "../components/ConfirmDialog.jsx";
+import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
@@ -178,8 +178,8 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
 
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5 ${wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{title}</h3>
@@ -334,8 +334,8 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
   const insts = [...(project.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex justify-end" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-4 shadow-2xl sm:p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

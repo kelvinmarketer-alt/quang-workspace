@@ -1,7 +1,9 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import { ConfirmHost } from "./components/ConfirmDialog.jsx";
+import { ToastHost } from "./components/Toast.jsx";
+import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 // Trang khác tải KHI MỞ (chunk riêng) → mở app nhanh hơn; Tổng quan tải sẵn vì là trang đầu.
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Customers = lazy(() => import("./pages/Customers.jsx"));
@@ -32,6 +34,7 @@ function firstAllowed(perms) {
 
 export default function App() {
   const { perms = [] } = useData();
+  const { pathname } = useLocation();
   // Chặn theo quyền: trang có feature mà mình không được cấp → chuyển về trang đầu tiên được phép.
   const g = (path, el) => {
     const feat = ROUTE_FEATURE[path];
@@ -39,6 +42,7 @@ export default function App() {
   };
   return (
     <Layout>
+      <ErrorBoundary resetKey={pathname}>
       <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={g("/", <Dashboard />)} />
@@ -60,7 +64,9 @@ export default function App() {
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
       </Suspense>
+      </ErrorBoundary>
       <ConfirmHost />
+      <ToastHost />
     </Layout>
   );
 }

@@ -15,6 +15,17 @@ function stripSecrets(s) {
 }
 
 const KEY = "quang-workspace-v4";
+// Bản sửa CHƯA lên cloud (mạng yếu / tắt app giữa chừng): lưu cờ + bản cloud gốc (base) để lần mở sau GỘP thay vì bị cloud đè mất.
+const PEND = "quang-workspace-pending";
+const readPending = (uid) => { try { const p = JSON.parse(localStorage.getItem(PEND) || "null"); return p && p.uid === uid ? p : null; } catch { return null; } };
+const writePending = (p) => { try { localStorage.setItem(PEND, JSON.stringify(p)); } catch { /* đầy bộ nhớ → bỏ qua */ } };
+const clearPending = () => { try { localStorage.removeItem(PEND); } catch { /* bỏ qua */ } };
+// Nhãn cho thông báo "Đã xoá … · Hoàn tác"
+const DELETE_LABELS = {
+  deleteTask: "công việc", deleteFamily: "sự kiện", deleteFamilyMany: "các sự kiện", deleteCustomer: "khách hàng (kèm dự án & tài nguyên)", deleteCustomers: "các khách hàng (kèm dự án & tài nguyên)",
+  deleteProject: "dự án (kèm tài nguyên)", deleteInstallment: "đợt thu", deleteExpense: "chi phí", deleteExpensesMany: "các chi phí", deleteFund: "quỹ", deleteSpendCat: "danh mục",
+  deleteFundTx: "giao dịch quỹ", deleteFundSchedule: "lịch chuyển quỹ", deleteCoin: "coin", deleteAdsResult: "kết quả quảng cáo", deleteResource: "tài nguyên", deleteResources: "các tài nguyên",
+};
 const Ctx = createContext(null);
 
 function load() {
@@ -104,7 +115,11 @@ export function DataProvider({ children }) {
   const retryTimer = useRef(null);
   const stateRef = useRef(state);
   const dirty = useRef(false);
+  const firstRun = useRef(true);
   stateRef.current = state;
+  // Thông báo nổi dùng chung (Hoàn tác sau khi xoá, "chỉ có quyền xem"…)
+  const [toast, setToast] = useState(null);
+  const undoRef = useRef(null);
   // Chủ workspace: mặc định = chính mình; nếu là THÀNH VIÊN (được chia sẻ) thì = user_id của chủ.
   const [ownerId, setOwnerId] = useState(null);
   const ownerRef = useRef(null);
@@ -128,6 +143,7 @@ export function DataProvider({ children }) {
   const pinKeyRef = useRef(null);
   const pendingLegacyVault = useRef([]);
   const privTimer = useRef(null);
+  const privBaseRef = useRef(null); // bản kho riêng trên cloud lần đọc/ghi gần nhất (để gộp khi 2 máy cùng sửa)
   const outgoing = (s) => (privAvailRef.current ? stripSecrets(s) : s);
 
   // Đẩy state hiện tại lên Supabase (dùng chung cho debounce / flush / retry).
@@ -165,6 +181,7 @@ export function DataProvider({ children }) {
         setState(stateRef.current);
       }
       dirty.current = false;
+      clearPending();
       setSyncStatus("idle");
     } catch (e) {
       console.warn("Lưu Supabase lỗi:", e?.message || e);
@@ -203,9 +220,35 @@ export function DataProvider({ children }) {
       P.vault = vaultMemRef.current || P.vault || [];
       delete P.vaultEnc;
     }
+    // Kiểm tra nơi khác (thiết bị khác) vừa sửa kho → gộp theo id thay vì ghi đè mất mục của nhau
+    try {
+      const cur = await supabase.from(PRIVATE_TABLE).select("data").eq("user_id", user.id).maybeSingle();
+      const R = cur.data?.data, B = privBaseRef.current;
+      if (!cur.error && R && B && !deepEqual(R, B)) {
+        const listOf = async (X) => (X?.lock ? (X.vaultEnc && pinKeyRef.current ? await decryptJSON(pinKeyRef.current, X.vaultEnc) : null) : X?.vault || []);
+        const [rl, bl] = [await listOf(R), await listOf(B)];
+        if (rl && bl && vaultMemRef.current) {
+          const mergedVault = merge3(bl, vaultMemRef.current, rl);
+          vaultMemRef.current = mergedVault; setVaultMem(mergedVault);
+          if (P.lock) P.vaultEnc = await encryptJSON(pinKeyRef.current, mergedVault); else P.vault = mergedVault;
+        } else if (!vaultMemRef.current) { // đang khoá (không sửa kho) → giữ nguyên kho trên cloud, không đè bản cũ trong máy
+          if (R.vaultEnc) P.vaultEnc = R.vaultEnc; if (R.vault) P.vault = R.vault; if (R.lock && !P.lock) P.lock = R.lock;
+        }
+        if (!P.openaiKey && R.openaiKey) P.openaiKey = R.openaiKey;
+      }
+    } catch (e) { // không giải mã được bản trên cloud (đổi PIN ở máy khác…) → KHÔNG ghi đè, báo lỗi
+      console.warn("Gộp kho riêng lỗi:", e?.message || e); setSyncStatus("error");
+      setToast({ text: "Kho Tài khoản & Thẻ vừa được sửa ở thiết bị khác (có thể đổi PIN) — tải lại app rồi sửa lại", at: Date.now() });
+      return;
+    }
     privRef.current = P;
     const { error } = await supabase.from(PRIVATE_TABLE).upsert({ user_id: user.id, data: P });
-    if (error) { console.warn("Lưu kho riêng lỗi:", error.message); setSyncStatus("error"); }
+    if (error) {
+      console.warn("Lưu kho riêng lỗi:", error.message); setSyncStatus("error");
+      clearTimeout(privTimer.current); privTimer.current = setTimeout(savePrivate, 5000); // tự thử lại
+      return;
+    }
+    privBaseRef.current = P;
   };
   const schedulePrivate = () => { clearTimeout(privTimer.current); privTimer.current = setTimeout(savePrivate, 500); };
 
@@ -233,6 +276,7 @@ export function DataProvider({ children }) {
       }
     }
     privRef.current = P;
+    privBaseRef.current = r.data?.data || P;
     privAvailRef.current = true;
     setPrivAvail(true);
     setOpenaiKey(P.openaiKey || "");
@@ -268,13 +312,27 @@ export function DataProvider({ children }) {
         // 2) Không có dòng riêng → có thể là THÀNH VIÊN: RLS cho phép thấy dòng của CHỦ đã chia sẻ cho mình
         const shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").neq("user_id", user.id).limit(1);
         if (!alive) return;
-        if (!shared.error && shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; blobAt = shared.data[0].updated_at; }
+        if (shared.error) { // lỗi mạng khi dò dòng được chia sẻ → KHÔNG tự coi là chủ (tránh tách thành bản dữ liệu riêng), thử lại sau
+          setSyncStatus("error");
+          setTimeout(() => { if (alive) setReloadTick((t) => t + 1); }, 4000);
+          return;
+        }
+        if (shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; blobAt = shared.data[0].updated_at; }
       }
       ownerRef.current = owner;
       setOwnerId(owner);
       baseRef.current = blob || null;
       baseAtRef.current = blobAt;
-      if (blob && Object.keys(blob).length > 0) {
+      const pend = readPending(user.id);
+      if (blob && Object.keys(blob).length > 0 && pend) {
+        // Máy này còn bản sửa CHƯA lên cloud (lần trước mạng yếu / tắt app) → GỘP 3 chiều, không để cloud đè mất
+        const merged = migrate(merge3(pend.base ?? undefined, stateRef.current, blob));
+        skipSave.current = true;
+        setState(owner === user.id ? merged : stripSecrets(merged));
+        dirty.current = true;
+        setTimeout(pushCloud, 1500);
+        setToast({ text: "Đã khôi phục các thay đổi chưa kịp lưu lần trước và gộp với dữ liệu mới nhất", at: Date.now() });
+      } else if (blob && Object.keys(blob).length > 0) {
         skipSave.current = true;
         const next = migrate(blob);
         // Tài khoản phụ: không bao giờ giữ vault/key trong máy
@@ -304,8 +362,12 @@ export function DataProvider({ children }) {
 
   // Đẩy Supabase (debounce) — chỉ khi đã đọc xong cloud lần đầu (synced)
   useEffect(() => {
-    if (!user || !synced) return;
+    if (firstRun.current) { firstRun.current = false; return; } // lần render đầu (đọc từ máy) không phải bản sửa
+    if (!user) return;
     if (skipSave.current) { skipSave.current = false; return; }
+    // Đánh dấu "có bản sửa chưa lên cloud" (sống qua tắt app). Giữ base cũ nếu đã có cờ.
+    if (!readPending(user.id)) writePending({ uid: user.id, base: baseRef.current, at: Date.now() });
+    if (!synced) return; // chưa tải xong cloud → lúc tải xong sẽ GỘP bản sửa này
     dirty.current = true;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(pushCloud, 700);
@@ -345,7 +407,7 @@ export function DataProvider({ children }) {
     return () => { document.removeEventListener("visibilitychange", onVisible); clearInterval(t); };
   }, [user?.id, synced]);
 
-  const api = useMemo(() => {
+  const api = useMemo(() => { // eslint-disable-line react-hooks/exhaustive-deps
     const uid = () => Math.random().toString(36).slice(2, 9);
     const normUrl = (u) => { u = (u || "").trim(); return u && !/^https?:\/\//i.test(u) ? "https://" + u : u; };
     // Vault: kho riêng (đã mở khoá) hoặc kiểu cũ trong khối chung (khi chưa tạo bảng qws_private)
@@ -360,7 +422,7 @@ export function DataProvider({ children }) {
       }
       setState((s) => ({ ...s, vault: fn(s.vault || []) }));
     };
-    return {
+    const o = {
       // state LUÔN đã ở dạng migrate (load()/fetch đã migrate) → không migrate lại mỗi render (tốn CPU + phá tham chiếu)
       ...state,
       // TASKS
@@ -674,6 +736,32 @@ export function DataProvider({ children }) {
         setState(load());
       },
     };
+    // XOÁ CÓ HOÀN TÁC: chụp bản trước khi xoá → thông báo "Đã xoá … · Hoàn tác" 10 giây (gộp 3 chiều nên không mất sửa khác trong lúc đó)
+    for (const [k, label] of Object.entries(DELETE_LABELS)) {
+      const orig = o[k]; if (!orig) continue;
+      o[k] = (...args) => {
+        const prev = stateRef.current;
+        orig(...args);
+        setTimeout(() => {
+          const after = stateRef.current; if (after === prev) return;
+          undoRef.current = { kind: "state", prev, after };
+          setToast({ text: `Đã xoá ${label}`, undo: true, at: Date.now() });
+        }, 30);
+      };
+    }
+    const delVault = o.deleteVaultItem;
+    o.deleteVaultItem = (id) => {
+      const item = (vaultMemRef.current || stateRef.current.vault || []).find((x) => x.id === id);
+      delVault(id);
+      if (item) { undoRef.current = { kind: "vault", item }; setToast({ text: `Đã xoá "${item.title || "mục"}" khỏi Tài khoản & Thẻ`, undo: true, at: Date.now() }); }
+    };
+    o.undoLast = () => {
+      const u = undoRef.current; undoRef.current = null; setToast(null);
+      if (!u) return;
+      if (u.kind === "vault") vaultSet((list) => (list.some((x) => x.id === u.item.id) ? list : [u.item, ...list]));
+      else setState((cur) => migrate(merge3(u.after, cur, u.prev)));
+    };
+    return o;
   }, [state]);
 
   // ===== KHOÁ PIN cho Tài khoản & Thẻ (mã hoá AES-GCM ngay trong máy, PIN không lưu ở đâu) =====
@@ -736,7 +824,8 @@ export function DataProvider({ children }) {
     // CHẶN GHI: thành viên không có quyền Sửa (hoặc cài đặt dữ liệu/bảo mật) → method thành no-op.
     let guarded = api;
     if (ownerId && !isOwner) {
-      const noop = () => {};
+      // Chỉ báo khi CHÍNH người dùng bấm/gõ (không báo khi trang tự gọi lúc mở)
+      const noop = () => { const ev = typeof window !== "undefined" ? window.event : null; if (ev && /click|submit|key|change|input|pointer|touch/.test(ev.type)) setToast({ text: "Bạn chỉ có quyền XEM mục này — nhờ chủ cấp quyền Sửa nếu cần", at: Date.now() }); };
       guarded = { ...api };
       for (const m of OWNER_ONLY_WRITES) if (m in guarded) guarded[m] = noop;
       for (const [feat, methods] of Object.entries(FEATURE_WRITES)) {
@@ -749,8 +838,8 @@ export function DataProvider({ children }) {
     const key = usePriv ? openaiKey : (state.settings?.openaiKey || "");
     const settings = { ...state.settings, openaiKey: isOwner || !ownerId ? key : "", aiReady: !!(key || "").trim() || !!state.settings?.aiEnabled };
     const vApi = isOwner ? vaultApi : { vaultLocked: false, vaultHasPin: false, vaultPrivate: false };
-    return { ...guarded, ...vApi, vault, settings, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId };
-  }, [api, vaultApi, vaultMem, openaiKey, privAvail, syncStatus, user?.id, user?.email, ownerId, state.members]);
+    return { ...guarded, ...vApi, vault, settings, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId, toast, setToast, undoLast: api.undoLast };
+  }, [api, vaultApi, vaultMem, openaiKey, privAvail, syncStatus, user?.id, user?.email, ownerId, state.members, toast]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

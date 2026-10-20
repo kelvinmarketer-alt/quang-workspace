@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { fundSpends } from "../lib/selectors.js";
 import { fmtDateVI } from "../lib/format.js";
 import { FUND_COLORS } from "../data/seed.js";
+import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const UNCAT = "Chưa phân loại";
@@ -102,8 +103,8 @@ function CategorizeModal({ rows, funds, cats, onAddCat, onSave, onClose }) {
   const done = Object.values(assign).filter(Boolean).length;
   const save = () => { const map = {}; for (const [id, v] of Object.entries(assign)) if (v) map[id] = v; if (Object.keys(map).length) onSave(map); onClose(); };
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
+      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <div>
