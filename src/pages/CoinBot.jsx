@@ -72,7 +72,7 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     const m = [];
     for (const t of trades) {
       m.push({ time: toT(t.entryAt), position: t.side === 1 ? "belowBar" : "aboveBar", color: t.side === 1 ? "#10b981" : "#f43f5e", shape: t.side === 1 ? "arrowUp" : "arrowDown", text: t.side === 1 ? "L" : "S", size: focus?.id === t.id ? 2 : 1 });
-      if (t.exitAt) m.push({ time: toT(Math.floor((t.exitAt - 1) / step) * step), position: t.side === 1 ? "aboveBar" : "belowBar", color: t.r >= 0 ? "#059669" : "#e11d48", shape: "circle", text: `${t.r >= 0 ? "+" : ""}${t.r.toFixed(1)}R`, size: focus?.id === t.id ? 2 : 1 });
+      if (t.exitAt) m.push({ time: toT(Math.floor((t.exitAt - 1) / step) * step), position: t.side === 1 ? "aboveBar" : "belowBar", color: t.r >= 0 ? "#059669" : "#e11d48", shape: "circle", text: `${t.r >= 0 ? "+" : ""}${fmtNum(t.r, 1, 1)}R`, size: focus?.id === t.id ? 2 : 1 });
     }
     a.markers.setMarkers(m.sort((x, y) => x.time - y.time));
   }, [markSig, step]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,10 +122,10 @@ function StatTable({ title, rows }) {
           <tr key={name} className="border-b border-slate-50">
             <td className="py-1.5 pr-2 font-bold text-slate-700">{name}</td>
             <td className="py-1.5 pr-2 text-right tabular-nums">{s.n}</td>
-            <td className="py-1.5 pr-2 text-right tabular-nums">{s.winRate?.toFixed(0)}%</td>
+            <td className="py-1.5 pr-2 text-right tabular-nums">{fmtNum(s.winRate, 0, 0)}%</td>
             <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(s.avgR)}`}>{rr(s.avgR)}</td>
             <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{s.pf === Infinity ? "∞" : f2(s.pf)}</td>
-            <td className={`py-1.5 text-right tabular-nums ${tone(s.totalR)}`}>{s.totalR.toFixed(1)}</td>
+            <td className={`py-1.5 text-right tabular-nums ${tone(s.totalR)}`}>{fmtNum(s.totalR, 1, 1)}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -422,11 +422,11 @@ export default function CoinBot({ active: visible = true }) {
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4 xl:grid-cols-8">
           <Num label="Vốn hiện tại" v={usd(eqNow)} sub={`vốn đầu ${usd(cfg.capital, 0)}${open.length ? ` · ${open.length} lệnh mở` : ""}`} />
           <Num label="Lãi / lỗ" v={usd(pnl)} sub={`${pct((pnl / cfg.capital) * 100)}${P.unrealized ? ` · tạm tính ${usd(P.unrealized)}` : ""}`} tone={tone(pnl)} />
-          <Num label="Tỉ lệ thắng" v={all.winRate != null ? `${all.winRate.toFixed(1)}%` : "—"} sub={`${all.wins} thắng · ${all.losses} thua · ${all.bes} hoà`} />
+          <Num label="Tỉ lệ thắng" v={all.winRate != null ? `${fmtNum(all.winRate, 1, 1)}%` : "—"} sub={`${all.wins} thắng · ${all.losses} thua · ${all.bes} hoà`} />
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} className="hidden sm:block" />
           <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} className="hidden sm:block" />
-          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : all.pf.toFixed(2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} className="hidden sm:block" />
-          <Num label="Sụt vốn lớn nhất" v={`${P.maxDD.toFixed(1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
+          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} className="hidden sm:block" />
+          <Num label="Sụt vốn lớn nhất" v={`${fmtNum(P.maxDD, 1, 1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} className="hidden sm:block" />
         </div>
 
@@ -471,8 +471,8 @@ export default function CoinBot({ active: visible = true }) {
                   <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
                   <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
                   <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {toSl.toFixed(2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {toTp.toFixed(2)}%</span></div>
-                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({t.lev.toFixed(1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
+                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {fmtNum(toTp, 2, 2)}%</span></div>
+                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
                 </div>
               );
             })}</div>
@@ -486,7 +486,7 @@ export default function CoinBot({ active: visible = true }) {
               <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
                 {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
                 <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · SL {px(p.sl)}</span>
-                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {Math.max(0, d).toFixed(2)}%</span>}
+                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {fmtNum(Math.max(0, d), 2, 2)}%</span>}
                 <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
               </div>
             ); })}</div>
@@ -549,8 +549,8 @@ export default function CoinBot({ active: visible = true }) {
                   <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
                   <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
                   <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {toSl.toFixed(2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {toTp.toFixed(2)}%</span></div>
-                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({t.lev.toFixed(1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
+                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {fmtNum(toTp, 2, 2)}%</span></div>
+                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
                 </div>
               );
             })}</div>
@@ -595,17 +595,17 @@ export default function CoinBot({ active: visible = true }) {
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:hidden">
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} />
           <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} />
-          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : all.pf.toFixed(2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
+          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} />
         </div>
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4 xl:grid-cols-8">
           <Num label="Kỳ vọng / lệnh ($)" v={usd(expUsd)} sub="lãi/lỗ TB mỗi lệnh" tone={tone(expUsd)} />
           <Num label="Thắng TB / Thua TB" v={<>{rr(all.avgWin)} <span className="text-slate-300">/</span> <span className="text-rose-600">{rr(all.avgLoss)}</span></>} sub={`payoff ${f2(all.payoff)} · lớn nhất ${rr(all.maxWin)}`} />
           <Num label="SQN (chất lượng hệ)" v={f2(all.sqn)} sub="<1.6 kém · 2–3 tốt" tone={all.sqn >= 1.6 ? "text-emerald-600" : all.sqn != null ? "text-rose-600" : undefined} />
-          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R/lệnh · trong đó funding ${all.fundR == null ? "—" : `${all.fundR >= 0 ? "" : "nhận "}${Math.abs(all.fundR).toFixed(3)}R`}`} />
+          <Num label="Phí đã trả" v={usd(P.fees)} sub={`TB ${f2(all.feeR)}R/lệnh · trong đó funding ${all.fundR == null ? "—" : `${all.fundR >= 0 ? "" : "nhận "}${fmtNum(Math.abs(all.fundR), 3, 3)}R`}`} />
           <Num label="Recovery factor" v={f2(recovery)} sub="lãi ròng ÷ sụt vốn, >2 tốt" tone={tone(recovery)} />
-          <Num label="Giữ lệnh TB" v={all.holdH == null ? "—" : all.holdH >= 24 ? `${(all.holdH / 24).toFixed(1)} ngày` : `${all.holdH.toFixed(1)} giờ`} sub={Object.entries(all.reasons).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"} />
-          <Num label="Long / Short" v={<><span className={tone(longS.avgR)}>{longS.winRate?.toFixed(0) ?? "—"}%</span> <span className="text-slate-300">/</span> <span className={tone(shortS.avgR)}>{shortS.winRate?.toFixed(0) ?? "—"}%</span></>} sub={`${longS.n} long ${rr(longS.avgR)} · ${shortS.n} short ${rr(shortS.avgR)}`} />
+          <Num label="Giữ lệnh TB" v={all.holdH == null ? "—" : all.holdH >= 24 ? `${fmtNum(all.holdH / 24, 1, 1)} ngày` : `${fmtNum(all.holdH, 1, 1)} giờ`} sub={Object.entries(all.reasons).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"} />
+          <Num label="Long / Short" v={<><span className={tone(longS.avgR)}>{fmtNum(longS.winRate, 0, 0) ?? "—"}%</span> <span className="text-slate-300">/</span> <span className={tone(shortS.avgR)}>{fmtNum(shortS.winRate, 0, 0) ?? "—"}%</span></>} sub={`${longS.n} long ${rr(longS.avgR)} · ${shortS.n} short ${rr(shortS.avgR)}`} />
           <Num label="Lệnh thua từng lời" v={rr(all.mfeLoss)} sub={`TB trước khi quay đầu · lệnh thắng từng âm ${rr(all.maeWin == null ? null : -all.maeWin)}`} />
         </div>
 
@@ -613,7 +613,7 @@ export default function CoinBot({ active: visible = true }) {
           <Title icon={Info}>Nhận xét tự động · {isBase ? "luật gốc" : "bot tự tối ưu"}</Title>
           <div className="grid gap-x-6 gap-y-1.5 text-[12px] leading-snug text-slate-600 md:grid-cols-2">
             {all.n < 100 && <div>• Mới {all.n} lệnh đã đóng — cần ≥ 100 lệnh để tỉ lệ thắng đáng tin.</div>}
-            <div>• Hoà vốn ở R:R 2 cần thắng ≥ <b>33%</b>, R:R 3 cần ≥ <b>25%</b>; hiện {all.winRate?.toFixed(0) ?? "—"}% với payoff {f2(all.payoff)}.</div>
+            <div>• Hoà vốn ở R:R 2 cần thắng ≥ <b>33%</b>, R:R 3 cần ≥ <b>25%</b>; hiện {fmtNum(all.winRate, 0, 0) ?? "—"}% với payoff {f2(all.payoff)}.</div>
             <div>• Phí + trượt giá ăn TB <b>{f2(all.feeR)}R</b>/lệnh{all.feeR > 0.2 ? " — lớn (SL sát), nên tăng SL tối thiểu theo ATR hoặc ưu tiên khung M15." : "."}</div>
             {all.mfeLoss != null && <div>• Lệnh thua từng lời TB <b>{rr(all.mfeLoss)}</b> trước khi quay đầu{all.mfeLoss >= 0.8 ? " — nhiều lệnh đã gần đúng hướng, chốt sớm/dời hoà vốn sớm có thể cứu." : " — phần lớn sai hướng ngay từ đầu, cần lọc điểm vào chặt hơn."}</div>}
             {(() => { const segs = [...by("tf", cfg.tfs, (x) => TFS[x].label), ...by("setup", cfg.setups, setupName), ...by("coin", cfg.coins)].filter(([, s]) => s.n >= 10).sort((a, b) => b[1].avgR - a[1].avgR); return segs.length ? <><div>• Tốt nhất: <b className="text-emerald-700">{segs[0][0]}</b> ({rr(segs[0][1].avgR)}/lệnh, {segs[0][1].n} lệnh)</div><div>• Kém nhất: <b className="text-rose-700">{segs[segs.length - 1][0]}</b> ({rr(segs[segs.length - 1][1].avgR)}/lệnh)</div></> : null; })()}
@@ -644,7 +644,7 @@ export default function CoinBot({ active: visible = true }) {
                   <tr key={tf} className={`border-b border-slate-50 ${tf === best ? "bg-emerald-50/60" : ""}`}>
                     <td className="py-1.5 pr-2 font-extrabold text-slate-800">{TFS[tf].label}{tf === best ? " 🏆" : ""}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{b.n}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{b.winRate == null ? "—" : `${b.winRate.toFixed(0)}%`}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{b.winRate == null ? "—" : `${fmtNum(b.winRate, 0, 0)}%`}</td>
                     <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(b.avgR)}`}>{rr(b.avgR)}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{b.pf === Infinity ? "∞" : f2(b.pf)}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums text-slate-500">{f2(b.feeR)}R</td>
@@ -669,8 +669,8 @@ export default function CoinBot({ active: visible = true }) {
                 <table className="w-full min-w-[520px] text-[12px]">
                   <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" />{cols.map(([l, , , c]) => <th key={l} className={`py-1.5 pr-2 text-right ${c}`}>{l}</th>)}</tr></thead>
                   <tbody>{[
-                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${s.winRate.toFixed(1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
-                    ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${P.maxDD.toFixed(1)}%`],
+                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 1, 1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
+                    ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${fmtNum(P.maxDD, 1, 1)}%`],
                   ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
                 </table>
               </div>
@@ -694,7 +694,7 @@ export default function CoinBot({ active: visible = true }) {
             <div className="mt-2 grid gap-3 md:grid-cols-2">
               <div>
                 <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Bài học hiện có ({res.lessonsActive.length})</div>
-                {res.lessonsActive.length ? <div className="space-y-0.5">{res.lessonsActive.map((l) => <div key={l.k} className="flex items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{l.label}</span><span className="shrink-0 tabular-nums text-slate-400">{l.n} lệnh · thắng {l.win?.toFixed(0)}%</span><span className={`shrink-0 font-bold tabular-nums ${tone(l.exp)}`}>{rr(l.exp)}</span></div>)}</div> : <div className="text-[12px] text-slate-400">Chưa có đặc điểm nào thua rõ rệt.</div>}
+                {res.lessonsActive.length ? <div className="space-y-0.5">{res.lessonsActive.map((l) => <div key={l.k} className="flex items-center gap-2 text-[12px]"><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{l.label}</span><span className="shrink-0 tabular-nums text-slate-400">{l.n} lệnh · thắng {fmtNum(l.win, 0, 0)}%</span><span className={`shrink-0 font-bold tabular-nums ${tone(l.exp)}`}>{rr(l.exp)}</span></div>)}</div> : <div className="text-[12px] text-slate-400">Chưa có đặc điểm nào thua rõ rệt.</div>}
               </div>
               <div>
                 <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-slate-400">Nhật ký học ({res.lessons.length})</div>
@@ -713,14 +713,14 @@ export default function CoinBot({ active: visible = true }) {
               <table className="w-full text-[12px]">
                 <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" /><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5 pr-2 text-right">Luật gốc</th><th className="py-1.5 text-right">Bị loại*</th></tr></thead>
                 <tbody>{[
-                  ["Lệnh", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${s.winRate.toFixed(0)}%`)], ["R TB", (s) => rr(s.avgR), true], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))], ["Tổng R", (s) => s.totalR.toFixed(1), true],
+                  ["Lệnh", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 0, 0)}%`)], ["R TB", (s) => rr(s.avgR), true], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))], ["Tổng R", (s) => fmtNum(s.totalR, 1, 1), true],
                 ].map(([l, f, col]) => (
                   <tr key={l} className="border-b border-slate-50">
                     <td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>
                     {[sAuto, sBase, sRej].map((s, i) => <td key={i} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${col ? tone(s.avgR) : i === 0 ? "text-violet-700" : "text-slate-700"}`}>{f(s)}</td>)}
                   </tr>
                 ))}
-                  <tr className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">Vốn / sụt vốn</td><td className="py-1.5 pr-2 text-right tabular-nums text-violet-700">{usd(res.portfolio.equity + res.portfolio.unrealized, 0)} / {res.portfolio.maxDD.toFixed(0)}%</td><td className="py-1.5 pr-2 text-right tabular-nums">{usd(res.basePortfolio.equity + res.basePortfolio.unrealized, 0)} / {res.basePortfolio.maxDD.toFixed(0)}%</td><td /></tr>
+                  <tr className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">Vốn / sụt vốn</td><td className="py-1.5 pr-2 text-right tabular-nums text-violet-700">{usd(res.portfolio.equity + res.portfolio.unrealized, 0)} / {fmtNum(res.portfolio.maxDD, 0, 0)}%</td><td className="py-1.5 pr-2 text-right tabular-nums">{usd(res.basePortfolio.equity + res.basePortfolio.unrealized, 0)} / {fmtNum(res.basePortfolio.maxDD, 0, 0)}%</td><td /></tr>
                 </tbody>
               </table>
               <div className="mt-2 space-y-1 text-[11.5px] leading-snug text-slate-500">
@@ -740,7 +740,7 @@ export default function CoinBot({ active: visible = true }) {
                       <td className="py-1.5 pr-2">{o.level < 0 ? <Badge tone="slate">Đang học</Badge> : o.take ? <Badge tone="emerald">Bật</Badge> : <Badge tone="rose">Tắt</Badge>}</td>
                       <td className="py-1.5 pr-2 text-slate-600">{o.level < 0 ? "gốc" : o.variant}</td>
                       <td className={`py-1.5 pr-2 text-right font-bold tabular-nums ${tone(o.exp)}`}>{o.exp == null ? "—" : rr(o.exp)}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{o.win == null ? "—" : `${o.win.toFixed(0)}%`}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums">{o.win == null ? "—" : `${fmtNum(o.win, 0, 0)}%`}</td>
                       <td className="py-1.5 pr-2 text-right tabular-nums">{o.n}</td>
                       <td className="py-1.5 text-[11px] text-slate-400">{o.level < 0 ? `cần ≥ ${cfg.minSample} lệnh` : LEVELS[o.level]}</td>
                     </tr>

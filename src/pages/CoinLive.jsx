@@ -208,7 +208,7 @@ function RulesCard({ st, session }) {
     <Card className="!p-3">
       <Title icon={ListChecks}>Luật & phiên bản bot</Title>
       {sum ? <div className="text-[12.5px] leading-snug text-slate-700"><b>Bot đang chạy luật:</b> {rulesText(sum)}</div>
-        : <div className="rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot trên máy bàn là bản cũ, chưa báo bộ luật đang chạy — cần cập nhật bot (Cài đặt bot → Tự cập nhật → “Cập nhật ngay”) để so với phiên Demo.</div>}
+        : <div className="rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot trên máy bàn là bản cũ, chưa báo bộ luật đang chạy. {st.version?.source === "site" ? "Bấm Cài đặt bot → Tự cập nhật → “Cập nhật ngay”." : "Bản này chưa biết tự cập nhật từ web: tải ZIP mới MỘT LẦN (repo qws-live-bot → Code → Download ZIP), bấm go-cai-dat.bat, giải nén chép đè (giữ .env và thư mục data), bấm cai-dat-windows.bat — từ đó bot tự cập nhật, không cần token."}</div>}
       {sum && (!demo ? <div className="mt-1 text-[12px] text-slate-500">Chưa có phiên Demo (tab Demo tự động) để so sánh luật.</div>
         : diffs.length ? (
           <div className="mt-1.5 rounded-lg bg-amber-50 p-2 text-[12px] text-amber-900">
