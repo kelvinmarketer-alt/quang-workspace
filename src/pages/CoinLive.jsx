@@ -177,6 +177,7 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
               <input type="password" autoComplete="off" placeholder={saved && !stale ? "Secret Key mới" : "Secret Key"} value={k.secret} onChange={(e) => setK({ ...k, secret: e.target.value })} className={inp} />
             </div>
           </div>
+          <UpdateBox st={st} cmd={cmd} onSaved={onSaved} />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {num("riskPct", "Rủi ro / lệnh", 0.25, "%", live ? "tháng đầu nên 1%" : null)}
             {num("capitalCap", "Vốn tính lệnh tối đa", 50, "$", "0 = cả ví Futures")}
@@ -195,6 +196,45 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
         </div>
       )}
     </Card>
+  );
+}
+
+// Tự cập nhật bot từ GitHub: token CHỈ ĐỌC (mã hoá như khoá API) + phiên bản đang chạy + nút "Cập nhật ngay"
+function UpdateBox({ st, cmd, onSaved }) {
+  const [tok, setTok] = useState(""), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
+  const v = st.version || {}, g = cmd?.keys?.github, stale = g && g.pubFp && st.pubFp && g.pubFp !== st.pubFp;
+  const write = async (data, ok) => {
+    setBusy(true);
+    const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { ...(cmd || {}), ...data, at: Date.now() }, updated_at: new Date().toISOString() });
+    setBusy(false); setMsg(error ? { bad: true, t: error.message } : { t: ok }); if (!error) onSaved?.();
+  };
+  const saveTok = async () => {
+    const t = tok.trim();
+    if (!/^(github_pat_|ghp_)/.test(t)) return setMsg({ bad: true, t: "Token GitHub thường bắt đầu bằng github_pat_ — kiểm tra lại" });
+    if (!st.pubKey) return setMsg({ bad: true, t: "Bot trên máy bàn là bản cũ — tải bản mới 1 lần (Download ZIP, chép đè)" });
+    await write({ keys: { ...(cmd?.keys || {}), github: { token: await encryptFor(st.pubKey, t), last4: t.slice(-4), pubFp: st.pubFp, savedAt: Date.now() } } }, "Đã lưu token — bot kiểm tra bản mới trong ~1 phút.");
+    setTok("");
+  };
+  const ago2 = (t) => (t ? new Date(t).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—");
+  const behind = v.latest?.sha && v.sha && v.latest.sha !== v.sha;
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-700"><RefreshCw size={14} /> Tự cập nhật bot</div>
+      <div className="mt-1 text-[11.5px] text-slate-500">Mỗi khi luật/bot được cải tiến, máy bàn tự tải bản mới (30 phút/lần), kiểm tra rồi tự chạy lại; bản mới lỗi → tự quay về bản cũ.</div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+        <span>Đang chạy: <b className="tabular-nums">{v.sha ? v.sha.slice(0, 7) : "bản tải tay"}</b>{v.date ? ` (${ago2(v.date)})` : ""}</span>
+        {behind && <span className="font-bold text-amber-700">Có bản mới {v.latest.sha.slice(0, 7)}</span>}
+        {v.lastCheck ? <span className="text-slate-400">kiểm tra lúc {ago2(v.lastCheck)}</span> : null}
+        {v.error && <span className="text-rose-600">{v.error}</span>}
+        <button disabled={busy || !g} onClick={() => write({ updateNow: Date.now() }, "Đã gửi lệnh — bot kiểm tra ngay (~15 giây).")} className="ml-auto rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-40">Cập nhật ngay</button>
+      </div>
+      {g && !stale ? <div className="mt-2 text-[12px] text-emerald-700">Đã lưu token GitHub …{g.last4}</div>
+        : <div className="mt-2 space-y-1.5">
+          <div className="text-[11.5px] text-slate-500">{stale ? <b className="text-amber-700">Token được mã hoá cho máy bot cũ — dán lại. </b> : null}Tạo token: GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate: Repository access = <b>Only qws-live-bot</b>, Permissions → <b>Contents: Read-only</b>.</div>
+          <div className="flex gap-2"><input type="password" autoComplete="off" placeholder="github_pat_…" value={tok} onChange={(e) => setTok(e.target.value)} className="w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm" /><button disabled={busy || !tok.trim()} onClick={saveTok} className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-[12.5px] font-bold text-white disabled:opacity-40">Lưu</button></div>
+        </div>}
+      {msg && <div className={`mt-2 rounded-lg p-2 text-[12px] font-bold ${msg.bad ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>{msg.t}</div>}
+    </div>
   );
 }
 
