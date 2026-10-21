@@ -1,7 +1,7 @@
 {
-  "sha": "0d0e94e7ff8d9247cbea9e652c7215c73843cba1",
-  "date": "2026-10-21T14:51:41+07:00",
-  "msg": "Bot: báo cáo tuần tối Chủ nhật (≥20:00 VN, gửi bù trong 16 giờ) — Demo + lệnh thật 7 ngày, tiến độ tháng so với 10 lệnh",
+  "sha": "61ca0fff36082a4640ee37893c89d726fc3ca0dd",
+  "date": "2026-10-21T21:43:35+07:00",
+  "msg": "Bot: đồng bộ luật app (bộ đệm nến tự lành)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "6a440a7edc981844846113efff56021435ed190c"
+      "sha": "4fb728307e39c2c6e06f0cdb27351a71a943c028"
     },
     {
       "path": "lib/report.js",
