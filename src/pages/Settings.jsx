@@ -9,18 +9,40 @@ import AiImport from "../components/AiImport.jsx";
 import CloudBackups from "../components/CloudBackups.jsx";
 import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
-import { FEATURES, FEATURE_HINT, memberAccess } from "../lib/permissions.js";
+import { FEATURES, FEATURE_HINT, COIN_SUBS, memberAccess } from "../lib/permissions.js";
 import { ask } from "../components/ConfirmDialog.jsx";
 
 const accBadge = (v) => (v === "edit" ? "bg-emerald-500 text-white" : v === "view" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400");
-const allAccess = (val) => Object.fromEntries(FEATURES.map(([k]) => [k, val]));
+// Mẫu nhanh: gồm cả từng tab Coin (Demo/Bot thật chỉ có mức Xem)
+const allAccess = (val) => ({ ...Object.fromEntries(FEATURES.map(([k]) => [k, val])), ...Object.fromEntries(COIN_SUBS.map(([k, , , opts]) => [k, opts.includes(val) ? val : val === "none" ? "none" : "view"])) });
 
 // Bảng quyền: mỗi tính năng 1 dòng (tên + mô tả) + nút chọn Không / Xem / Sửa
 function AccessGrid({ access, onSet }) {
   const opts = [["none", "Không", "bg-slate-200 text-slate-600"], ["view", "Xem", "bg-sky-500 text-white"], ["edit", "Sửa", "bg-emerald-500 text-white"]];
   return (
     <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
-      {FEATURES.map(([k, l]) => (
+      {FEATURES.map(([k, l]) => k === "coin" ? (
+        // Đầu tư Coin: phân quyền TỪNG TAB (ai xem được vốn, ai chỉ xem Demo / Bot thật)
+        <div key={k} className="px-3 py-2">
+          <div className="text-[13px] font-bold text-slate-700">{l}</div>
+          <div className="text-[11px] leading-snug text-slate-400">Chọn riêng từng tab · tab Tổng quan Coin và mọi nút điều khiển bot chỉ chủ dùng</div>
+          <div className="mt-1.5 space-y-1 border-l-2 border-amber-200 pl-2.5">
+            {COIN_SUBS.map(([sk, sl, sh, allow]) => (
+              <div key={sk} className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12.5px] font-bold text-slate-700">{sl}</div>
+                  <div className="text-[10.5px] leading-snug text-slate-400">{sh}</div>
+                </div>
+                <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5">
+                  {opts.filter(([v]) => allow.includes(v)).map(([v, t, on]) => (
+                    <button key={v} type="button" onClick={() => onSet(sk, v)} className={`min-w-[44px] rounded-md px-2 py-1.5 text-[11px] font-bold ${(access[sk] || "none") === v ? on : "text-slate-400"}`}>{t}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
         <div key={k} className="flex items-center gap-2 px-3 py-2">
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold text-slate-700">{l}</div>
@@ -51,7 +73,7 @@ function MembersCard() {
       <SectionTitle action={<Users2 size={18} className="text-indigo-500" />}>Người dùng & phân quyền</SectionTitle>
       <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700">
         <ShieldCheck size={15} className="mt-0.5 shrink-0" />
-        <span>Bạn là <b>chủ (admin)</b> — toàn quyền. Thêm thành viên bằng <b>email</b>, mỗi mục chọn <b className="text-slate-500">Không</b> / <b className="text-sky-600">Xem</b> / <b className="text-emerald-600">Sửa</b>. <b>Chỉ chủ</b> (không cấp được): Tài khoản &amp; Thẻ, ví Binance, cấu hình token/kết nối, sao lưu – khôi phục, quản lý người dùng.</span>
+        <span>Bạn là <b>chủ (admin)</b> — toàn quyền. Thêm thành viên bằng <b>email</b>, mỗi mục chọn <b className="text-slate-500">Không</b> / <b className="text-sky-600">Xem</b> / <b className="text-emerald-600">Sửa</b>. <b>Chỉ chủ</b> (không cấp được): Tài khoản &amp; Thẻ, cấu hình token/kết nối, sao lưu – khôi phục, quản lý người dùng, điều khiển bot. Đầu tư Coin chọn quyền <b>từng tab</b>.</span>
       </div>
 
       {/* Thêm thành viên */}
@@ -84,7 +106,8 @@ function MembersCard() {
                 <button onClick={async () => { if (await ask(`Gỡ quyền của ${m.email}?`)) removeMember(m.email); }} className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
               <button type="button" onClick={() => setOpenM(openM === m.email ? null : m.email)} className="mt-2 flex w-full flex-wrap items-center gap-1 text-left">
-                {FEATURES.filter(([k]) => a[k] !== "none").map(([k, l]) => <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${accBadge(a[k])}`}>{l}{a[k] === "edit" ? " ✎" : ""}</span>)}
+                {FEATURES.filter(([k]) => k !== "coin" && a[k] !== "none").map(([k, l]) => <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${accBadge(a[k])}`}>{l}{a[k] === "edit" ? " ✎" : ""}</span>)}
+                {COIN_SUBS.filter(([k]) => a[k] !== "none").map(([k, l]) => <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10.5px] font-bold ${accBadge(a[k])}`}>Coin · {l.split(" — ")[0]}{a[k] === "edit" ? " ✎" : ""}</span>)}
                 {FEATURES.every(([k]) => a[k] === "none") && <span className="text-[11px] text-slate-400">Chưa có quyền nào</span>}
                 <span className="ml-auto text-[11px] font-bold text-indigo-600">{openM === m.email ? "Thu gọn" : "Sửa quyền"}</span>
               </button>

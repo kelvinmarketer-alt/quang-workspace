@@ -275,7 +275,18 @@ Deno.serve(async (req) => {
   const { data: u } = await supa.auth.getUser();
   const email = ((u && u.user && u.user.email) || "").toLowerCase();
   if (!email) return json({ error: "Chua dang nhap" }, 401);
-  if (OWNER && email !== OWNER) return json({ error: "Chi chu workspace duoc dong bo vi" }, 403);
+  if (OWNER && email !== OWNER) {
+    // Thành viên được chủ cấp quyền "Đầu tư — danh mục & vốn" (members[].access.coinInvest = view|edit) → được XEM ví (21/10)
+    let ok = false;
+    try {
+      const admin = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
+      const { data: rows } = await admin.from("qws_workspaces").select("members:data->members");
+      for (const r of rows || []) for (const m of Array.isArray(r.members) ? r.members : []) {
+        if (String(m?.email || "").toLowerCase() === email && ["view", "edit"].includes(m?.access?.coinInvest)) ok = true;
+      }
+    } catch (_) { ok = false; }
+    if (!ok) return json({ error: "Chi chu workspace (hoac thanh vien duoc cap quyen Dau tu) duoc xem vi" }, 403);
+  }
 
   const debug = new URL(req.url).searchParams.get("debug") === "1";
   try {

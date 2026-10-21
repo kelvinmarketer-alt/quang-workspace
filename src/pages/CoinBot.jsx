@@ -289,7 +289,8 @@ function useLive(active, coins, tfs, onClose) {
 }
 
 export default function CoinBot({ active: visible = true }) {
-  const { settings = {}, setSettings, isOwner } = useData();
+  const { settings = {}, setSettings, isOwner, perms = [] } = useData();
+  const canView = isOwner || perms.includes("coinDemo"); // thành viên được cấp quyền: CHỈ XEM (không dừng / phiên mới / sửa cặp)
   const session = settings.paperBot || null;
   const [raw, setRaw] = useState(null);
   const [rawOld, setRawOld] = useState(null); // bản cũ: cùng phiên nhưng chưa có luật vào đẹp — để so sánh
@@ -317,7 +318,7 @@ export default function CoinBot({ active: visible = true }) {
   const [toast, setToast] = useState(null);
   const running = useRef(false), lastRun = useRef(0), hits = useRef(new Map()), prevSt = useRef(null), debounce = useRef(null);
   const cfg = cfgOf(session);
-  const active = !!session && !session.stoppedAt && isOwner && visible; // tab ẩn → tắt giá realtime + tính lại (đỡ tốn pin)
+  const active = !!session && !session.stoppedAt && canView && visible; // tab ẩn → tắt giá realtime + tính lại (đỡ tốn pin)
 
   const sessRef = useRef(session); sessRef.current = session;
   const again = useRef(false);
@@ -433,8 +434,9 @@ export default function CoinBot({ active: visible = true }) {
     return ev.sort((a, b) => b.t - a.t).slice(0, 12);
   }, [P]);
 
-  if (!isOwner) return <Card><div className="text-sm text-slate-500">Chỉ chủ workspace dùng được Demo tự động.</div></Card>;
-  if (!session || config) return <SetupForm initial={session?.cfg} onStart={(s) => { setSettings({ paperBot: s }); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
+  if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Demo tự động.</div></Card>;
+  if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
+  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} onStart={(s) => { setSettings({ paperBot: s }); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
 
   const stop = async () => { if (await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.", { ok: "Dừng phiên", danger: true })) setSettings({ paperBot: { ...session, stoppedAt: Date.now() } }); };
   const eqNow = P ? P.equity + P.unrealized : null, pnl = eqNow != null ? eqNow - cfg.capital : null;
@@ -456,7 +458,7 @@ export default function CoinBot({ active: visible = true }) {
           {cfg.adaptive && <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"><Brain size={11} /> Tự tối ưu</span>}
           <div className="ml-auto flex gap-1.5">
             <button onClick={run} disabled={!!busy} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-50"><RefreshCw size={13} className={busy ? "animate-spin" : ""} /> Cập nhật</button>
-            {session.stoppedAt ? <button onClick={() => setConfig(true)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Play size={13} /> Phiên mới</button>
+            {!isOwner ? <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[12px] font-bold text-sky-700">Chỉ xem</span> : session.stoppedAt ? <button onClick={() => setConfig(true)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Play size={13} /> Phiên mới</button>
               : <button onClick={stop} className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Square size={12} /> Dừng</button>}
           </div>
         </div>

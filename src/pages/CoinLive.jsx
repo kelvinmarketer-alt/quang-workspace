@@ -39,7 +39,7 @@ async function mergeCmd(patch, fallback) {
 }
 
 export default function CoinLive({ active }) {
-  const { settings = {} } = useData();
+  const { settings = {}, isOwner } = useData(); // thành viên có quyền "Bot thật": CHỈ XEM — mọi nút điều khiển chỉ chủ
   const session = settings.paperBot || null;
   const [st, setSt] = useState(null), [cmd, setCmd] = useState(null), [hist, setHist] = useState(null), [err, setErr] = useState(""), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false);
   const [slow, setSlow] = useState(false), [note, setNote] = useState(null), [closing, setClosing] = useState(false), [closeTxt, setCloseTxt] = useState("");
@@ -105,7 +105,7 @@ export default function CoinLive({ active }) {
           {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
           <button onClick={load} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[13px] font-bold text-white"><RefreshCw size={14} /> Kiểm tra lại</button>
         </Card>
-        <BotSettings st={{}} cmd={cmd} session={session} onSaved={load} defaultOpen={false} />
+        {isOwner && <BotSettings st={{}} cmd={cmd} session={session} onSaved={load} defaultOpen={false} />}
       </div>
     );
   }
@@ -142,9 +142,9 @@ export default function CoinLive({ active }) {
           {syncOk != null && <a href="#bot-rules" className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${syncOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{syncOk ? "✓ Đồng bộ Demo" : "⚠ Khác Demo — xem"}</a>}
           <div className="ml-auto flex flex-wrap justify-end gap-1.5">
             <button onClick={load} aria-label="Làm mới" className="rounded-lg border border-slate-200 p-2 text-slate-500"><RefreshCw size={14} /></button>
-            {stopped ? <button disabled={busy} onClick={() => setStop(false)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"><Play size={13} /> Chạy lại</button>
+            {!isOwner ? <span className="rounded-lg bg-sky-50 px-2.5 py-2 text-[12px] font-bold text-sky-700">Chỉ xem</span> : stopped ? <button disabled={busy} onClick={() => setStop(false)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"><Play size={13} /> Chạy lại</button>
               : <button disabled={busy} onClick={() => setStop(true)} className="flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"><Square size={12} /> Dừng bot</button>}
-            <button disabled={busy} onClick={startCloseAll} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-300 bg-white px-2.5 py-2 text-[12px] font-bold text-rose-700 disabled:opacity-50"><XOctagon size={13} /> Đóng hết vị thế</button>
+            {isOwner && <button disabled={busy} onClick={startCloseAll} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-300 bg-white px-2.5 py-2 text-[12px] font-bold text-rose-700 disabled:opacity-50"><XOctagon size={13} /> Đóng hết vị thế</button>}
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">Rủi ro {fmtNum(st.risk, 2, 0)}%/lệnh{st.riskNow != null && st.riskNow < st.risk ? <b className="text-amber-700"> (đang thua {st.lossRun} lệnh liền → {fmtNum(st.riskNow, 2, 0)}% tới khi thắng lại)</b> : ""} · tối đa {st.maxOpen} lệnh · dừng ngày -{fmtNum(st.dailyStop ?? 6, 2, 0)}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
@@ -172,9 +172,9 @@ export default function CoinLive({ active }) {
 
       <RulesCard st={st} session={session} cmd={cmd} />
 
-      {st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
+      {isOwner && st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
 
-      <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} liveChecks={liveChecks} />
+      {isOwner && <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} liveChecks={liveChecks} />}
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} />

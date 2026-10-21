@@ -20,11 +20,21 @@ export const FEATURE_HINT = {
   web: "Search Console + GA4 các web đang bật bên Văn phòng AI (chỉ xem)",
   fanpage: "Tiếp cận, tương tác, bài đăng các page đang bật bên Văn phòng AI (chỉ xem)",
   ketoan: "Doanh thu, công nợ, chi phí vận hành, quỹ & dòng tiền",
-  coin: "Coin nhập tay + tab Thị trường/AI (ví Binance chỉ chủ xem)",
+  coin: "Chọn riêng từng tab bên dưới",
   tasks: "Công việc, lịch âm/dương, giỗ, sinh nhật",
 };
-// Chỉ CHỦ, không cấp được: Tài khoản & Thẻ (dữ liệu nhạy cảm), Cài đặt dữ liệu/bảo mật, ví Binance.
+// Quyền TỪNG TAB của Đầu tư Coin (21/10): chủ chọn ai được xem danh mục & vốn, ai chỉ xem Demo / Bot thật.
+// [key, nhãn, mô tả, các mức cho phép]. Demo + Bot thật CHỈ XEM (điều khiển bot luôn chỉ chủ).
+export const COIN_SUBS = [
+  ["coinInvest", "Đầu tư — danh mục & vốn", "Ví Binance (Spot/Earn/Futures), tiền đã nạp, lãi/lỗ, coin nhập tay. Sửa = thêm/sửa coin nhập tay", ["none", "view", "edit"]],
+  ["coinMarket", "Thị trường & AI", "Biểu đồ, chỉ báo, phân tích AI", ["none", "view"]],
+  ["coinDemo", "Demo tự động", "Kết quả, lịch sử lệnh demo (chỉ xem — không dừng/sửa được)", ["none", "view"]],
+  ["coinLive", "Bot thật", "Trạng thái, lệnh, lịch sử bot thật (chỉ xem — không dừng/đóng lệnh/sửa cài đặt)", ["none", "view"]],
+];
+export const COIN_SUB_KEYS = COIN_SUBS.map(([k]) => k);
+// Chỉ CHỦ, không cấp được: Tài khoản & Thẻ (dữ liệu nhạy cảm), Cài đặt dữ liệu/bảo mật, tab Tổng quan Coin.
 export const ALL_FEATURES = FEATURES.map(([k]) => k);
+export const ALL_KEYS = [...ALL_FEATURES, ...COIN_SUB_KEYS]; // dùng cho perms (chủ = có hết)
 
 // map route path → feature key (để lọc menu + chặn route). Trang không có key = ai cũng vào (VD Cài đặt).
 export const ROUTE_FEATURE = {
@@ -67,5 +77,12 @@ export function memberAccess(member) {
   // Quyền mới tách ra sau: chưa đặt thì kế thừa từ quyền cũ tương ứng (Tài nguyên ← Khách & Dự án); Website/Fanpage mặc định không
   if (a.resources == null) a.resources = a.customers || "none";
   for (const [k] of FEATURES) if (a[k] == null) a[k] = "none";
+  // Tab Coin chưa đặt riêng → kế thừa quyền cũ: Thị trường + Demo theo "coin"; danh mục & vốn, Bot thật mặc định KHÔNG (trước đây chỉ chủ)
+  if (a.coinInvest == null) a.coinInvest = "none";
+  if (a.coinMarket == null) a.coinMarket = a.coin !== "none" ? "view" : "none";
+  if (a.coinDemo == null) a.coinDemo = a.coin !== "none" ? "view" : "none";
+  if (a.coinLive == null) a.coinLive = "none";
+  // Module Coin hiện khi có ít nhất 1 tab; Sửa (coin nhập tay) khi "danh mục & vốn" = Sửa
+  a.coin = a.coinInvest === "edit" ? "edit" : COIN_SUB_KEYS.some((k) => a[k] !== "none") ? "view" : "none";
   return a;
 }

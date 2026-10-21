@@ -85,7 +85,9 @@ const COIN_TABS = ["overview", "invest", "market", "bot", "live"];
 const CoinOverview = lazy(() => import("./CoinOverview.jsx"));
 
 export default function Coin() {
-  const { isOwner } = useData();
+  const { isOwner, perms = [] } = useData();
+  // Tab theo quyền (21/10): chủ thấy hết; thành viên thấy tab được cấp (Tổng quan Coin luôn chỉ chủ)
+  const allowTab = { overview: isOwner, invest: isOwner || perms.includes("coinInvest"), market: isOwner || perms.includes("coinMarket"), bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive") };
   // ?tab=live|bot|market|invest (vd link từ thông báo đẩy) → mở đúng tab; không có thì nhớ tab lần trước
   const [sp, setSp] = useSearchParams();
   const qTab = sp.get("tab");
@@ -101,22 +103,22 @@ export default function Coin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTab]);
   // "Bot thật" + "Tổng quan" chỉ chủ xem → người khác (hoặc lúc chưa xác định chủ) rơi về Đầu tư
-  const cur = (tab === "live" || tab === "overview") && !isOwner ? "invest" : tab;
+  const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className={`flex gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${isOwner ? "sm:grid-cols-5" : "sm:grid-cols-3"}`}>
-        {[...(isOwner ? [["overview", "Tổng quan", LayoutDashboard, "Tổng quan"]] : []), ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ...(isOwner ? [["live", "Bot thật", Radio, "Bot thật"]] : [])].map(([k, label, Icon, short]) => (
+      <div className={`flex gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
+        {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (
           <button key={k} onClick={() => pick(k)} className={`flex shrink-0 items-center justify-center gap-1 rounded-xl px-2.5 py-2 sm:px-1 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${cur === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
         ))}
       </div>
       {isOwner && (seen.overview || cur === "overview") && <div className={cur === "overview" ? "" : "hidden"}><Suspense fallback={fb}><CoinOverview active={cur === "overview"} go={pick} /></Suspense></div>}
-      {(seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><CoinInvest active={cur === "invest"} /></div>}
-      {seen.market && <div className={cur === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={cur === "market"} /></Suspense></div>}
-      {seen.bot && <div className={cur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "bot"} /></Suspense></div>}
-      {isOwner && seen.live && <div className={cur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "live"} /></Suspense></div>}
+      {allowTab.invest && (seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><CoinInvest active={cur === "invest"} /></div>}
+      {allowTab.market && (seen.market || cur === "market") && <div className={cur === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={cur === "market"} /></Suspense></div>}
+      {allowTab.bot && (seen.bot || cur === "bot") && <div className={cur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "bot"} /></Suspense></div>}
+      {allowTab.live && (seen.live || cur === "live") && <div className={cur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "live"} /></Suspense></div>}
     </div>
   );
 }
@@ -287,7 +289,9 @@ function CoinRow({ r, vnd, canW, onEdit, onDelete }) {
 }
 
 function CoinInvest({ active = true }) {
-  const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner, settings = {}, setSettings } = useData();
+  const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner: isChu, perms = [], settings = {}, setSettings } = useData();
+  // isOwner ở tab này = "được xem ví Binance & vốn": chủ, hoặc thành viên có quyền Đầu tư (danh mục & vốn). Sửa sổ nạp vẫn chỉ chủ (isChu).
+  const isOwner = isChu || perms.includes("coinInvest");
   const canW = canEdit ? canEdit("coin") : true;
   const [prices, setPrices] = useState({});
   // Phản hồi qws-binance: bản cũ = { balances, deposited }; bản mới (version 2) thêm futures/earn/lãi đã chốt
@@ -441,8 +445,8 @@ function CoinInvest({ active = true }) {
                   {headPnl >= 0 ? <TrendingUp size={16} className="shrink-0" /> : <TrendingDown size={16} className="shrink-0" />}
                   {isOwner ? `${fmtUsdSigned(vsDep)} (${sPct(vsDepPct)})` : `${fmtUsdSigned(tot.manPnl)}${tot.manPct != null ? ` (${sPct(tot.manPct)})` : ""}`}
                 </div>
-                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)}{fromTs ? ` (từ ${new Date(fromTs).toLocaleDateString("vi-VN")})` : ""} <button onClick={() => setDepEdit(depEdit == null ? { extra: String(ledger.extraVnd || ""), from: ledger.fromDate || "" } : null)} className="ml-1 font-bold text-amber-200 underline">{depEdit == null ? "Sửa" : "Đóng"}</button></div>}
-                {isOwner && depEdit != null && (
+                {isOwner && <div className="mt-0.5 text-[12px] text-amber-100/70"><span className={`font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{sVnd(vsDepVnd)}</span> so với đã nạp {formatVND(depVnd)}{fromTs ? ` (từ ${new Date(fromTs).toLocaleDateString("vi-VN")})` : ""} {isChu && <button onClick={() => setDepEdit(depEdit == null ? { extra: String(ledger.extraVnd || ""), from: ledger.fromDate || "" } : null)} className="ml-1 font-bold text-amber-200 underline">{depEdit == null ? "Sửa" : "Đóng"}</button>}</div>}
+                {isChu && depEdit != null && (
                   <div className="mt-2 rounded-xl bg-white/10 p-3 text-[12px] text-amber-50">
                     <div><b>Đã nạp</b> = lệnh nạp/mua P2P trừ bán P2P {fromTs ? <>từ <b>{new Date(fromTs).toLocaleDateString("vi-VN")}</b></> : "toàn thời gian"}: <b>{formatVND(ledgerVnd)}</b> ({ledgerList.length} lệnh){Number(ledger.extraVnd) ? <> + tự thêm <b>{formatVND(ledger.extraVnd)}</b></> : null}. Toàn bộ lịch sử: {allList.length} lệnh, nạp ròng {formatVND(allVnd)}{allList.length ? ` (từ ${new Date(Math.min(...allList.map((x) => x.date))).toLocaleDateString("vi-VN")})` : ""}.</div>
                     <div className="mt-2 flex flex-wrap items-center gap-2"><span className="shrink-0">Tính từ ngày:</span><input type="date" value={depEdit.from} onChange={(e) => setDepEdit({ ...depEdit, from: e.target.value })} className="rounded-lg bg-white px-2 py-1.5 text-sm text-slate-900" /><button onClick={() => setDepEdit({ ...depEdit, from: "" })} className="text-amber-200 underline">toàn thời gian</button></div>

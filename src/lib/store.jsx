@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES, SEED_SPEND_CATS } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
-import { ALL_FEATURES, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess } from "./permissions.js";
+import { ALL_FEATURES, ALL_KEYS, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess } from "./permissions.js";
 import { merge3, deepEqual } from "./merge.js";
 import { deriveKey, encryptJSON, decryptJSON, newSalt, PIN_ITER } from "./crypto.js";
 
@@ -819,7 +819,7 @@ export function DataProvider({ children }) {
     const me = (state.members || []).find((m) => (m.email || "").toLowerCase() === email);
     const access = isOwner || !ownerId ? null : memberAccess(me);
     // Chưa resolve owner → tạm full (tránh chớp). Chủ → full. Thành viên → theo access (none/view/edit).
-    const perms = !ownerId || isOwner ? ALL_FEATURES : ALL_FEATURES.filter((k) => access[k] && access[k] !== "none");
+    const perms = !ownerId || isOwner ? ALL_KEYS : ALL_KEYS.filter((k) => access[k] && access[k] !== "none"); // gồm cả quyền từng tab Coin
     const editable = !ownerId || isOwner ? ALL_FEATURES : ALL_FEATURES.filter((k) => access[k] === "edit");
     const canEdit = (f) => editable.includes(f);
     // CHẶN GHI: thành viên không có quyền Sửa (hoặc cài đặt dữ liệu/bảo mật) → method thành no-op.
