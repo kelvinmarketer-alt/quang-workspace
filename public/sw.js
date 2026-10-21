@@ -16,7 +16,7 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith((async () => {
       try {
-        const res = await fetch(req);
+        const res = await fetch(req, { cache: "no-cache" }); // luôn hỏi lại máy chủ (không dùng HTML cũ trong bộ nhớ đệm HTTP)
         if (res.ok) { const c = await caches.open(CACHE); c.put("/", res.clone()); }
         return res;
       } catch {

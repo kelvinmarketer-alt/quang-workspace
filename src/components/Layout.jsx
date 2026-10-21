@@ -201,6 +201,23 @@ function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini }) {
   );
 }
 
+// Có bản app mới (vừa deploy) → nút "Tải lại": 5 phút/lần + khi quay lại tab, so file JS chính đang chạy với bản trên máy chủ
+function UpdatePill() {
+  const [nu, setNu] = useState(false);
+  useEffect(() => {
+    const mine = document.querySelector('script[src*="/assets/index-"]')?.getAttribute("src")?.split("/assets/")[1];
+    if (!mine) return undefined;
+    const check = async () => {
+      if (document.hidden) return;
+      try { const h = await fetch("/?v=" + Date.now(), { cache: "no-store" }).then((r) => r.text()); const cur = h.match(/\/assets\/(index-[^"']+\.js)/)?.[1]; if (cur && cur !== mine) setNu(true); } catch { /* mất mạng */ }
+    };
+    const t = setInterval(check, 300000); document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", check); };
+  }, []);
+  if (!nu) return null;
+  return <button onClick={() => location.reload()} title="App vừa được cập nhật — bấm để dùng bản mới" className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white shadow animate-pulse"><RefreshCw size={12} /> <span className="hidden sm:inline">Có bản mới · </span>Tải lại</button>;
+}
+
 // Sáng / tối toàn app (lib/theme.js) — nhớ theo máy
 function ThemeButton() {
   const [t, setT] = useTheme();
@@ -395,6 +412,7 @@ export default function Layout({ children }) {
             </button>
             <h1 className="text-lg font-extrabold tracking-tight text-slate-900">{title}</h1>
             <div className="ml-auto flex items-center gap-2">
+              <UpdatePill />
               <SyncBadge />
               <SearchButton onOpen={() => setPaletteOpen(true)} />
               <ThemeButton />
