@@ -292,12 +292,23 @@ function useLive(active, coins, tfs, onClose) {
 
 // Nhật ký thay đổi luật: lúc đổi (số liệu khi đó) → sau khi đổi (lệnh vào từ lúc đổi, theo luật hiện tại)
 function RulesLog({ log, list }) {
-  const rows = Array.isArray(log) ? log : [];
+  const rows0 = Array.isArray(log) ? log : [];
   const [all, setAll] = useState(false);
+  // Lọc (22/10): theo nguồn (Demo / Bot thật) + người đổi
+  const [src, setSrc] = useState("all"), [who, setWho] = useState("all");
+  const people = [...new Set(rows0.map((r) => r.by).filter(Boolean))];
+  const rows = rows0.filter((r) => (src === "all" || (src === "bot") === (r.src === "bot")) && (who === "all" || r.by === who));
+  const chip = (on) => `rounded-full px-2 py-0.5 text-[11px] font-bold ${on ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`;
   return (
     <Card className="!p-3">
-      <Title icon={History}>Nhật ký thay đổi luật ({rows.length})</Title>
-      {!rows.length ? <div className="text-[12px] text-slate-400">Chưa có thay đổi nào được ghi. Từ nay mỗi lần tắt/bật cặp, khung, sửa cặp, tạo phiên mới hay dừng phiên đều được ghi lại ở đây.</div> : (
+      <Title icon={History}>Nhật ký thay đổi luật ({rows.length}{rows.length !== rows0.length ? `/${rows0.length}` : ""})</Title>
+      {rows0.length > 3 && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+          {[["all", "Tất cả"], ["demo", "Demo"], ["bot", "Bot thật"]].map(([k, l]) => <button key={k} onClick={() => setSrc(k)} className={chip(src === k)}>{l}</button>)}
+          {people.length > 1 && <><span className="mx-1 h-3 w-px bg-slate-200" />{[["all", "Mọi người"], ...people.map((p) => [p, p.split("@")[0]])].map(([k, l]) => <button key={k} onClick={() => setWho(k)} className={chip(who === k)}>{l}</button>)}</>}
+        </div>
+      )}
+      {!rows0.length ? <div className="text-[12px] text-slate-400">Chưa có thay đổi nào được ghi. Từ nay mỗi lần tắt/bật cặp, khung, sửa cặp, tạo phiên mới hay dừng phiên đều được ghi lại ở đây.</div> : (
         <div className="divide-y divide-slate-100">
           {(all ? rows : rows.slice(0, 8)).map((r, i) => {
             const after = statsOf(list.filter((t) => t.entryAt >= r.at));
@@ -317,6 +328,7 @@ function RulesLog({ log, list }) {
           })}
         </div>
       )}
+      {!!rows0.length && !rows.length && <div className="py-1 text-[12px] text-slate-400">Không có dòng nào khớp bộ lọc.</div>}
       {rows.length > 8 && <button onClick={() => setAll((v) => !v)} className="mt-1 text-[12px] font-bold text-indigo-600">{all ? "Thu gọn" : `Xem cả ${rows.length} dòng`}</button>}
       <div className="mt-1 text-[11px] text-slate-400">"Sau đó" = lệnh vào từ lúc đổi theo luật đang chạy — cần vài tuần mới đủ để đánh giá một thay đổi.</div>
     </Card>

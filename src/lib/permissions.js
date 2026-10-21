@@ -57,6 +57,8 @@ export const ROUTE_FEATURE = {
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];
 
+// ⚠️ 22/10: máy chủ lọc dữ liệu cho tài khoản phụ theo DANH SÁCH CHO PHÉP (supabase/SETUP-MEMBER-SCOPE.sql → qws_member_view / qws_member_save).
+// Thêm khoá dữ liệu mới (state.xxx / settings.xxx) mà tài khoản phụ cần thấy / sửa → khai báo thêm ở 2 hàm đó, không thì họ không thấy.
 // Các method GHI của store theo từng tính năng — để CHẶN khi thành viên chỉ có quyền Xem.
 export const FEATURE_WRITES = {
   customers: ["addCustomer", "addCustomers", "updateCustomer", "deleteCustomer", "deleteCustomers", "addProject", "updateProject", "deleteProject", "addInstallment", "updateInstallment", "deleteInstallment", "importParsed"],

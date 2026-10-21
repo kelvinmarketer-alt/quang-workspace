@@ -31,24 +31,27 @@ create or replace function public.qws_scope_arr(arr jsonb, ids jsonb, fld text, 
   select coalesce(jsonb_agg(x), '[]'::jsonb) from jsonb_array_elements(case when jsonb_typeof(arr) = 'array' then arr else '[]'::jsonb end) x
   where keep = exists (select 1 from jsonb_array_elements_text(ids) i where i = x->>fld) $$;
 
--- 2) Bản dữ liệu thành viên được thấy
+-- 2) Bản dữ liệu thành viên được thấy — DANH SÁCH CHO PHÉP (22/10): khoá nào chưa khai báo ở đây thì tài khoản phụ KHÔNG thấy
+--    (thêm mục dữ liệu mới trong app → thêm vào đây nếu tài khoản phụ cần thấy). Khớp FEATURES trong src/lib/permissions.js.
 create or replace function public.qws_member_view(d jsonb, m jsonb) returns jsonb language plpgsql immutable as $$
-declare a jsonb := public.qws_member_acc(m); ids jsonb := a->'_scope'; r jsonb := d - 'vault'; s jsonb := coalesce(d->'settings', '{}'::jsonb) - 'openaiKey';
-  dash boolean := a->>'dashboard' <> 'none';
+declare a jsonb := public.qws_member_acc(m); ids jsonb := a->'_scope'; ds jsonb := coalesce(d->'settings', '{}'::jsonb);
+  dash boolean := a->>'dashboard' <> 'none'; keys text[] := array['catsV5']; skeys text[] := array['aiEnabled', 'openaiModel']; r jsonb; s jsonb;
 begin
-  r := jsonb_set(r, '{members}', jsonb_build_array(m)); -- chỉ thấy hồ sơ của chính mình
-  if a->>'customers' = 'none' and not dash then r := r - 'customerList' - 'projects';
-  elsif ids is not null then r := r || jsonb_build_object('customerList', public.qws_scope_arr(d->'customerList', ids, 'id', true), 'projects', public.qws_scope_arr(d->'projects', ids, 'customerId', true));
+  if a->>'customers' <> 'none' or dash then keys := keys || array['customerList', 'projects']; end if;
+  if a->>'resources' <> 'none' then keys := keys || array['resources']; end if;
+  if a->>'ketoan' <> 'none' or (dash and ids is null) then keys := keys || array['expenses', 'funds', 'fundTx', 'fundSchedules', 'spendCats', 'transactions']; end if;
+  if a->>'tasks' <> 'none' or dash then keys := keys || array['tasks', 'family']; end if;
+  if a->>'coinInvest' <> 'none' then keys := keys || array['coins']; skeys := skeys || array['coinDeposits']; end if;
+  if a->>'coinDemo' <> 'none' or a->>'coinLive' <> 'none' then skeys := skeys || array['paperBot', 'paperBotLog']; end if;
+  if a->>'ads' <> 'none' then keys := keys || array['adsResults']; end if;
+  select coalesce(jsonb_object_agg(k, d->k), '{}'::jsonb) into r from unnest(keys) k where d ? k;
+  select coalesce(jsonb_object_agg(k, ds->k), '{}'::jsonb) into s from unnest(skeys) k where ds ? k;
+  if ids is not null then -- giới hạn dự án: chỉ khách được giao + dự án / tài nguyên của họ
+    if r ? 'customerList' then r := r || jsonb_build_object('customerList', public.qws_scope_arr(d->'customerList', ids, 'id', true)); end if;
+    if r ? 'projects' then r := r || jsonb_build_object('projects', public.qws_scope_arr(d->'projects', ids, 'customerId', true)); end if;
+    if r ? 'resources' then r := r || jsonb_build_object('resources', public.qws_scope_arr(d->'resources', ids, 'customerId', true)); end if;
   end if;
-  if a->>'resources' = 'none' then r := r - 'resources';
-  elsif ids is not null then r := r || jsonb_build_object('resources', public.qws_scope_arr(d->'resources', ids, 'customerId', true));
-  end if;
-  if a->>'ketoan' = 'none' and (not dash or ids is not null) then r := r - 'expenses' - 'funds' - 'fundTx' - 'fundSchedules' - 'spendCats' - 'transactions'; end if;
-  if a->>'tasks' = 'none' and not dash then r := r - 'tasks' - 'family'; end if;
-  if a->>'coinInvest' = 'none' then r := r - 'coins'; s := s - 'coinDeposits'; end if;
-  if a->>'coinDemo' = 'none' and a->>'coinLive' = 'none' then s := s - 'paperBot' - 'paperBotLog'; end if;
-  if a->>'ads' = 'none' then r := r - 'adsResults'; end if;
-  return r || jsonb_build_object('settings', s);
+  return r || jsonb_build_object('members', jsonb_build_array(m), 'settings', s); -- chỉ thấy hồ sơ của chính mình
 end $$;
 
 -- 3) Thành viên tải dữ liệu (đã lọc)

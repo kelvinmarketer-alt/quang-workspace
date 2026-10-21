@@ -350,7 +350,27 @@ function Notifications() {
   );
 }
 
+// 22/10: mở app ở trang khác → máy rảnh 6 giây thì tính sẵn Demo ngầm (1 lần / lần mở app): nến + kết quả được nhớ sẵn,
+// vào Coin là có số mới ngay thay vì chờ 2–3 giây tải nến. Chỉ khi có quyền xem Demo và đang có phiên.
+function useDemoWarm() {
+  const { settings = {}, perms = [], ownerId } = useData();
+  const loc = useLocation();
+  const done = useRef(false);
+  const ok = !!ownerId && !!settings.paperBot && perms.includes("coinDemo");
+  useEffect(() => {
+    if (!ok || done.current || loc.pathname.startsWith("/coin")) return undefined;
+    const t = setTimeout(() => {
+      if (done.current || document.hidden) return;
+      done.current = true;
+      const go = () => import("../lib/coinShared.js").then((m) => m.demoResult(settings.paperBot)).catch(() => {});
+      if (window.requestIdleCallback) window.requestIdleCallback(go, { timeout: 5000 }); else go();
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [ok, loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export default function Layout({ children }) {
+  useDemoWarm();
   const [open, setOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pins, togglePin] = useNavPins();
