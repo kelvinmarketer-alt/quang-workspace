@@ -19,10 +19,11 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 9,
+  cfgVer: 10,
   capital: 1000, riskPct: 2, maxOpen: 3, maxLev: 20, dailyStopPct: 6, // v7 (user chốt 20/10): rủi ro 2%/lệnh, dừng ngày -6% (= 3 lệnh thua)
-  streakN: 3, streakRiskPct: 1, // v9 (user duyệt 21/10): thua 3 lệnh liền → rủi ro 1%/lệnh tới khi thắng lại. 270 ngày: vốn cả 3 kỳ cao hơn (1207/1385/1491 → 1231/1410/1553$), sụt vốn tối đa 13–15% → 11%
-  // Thử 21/10 (mặc định TẮT, bot thật chưa hỗ trợ): thả TP trailAtR/trailAtr/trailLockR và cắt khi đảo chiều revExit/revMinR — thắng nhiều hơn nhưng R & lợi nhuận GIẢM ở cả 3 kỳ
+  streakN: 0, streakRiskPct: 1, // v10 (user chốt 21/10 "mọi vấn đề đều là xác suất, cứ để risk 2%"): TẮT giảm rủi ro sau chuỗi thua — rủi ro cố định. (v9 từng bật: thua 3 liền → 1%.) 270 ngày: vốn cả 3 kỳ cao hơn (1207/1385/1491 → 1231/1410/1553$), sụt vốn tối đa 13–15% → 11%
+  // Thử 21/10 (mặc định TẮT, bot thật chưa hỗ trợ): thả TP trailAtR/trailAtr/trailLockR và cắt khi đảo chiều revExit/revMinR — thắng nhiều hơn nhưng R & lợi nhuận GIẢM ở cả 3 kỳ.
+  // Dời SL về entry (beAtR) ở 0,5R / 0,75R / 1R: lợi nhuận cả 3 kỳ giảm mạnh (0,5R: R +0,38 → +0,11, vốn 1207/1385/1491 → 1098/1118/1056$) → giữ beAtR 0
   trailAtR: 0, revExit: 0,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
   sigVol: false, noEngulf: true, d1Bias: true, // v6: bỏ vào ngay sau engulfing lớn · chỉ thuận D1 · v8: TẮT lọc volume nến tín hiệu (Key Volume vẫn xét volume)
@@ -39,6 +40,7 @@ export const DEFAULT_CFG = {
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V10_KEYS = ["streakN"];
 const V9_KEYS = ["streakN", "streakRiskPct"];
 const V8_KEYS = ["htfFilter", "sigVol", "maxExtAtr"];
 const V7_KEYS = ["riskPct", "dailyStopPct", "d1Bias"];
@@ -57,6 +59,7 @@ export function cfgOf(session) {
   if (ver < 7) for (const k of V7_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 8) for (const k of V8_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 9) for (const k of V9_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 10) for (const k of V10_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.coins = [...new Set((c.coins || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); if (!c.coins.length) c.coins = [...DEFAULT_CFG.coins]; // cặp do user chọn (thêm/sửa/xoá trong app)
