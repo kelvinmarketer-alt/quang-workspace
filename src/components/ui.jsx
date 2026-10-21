@@ -30,14 +30,14 @@ export function FitMoney({ value, className = "" }) {
   const [short, setShort] = useState(false);
   useLayoutEffect(() => {
     const b = box.current, f = full.current; if (!b || !f) return undefined;
-    const check = () => setShort(f.scrollWidth > b.clientWidth + 1);
+    const check = () => setShort(f.offsetWidth > b.clientWidth + 1); // f là inline-block → đo được bề rộng thật của số đầy đủ
     check();
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(check); ro.observe(b); return () => ro.disconnect();
   }, [value]);
   return (
     <span ref={box} className={`relative block min-w-0 overflow-hidden whitespace-nowrap ${className}`} title={formatVND(value)}>
-      <span ref={full} className={short ? "invisible absolute left-0 top-0" : ""} aria-hidden={short}>{formatVND(value)}</span>
+      <span ref={full} className={`inline-block ${short ? "invisible absolute left-0 top-0" : ""}`} aria-hidden={short}>{formatVND(value)}</span>
       {short && <span>{formatShort(value)}</span>}
     </span>
   );
