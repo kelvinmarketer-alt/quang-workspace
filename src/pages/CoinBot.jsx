@@ -495,6 +495,18 @@ export default function CoinBot({ active: visible = true }) {
           <Num label="Sụt vốn lớn nhất" v={`${fmtNum(P.maxDD, 1, 1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} className="hidden sm:block" />
         </div>
+        {(() => { // Chuỗi thua đang diễn ra + luật v9 (giảm rủi ro) đã đỡ được bao nhiêu
+          const done = P.trades.filter((t) => t.status === "done").sort((a, b) => a.exitAt - b.exitAt);
+          let run = 0; for (let i = done.length - 1; i >= 0 && done[i].pnl < 0; i--) run++;
+          const red = done.filter((t) => t.reducedRisk && t.pnl < 0), lost = red.reduce((x, t) => x - t.pnl, 0), full = cfg.streakRiskPct > 0 ? (lost * cfg.riskPct) / cfg.streakRiskPct : lost;
+          if (!(cfg.streakN > 0) || (run < cfg.streakN && !red.length)) return null;
+          return (
+            <div className={`border-t px-3 py-2 text-[12px] leading-snug ${run >= cfg.streakN ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-100 bg-white text-slate-600"}`}>
+              {run >= cfg.streakN ? <><b>Đang thua {run} lệnh liền</b> (từ {dt(done[done.length - run].exitAt)}) → lệnh tiếp theo rủi ro <b>{fmtNum(cfg.streakRiskPct, 2, 0)}%</b> thay vì {fmtNum(cfg.riskPct, 2, 0)}%, thắng 1 lệnh thì trở lại {fmtNum(cfg.riskPct, 2, 0)}%. </> : null}
+              Luật giảm rủi ro sau {cfg.streakN} lệnh thua đã áp cho <b>{red.length}</b> lệnh thua: mất {usd(lost)} thay vì khoảng {usd(full)} (đỡ {usd(full - lost)}).
+            </div>
+          );
+        })()}
 
         <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
           {[["chart", "Biểu đồ & lệnh", "Biểu đồ"], ["history", `Lịch sử lệnh (${P.trades.filter((t) => t.status !== "skip").length})`, `Lịch sử (${P.trades.filter((t) => t.status !== "skip").length})`], ["stats", "Thống kê", "Thống kê"], ["opt", "Tối ưu & bài học", "Tối ưu"]].map(([k, l, m]) => <button key={k} onClick={() => setTab(k)} className={`flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-[12.5px] font-bold sm:px-3 ${tab === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}><span className="sm:hidden">{m}</span><span className="hidden sm:inline">{l}</span></button>)}
@@ -595,8 +607,8 @@ export default function CoinBot({ active: visible = true }) {
             <div className="space-y-1">{feed.length ? feed.map((e, i) => { const t = e.tr, fresh = Date.now() - e.t < 15 * 60000; return (
               <div key={i} className={`flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] ${fresh ? "bg-amber-50" : ""}`}>
                 <span className="w-[74px] shrink-0 tabular-nums text-[11px] text-slate-400">{dt(e.t)}</span>
-                {e.kind === "open" ? <span className="min-w-0 truncate">{side(t.side)} <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">@ {px(t.entry)}</span></span>
-                  : <span className="min-w-0 truncate"><span className="font-bold text-slate-600">Đóng</span> <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">{t.reason}</span></span>}
+                {e.kind === "open" ? <span className="min-w-0 truncate">{side(t.side)} <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">@ {px(t.entry)}</span>{t.reducedRisk && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}</span>
+                  : <span className="min-w-0 truncate"><span className="font-bold text-slate-600">Đóng</span> <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">{t.reason}</span>{t.reducedRisk && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}</span>}
                 {e.kind === "close" && <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span>}
               </div>
             ); }) : <div className="text-[12px] text-slate-400">Chưa có lệnh.</div>}</div>
@@ -642,6 +654,7 @@ export default function CoinBot({ active: visible = true }) {
               <div className="flex items-center gap-2 text-[12.5px]">
                 {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TFS[t.tf].label}</span><span className="truncate text-slate-500">{setupName(t.setup)}</span>
                 {t.status === "open" && <span className="rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
+                {t.reducedRisk && t.status !== "skip" && t.status !== "reject" && <span className="shrink-0 rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}
                 <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${dim ? "text-slate-400" : tone(R)}`}>{rr(R)}</span>
                 <span className={`w-[72px] shrink-0 text-right font-extrabold tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
               </div>
