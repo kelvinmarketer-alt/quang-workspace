@@ -1,7 +1,7 @@
 {
-  "sha": "fce92299cf90230ba72545783784d3ead72c93a6",
-  "date": "2026-10-21T11:36:39+07:00",
-  "msg": "Bot: luật v10 (rủi ro cố định 2%)",
+  "sha": "c37931d6108c8e57acce0edf18482dc686a9d6cc",
+  "date": "2026-10-21T11:49:01+07:00",
+  "msg": "Bot: đồng bộ hoàn toàn với Demo — học (tối ưu + bài học) từ đúng mốc startAt của phiên Demo; rủi ro/số lệnh/dừng ngày/đòn bẩy theo Demo khi app bật 'theo Demo' (mặc định), có chặn giới hạn an toàn; báo learnFrom/followDemo",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "e1f85eacf882c6cbc5efc8beb2cfa0acc08c7b78"
+      "sha": "69251901c2ba226a0947282088bc0244496efb67"
     },
     {
       "path": "lib/paperBot.js",

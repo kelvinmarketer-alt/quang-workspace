@@ -62,7 +62,7 @@ async function resolveRun(first) {
   const mode = c.mode === "live" || c.mode === "testnet" ? c.mode : (process.env.MODE || "testnet").trim();
   if (!first && mode !== MODE) { log(`🔁 App đổi chế độ ${MODE} → ${mode}: khởi động lại bot`); await pushStatus({ mode: MODE, at: now(), waiting: "Đang khởi động lại để đổi chế độ…", pubKey: MK.pub, pubFp: PUB_FP }, true).catch(() => {}); process.exit(0); }
   MODE = mode;
-  RISK = num(c.riskPct, ENV("RISK_PCT", 2)); MAX_OPEN = num(c.maxOpen, ENV("MAX_OPEN", 3)); DAILY_STOP = num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)); MAX_LEV = num(c.maxLev, ENV("MAX_LEV", 20)); CAP = num(c.capitalCap, ENV("CAPITAL_CAP", 0));
+  riskFrom(c); CAP = num(c.capitalCap, ENV("CAPITAL_CAP", 0));
   // token GitHub (chỉ đọc) cho tự cập nhật: từ app (mã hoá) hoặc GITHUB_TOKEN trong .env
   ghToken = process.env.GITHUB_TOKEN?.trim() || null;
   const g = cmd?.keys?.github; if (g?.token && (!g.pubFp || g.pubFp === PUB_FP)) { try { ghToken = decrypt(g.token); } catch { /* bỏ qua */ } }
@@ -127,11 +127,22 @@ async function syncHistory() { // chỉ ghi khi có thay đổi; lỗi → thử
 
 // Luật = cấu hình phiên Demo trong app (đọc lại mỗi lần quét ≈5 phút); vốn/rủi ro/giới hạn lấy từ .env (an toàn tiền thật)
 let cfg = { ...cfgOf({ cfg: {} }), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV }, cfgAt = 0, cfgSrc = "mặc định";
+// ĐỒNG BỘ VỚI DEMO: luật (bộ lọc, cặp, setup, khung) + mốc dữ liệu học (startAt phiên Demo) + rủi ro & giới hạn (khi app bật "theo Demo" — mặc định bật)
+let demoCfg = null, demoStart = null;
+const clamp = (v, lo, hi, d) => (isFinite(Number(v)) && v !== null && v !== "" ? Math.min(hi, Math.max(lo, Number(v))) : d); // chặn giá trị lạ (an toàn tiền thật)
+function riskFrom(c) {
+  const f = c.followDemo !== false && demoCfg;
+  RISK = clamp(f ? demoCfg.riskPct : num(c.riskPct, ENV("RISK_PCT", 2)), 0.1, 5, 2);
+  MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 5, 3));
+  DAILY_STOP = clamp(f ? demoCfg.dailyStopPct : num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)), 1, 20, 6);
+  MAX_LEV = Math.round(clamp(f ? demoCfg.maxLev : num(c.maxLev, ENV("MAX_LEV", 20)), 1, 20, 20));
+}
 async function refreshCfg() {
   if (Date.now() - cfgAt < 240000) return; cfgAt = Date.now(); // đọc cấu hình Demo mỗi lần quét (≈5 phút)
   const demo = await readDemoSession().catch(() => null);
   if (!demo) return;
-  const next = { ...cfgOf(demo), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
+  demoCfg = cfgOf(demo); demoStart = Number(demo.startAt) > 0 ? Number(demo.startAt) : null; riskFrom(appCfg);
+  const next = { ...demoCfg, riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
   cfgSrc = "phiên Demo trong app"; // đọc được phiên Demo (kể cả khi trùng mặc định)
   if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}`); }
 }
@@ -238,7 +249,7 @@ async function closed(symbol, a, why = null) {
 
 // ---------- 2) Tìm tín hiệu mới + đặt lệnh chờ ----------
 async function scan(posMap, halted) {
-  const raw = await runSession({ startAt: now() - 90 * 86400000, cfg }, () => {});
+  const raw = await runSession({ startAt: demoStart || now() - 90 * 86400000, cfg }, () => {}); // cùng mốc học với phiên Demo → tối ưu + bài học giống Demo
   const fresh = (raw.pending || []).filter((p) => !S.handled[p.id] && now() < p.until);
   // THỬ QUY TRÌNH (chỉ testnet/thử): FAKE_SIGNAL=BTC → 1 lệnh LONG giả sát giá hiện tại để kiểm tra đặt lệnh → khớp → SL/TP → đóng
   const fc = (process.env.FAKE_SIGNAL || "").trim().toUpperCase();
@@ -397,7 +408,7 @@ async function cycle(state) {
     raw = await scan(posMap, halted);
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
   }
-  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
+  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
   await syncHistory();
 }
 

@@ -103,7 +103,7 @@ export default function CoinLive({ active }) {
           {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
           <button onClick={load} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[13px] font-bold text-white"><RefreshCw size={14} /> Kiểm tra lại</button>
         </Card>
-        <BotSettings st={{}} cmd={cmd} onSaved={load} defaultOpen={false} />
+        <BotSettings st={{}} cmd={cmd} session={session} onSaved={load} defaultOpen={false} />
       </div>
     );
   }
@@ -154,11 +154,11 @@ export default function CoinLive({ active }) {
         {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
       </Card>
 
-      <RulesCard st={st} session={session} />
+      <RulesCard st={st} session={session} cmd={cmd} />
 
       {st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
 
-      <BotSettings st={st} cmd={cmd} onSaved={load} defaultOpen={!!st.waiting} />
+      <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} />
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} />
@@ -201,10 +201,21 @@ export default function CoinLive({ active }) {
 }
 
 // ---------- Luật bot đang chạy + phiên bản, so với phiên Demo ----------
-function RulesCard({ st, session }) {
+const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
+const RISK_KEYS = [["riskPct", "Rủi ro / lệnh", (v) => `${fmtNum(v, 2, 0)}%`], ["maxOpen", "Tối đa lệnh mở", (v) => `${v}`], ["dailyStopPct", "Dừng ngày", (v) => `-${fmtNum(v, 2, 0)}%`], ["maxLev", "Đòn bẩy tối đa", (v) => `${v}x`]];
+function RulesCard({ st, session, cmd }) {
   const sum = st.cfgSummary, v = st.version || {};
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
-  const diffs = useMemo(() => (sum && demo ? cfgDiff(sum, demo) : []), [sum, demo]);
+  const diffs = useMemo(() => {
+    if (!sum || !demo) return [];
+    const d = cfgDiff(sum, demo), set = st.settings || {};
+    for (const [k, label, f] of RISK_KEYS) if (set[k] != null && Number(set[k]) !== Number(demo[k])) d.push({ key: k, label, demo: f(demo[k]), bot: f(set[k]) });
+    return d;
+  }, [sum, demo, st.settings]);
+  // Code luật (lib/paperBot.js) trên máy bot so với bản app đang chạy; mốc dữ liệu học (tối ưu + rút kinh nghiệm) so với phiên Demo
+  const codeSame = !st.rulesHash || !APP_RULES_HASH ? null : st.rulesHash === APP_RULES_HASH;
+  const learnSame = !session || !st.learnFrom ? null : Math.abs(st.learnFrom - session.startAt) < 60000;
+  const following = cmd?.config?.followDemo !== false;
   const when = (t) => { if (!t) return null; const d = new Date(t); return isNaN(d) ? null : d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
   return (
     <Card className="!p-3">
@@ -218,7 +229,15 @@ function RulesCard({ st, session }) {
             <ul className="mt-0.5 space-y-0.5">{diffs.map((d) => <li key={d.key}>• {d.label}: Demo <b>{d.demo}</b> · Bot <b>{d.bot}</b></li>)}</ul>
             <div className="mt-1 text-[11px] text-amber-800/80">Bot đọc lại cấu hình phiên Demo mỗi ~5 phút — vừa sửa phiên Demo thì chờ vài phút; vẫn khác thì cập nhật bot.</div>
           </div>
-        ) : <div className="mt-1 text-[12px] font-bold text-emerald-700">✓ Giống phiên Demo</div>)}
+        ) : <div className="mt-1 text-[12px] font-bold text-emerald-700">✓ Giống phiên Demo: bộ lọc, cặp, setup, khung{st.settings ? ", rủi ro & giới hạn" : ""}</div>)}
+      {sum && demo && (
+        <div className="mt-1 space-y-0.5 text-[12px]">
+          {codeSame === false ? <div className="font-bold text-amber-700">⏳ Code luật trên máy bot ({String(st.rulesHash).slice(0, 8)}) khác bản app ({APP_RULES_HASH.slice(0, 8)}) — bot tự cập nhật trong ≤5 phút (Cài đặt bot → Tự cập nhật → “Cập nhật ngay” để nhanh hơn).</div> : codeSame ? <div className="font-bold text-emerald-700">✓ Cùng code luật với app (mã {APP_RULES_HASH.slice(0, 8)})</div> : null}
+          {learnSame === false ? <div className="font-bold text-amber-700">⏳ Bot chưa học cùng mốc dữ liệu với Demo (Demo từ {when(session.startAt)}) — bot bản mới sẽ tự theo.</div> : learnSame ? <div className="font-bold text-emerald-700">✓ Cùng dữ liệu tự tối ưu & rút kinh nghiệm với Demo (từ {when(session.startAt)})</div> : null}
+          {!following && <div className="font-bold text-amber-700">⚠ Rủi ro & giới hạn của bot đang đặt RIÊNG (không theo Demo) — bật lại trong Cài đặt bot.</div>}
+          {session.stoppedAt && <div className="font-bold text-amber-700">⚠ Phiên Demo đã DỪNG nhưng bot vẫn chạy — bấm “Dừng bot” nếu muốn dừng cả hai.</div>}
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-slate-500">
         <span>Phiên bản: <b className="tabular-nums text-slate-700">{v.sha ? v.sha.slice(0, 7) : "bản tải tay"}</b>{when(v.date) ? ` · ${when(v.date)}` : ""}</span>
         <span>Nguồn: {v.source || (v.sha ? "GitHub (tự cập nhật)" : "tải tay (ZIP)")}</span>
@@ -443,22 +462,26 @@ async function encryptFor(pubB64, text) {
   const pk = await crypto.subtle.importKey("spki", b64ToBytes(pubB64), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
   return bytesToB64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pk, new TextEncoder().encode(text)));
 }
-function BotSettings({ st, cmd, onSaved, defaultOpen }) {
-  const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, notify: true, ...(st.settings || {}), ...(cmd?.config || {}) };
+function BotSettings({ st, cmd, session, onSaved, defaultOpen }) {
+  const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
+  const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, notify: true, followDemo: true, ...(st.settings || {}), ...(cmd?.config || {}) };
   const [open, setOpen] = useState(defaultOpen);
   const [f, setF] = useState(c0), [k, setK] = useState({ key: "", secret: "" }), [confirm, setConfirm] = useState(""), [msg, setMsg] = useState(null), [saving, setSaving] = useState(false);
   useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
   const live = f.mode === "live", saved = cmd?.keys?.[f.mode], stale = saved && saved.pubFp && st.pubFp && saved.pubFp !== st.pubFp;
   const inp = "w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm";
+  const follow = f.followDemo !== false && !!demo; // rủi ro & giới hạn lấy theo phiên Demo → 2 bên luôn đồng bộ
+  const LOCK = ["riskPct", "maxOpen", "dailyStopPct", "maxLev"];
   const num = (key, label, step, suffix, hint) => (
     <label className="block text-[12px]"><span className="mb-1 block font-semibold text-slate-500">{label}</span>
-      <div className="flex items-center gap-1"><input type="number" inputMode="decimal" step={step} value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} className={inp} />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
+      <div className="flex items-center gap-1"><input type="number" inputMode="decimal" step={step} disabled={follow && LOCK.includes(key)} value={follow && LOCK.includes(key) ? demo[key] : f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} className={`${inp} disabled:bg-slate-50 disabled:text-slate-500`} />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
       {hint && <span className="mt-0.5 block text-[10.5px] text-slate-400">{hint}</span>}
     </label>
   );
   const save = async () => {
     setMsg(null);
-    const v = { mode: f.mode, riskPct: Number(f.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(f.maxOpen)), dailyStopPct: Number(f.dailyStopPct), maxLev: Math.round(Number(f.maxLev)), notify: f.notify !== false };
+    const src = follow ? demo : f;
+    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false };
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
     if (!(v.maxOpen >= 1 && v.maxOpen <= 5)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–5" });
     if (!(v.dailyStopPct >= 1 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 1–20%" });
@@ -511,6 +534,7 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
             </div>
           </div>
           <UpdateBox st={st} cmd={cmd} onSaved={onSaved} />
+          <label className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-2.5 text-[12px] text-emerald-900"><input type="checkbox" className="mt-0.5" checked={f.followDemo !== false} onChange={(e) => setF({ ...f, followDemo: e.target.checked })} /><span><b>Rủi ro & giới hạn theo phiên Demo (đồng bộ)</b> — rủi ro/lệnh, số lệnh mở, dừng ngày, đòn bẩy lấy đúng như Demo{demo ? ` (${fmtNum(demo.riskPct, 2, 0)}% · ${demo.maxOpen} lệnh · dừng ngày ${fmtNum(demo.dailyStopPct, 2, 0)}% · ${demo.maxLev}x)` : ""}; sửa ở Demo là bot theo. Bỏ chọn để đặt riêng cho bot (khi đó Demo và bot sẽ KHÁC nhau).</span></label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {num("riskPct", "Rủi ro / lệnh", 0.25, "%", live ? "tháng đầu nên 1%" : null)}
             {num("capitalCap", "Vốn tính lệnh tối đa", 50, "$", "0 = cả ví Futures")}
