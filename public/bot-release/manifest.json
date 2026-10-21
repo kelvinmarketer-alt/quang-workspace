@@ -1,7 +1,7 @@
 {
-  "sha": "c37931d6108c8e57acce0edf18482dc686a9d6cc",
-  "date": "2026-10-21T11:49:01+07:00",
-  "msg": "Bot: đồng bộ hoàn toàn với Demo — học (tối ưu + bài học) từ đúng mốc startAt của phiên Demo; rủi ro/số lệnh/dừng ngày/đòn bẩy theo Demo khi app bật 'theo Demo' (mặc định), có chặn giới hạn an toàn; báo learnFrom/followDemo",
+  "sha": "0d0e94e7ff8d9247cbea9e652c7215c73843cba1",
+  "date": "2026-10-21T14:51:41+07:00",
+  "msg": "Bot: báo cáo tuần tối Chủ nhật (≥20:00 VN, gửi bù trong 16 giờ) — Demo + lệnh thật 7 ngày, tiến độ tháng so với 10 lệnh",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "69251901c2ba226a0947282088bc0244496efb67"
+      "sha": "bf4bd9d43df0cded0159672d58107013aa755430"
     },
     {
       "path": "lib/paperBot.js",

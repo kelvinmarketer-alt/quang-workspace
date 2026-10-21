@@ -11,6 +11,8 @@ import { pushSupported, permission, isSubscribed, enablePush } from "../lib/push
 import { runSessionAsync } from "../lib/botRunner.js";
 import { finalize, cfgOf } from "../lib/paperBot.js";
 import { normLive, liveSummary, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
+import { monthOf, monthLabel, MONTH_TARGET } from "../lib/coinShared.js";
+import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Bot thật": theo dõi bot giao dịch chạy nền trên máy bàn ở nhà (repo qws-live-bot) qua bảng Supabase qws_live_bot
 // — bot ghi dòng 'status' mỗi ~30 giây + dòng 'history' (lịch sử lệnh thật); app ghi dòng 'command' (LUÔN gộp với dữ liệu cũ)
@@ -111,7 +113,20 @@ export default function CoinLive({ active }) {
   const online = Date.now() - st.at < 120000, stopped = !!(cmd?.stop || st.stopped);
   const act = Object.entries(st.active || {}).map(([sym, a]) => ({ sym, ...a }));
   const nPos = Object.keys(st.positions || {}).length, nLeft = Math.max(act.length, nPos);
-  const closes = (st.events || []).filter((e) => e.ev === "close"), wins = closes.filter((e) => e.pnl > 0).length;
+  const closes = (st.events || []).filter((e) => e.ev === "close" && e.setup !== "TEST" && !String(e.id || "").startsWith("test-")), wins = closes.filter((e) => e.pnl > 0).length; // bỏ lệnh thử
+  const realT = (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.setup !== "TEST" && (!t.mode || t.mode === st.mode));
+  // Điều kiện trước khi cho bật TIỀN THẬT (phải đạt đủ)
+  const tn = (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.setup !== "TEST" && t.mode === "testnet" && t.exitAt);
+  const tnFirst = tn.length ? Math.min(...tn.map((t) => Number(t.exitAt))) : null, tnPnl = tn.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
+  const liveChecks = [
+    { ok: !!tnFirst && Date.now() - tnFirst >= 14 * 86400000, t: "Testnet đã chạy ít nhất 2 tuần", v: tnFirst ? `từ ${dt(tnFirst)}` : "chưa có lệnh" },
+    { ok: tn.length >= 20, t: "Ít nhất 20 lệnh testnet đã đóng", v: `${tn.length}/20` },
+    { ok: tn.length > 0 && tnPnl > 0, t: "Tổng lãi/lỗ testnet dương", v: tn.length ? fmtUsdSigned(tnPnl) : "—" },
+    { ok: st.test?.ok === true, t: "Lệnh thử đạt mọi bước", v: st.test?.doneAt ? (st.test.ok ? "đạt" : "có lỗi") : "chưa chạy" },
+  ];
+  const monthN = realT.filter((t) => t.exitAt && monthOf(t.exitAt) === monthOf(Date.now())).length;
+  const syncOk = (() => { const demo = session ? cfgOf(session) : null; if (!demo || !st.cfgSummary) return null; const set = st.settings || {}; return !cfgDiff(st.cfgSummary, demo).length && ["riskPct", "maxOpen", "dailyStopPct", "maxLev"].every((k) => set[k] == null || Number(set[k]) === Number(demo[k])) && (!st.rulesHash || !APP_RULES_HASH || st.rulesHash === APP_RULES_HASH) && (!st.learnFrom || Math.abs(st.learnFrom - session.startAt) < 60000); })();
+  liveChecks.push({ ok: syncOk === true, t: "Bot đồng bộ hoàn toàn với Demo", v: syncOk ? "đạt" : "chưa" });
   const closeSent = cmd?.closeAllAt && Date.now() - cmd.closeAllAt < 15 * 60000 ? cmd.closeAllAt : null;
   const todayPnl = st.lastScan?.pnl;
   return (
@@ -124,6 +139,7 @@ export default function CoinLive({ active }) {
           {online ? <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Đang chạy</span>
             : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Mất liên lạc · báo lần cuối {ago(st.at)}</span>}
           {stopped && <Badge tone="rose">ĐANG DỪNG</Badge>}
+          {syncOk != null && <a href="#bot-rules" className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${syncOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{syncOk ? "✓ Đồng bộ Demo" : "⚠ Khác Demo — xem"}</a>}
           <div className="ml-auto flex flex-wrap justify-end gap-1.5">
             <button onClick={load} aria-label="Làm mới" className="rounded-lg border border-slate-200 p-2 text-slate-500"><RefreshCw size={14} /></button>
             {stopped ? <button disabled={busy} onClick={() => setStop(false)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"><Play size={13} /> Chạy lại</button>
@@ -158,13 +174,13 @@ export default function CoinLive({ active }) {
 
       {st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
 
-      <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} />
+      <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} liveChecks={liveChecks} />
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} />
         <Num label="Lãi/lỗ hôm nay" v={todayPnl == null ? "—" : fmtUsdSigned(todayPnl)} t={tone(todayPnl)} />
         <Num label="Lệnh chờ / đang mở" v={`${act.filter((a) => a.stage === "entry").length} / ${act.filter((a) => a.stage === "open").length}`} />
-        <Num label="Lệnh đã đóng (gần đây)" v={closes.length || "—"} sub={closes.length ? `thắng ${fmtPct((wins / closes.length) * 100, 0)}` : null} />
+        <Num label={`Lệnh ${monthLabel(monthOf(Date.now())).toLowerCase()}`} v={<span className={monthN >= MONTH_TARGET ? "text-emerald-600" : undefined}>{monthN}/{MONTH_TARGET}</span>} sub={closes.length ? `gần đây thắng ${fmtPct((wins / closes.length) * 100, 0)}` : "mục tiêu ≥ 10 lệnh/tháng"} />
       </div>
 
       <Card className="!p-3">
@@ -194,7 +210,7 @@ export default function CoinLive({ active }) {
 
       <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
         <ShieldAlert size={13} className="mt-0.5 shrink-0" />
-        <span>Bot chạy trên máy bàn ở nhà bằng khoá API riêng (chỉ Futures, tắt rút tiền) — app chỉ đọc trạng thái và gửi lệnh Dừng / Đóng hết. Dừng bot không đóng vị thế đang mở (vẫn có SL/TP); “Đóng hết vị thế” mới đóng bằng giá thị trường. Không phải tư vấn đầu tư.</span>
+        <span>Không phải tư vấn đầu tư. <InfoTip label="Bot chạy thế nào">Bot chạy trên máy bàn ở nhà bằng khoá API riêng (chỉ Futures, tắt rút tiền) — app chỉ đọc trạng thái và gửi lệnh Dừng / Đóng hết / đổi cài đặt. Dừng bot không đóng vị thế đang mở (vẫn có SL/TP); “Đóng hết vị thế” mới đóng bằng giá thị trường.</InfoTip></span>
       </div>
     </div>
   );
@@ -204,6 +220,7 @@ export default function CoinLive({ active }) {
 const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
 const RISK_KEYS = [["riskPct", "Rủi ro / lệnh", (v) => `${fmtNum(v, 2, 0)}%`], ["maxOpen", "Tối đa lệnh mở", (v) => `${v}`], ["dailyStopPct", "Dừng ngày", (v) => `-${fmtNum(v, 2, 0)}%`], ["maxLev", "Đòn bẩy tối đa", (v) => `${v}x`]];
 function RulesCard({ st, session, cmd }) {
+  const [open, setOpen] = useState(false);
   const sum = st.cfgSummary, v = st.version || {};
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
   const diffs = useMemo(() => {
@@ -216,10 +233,12 @@ function RulesCard({ st, session, cmd }) {
   const codeSame = !st.rulesHash || !APP_RULES_HASH ? null : st.rulesHash === APP_RULES_HASH;
   const learnSame = !session || !st.learnFrom ? null : Math.abs(st.learnFrom - session.startAt) < 60000;
   const following = cmd?.config?.followDemo !== false;
+  const allOk = !!sum && !!demo && !diffs.length && codeSame !== false && learnSame !== false && following && !session?.stoppedAt;
   const when = (t) => { if (!t) return null; const d = new Date(t); return isNaN(d) ? null : d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
   return (
-    <Card className="!p-3">
-      <Title icon={ListChecks}>Luật & phiên bản bot</Title>
+    <Card className="!p-3" id="bot-rules">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 text-left"><Title icon={ListChecks}>Luật & phiên bản bot</Title><span className={`ml-auto mb-1.5 shrink-0 text-[11.5px] font-bold ${allOk ? "text-emerald-700" : "text-amber-700"}`}>{allOk ? "✓ Đồng bộ hoàn toàn với Demo" : "⚠ Cần xem"}</span><ChevronDown size={15} className={`mb-1.5 shrink-0 text-slate-400 transition ${open || !allOk ? "rotate-180" : ""}`} /></button>
+      {(open || !allOk) && <>
       {sum ? <div className="text-[12.5px] leading-snug text-slate-700"><b>Bot đang chạy luật:</b> {rulesText(sum)}</div>
         : <div className="rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot trên máy bàn là bản cũ, chưa báo bộ luật đang chạy. {st.version?.source === "site" ? "Bấm Cài đặt bot → Tự cập nhật → “Cập nhật ngay”." : "Bản này chưa biết tự cập nhật từ web: tải ZIP mới MỘT LẦN (repo qws-live-bot → Code → Download ZIP), bấm go-cai-dat.bat, giải nén chép đè (giữ .env và thư mục data), bấm cai-dat-windows.bat — từ đó bot tự cập nhật, không cần token."}</div>}
       {sum && (!demo ? <div className="mt-1 text-[12px] text-slate-500">Chưa có phiên Demo (tab Demo tự động) để so sánh luật.</div>
@@ -244,6 +263,7 @@ function RulesCard({ st, session, cmd }) {
         <span>Luật lấy từ: {st.rules || "mặc định"}</span>
         {st.rulesHash && <span>Mã luật: <span className="tabular-nums">{String(st.rulesHash).slice(0, 8)}</span></span>}
       </div>
+      </>}
     </Card>
   );
 }
@@ -252,7 +272,7 @@ function RulesCard({ st, session, cmd }) {
 const isoVN = (t) => (t ? new Date(t + 7 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "");
 // Lệnh thử (chỉ Testnet): bot đặt 1 lệnh nhỏ sát giá → khớp → SL/TP → đóng sau 1 phút → lịch sử → thông báo; hiện từng bước từ status.test
 function TestTradeCard({ st, cmd, online, stopped, onSent }) {
-  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [showSteps, setShowSteps] = useState(false);
   const sentAt = Number(cmd?.testTradeAt) || 0, t = st.test && st.test.at === sentAt ? st.test : null;
   const running = !!sentAt && (!t || !t.doneAt) && Date.now() - sentAt < 20 * 60000;
   const noReply = running && !t && Date.now() - sentAt > 3 * 60000;
@@ -269,9 +289,10 @@ function TestTradeCard({ st, cmd, online, stopped, onSent }) {
         {t?.doneAt ? <Badge tone={t.ok ? "emerald" : "rose"}>{t.ok ? "Đạt — mọi bước OK" : "Có bước lỗi"}</Badge> : running ? <Badge tone="amber">Đang chạy…</Badge> : null}
         <button disabled={busy || running || !online || stopped} onClick={run} className="ml-auto flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40">{busy || running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Chạy lệnh thử</button>
       </div>
-      <div className="mt-1 text-[11.5px] text-slate-500">Kiểm tra trọn quy trình khi không ngồi ở máy: đặt lệnh → khớp → SL/TP → đóng → lịch sử → thông báo điện thoại. Tiền ảo, rủi ro 0,1% vốn, không tính vào thống kê.{!online ? " · Bot đang mất liên lạc." : stopped ? " · Bot đang DỪNG — bấm Chạy lại trước." : ""}</div>
+      <div className="mt-1 flex items-center gap-1 text-[11.5px] text-slate-500">Kiểm tra trọn quy trình khi không ngồi ở máy <InfoTip>Bot đặt 1 lệnh LONG BTC (hoặc ETH) sát giá bằng tiền ảo → khớp → đặt SL/TP → giữ 1 phút → đóng → ghi lịch sử → gửi thông báo về điện thoại. Rủi ro 0,1% vốn, không tính vào thống kê.</InfoTip>{!online ? " · Bot đang mất liên lạc." : stopped ? " · Bot đang DỪNG — bấm Chạy lại trước." : ""}</div>
       {noReply && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot chưa nhận lệnh thử sau 3 phút — có thể máy bot chưa cập nhật bản mới (tự cập nhật trong ~5 phút) hoặc đang chờ khoá API.</div>}
-      {t?.steps?.length > 0 && <ol className="mt-2 space-y-1">{t.steps.map((x, i) => (
+      {t?.doneAt && !showSteps && <button onClick={() => setShowSteps(true)} className="mt-1 text-[11.5px] font-bold text-indigo-600">{t.ok ? "✓" : "✖"} Lần thử gần nhất {new Date(t.doneAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })} · xem {t.steps.length} bước ▾</button>}
+      {t?.steps?.length > 0 && (!t.doneAt || showSteps) && <ol className="mt-2 space-y-1">{t.steps.map((x, i) => (
         <li key={i} className={`flex gap-2 text-[12px] leading-snug ${x.ok ? "text-slate-700" : "font-bold text-rose-700"}`}><span className="w-[42px] shrink-0 tabular-nums text-[11px] text-slate-400">{new Date(x.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span><span>{x.ok ? "✓" : "✖"} {x.msg}</span></li>
       ))}</ol>}
       {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
@@ -282,7 +303,7 @@ function TestTradeCard({ st, cmd, online, stopped, onSent }) {
 function LiveResults({ hist, st, session }) {
   const all = useMemo(() => (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.coin && t.setup !== "TEST").map((t) => normLive(t, st.mode)), [hist, st.mode]); // bỏ lệnh thử khỏi thống kê
   const modes = useMemo(() => [...new Set(all.map((t) => t.mode))], [all]);
-  const [mode, setMode] = useState(null), [filter, setFilter] = useState("all"), [pair, setPair] = useState("all"), [showN, setShowN] = useState(30);
+  const [mode, setMode] = useState(null), [filter, setFilter] = useState("all"), [pair, setPair] = useState("all"), [showN, setShowN] = useState(30), [mon, setMon] = useState("all");
   const m = mode && modes.includes(mode) ? mode : modes.includes(st.mode) ? st.mode : modes[0];
   const list = useMemo(() => all.filter((t) => t.mode === m), [all, m]);
   const S = useMemo(() => liveSummary(list, m === st.mode ? st.lastScan?.eq : null), [list, m, st.mode, st.lastScan?.eq]);
@@ -291,7 +312,13 @@ function LiveResults({ hist, st, session }) {
   const shown = useMemo(() => list
     .filter((t) => pair === "all" || t.coin === pair || `${t.coin}|${t.tf}` === pair)
     .filter((t) => filter === "all" || (t.r != null && (filter === "win" ? t.r > 0.05 : t.r < -0.05)))
-    .sort((a, b) => (b.exitAt ?? b.entryAt ?? 0) - (a.exitAt ?? a.entryAt ?? 0)), [list, pair, filter]);
+    .filter((t) => mon === "all" || monthOf(t.exitAt ?? t.entryAt) === mon)
+    .sort((a, b) => (b.exitAt ?? b.entryAt ?? 0) - (a.exitAt ?? a.entryAt ?? 0)), [list, pair, filter, mon]);
+  const months = useMemo(() => {
+    const mm = new Map();
+    for (const t of list) { if (!(pair === "all" || t.coin === pair || `${t.coin}|${t.tf}` === pair) || t.exitAt == null) continue; const k = monthOf(t.exitAt), x = mm.get(k) || { k, n: 0, win: 0, pnl: 0 }; x.n++; if (t.r > 0.05) x.win++; x.pnl += t.pnl || 0; mm.set(k, x); }
+    return [...mm.values()].sort((a, b) => (a.k < b.k ? 1 : -1));
+  }, [list, pair]);
   const exportCsv = () => downloadCSV(`lich-su-lenh-that-${m}-${new Date().toISOString().slice(0, 10)}`, [
     ["Mở lúc", "Đóng lúc", "Cặp", "Khung", "Hướng", "Setup", "Giá vào", "Giá ra", "SL", "TP", "Khối lượng", "Rủi ro $", "R", "Lãi/lỗ $", "Kết thúc", "Chế độ", "Mã lệnh"],
     ...shown.map((t) => [isoVN(t.entryAt), isoVN(t.exitAt), t.coin, TF[t.tf] || t.tf, t.side === 1 ? "LONG" : "SHORT", setupName(t.setup), t.entry != null ? String(t.entry) : "", t.exit != null ? String(t.exit) : "", t.sl != null ? String(t.sl) : "", t.tp != null ? String(t.tp) : "", t.qty != null ? String(t.qty) : "", t.riskUsd, t.r, t.pnl, t.reason || "", MODE_L[t.mode] || t.mode, t.id]),
@@ -351,8 +378,21 @@ function LiveResults({ hist, st, session }) {
           {coins.map((c) => <option key={c} value={c}>{c} · mọi khung</option>)}
           {streams.map((s) => { const [c, tf] = s.split("|"); return <option key={s} value={s}>{c} {TF[tf] || tf}</option>; })}
         </select>
+        <select value={mon} onChange={(e) => { setMon(e.target.value); setShowN(30); }} className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[12px] font-bold text-slate-600">
+          <option value="all">Mọi tháng</option>
+          {months.map((x) => <option key={x.k} value={x.k}>{monthLabel(x.k)}</option>)}
+        </select>
         <button onClick={exportCsv} disabled={!shown.length} className="ml-auto rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-40">Xuất CSV</button>
       </div>
+      {months.length > 0 && (
+        <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">{months.map((x) => (
+          <button key={x.k} onClick={() => { setMon(mon === x.k ? "all" : x.k); setShowN(30); }} className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-left ${mon === x.k ? "border-indigo-300 bg-indigo-50" : "border-slate-100 bg-slate-50"}`}>
+            <div className="text-[10.5px] font-bold text-slate-500">{monthLabel(x.k)}</div>
+            <div className="text-[12px] tabular-nums"><b className={x.n >= MONTH_TARGET ? "text-emerald-700" : "text-slate-700"}>{x.n} lệnh</b><span className="text-slate-400"> · thắng {fmtNum((x.win / x.n) * 100, 0, 0)}%</span></div>
+            <div className={`text-[12px] font-extrabold tabular-nums ${tone(x.pnl)}`}>{fmtUsdSigned(x.pnl)}</div>
+          </button>
+        ))}</div>
+      )}
       <div className="divide-y divide-slate-100">{shown.slice(0, showN).map((t, i) => (
         <div key={`${t.id || i}-${t.exitAt || ""}`} className="px-1 py-2">
           <div className="flex items-center gap-2 text-[12.5px]">
@@ -462,7 +502,7 @@ async function encryptFor(pubB64, text) {
   const pk = await crypto.subtle.importKey("spki", b64ToBytes(pubB64), { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
   return bytesToB64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pk, new TextEncoder().encode(text)));
 }
-function BotSettings({ st, cmd, session, onSaved, defaultOpen }) {
+function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }) {
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
   const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, notify: true, followDemo: true, ...(st.settings || {}), ...(cmd?.config || {}) };
   const [open, setOpen] = useState(defaultOpen);
@@ -492,6 +532,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen }) {
     if (!hasNewKey && (!saved || stale) && !envKey) return setMsg({ bad: true, t: `Chưa có khoá API ${live ? "THẬT" : "Testnet"} — dán API Key + Secret Key rồi lưu` });
     if (!st.pubKey) return setMsg({ bad: true, t: st.at ? "Bot trên máy bàn là bản cũ — tải bản mới (Download ZIP, chép đè) rồi thử lại" : "Chưa nhận được tín hiệu từ máy chạy bot — bật bot trên máy bàn trước (khoá được mã hoá bằng khoá công khai của máy bot)" });
     if (live && cmd?.config?.mode !== "live") {
+      if (!liveChecks.length || !liveChecks.every((c) => c.ok)) return setMsg({ bad: true, t: "Chưa đủ điều kiện bật TIỀN THẬT — xem danh sách bên dưới (testnet ≥ 2 tuần, ≥ 20 lệnh, có lãi, lệnh thử đạt)." });
       if (confirm.trim().toUpperCase() !== "TIỀN THẬT" && confirm.trim().toUpperCase() !== "TIEN THAT") return setMsg({ bad: true, t: 'Gõ đúng chữ "TIỀN THẬT" vào ô xác nhận để bật chế độ tiền thật' });
       if (!(await ask(`Bật chạy TIỀN THẬT?\nBot sẽ đặt lệnh THẬT trên Binance: rủi ro ${v.riskPct}%/lệnh, vốn tính lệnh tối đa ${v.capitalCap ? v.capitalCap + "$" : "toàn bộ ví Futures"}, tối đa ${v.maxOpen} lệnh, dừng ngày -${v.dailyStopPct}%.\nKết quả quá khứ/testnet không đảm bảo lợi nhuận.`, { ok: "Bật tiền thật", danger: true }))) return;
     }
@@ -549,7 +590,12 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen }) {
           </div>
           {live && cmd?.config?.mode !== "live" && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] text-rose-800">
-              <b>Bật TIỀN THẬT:</b> bot sẽ đặt lệnh thật bằng tiền trong ví Futures. Khuyên: đã chạy Testnet ổn 2–4 tuần, tháng đầu vốn 100–200$ và rủi ro 1%.
+              <b>Bật TIỀN THẬT:</b> bot sẽ đặt lệnh thật bằng tiền trong ví Futures. Khuyên: tháng đầu vốn 100–200$ (ô “Vốn tính lệnh tối đa”).
+              <div className="mt-2 rounded-lg bg-white p-2">
+                <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Điều kiện trước khi chạy tiền thật ({liveChecks.filter((c) => c.ok).length}/{liveChecks.length})</div>
+                {liveChecks.map((c) => <div key={c.t} className={`flex items-baseline justify-between gap-2 py-0.5 ${c.ok ? "text-emerald-700" : "text-slate-600"}`}><span>{c.ok ? "✓" : "○"} {c.t}</span><span className="shrink-0 font-bold tabular-nums">{c.v}</span></div>)}
+                {!liveChecks.every((c) => c.ok) && <div className="mt-1 text-[11px] font-bold text-rose-700">Chưa đạt đủ → chưa bật được tiền thật. Cứ để bot chạy testnet thêm.</div>}
+              </div>
               <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder='Gõ "TIỀN THẬT" để xác nhận' className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-sm" />
             </div>
           )}

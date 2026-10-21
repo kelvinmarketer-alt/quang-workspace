@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
-import { runSession, cfgOf, SYMBOLS, TFS, symOf } from "./paperBot.js";
+import { runSession, cfgOf, SYMBOLS, TFS, symOf, finalize, statsOf } from "./paperBot.js";
 import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
@@ -377,6 +377,27 @@ const cfgSummary = () => { const { coins, tfs, setups, keyVolume, d1Bias, sigVol
 function lossRun() { let n = 0; for (const t of HIST) { if (t.setup === "TEST" || (t.mode && t.mode !== MODE)) continue; if (Number(t.pnl) < 0) n++; else if (Number(t.pnl) > 0) break; } return n; }
 const riskNow = () => (cfg.streakN > 0 && lossRun() >= cfg.streakN ? Math.min(RISK, cfg.streakRiskPct ?? RISK / 2) : RISK);
 
+// ---------- Báo cáo tuần (tối Chủ nhật ≥ 20:00 giờ VN; máy tắt lúc đó thì gửi bù trong 16 giờ sau) ----------
+// Demo (chạy lại cùng luật/mốc học như tab Demo) + lệnh thật của bot trong 7 ngày, kèm tiến độ tháng so với mục tiêu 10 lệnh
+let lastRaw = null;
+function weeklyReport() {
+  if (DRY || ONCE || !lastRaw) return;
+  const vnNow = new Date(now() + VN), sun = new Date(vnNow); sun.setUTCHours(20, 0, 0, 0); sun.setUTCDate(sun.getUTCDate() - sun.getUTCDay()); // Chủ nhật gần nhất 20:00 (giờ VN, dạng UTC giả)
+  if (sun > vnNow) sun.setUTCDate(sun.getUTCDate() - 7);
+  const at = sun.getTime() - VN, key = sun.toISOString().slice(0, 10);
+  if (now() - at > 16 * 3600000 || S.weeklySent === key) return;
+  S.weeklySent = key; save();
+  const from = at - 7 * 86400000, mon = new Date(vnNow).toISOString().slice(0, 7), inMon = (t) => new Date(Number(t) + VN).toISOString().slice(0, 7) === mon;
+  const P = finalize(lastRaw, null).portfolio.trades.filter((t) => t.status === "done" || t.status === "open");
+  const dW = P.filter((t) => t.entryAt >= from && t.entryAt < at), dWs = statsOf(dW.filter((t) => t.status === "done")), dPnl = dW.reduce((x, t) => x + (t.pnl || 0), 0);
+  const L = HIST.filter((t) => t.setup !== "TEST" && (!t.mode || t.mode === MODE)), lW = L.filter((t) => t.exitAt >= from && t.exitAt < at), lPnl = lW.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
+  const d2 = (t) => new Date(t + VN).toISOString().slice(5, 10).split("-").reverse().join("/");
+  const title = `📅 Tuần ${d2(from)}–${d2(at - 1)}: Demo ${dW.length} lệnh ${sgn(dPnl, 2)}$ · Bot ${lW.length} lệnh ${sgn(lPnl, 2)}$`;
+  const body = `Demo: thắng ${dWs.n ? vn(dWs.winRate, 0) : "—"}% · tháng này ${P.filter((t) => inMon(t.entryAt)).length}/10 lệnh. Bot ${modeLbl()}: ${lW.filter((t) => Number(t.pnl) > 0).length} thắng · tháng này ${L.filter((t) => t.exitAt && inMon(t.exitAt)).length}/10 lệnh. Không phải tư vấn đầu tư.`;
+  log(`📅 Báo cáo tuần: ${title}`);
+  note(title, body, `qws-bot-week-${key}`);
+}
+
 // ---------- Vòng lặp ----------
 async function cycle(state) {
   const cmd = await resolveRun(false);
@@ -407,9 +428,11 @@ async function cycle(state) {
     await refreshCfg();
     raw = await scan(posMap, halted);
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
+    lastRaw = raw;
   }
   await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
   await syncHistory();
+  try { weeklyReport(); } catch (e) { log("Lỗi báo cáo tuần:", e.message); }
 }
 
 // Tự cập nhật: 5 phút/lần hoặc khi bấm "Cập nhật ngay" trong app; có bản mới → thoát để vòng chạy bật bản mới

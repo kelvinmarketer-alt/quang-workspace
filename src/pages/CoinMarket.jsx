@@ -51,6 +51,7 @@ function demoTrades(session) {
 // Biểu đồ nến (TradingView lightweight-charts): nến + EMA20/50 + khối lượng + mốc BOS/CHoCH + lệnh bot demo + đường Entry/SL/TP
 // Trục thời gian theo giờ VN (UTC+7, giống tab Demo). marks: mốc thêm (lệnh bot) theo giây UTC như nến.
 const VN = 7 * 3600;
+const NONE = []; // mảng rỗng cố định (tắt lớp) — tránh vẽ lại biểu đồ mỗi lần render
 function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
   useEffect(() => {
@@ -76,6 +77,7 @@ function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKe
     const a = api.current; if (!a || !candles.length) return;
     const T = (t) => t + VN, first = candles[0].time, last = candles[candles.length - 1].time;
     a.candle.applyOptions({ priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision } });
+    a.chart.applyOptions({ localization: { locale: "vi-VN", priceFormatter: (p) => Number(p).toLocaleString("vi-VN", { minimumFractionDigits: precision, maximumFractionDigits: precision }) } }); // số kiểu Việt (83.003,06) như phần còn lại của app
     a.candle.setData(candles.map(({ time, open, high, low, close }) => ({ time: T(time), open, high, low, close })));
     a.vol.setData(candles.map((c) => ({ time: T(c.time), value: c.volume, color: c.close >= c.open ? "rgba(16,185,129,0.35)" : "rgba(244,63,94,0.35)" })));
     a.l20.setData(e20.map((p) => ({ time: T(p.time), value: p.value }))); a.l50.setData(e50.map((p) => ({ time: T(p.time), value: p.value })));
@@ -283,7 +285,7 @@ function AiHistory({ recs, active, sym, onOpen, className = "" }) {
   );
 }
 
-// Cảnh báo giá (chỉ chủ): lưu ở Supabase qws_live_bot, dòng 'command' → data.priceAlerts. Máy chủ kiểm tra ~10 phút/lần và gửi thông báo đẩy.
+// Cảnh báo giá (chỉ chủ): lưu ở Supabase qws_live_bot, dòng 'command' → data.priceAlerts. Máy chủ (Worker Cloudflare qws-monitor) kiểm tra 5 phút/lần và gửi thông báo đẩy.
 // Ghi: LUÔN đọc lại dòng command mới nhất rồi ghi gộp {...data, priceAlerts} → không mất khoá/cấu hình/stop của bot thật.
 function PriceAlerts({ active, pair, market, price }) {
   const [alerts, setAlerts] = useState(null);
@@ -374,7 +376,7 @@ function PriceAlerts({ active, pair, market, price }) {
           </ul>
         )}
         <div className="mt-2 text-[10.5px] leading-snug text-slate-400">
-          Máy chủ kiểm tra khoảng <b>10 phút/lần</b> (khi job chạy) rồi gửi <b>thông báo đẩy</b> — cần bật ở Cài đặt → Thông báo đẩy.{" "}
+          Máy chủ kiểm tra <b>5 phút/lần</b> rồi gửi <b>thông báo đẩy</b> — cần bật ở Cài đặt → Thông báo đẩy.{" "}
           {push === true ? <span className="font-semibold text-emerald-600">Máy này đã bật ✓</span> : push === false ? <span className="font-semibold text-amber-600">Máy này chưa bật.</span> : null}
         </div>
       </>)}
@@ -481,9 +483,12 @@ export default function CoinMarket({ active = true }) {
   const sessCfg = session ? cfgOf(session) : null, inSess = !!sessCfg && sessCfg.coins.includes(sym) && sessCfg.tfs.includes(tf);
 
   // Đường Entry/SL/TP của AI + lệnh bot demo đang mở vẽ lên biểu đồ
+  // Lớp trên biểu đồ: bật/tắt từng nhóm cho đỡ rối (nhớ trên máy này)
+  const [layers, setLayers] = useState(() => ({ ema: true, smc: true, levels: true, ai: true, ...(ls.get("qws_mkt_layers", {}) || {}) }));
+  const togLayer = (k) => setLayers((o) => { const n = { ...o, [k]: !o[k] }; ls.set("qws_mkt_layers", n); return n; });
   const lines = useMemo(() => {
-    const out = (ta?.series.levels || []).map((l) => ({ price: l.price, color: l.color, title: l.title, style: 1, width: 1 }));
-    (ai?.setups || []).filter((x) => x.valid).forEach((x, i) => {
+    const out = layers.levels ? (ta?.series.levels || []).map((l) => ({ price: l.price, color: l.color, title: l.title, style: 1, width: 1 })) : [];
+    if (layers.ai) (ai?.setups || []).filter((x) => x.valid).forEach((x, i) => {
       const L = x.direction === "long" ? "L" : "S", style = i === 0 ? 0 : 2;
       out.push({ price: x.entry, color: "#6366f1", title: `${L} Entry`, style, width: 2 });
       out.push({ price: x.stop_loss, color: "#f43f5e", title: `${L} SL`, style });
@@ -494,7 +499,7 @@ export default function CoinMarket({ active = true }) {
       out.push({ price: t.sl, color: "#e11d48", title: "Bot SL", style: 2 }, { price: t.tp, color: "#059669", title: "Bot TP", style: 2 });
     }
     return out;
-  }, [ai, ta, botList]);
+  }, [ai, ta, botList, layers.levels, layers.ai]);
 
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi
   const pickSym = async (v) => {
@@ -563,7 +568,7 @@ export default function CoinMarket({ active = true }) {
     ...s.volumeDivergence.map((t) => ({ t, tone: t.includes("ÂM") ? "rose" : "emerald" })),
     ...s.momentum.divergence.map((t) => ({ t, tone: t.includes("âm") ? "rose" : "emerald" })),
     ...s.patterns.map((x) => ({ t: `${x.name} · ${x.ago}n trước`, tone: /TĂNG|Bullish|dưới|tăng/.test(x.name) ? "emerald" : /GIẢM|Bearish|trên|giảm/.test(x.name) ? "rose" : "slate" })),
-  ] : [];
+  ].filter((x, i, arr) => arr.findIndex((y) => y.t === x.t) === i) : []; // bỏ dòng trùng (vd 2 đỉnh swing cùng bị quét ở 1 mức giá)
   const main = ai?.setups?.[0], others = ai?.setups?.slice(1) || [];
   const DETAIL = ai ? [["Khung lớn", ai.htf_context], ["Wyckoff", ai.wyckoff_phase], ["Bộ lọc xu hướng", ai.trend_filter], ["SMC", ai.smc], ["Thanh khoản", ai.liquidity], ["Price action", ai.price_action], ["Khối lượng", ai.volume], ["VSA", ai.vsa], ["Động lượng", ai.momentum]].filter(([, v]) => v) : [];
 
@@ -621,12 +626,14 @@ export default function CoinMarket({ active = true }) {
           ) : (
             <div className="relative mt-2">
               {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-              <CandleChart candles={data.ltf} e20={ta?.series.e20 || []} e50={ta?.series.e50 || []} events={ta?.series.events || []} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} />
-              <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] font-semibold text-slate-400">
-                <span><span className="text-amber-500">━</span> EMA20</span><span><span className="text-indigo-500">━</span> EMA50</span><span>▲▼ BOS/CHoCH</span><span><span className="text-yellow-500">┅</span> Key Volume</span><span><span className="text-rose-400">┅</span>/<span className="text-emerald-400">┅</span> Protected</span><span><span className="text-slate-400">┅</span> POC</span>
-                {lines.length > 0 && <span><span className="text-indigo-500">━</span> Entry <span className="text-rose-500">━</span> SL <span className="text-emerald-500">━</span> TP</span>}
+              <CandleChart candles={data.ltf} e20={layers.ema ? ta?.series.e20 || [] : NONE} e50={layers.ema ? ta?.series.e50 || [] : NONE} events={layers.smc ? ta?.series.events || [] : NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} />
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] font-semibold text-slate-400">
+                <span className="mr-0.5 font-bold text-slate-500">Hiện:</span>
+                {[["ema", <><span className="text-amber-500">━</span> EMA20 <span className="text-indigo-500">━</span> EMA50</>], ["smc", "▲▼ BOS/CHoCH"], ["levels", <><span className="text-yellow-500">┅</span> Key Volume · Protected · POC</>], ...(ai?.setups?.length ? [["ai", <><span className="text-indigo-500">━</span> Vào <span className="text-rose-500">━</span> SL <span className="text-emerald-500">━</span> TP (AI)</>]] : [])].map(([k, label]) => (
+                  <button key={k} onClick={() => togLayer(k)} aria-pressed={!!layers[k]} className={`rounded-md border px-1.5 py-0.5 transition ${layers[k] ? "border-slate-200 bg-white text-slate-600" : "border-dashed border-slate-200 text-slate-300 line-through"}`}>{label}</button>
+                ))}
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}
-                <span>giờ VN</span>
+                <span className="ml-auto">giờ VN</span>
               </div>
             </div>
           )}

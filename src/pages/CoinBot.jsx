@@ -8,6 +8,8 @@ import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeri
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
+import { monthOf, monthLabel, MONTH_TARGET } from "../lib/coinShared.js";
+import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -296,6 +298,7 @@ export default function CoinBot({ active: visible = true }) {
   const [config, setConfig] = useState(false);
   const [filter, setFilter] = useState("all");
   const [hStream, setHStream] = useState("all"); // lọc lịch sử theo cặp|khung
+  const [hMonth, setHMonth] = useState("all"); // lọc lịch sử theo tháng (giờ VN)
   const histScroll = useRef(0);
   const [showN, setShowN] = useState(40);
   const [view, setView] = useState("auto");
@@ -401,8 +404,20 @@ export default function CoinBot({ active: visible = true }) {
   const taken = useMemo(() => {
     if (!P) return [];
     const src = filter === "reject" ? res.rejected.map((t) => ({ ...t, status: "reject" })) : P.trades;
-    return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
-  }, [P, res, filter, hStream]);
+    return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => hMonth === "all" || monthOf(t.entryAt) === hMonth).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
+  }, [P, res, filter, hStream, hMonth]);
+  // Tổng theo tháng (lệnh đã vào, theo cặp đang lọc): số lệnh · thắng · lãi/lỗ $
+  const months = useMemo(() => {
+    if (!P) return [];
+    const m = new Map();
+    for (const t of P.trades) {
+      if (t.status === "skip" || !(hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream)) continue;
+      const k = monthOf(t.entryAt), x = m.get(k) || { k, n: 0, win: 0, done: 0, pnl: 0 };
+      x.n++; if (t.status === "done") { x.done++; if (t.r > 0.05) x.win++; x.pnl += t.pnl || 0; }
+      m.set(k, x);
+    }
+    return [...m.values()].sort((a, b) => (a.k < b.k ? 1 : -1));
+  }, [P, hStream]);
   // Xuất lịch sử đang lọc ra CSV (mở được bằng Excel, giữ tiếng Việt)
   const exportCsv = () => {
     const head = ["Vào lúc", "Cặp", "Khung", "Hướng", "Setup", "Giá vào", "SL", "TP", "Kết thúc", "Giá thoát", "Lúc thoát", "R", "Lãi/lỗ $", "Trạng thái"];
@@ -479,9 +494,21 @@ export default function CoinBot({ active: visible = true }) {
       {!res ? (err && !busy
         ? <Card><div className="py-10 text-center"><div className="text-[14px] font-extrabold text-rose-600">Chưa tải được dữ liệu Binance</div><div className="mt-1 text-[12px] text-slate-500">{err}</div><button onClick={run} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
         : <Card><div className="py-12 text-center text-sm text-slate-400"><div className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" /> {busy || "Đang chạy lại dữ liệu…"}</div><div className="mt-1 text-[11.5px]">Lần đầu cần tải ~3 tháng nến (vài chục nghìn nến) — các lần sau chỉ tải phần mới, mở rất nhanh.</div></div></Card>) : (<>
+        {(() => { // Tóm tắt 1 dòng: đang làm gì · lệnh gần nhất · nhịp lệnh · tiến độ tháng này so với mục tiêu
+          const tr = P.trades.filter((t) => t.status !== "skip"), last = tr.slice().sort((a, b) => b.entryAt - a.entryAt)[0];
+          const weeks = Math.max(1, (Date.now() - session.startAt) / (7 * 86400000)), mNow = tr.filter((t) => monthOf(t.entryAt) === monthOf(Date.now())).length;
+          return (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-100 bg-white px-3 py-2 text-[12.5px] text-slate-600 shadow-sm">
+              <b className={open.length ? "text-emerald-700" : "text-slate-700"}>{session.stoppedAt ? "Phiên đã dừng" : open.length ? `Đang mở ${open.length} lệnh` : "Đang chờ tín hiệu"}</b>
+              {last && <span>Lệnh gần nhất <b className="text-slate-800">{last.coin} {TFS[last.tf].label}</b> · {dt(last.entryAt)}</span>}
+              <span>TB <b className="text-slate-800">{fmtNum(tr.length / weeks, 1, 0)}</b> lệnh/tuần</span>
+              <span className={mNow >= MONTH_TARGET ? "font-bold text-emerald-700" : ""}>{monthLabel(monthOf(Date.now()))}: <b>{mNow}/{MONTH_TARGET}</b> lệnh</span>
+            </div>
+          );
+        })()}
         {cfg.adaptive && (
           <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-            {[["auto", "Bot tự tối ưu", Brain], ["base", "Luật gốc (cố định)", Bot]].map(([k, l, I]) => <button key={k} onClick={() => { setView(k); setShowN(40); if (k === "base" && filter === "reject") setFilter("all"); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12.5px] font-bold ${view === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}><I size={14} /> {l}</button>)}
+            {[["auto", "Bot tự tối ưu", Brain], ["base", "So sánh: không tự tối ưu", Bot]].map(([k, l, I]) => <button key={k} onClick={() => { setView(k); setShowN(40); if (k === "base" && filter === "reject") setFilter("all"); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12.5px] font-bold ${view === k ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}><I size={14} /> {l}</button>)}
           </div>
         )}
 
@@ -647,8 +674,21 @@ export default function CoinBot({ active: visible = true }) {
               {cfg.coins.map((c) => <option key={c} value={c}>{c} · mọi khung</option>)}
               {cfg.coins.flatMap((c) => cfg.tfs.map((t) => <option key={c + t} value={`${c}|${t}`}>{c} {TFS[t].label}</option>))}
             </select>
+            <select value={hMonth} onChange={(e) => { setHMonth(e.target.value); setShowN(40); }} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[12px] font-bold text-slate-600">
+              <option value="all">Mọi tháng</option>
+              {months.map((m) => <option key={m.k} value={m.k}>{monthLabel(m.k)}</option>)}
+            </select>
             <button onClick={exportCsv} disabled={!taken.length} className="ml-auto rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-40">Xuất CSV</button>
           </div>
+          {months.length > 0 && (
+            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">{months.map((m) => (
+              <button key={m.k} onClick={() => { setHMonth(hMonth === m.k ? "all" : m.k); setShowN(40); }} className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-left ${hMonth === m.k ? "border-indigo-300 bg-indigo-50" : "border-slate-100 bg-slate-50 hover:border-slate-200"}`}>
+                <div className="text-[10.5px] font-bold text-slate-500">{monthLabel(m.k)}</div>
+                <div className="text-[12px] tabular-nums"><b className={m.n >= MONTH_TARGET ? "text-emerald-700" : "text-slate-700"}>{m.n} lệnh</b>{m.done ? <span className="text-slate-400"> · thắng {fmtNum((m.win / m.done) * 100, 0, 0)}%</span> : null}</div>
+                <div className={`text-[12px] font-extrabold tabular-nums ${tone(m.pnl)}`}>{m.done ? usd(m.pnl) : "—"}</div>
+              </button>
+            ))}</div>
+          )}
           <div className="divide-y divide-slate-100">{taken.slice(0, showN).map((t) => { const R = t.r ?? t.uR, dim = t.status === "skip" || t.status === "reject"; return (
             <button key={t.id} onClick={() => showOnChart(t)} className={`block w-full px-1 py-2 text-left hover:bg-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""} ${focus?.id === t.id ? "bg-indigo-50/70" : ""}`}>
               <div className="flex items-center gap-2 text-[12.5px]">
@@ -845,7 +885,7 @@ export default function CoinBot({ active: visible = true }) {
 
         <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
           <ShieldAlert size={13} className="mt-0.5 shrink-0" />
-          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, chỉ vào lệnh chờ ở giá đóng nến tín hiệu (khớp khi giá xuyên qua, hết hạn thì huỷ), không đuổi giá, SL ngoài vùng nhiễu, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát. Phí: vào lệnh chờ 0,02%, chốt lời 0,02%, cắt lỗ 0,05% + trượt giá, và phí FUNDING thật của Binance (BTC/ETH mỗi 8h, XAU mỗi 4h) khi giữ lệnh qua mốc funding. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</span>
+          <span>Lệnh ẢO trên dữ liệu thật Binance Futures — không phải tư vấn đầu tư. <InfoTip label="Cách bot demo tính">Không đặt lệnh thật, khoá Binance vẫn chỉ đọc. Luật: chỉ nến đã đóng mới ra tín hiệu, chỉ vào lệnh chờ ở giá đóng nến tín hiệu (khớp khi giá xuyên qua, hết hạn thì huỷ), không đuổi giá, SL ngoài vùng nhiễu, SL &amp; TP cùng chạm 1 nến tính THUA, bỏ lệnh SL &gt; 4 ATR hoặc SL quá sát. Phí: vào lệnh chờ 0,02%, chốt lời 0,02%, cắt lỗ 0,05% + trượt giá, và phí FUNDING thật của Binance (BTC/ETH mỗi 8h, XAU mỗi 4h) khi giữ lệnh qua mốc funding. Lệnh mở theo giá realtime: chạm SL/TP là đóng ngay. Bộ tự tối ưu chỉ học từ lệnh đã đóng trước thời điểm quyết định. Kết quả quá khứ không đảm bảo tương lai — chỉ để kiểm tra phương pháp, không phải tư vấn đầu tư.</InfoTip></span>
         </div>
       </>)}
     </div>
