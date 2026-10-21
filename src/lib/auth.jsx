@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
     user: session?.user || null,
     loading: session === undefined,
     signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-    signUp: (email, password) => supabase.auth.signUp({ email, password }),
+    signUp: (email, password) => supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin } }), // link xác nhận email quay về đúng app (cần có trong Redirect URLs của Supabase)
     changePassword: (password) => supabase.auth.updateUser({ password }),
     signOut: () => supabase.auth.signOut(),
   };
