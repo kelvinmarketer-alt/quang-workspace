@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
@@ -105,11 +105,11 @@ function useNavPins() {
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
 const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Quỹ & Dòng tiền", "/quy-thong-ke": "Quỹ & Dòng tiền" };
 
-function Brand() {
+function Brand({ mini }) {
   return (
-    <div className="flex items-center gap-3 px-2">
+    <div className={`flex items-center gap-3 ${mini ? "justify-center" : "px-2"}`}>
       <img src="/logo-mark.png" alt="2BKIN" className="h-10 w-10 rounded-xl bg-white object-contain ring-1 ring-slate-100" />
-      <div className="leading-tight">
+      <div className={`leading-tight ${mini ? "hidden" : ""}`}>
         <div className="text-[15px] font-extrabold tracking-tight">Quang Workspace</div>
         <div className="text-[11px] font-medium text-slate-400">by 2BKIN</div>
       </div>
@@ -117,7 +117,7 @@ function Brand() {
   );
 }
 
-function NavItem({ n, onNavigate, pinned, onTogglePin, mobile }) {
+function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
   const pinBtn = (
     <button
       type="button"
@@ -135,34 +135,36 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile }) {
     <div className="group/item relative">
       {n.href ? (
         <a href={n.href} target="_blank" rel="noopener" onClick={onNavigate}
-          className="group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900">
-          <n.icon size={18} />
-          {n.label}
-          <ExternalLink size={13} className="ml-auto opacity-50" />
+          title={mini ? n.label : undefined}
+          className={`group flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900 ${mini ? "justify-center px-0" : "px-3 pr-9"}`}>
+          <n.icon size={18} className="shrink-0" />
+          {!mini && n.label}
+          {!mini && <ExternalLink size={13} className="ml-auto opacity-50" />}
         </a>
       ) : (
         <NavLink
           to={n.to}
           end={n.end}
           onClick={onNavigate}
+          title={mini ? n.label : undefined}
           className={({ isActive }) =>
-            `group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold transition ${
+            `group flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition ${mini ? "justify-center px-0" : "px-3 pr-9"} ${
               isActive
                 ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
                 : "text-slate-500 hover:bg-white hover:text-slate-900"
             }`
           }
         >
-          <n.icon size={18} />
-          {n.label}
+          <n.icon size={18} className="shrink-0" />
+          {!mini && n.label}
         </NavLink>
       )}
-      {pinBtn}
+      {!mini && pinBtn}
     </div>
   );
 }
 
-function SideNav({ onNavigate, pins = [], onTogglePin, mobile }) {
+function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini }) {
   const items = useNavItems();
   const sections = useMemo(() => {
     const pinnedItems = pins.map((k) => items.find((n) => navKey(n) === k)).filter(Boolean);
@@ -181,15 +183,15 @@ function SideNav({ onNavigate, pins = [], onTogglePin, mobile }) {
     return out;
   }, [items, pins]);
   return (
-    <nav className="mt-5 flex min-h-0 flex-col gap-1 overflow-y-auto px-3 pb-2">
+    <nav className={`mt-5 flex min-h-0 flex-col gap-1 overflow-y-auto pb-2 ${mini ? "px-2.5 no-scrollbar" : "px-3"}`}>
       {sections.map((s, si) => (
         <div key={s.id} className={si ? "mt-3" : ""}>
-          <div className={`mb-1 flex items-center gap-1 px-3 text-[10px] font-bold uppercase tracking-wider ${s.id === "pin" ? "text-indigo-400" : "text-slate-400"}`}>
+          {mini ? si > 0 && <div className="mx-2 mb-2 border-t border-slate-200" /> : <div className={`mb-1 flex items-center gap-1 px-3 text-[10px] font-bold uppercase tracking-wider ${s.id === "pin" ? "text-indigo-400" : "text-slate-400"}`}>
             {s.id === "pin" && <Pin size={10} />}{s.label}
-          </div>
+          </div>}
           <div className="flex flex-col gap-1">
             {s.items.map((n) => (
-              <NavItem key={navKey(n)} n={n} onNavigate={onNavigate} pinned={s.id === "pin"} onTogglePin={onTogglePin} mobile={mobile} />
+              <NavItem key={navKey(n)} n={n} onNavigate={onNavigate} pinned={s.id === "pin"} onTogglePin={onTogglePin} mobile={mobile} mini={mini} />
             ))}
           </div>
         </div>
@@ -323,6 +325,9 @@ export default function Layout({ children }) {
   const [open, setOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pins, togglePin] = useNavPins();
+  // Thu gọn menu trái (máy tính): chỉ còn biểu tượng → nội dung (biểu đồ Coin…) rộng hơn; nhớ theo máy
+  const [mini, setMiniState] = useState(() => { try { return localStorage.getItem("qws_nav_mini") === "1"; } catch { return false; } });
+  const setMini = (v) => { setMiniState(v); try { localStorage.setItem("qws_nav_mini", v ? "1" : "0"); } catch {} };
   const navItems = useNavItems();
   const loc = useLocation();
   const li = lunarInfo(new Date());
@@ -333,12 +338,16 @@ export default function Layout({ children }) {
   return (
     <div className="aurora min-h-screen">
       {/* Sidebar desktop */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-white/60 bg-white/60 backdrop-blur-xl lg:flex">
-        <div className="pt-6">
-          <Brand />
+      <aside className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-white/60 bg-white/60 backdrop-blur-xl transition-[width] duration-200 lg:flex ${mini ? "w-[76px]" : "w-64"}`}>
+        <div className="relative pt-6">
+          <Brand mini={mini} />
+          <button type="button" onClick={() => setMini(!mini)} title={mini ? "Mở rộng menu" : "Thu gọn menu"} aria-label={mini ? "Mở rộng menu" : "Thu gọn menu"}
+            className={`absolute z-10 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:text-slate-800 ${mini ? "-right-3 top-[34px]" : "right-3 top-[34px]"}`}>
+            {mini ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
+          </button>
         </div>
-        <SideNav pins={pins} onTogglePin={togglePin} />
-        <div className="mt-auto p-4">
+        <SideNav pins={pins} onTogglePin={togglePin} mini={mini} />
+        <div className={`mt-auto p-4 ${mini ? "hidden" : ""}`}>
           <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white">
             <div className="text-[11px] font-medium uppercase tracking-wide text-indigo-200">Âm lịch hôm nay</div>
             <div className="mt-1 text-2xl font-extrabold">{li.label}</div>
@@ -366,7 +375,7 @@ export default function Layout({ children }) {
       )}
 
       {/* Main */}
-      <div className="lg:pl-64">
+      <div className={`transition-[padding] duration-200 ${mini ? "lg:pl-[76px]" : "lg:pl-64"}`}>
         <header className="sticky top-0 z-20 border-b border-white/50 bg-white/55 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button onClick={() => setOpen(true)} aria-label="Mở menu" className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">

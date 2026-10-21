@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
+import CoinSignal from "../components/CoinSignal.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { ask } from "../components/ConfirmDialog.jsx";
@@ -594,6 +595,8 @@ export default function CoinMarket({ active = true }) {
         {qErr && <div className="mt-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-rose-600"><AlertTriangle size={13} className="shrink-0" /> {qErr}</div>}
         {qNote && <div className="mt-1.5 text-[12px] font-semibold text-amber-600">{qNote}</div>}
       </Card>
+
+      <CoinSignal sym={sym} tf={tf} market={usedMkt} summary={s} stale={stale} active={active} />
 
       <div className="grid gap-3 xl:grid-cols-3">
         {/* Biểu đồ */}

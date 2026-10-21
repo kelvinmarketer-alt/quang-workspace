@@ -1,13 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "../lib/format.js";
 import { useBinance, useUsdVnd, depositInfo } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
+import { cfgOf } from "../lib/paperBot.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 // Đọc số kiểu VN: phẩy = thập phân ("0,5"); chấm + đúng 3 số = phân cách nghìn ("60.000", "1.234.567");
@@ -84,6 +85,26 @@ const COIN_TABS = ["overview", "invest", "market", "bot", "live"];
 // Tab "Tổng quan" (chỉ chủ): tài sản + bot thật + demo + cảnh báo giá trong 1 màn hình
 const CoinOverview = lazy(() => import("./CoinOverview.jsx"));
 
+// Quy tắc quản trị rủi ro bot đang áp dụng (đọc từ cấu hình phiên Demo = luật bot thật) — luôn hiện cuối module (21/10, tham khảo viaitrading)
+function RiskRules() {
+  const { settings = {} } = useData();
+  const c = cfgOf(settings.paperBot || null);
+  const rules = [
+    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh`], ["Dừng ngày", `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%`],
+    ["Chốt lời", `R:R 1:${fmtNum(c.rr, 1, 0)}`], ["Cắt lỗ", `SL ≥ ${fmtNum(c.minSlAtr, 1, 0)} ATR, luôn đặt`], ["Không đuổi giá", `≤ ${fmtNum(c.maxExtAtr, 1, 0)} ATR từ EMA50`],
+    ...(c.d1Bias ? [["Xu hướng", "chỉ thuận D1"]] : []), ["Ví", "chỉ Futures, không đụng Spot"],
+  ];
+  return (
+    <div className="rounded-none border border-amber-300/60 bg-amber-50/60 p-3 sm:rounded-2xl sm:p-4">
+      <div className="flex items-center gap-1.5 text-[12px] font-extrabold uppercase tracking-wide text-amber-700"><ShieldCheck size={15} /> Quy tắc quản trị rủi ro & bảo vệ vốn (bot v{c.cfgVer})</div>
+      <div className="mt-2 rounded-lg border border-amber-300/60 bg-amber-100/60 px-3 py-1.5 text-[12px] font-bold text-amber-800">“Phân tích do hệ thống/AI hỗ trợ · chỉ để tham khảo · không phải tư vấn đầu tư · giao dịch có rủi ro.”</div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {rules.map(([k, v]) => <div key={k} className="rounded-lg bg-white/70 px-2.5 py-1.5"><div className="text-[10.5px] font-bold uppercase text-slate-400">{k}</div><div className="text-[12.5px] font-extrabold text-slate-800">{v}</div></div>)}
+      </div>
+    </div>
+  );
+}
+
 export default function Coin() {
   const { isOwner, perms = [] } = useData();
   // Tab theo quyền (21/10): chủ thấy hết; thành viên thấy tab được cấp (Tổng quan Coin luôn chỉ chủ)
@@ -132,6 +153,7 @@ export default function Coin() {
       {allowTab.market && (seen.market || cur === "market") && <div className={cur === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={cur === "market"} /></Suspense></div>}
       {allowTab.bot && (seen.bot || cur === "bot") && <div className={cur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "bot"} /></Suspense></div>}
       {allowTab.live && (seen.live || cur === "live") && <div className={cur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "live"} /></Suspense></div>}
+      {cur !== "invest" && <RiskRules />}
     </div>
   );
 }

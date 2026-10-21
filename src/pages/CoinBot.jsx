@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
+import BotSignalBoard from "../components/BotSignalBoard.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
@@ -542,6 +543,8 @@ export default function CoinBot({ active: visible = true }) {
         </div>
 
         {tab === "chart" && (<>
+        <BotSignalBoard cfg={cfg} trades={P.trades} pending={res.pending || []} live={live} ver={ver} active={active} stopped={!!session.stoppedAt} sel={sel}
+          onPick={(c, t) => { setSel({ coin: c, tf: t }); setFocus(null); setTimeout(() => document.getElementById("bot-chart")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }} />
         {(() => { // Vì sao chưa có lệnh: 48 giờ không có lệnh mới → tổng hợp tín hiệu bị bỏ 7 ngày qua theo lý do
           const lastEntry = Math.max(0, ...P.trades.filter((t) => t.status !== "skip").map((t) => t.entryAt));
           if (Date.now() - lastEntry < 48 * 3600000 || !res.skipLog?.length) return null;
@@ -557,6 +560,7 @@ export default function CoinBot({ active: visible = true }) {
             </Card>
           );
         })()}
+        <div id="bot-chart" className="scroll-mt-20" />
         <Card className="!p-0 overflow-hidden">
           <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 px-3 py-2">
             {cfg.coins.flatMap((c) => cfg.tfs.map((t) => [c, t])).map(([c, t]) => { const on = sel.coin === c && sel.tf === t, n = P.trades.filter((x) => x.coin === c && x.tf === t && x.status !== "skip").length, op = P.trades.some((x) => x.coin === c && x.tf === t && x.status === "open"); return (
