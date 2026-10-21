@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity } from "lucide-react";
+import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import BotSignalBoard from "../components/BotSignalBoard.jsx";
@@ -10,7 +10,7 @@ import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeri
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
-import { monthOf, monthLabel, MONTH_TARGET } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, weakStreams } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
@@ -317,10 +317,19 @@ export default function CoinBot({ active: visible = true }) {
   };
   // Tắt 1 cặp từ bảng "nên giữ hay tắt" (cùng cơ chế Thêm/sửa cặp: Demo chạy lại, bot thật áp dụng ~5 phút)
   const removeCoin = async (c) => {
-    const next = cfg.coins.filter((x) => x !== c);
+    const next = cfg.coins.filter((x) => x !== c), offNext = (cfg.offStreams || []).filter((k) => !k.startsWith(c + "|"));
     if (!next.length) return;
     if (!(await ask(`Tắt cặp ${c} khỏi bot?\nCòn lại: ${next.join(", ")}.\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút (lệnh ${c} đang mở trên sàn — nếu có — vẫn giữ SL/TP tới khi đóng). Bật lại được ở "Thêm/sửa cặp".`, { ok: `Tắt ${c}`, danger: true }))) return;
-    setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), coins: next }, createdAt: Date.now() } });
+    setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), coins: next, offStreams: offNext }, createdAt: Date.now() } });
+  };
+  // Tắt / bật RIÊNG 1 khung của 1 cặp (cfg.offStreams) — Demo chạy lại, bot thật áp dụng ~5 phút
+  const toggleStream = async (c, tf) => {
+    const key = `${c}|${tf}`, cur = cfg.offStreams || [], on = cur.includes(key);
+    const next = on ? cur.filter((x) => x !== key) : [...cur, key];
+    if (!on && cfg.coins.every((x) => cfg.tfs.every((t) => next.includes(`${x}|${t}`)))) return;
+    const lbl = `${c} ${TFS[tf].label}`;
+    if (!(await ask(on ? `Bật lại ${lbl}?\nDemo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút.` : `Tắt riêng ${lbl}?\nBot không quét / không vào lệnh ở khung này nữa (các khung khác của ${c} vẫn chạy). Demo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút. Bật lại được ngay tại bảng này.`, { ok: on ? `Bật ${lbl}` : `Tắt ${lbl}`, danger: !on }))) return;
+    setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), offStreams: next }, createdAt: Date.now() } });
   };
   const [focus, setFocus] = useState(null);
   const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
@@ -472,7 +481,7 @@ export default function CoinBot({ active: visible = true }) {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => setEditCoins((v) => (v ? null : [...cfg.coins]))} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa cặp ▴" : "Thêm/sửa cặp ▾"}</button></>}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => setEditCoins((v) => (v ? null : [...cfg.coins]))} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa cặp ▴" : "Thêm/sửa cặp ▾"}</button></>}
           {editCoins && (
             <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
               <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Cặp bot giao dịch (Demo + bot thật)</div>
@@ -514,6 +523,18 @@ export default function CoinBot({ active: visible = true }) {
               {last && <span>Lệnh gần nhất <b className="text-slate-800">{last.coin} {TFS[last.tf].label}</b> · {dt(last.entryAt)}</span>}
               <span>TB <b className="text-slate-800">{fmtNum(tr.length / weeks, 1, 0)}</b> lệnh/tuần</span>
               <span className={mNow >= MONTH_TARGET ? "font-bold text-emerald-700" : ""}>{monthLabel(monthOf(Date.now()))}: <b>{mNow}/{MONTH_TARGET}</b> lệnh</span>
+            </div>
+          );
+        })()}
+        {(() => { // Cảnh báo sớm: khung / cặp × khung đang âm 30 ngày gần nhất → mở bảng "nên giữ hay tắt"
+          const w = weakStreams(P.trades, cfg); if (!w.tfs.length && !w.pairs.length) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <b>30 ngày qua đang âm:</b>
+              {w.tfs.map((x) => <span key={x.tf}>khung <b>{TFS[x.tf].label}</b> ({x.n} lệnh, {rr(x.avgR)})</span>)}
+              {w.pairs.slice(0, 4).map((x) => <span key={x.coin + x.tf} className="rounded bg-white/60 px-1.5">{x.coin} {TFS[x.tf].label} · {x.n} lệnh · {rr(x.avgR)}</span>)}
+              <button onClick={() => setTab("stats")} className="ml-auto rounded-lg bg-amber-600 px-2.5 py-1 text-[11.5px] font-bold text-white">Xem nên giữ hay tắt</button>
             </div>
           );
         })()}
@@ -725,7 +746,7 @@ export default function CoinBot({ active: visible = true }) {
         </>)}
 
         {tab === "stats" && (<>
-        <PairReview cfg={cfg} list={list} ptrades={P.trades} canEdit={isOwner && !session.stoppedAt} onRemoveCoin={removeCoin} />
+        <PairReview cfg={cfg} list={list} ptrades={P.trades} canEdit={isOwner && !session.stoppedAt} onRemoveCoin={removeCoin} onToggleStream={toggleStream} />
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:hidden">
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} />
           <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} />

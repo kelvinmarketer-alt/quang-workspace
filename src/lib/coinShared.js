@@ -92,3 +92,19 @@ export function demoResult(session) {
 export const monthOf = (t) => new Date(Number(t) + 7 * 3600000).toISOString().slice(0, 7); // "2026-10"
 export const monthLabel = (m) => { const [y, mo] = String(m).split("-"); return `Tháng ${Number(mo)}/${y}`; };
 export const MONTH_TARGET = 10; // user chốt 21/10: tối thiểu 10 lệnh/tháng
+
+// ---------- Khung / cặp đang yếu 30 ngày gần nhất (cảnh báo sớm, sếp tự quyết tắt hay không) ----------
+// Lệnh ĐÃ ĐÓNG có r, vào trong 30 ngày; khung (gộp mọi cặp) cần ≥ 8 lệnh, cặp × khung cần ≥ 5 lệnh; âm = R TB < 0
+export function weakStreams(trades, cfg, days = 30) {
+  const since = Date.now() - days * 86400000, done = (trades || []).filter((t) => t.status === "done" && t.r != null && t.entryAt >= since);
+  const off = new Set(cfg?.offStreams || []), avg = (L) => L.reduce((a, t) => a + t.r, 0) / L.length;
+  const tfs = (cfg?.tfs || []).map((tf) => { const L = done.filter((t) => t.tf === tf); return { tf, n: L.length, avgR: L.length ? avg(L) : null }; }).filter((x) => x.n >= 8 && x.avgR < 0);
+  const pairs = [];
+  for (const c of cfg?.coins || []) for (const tf of cfg?.tfs || []) {
+    if (off.has(`${c}|${tf}`)) continue;
+    const L = done.filter((t) => t.coin === c && t.tf === tf);
+    if (L.length >= 5 && avg(L) < 0) pairs.push({ coin: c, tf, n: L.length, avgR: avg(L) });
+  }
+  pairs.sort((a, b) => a.avgR - b.avgR);
+  return { tfs, pairs, days };
+}

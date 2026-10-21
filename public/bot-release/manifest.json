@@ -1,7 +1,7 @@
 {
-  "sha": "6b5074648a9ec3a717fd68afbe30d0ee7a439773",
-  "date": "2026-10-21T23:19:32+07:00",
-  "msg": "Báo điện thoại khi ĐẶT lệnh chờ (tắt riêng bằng config.notifyPending=false)",
+  "sha": "ae3fffae0fc11f1345ecd0f23b330449343e5b9e",
+  "date": "2026-10-21T23:37:54+07:00",
+  "msg": "Luật: tắt riêng 1 khung của 1 cặp (cfg.offStreams, đồng bộ từ app) + log hiển thị khung đã tắt",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "e0b75bb7f502d9e954acbab97cfea58868108964"
+      "sha": "ead8efdf7bff08fbae0fac0a27fef1a8ea0cc294"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "4fb728307e39c2c6e06f0cdb27351a71a943c028"
+      "sha": "29e13c1b8a2cea3f501789ff55c4913b5169e053"
     },
     {
       "path": "lib/report.js",

@@ -34,6 +34,7 @@ const STATUS = {
   block: ["BỊ LỌC", "border-slate-200 bg-slate-100 text-slate-500"],
   wait: ["CHỜ TÍN HIỆU", "border-slate-200 bg-slate-50 text-slate-500"],
   stop: ["ĐÃ DỪNG", "border-slate-200 bg-slate-100 text-slate-500"],
+  off: ["ĐÃ TẮT KHUNG", "border-slate-200 bg-slate-100 text-slate-400"],
 };
 
 export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, active, stopped, onPick, sel }) {
@@ -58,10 +59,10 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
     const open = mine.filter((x) => x.status === "open").sort((a, b) => b.entryAt - a.entryAt)[0];
     const pend = pending.filter((p) => p.coin === coin && p.tf === tf).sort((a, b) => b.signalAt - a.signalAt)[0];
     const last = mine.filter((x) => x.status === "done").sort((a, b) => b.exitAt - a.exitAt)[0];
-    const st = stopped ? "stop" : open ? "open" : pend ? (pend.blocked ? "block" : "pend") : "wait";
+    const st = stopped ? "stop" : (cfg.offStreams || []).includes(`${coin}|${tf}`) && !open ? "off" : open ? "open" : pend ? (pend.blocked ? "block" : "pend") : "wait";
     return { coin, tf, open, pend, last, st, n: mine.length, price: live?.current?.[`px|${coin}`] };
   });
-  const order = { open: 0, pend: 1, block: 2, wait: 3, stop: 4 };
+  const order = { open: 0, pend: 1, block: 2, wait: 3, off: 4, stop: 5 };
   // Gộp theo coin (21/10): 1 dòng / coin, các khung xếp trong dòng; coin có lệnh đang mở / chờ lên đầu
   const groups = cfg.coins.map((coin) => {
     const items = rows.filter((r) => r.coin === coin);

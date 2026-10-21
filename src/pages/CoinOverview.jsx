@@ -5,7 +5,7 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { fmtUsd, fmtUsdSigned, fmtNum, fmtPct, fmtPx, formatVND } from "../lib/format.js";
-import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET } from "../lib/coinShared.js";
+import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET, weakStreams } from "../lib/coinShared.js";
 import { cfgOf, statsOf, TFS } from "../lib/paperBot.js";
 
 const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
@@ -154,6 +154,11 @@ export default function CoinOverview({ active, go }) {
               <Row k="Tỉ lệ thắng · R TB" v={dStats?.n ? `${fmtNum(dStats.winRate, 1, 1)}% · ${dStats.avgR >= 0 ? "+" : ""}${fmtNum(dStats.avgR, 2, 2)}R` : "—"} />
               <Row k={dOpen.length ? "Đang mở" : "Lệnh gần nhất"} v={dOpen.length ? `${dOpen.length} lệnh` : dLast ? `${dLast.coin} ${TFS[dLast.tf]?.label} · ${dm(dLast.entryAt)}` : "chưa có"} />
               <div className="mt-2"><MonthBar n={dMonth.length} label={`${monthLabel(month)} · lệnh vào`} /></div>
+              {(() => { const w = weakStreams(demo.portfolio?.trades, cfg); if (!w.tfs.length && !w.pairs.length) return null; return (
+                <button onClick={() => go("bot")} className="mt-2 w-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-left text-[11.5px] leading-snug text-amber-800">
+                  ⚠ 30 ngày qua đang âm: {[...w.tfs.map((x) => `${TFS[x.tf]?.label} (${x.n} lệnh, ${fmtNum(x.avgR, 2, 2)}R)`), ...w.pairs.slice(0, 3).map((x) => `${x.coin} ${TFS[x.tf]?.label} ${fmtNum(x.avgR, 2, 2)}R`)].join(" · ")} — xem Demo → Thống kê
+                </button>
+              ); })()}
             </>
           )}
         </Card>

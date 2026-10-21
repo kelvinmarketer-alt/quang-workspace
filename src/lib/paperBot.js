@@ -37,6 +37,7 @@ export const DEFAULT_CFG = {
   adaptive: true, warmupDays: 0, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
   htfFilter: false, // v8: TẮT lọc thuận H1/H4 — khung lớn chỉ để bias, bias = D1 (d1Bias). Bật lại: M5→H1, M15→H4 (EMA200)
   // v8 (user chốt 21/10, cần ≥10 lệnh/tháng): 270 ngày 3 kỳ: 7,7 → 14,6 lệnh/tháng, tháng ít nhất 3 → 12, thắng 55→50%, R +0,52→+0,38, lời +768$→+2.083$, sụt vốn tối đa 10→15%
+  offStreams: [], // 21/10: tắt RIÊNG 1 khung của 1 cặp ("ARB|5m") — sếp bấm "Tắt khung" ở Demo → Thống kê; khung đó không quét / không vào lệnh (Demo + bot thật)
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
@@ -386,7 +387,9 @@ export async function runSession(session, onProgress = () => {}) {
   const bump = (k, n = 1) => { if (n) skipped[k] = (skipped[k] || 0) + n; };
   // tải song song mọi cặp × khung (kể cả khung lớn để lọc) — lần sau chỉ tải phần nến mới
   const need = new Map();
+  const off = new Set(cfg.offStreams || []);
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
+    if (off.has(`${coin}|${tf}`)) continue;
     need.set(`${coin}|${tf}`, [symOf(coin), tf, learnFrom - 260 * TFS[tf].ms]);
     for (const h of ["1h", "4h", "1d"]) need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]);
     if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
@@ -404,6 +407,7 @@ export async function runSession(session, onProgress = () => {}) {
   }
   finally { pageHook = null; }
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
+    if (off.has(`${coin}|${tf}`)) { streams.push({ coin, tf, bars: 0, note: "đã tắt" }); continue; }
     const symbol = symOf(coin), step = TFS[tf].ms, key = `${coin}|${tf}`;
     const K = (await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
     if (K.length < 260) { streams.push({ coin, tf, bars: K.length, note: "thiếu dữ liệu" }); continue; }

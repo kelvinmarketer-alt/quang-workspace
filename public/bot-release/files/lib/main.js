@@ -144,7 +144,7 @@ async function refreshCfg() {
   demoCfg = cfgOf(demo); demoStart = Number(demo.startAt) > 0 ? Number(demo.startAt) : null; riskFrom(appCfg);
   const next = { ...demoCfg, riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
   cfgSrc = "phiên Demo trong app"; // đọc được phiên Demo (kể cả khi trùng mặc định)
-  if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}`); }
+  if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}${cfg.offStreams?.length ? ` · tắt riêng ${cfg.offStreams.join(", ")}` : ""}`); }
 }
 const symCoin = (s) => Object.entries(SYMBOLS).find(([, v]) => v === s)?.[0] || String(s).replace(/USDT$/, "");
 // Cặp của bot = cặp trong luật Demo (user thêm/sửa/xoá trong app) + cặp mặc định + cặp còn lệnh/vị thế bot đang giữ (vd cặp vừa bị xoá khỏi danh sách)

@@ -138,6 +138,12 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
   const [open, setOpen] = useState(() => { try { const v = localStorage.getItem("qws_mkt_sig"); return v == null ? window.innerWidth >= 640 : v !== "0"; } catch { return true; } });
   const [ver, setVer] = useState(null), [vBusy, setVBusy] = useState(false), [vErr, setVErr] = useState("");
   useEffect(() => { setVer(VERIFY.get(`${sym}|${tf}|${market}`) || null); setVErr(""); }, [sym, tf, market]);
+  // Tự chạy kiểm chứng (nhẹ, ~0,5 giây, nhớ 30 phút) khi thẻ đang mở → độ đúng lịch sử hiện ngay dưới đồng hồ
+  useEffect(() => {
+    if (!active || !open || !market || VERIFY.get(`${sym}|${tf}|${market}`)) return undefined;
+    const t = setTimeout(() => { if (!document.hidden) runVerify(); }, 1500);
+    return () => clearTimeout(t);
+  }, [sym, tf, market, active, open]); // eslint-disable-line react-hooks/exhaustive-deps
   const runVerify = async () => {
     setVBusy(true); setVErr("");
     try { const r = await verify(sym, tf, market); if (keyRef.current === `${sym}|${market}`) setVer(r); } catch (e) { setVErr(e.message || String(e)); }
@@ -171,7 +177,7 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
   const parts = partsOf(s, d), plan = planOf(s, b.dir);
   const color = b.dir === 1 ? "#10b981" : b.dir === -1 ? "#f43f5e" : "#f59e0b";
   const strength = b.dir === -1 ? 100 - b.buyPct : b.dir === 1 ? b.buyPct : Math.max(b.buyPct, 100 - b.buyPct);
-  const word = b.dir === 1 ? "NGHIÊNG MUA" : b.dir === -1 ? "NGHIÊNG BÁN" : "TRUNG TÍNH";
+  const word = b.dir === 1 ? "CHỈ BÁO NGHIÊNG MUA" : b.dir === -1 ? "CHỈ BÁO NGHIÊNG BÁN" : "CHỈ BÁO TRUNG TÍNH"; // nhãn trung tính: đây là chỉ báo, không phải lệnh
   const br = s.volume?.buyRatio20 != null ? Math.round(s.volume.buyRatio20 * 100) : null;
   const tfLabel = (TFS_MTF.find(([k]) => k === tf) || [, tf.toUpperCase()])[1];
   const agree = mtf ? mtf.filter((r) => !r.na && r.dir === b.dir && b.dir !== 0).length : 0, known = mtf ? mtf.filter((r) => !r.na).length : 0;
@@ -192,8 +198,14 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 pb-3 pt-4">
               <Arc pct={strength} color={color}>
                 <div className="text-4xl font-black tabular-nums" style={{ color }}>{strength}%</div>
-                <div className="mt-1 rounded-lg border px-3 py-0.5 text-[13px] font-black tracking-wide" style={{ color, borderColor: color + "66", background: color + "14" }}>{word}</div>
+                <div className="mt-1 rounded-lg border px-3 py-0.5 text-[11.5px] font-black tracking-wide" style={{ color, borderColor: color + "66", background: color + "14" }}>{word}</div>
               </Arc>
+              {ver?.n > 0 && (
+                <div className={`mx-auto mt-2 w-fit rounded-lg border px-2.5 py-1 text-center text-[11.5px] ${ver.avgR >= 0.05 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}`} title="Chấm lại điểm này trên ~700 nến quá khứ cùng khung: nghiêng rõ thì giả định vào theo vùng tham khảo (TP 2R / SL −1R)">
+                  Độ đúng lịch sử {tfLabel}: thắng <b>{fmtNum(ver.win, 0, 0)}%</b> · TB <b>{ver.avgR >= 0 ? "+" : ""}{fmtNum(ver.avgR, 2, 2)}R</b> / {ver.n} lần{ver.avgR < 0.05 ? " → chỉ để tham khảo bối cảnh" : ""}
+                </div>
+              )}
+              {vBusy && !ver && <div className="mt-2 flex items-center justify-center gap-1 text-[11px] text-slate-400"><Loader2 size={11} className="animate-spin" /> đang chấm độ đúng lịch sử…</div>}
               <div className="mt-2 text-center text-[11px] text-slate-400">{b.buyPct}% phiếu MUA · {100 - b.buyPct}% BÁN (cấu trúc, EMA, EMA200, MACD, RSI, DMI, lực mua, BOS)</div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
