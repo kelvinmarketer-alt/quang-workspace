@@ -76,3 +76,89 @@ body {
 @media (hover: none) {
   .group-hover\:opacity-100, .sm\:group-hover\:opacity-100, .lg\:group-hover\:opacity-100, .group-hover\/item\:opacity-100 { opacity: 1 !important; }
 }
+
+/* ===== GIAO DIỆN PRO — module Đầu tư Coin (nút "Pro" trên thanh tab Coin) =====
+   Nền tối kiểu sàn giao dịch, BỐ CỤC GIỮ NGUYÊN: chỉ đổi biến --color-* của Tailwind trong html.coin-pro
+   (Coin.jsx gắn/gỡ class khi vào/ra trang Coin). Slate đảo sáng↔tối; màu nhấn 50–200 = nền ánh màu, 600–800 = chữ sáng hơn. */
+html.coin-pro {
+  color-scheme: dark;
+  --pro-bg: #060a13;
+  --color-white: #0c1322;
+  --color-slate-50: #111a2c; --color-slate-100: #16213a; --color-slate-200: #1f2c47; --color-slate-300: #2c3c5e;
+  --color-slate-400: #6f7f9c; --color-slate-500: #8f9eb8; --color-slate-600: #aab7cc; --color-slate-700: #c5cfe0;
+  --color-slate-800: #dde4ef; --color-slate-900: #eef2f8; --color-slate-950: #f8fafc;
+  --color-gray-50: #111a2c; --color-gray-100: #16213a; --color-gray-200: #1f2c47; --color-gray-400: #6f7f9c; --color-gray-500: #8f9eb8; --color-gray-600: #aab7cc; --color-gray-700: #c5cfe0; --color-gray-900: #eef2f8;
+  --color-emerald-50: color-mix(in srgb, #10b981 10%, #0c1322); --color-emerald-100: color-mix(in srgb, #10b981 17%, #0c1322); --color-emerald-200: color-mix(in srgb, #10b981 32%, #0c1322);
+  --color-emerald-600: #10b981; --color-emerald-700: #34d399; --color-emerald-800: #6ee7b7; --color-emerald-900: #6ee7b7;
+  --color-green-50: color-mix(in srgb, #22c55e 10%, #0c1322); --color-green-100: color-mix(in srgb, #22c55e 17%, #0c1322); --color-green-200: color-mix(in srgb, #22c55e 32%, #0c1322);
+  --color-green-600: #22c55e; --color-green-700: #4ade80; --color-green-800: #86efac; --color-green-900: #86efac;
+  --color-teal-50: color-mix(in srgb, #14b8a6 10%, #0c1322); --color-teal-100: color-mix(in srgb, #14b8a6 17%, #0c1322); --color-teal-200: color-mix(in srgb, #14b8a6 32%, #0c1322);
+  --color-teal-600: #14b8a6; --color-teal-700: #2dd4bf; --color-teal-800: #5eead4; --color-teal-900: #5eead4;
+  --color-cyan-50: color-mix(in srgb, #06b6d4 10%, #0c1322); --color-cyan-100: color-mix(in srgb, #06b6d4 17%, #0c1322); --color-cyan-200: color-mix(in srgb, #06b6d4 32%, #0c1322);
+  --color-cyan-600: #06b6d4; --color-cyan-700: #22d3ee; --color-cyan-800: #67e8f9; --color-cyan-900: #67e8f9;
+  --color-sky-50: color-mix(in srgb, #0ea5e9 10%, #0c1322); --color-sky-100: color-mix(in srgb, #0ea5e9 17%, #0c1322); --color-sky-200: color-mix(in srgb, #0ea5e9 32%, #0c1322);
+  --color-sky-600: #0ea5e9; --color-sky-700: #38bdf8; --color-sky-800: #7dd3fc; --color-sky-900: #7dd3fc;
+  --color-blue-50: color-mix(in srgb, #3b82f6 10%, #0c1322); --color-blue-100: color-mix(in srgb, #3b82f6 17%, #0c1322); --color-blue-200: color-mix(in srgb, #3b82f6 32%, #0c1322);
+  --color-blue-600: #3b82f6; --color-blue-700: #60a5fa; --color-blue-800: #93c5fd; --color-blue-900: #93c5fd;
+  --color-indigo-50: color-mix(in srgb, #6366f1 10%, #0c1322); --color-indigo-100: color-mix(in srgb, #6366f1 17%, #0c1322); --color-indigo-200: color-mix(in srgb, #6366f1 32%, #0c1322);
+  --color-indigo-600: #6366f1; --color-indigo-700: #818cf8; --color-indigo-800: #a5b4fc; --color-indigo-900: #a5b4fc;
+  --color-violet-50: color-mix(in srgb, #8b5cf6 10%, #0c1322); --color-violet-100: color-mix(in srgb, #8b5cf6 17%, #0c1322); --color-violet-200: color-mix(in srgb, #8b5cf6 32%, #0c1322);
+  --color-violet-600: #8b5cf6; --color-violet-700: #a78bfa; --color-violet-800: #c4b5fd; --color-violet-900: #c4b5fd;
+  --color-purple-50: color-mix(in srgb, #a855f7 10%, #0c1322); --color-purple-100: color-mix(in srgb, #a855f7 17%, #0c1322); --color-purple-200: color-mix(in srgb, #a855f7 32%, #0c1322);
+  --color-purple-600: #a855f7; --color-purple-700: #c084fc; --color-purple-800: #d8b4fe; --color-purple-900: #d8b4fe;
+  --color-fuchsia-50: color-mix(in srgb, #d946ef 10%, #0c1322); --color-fuchsia-100: color-mix(in srgb, #d946ef 17%, #0c1322); --color-fuchsia-200: color-mix(in srgb, #d946ef 32%, #0c1322);
+  --color-fuchsia-600: #d946ef; --color-fuchsia-700: #e879f9; --color-fuchsia-800: #f0abfc; --color-fuchsia-900: #f0abfc;
+  --color-pink-50: color-mix(in srgb, #ec4899 10%, #0c1322); --color-pink-100: color-mix(in srgb, #ec4899 17%, #0c1322); --color-pink-200: color-mix(in srgb, #ec4899 32%, #0c1322);
+  --color-pink-600: #ec4899; --color-pink-700: #f472b6; --color-pink-800: #f9a8d4; --color-pink-900: #f9a8d4;
+  --color-rose-50: color-mix(in srgb, #f43f5e 10%, #0c1322); --color-rose-100: color-mix(in srgb, #f43f5e 17%, #0c1322); --color-rose-200: color-mix(in srgb, #f43f5e 32%, #0c1322);
+  --color-rose-600: #f43f5e; --color-rose-700: #fb7185; --color-rose-800: #fda4af; --color-rose-900: #fda4af;
+  --color-red-50: color-mix(in srgb, #ef4444 10%, #0c1322); --color-red-100: color-mix(in srgb, #ef4444 17%, #0c1322); --color-red-200: color-mix(in srgb, #ef4444 32%, #0c1322);
+  --color-red-600: #ef4444; --color-red-700: #f87171; --color-red-800: #fca5a5; --color-red-900: #fca5a5;
+  --color-orange-50: color-mix(in srgb, #f97316 10%, #0c1322); --color-orange-100: color-mix(in srgb, #f97316 17%, #0c1322); --color-orange-200: color-mix(in srgb, #f97316 32%, #0c1322);
+  --color-orange-600: #f97316; --color-orange-700: #fb923c; --color-orange-800: #fdba74; --color-orange-900: #fdba74;
+  --color-amber-50: color-mix(in srgb, #f59e0b 10%, #0c1322); --color-amber-100: color-mix(in srgb, #f59e0b 17%, #0c1322); --color-amber-200: color-mix(in srgb, #f59e0b 32%, #0c1322);
+  --color-amber-600: #f59e0b; --color-amber-700: #fbbf24; --color-amber-800: #fcd34d; --color-amber-900: #fcd34d;
+  --color-yellow-50: color-mix(in srgb, #eab308 10%, #0c1322); --color-yellow-100: color-mix(in srgb, #eab308 17%, #0c1322); --color-yellow-200: color-mix(in srgb, #eab308 32%, #0c1322);
+  --color-yellow-600: #eab308; --color-yellow-700: #facc15; --color-yellow-800: #fde047; --color-yellow-900: #fde047;
+  --color-lime-50: color-mix(in srgb, #84cc16 10%, #0c1322); --color-lime-100: color-mix(in srgb, #84cc16 17%, #0c1322); --color-lime-200: color-mix(in srgb, #84cc16 32%, #0c1322);
+  --color-lime-600: #84cc16; --color-lime-700: #a3e635; --color-lime-800: #bef264; --color-lime-900: #bef264;
+}
+html.coin-pro body, html.coin-pro .aurora {
+  background:
+    radial-gradient(900px 500px at 15% -10%, rgba(20,184,166,.10), transparent 60%),
+    radial-gradient(800px 500px at 100% 0%, rgba(56,189,248,.08), transparent 55%),
+    var(--pro-bg);
+  color: #dde4ef;
+}
+html.coin-pro .card {
+  background: linear-gradient(180deg, #0d1526, #0a1120);
+  border-color: rgba(45,212,191,.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 0 0 1px rgba(15,23,42,.6), 0 10px 30px -18px rgba(20,184,166,.35);
+}
+html.coin-pro .glass { background: rgba(12,19,34,.72); border-color: rgba(45,212,191,.12); }
+/* Chữ trắng trên nút màu giữ trắng; khối nền tối (banner, nút đen) giữ tối */
+html.coin-pro .text-white { color: #fff; }
+html.coin-pro .text-white\/70 { color: rgb(255 255 255 / .7); }
+html.coin-pro .text-white\/60 { color: rgb(255 255 255 / .6); }
+html.coin-pro .bg-slate-900 { background-color: #04070e; }
+html.coin-pro .bg-slate-800 { background-color: #0b1220; }
+html.coin-pro .bg-slate-900\/40 { background-color: rgb(0 0 0 / .6); }
+html.coin-pro .from-slate-900 { --tw-gradient-from: #04070e; }
+html.coin-pro .to-indigo-900 { --tw-gradient-to: #0b1a3a; }
+/* Ô nhập */
+html.coin-pro input, html.coin-pro select, html.coin-pro textarea { background-color: #0a1120; color: #eef2f8; }
+html.coin-pro input::placeholder, html.coin-pro textarea::placeholder { color: #55627c; }
+/* Số kiểu terminal */
+html.coin-pro .tabular-nums { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.01em; }
+/* Biểu đồ recharts */
+html.coin-pro .recharts-cartesian-grid line { stroke: rgba(148,163,184,.12); }
+html.coin-pro .recharts-cartesian-axis-tick-value { fill: #7d8ba6; }
+html.coin-pro .recharts-pie-sector path { stroke: #0c1322; }
+html.coin-pro .recharts-default-tooltip { background: #0d1526 !important; border-color: #1f2c47 !important; color: #dde4ef; }
+html.coin-pro .recharts-legend-item-text { color: #aab7cc !important; }
+/* Nút bật Pro + tab đang chọn phát sáng */
+.pro-toggle-on { background: linear-gradient(90deg, #0f766e, #0e7490); color: #fff; box-shadow: 0 0 0 1px rgba(45,212,191,.45), 0 0 18px -4px rgba(45,212,191,.7); }
+html.coin-pro .from-amber-500.to-orange-500 { box-shadow: 0 0 0 1px rgba(251,191,36,.5), 0 0 18px -6px rgba(251,191,36,.8); }
+html.coin-pro ::-webkit-scrollbar { width: 8px; height: 8px; }
+html.coin-pro ::-webkit-scrollbar-thumb { background: #1f2c47; border-radius: 8px; }
+html.coin-pro ::-webkit-scrollbar-track { background: transparent; }

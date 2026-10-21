@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -103,16 +103,29 @@ export default function Coin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTab]);
   // "Bot thật" + "Tổng quan" chỉ chủ xem → người khác (hoặc lúc chưa xác định chủ) rơi về Đầu tư
+  // Giao diện Pro (21/10): nền tối kiểu sàn giao dịch, bố cục giữ nguyên — chỉ đổi biến màu (html.coin-pro trong index.css), nhớ theo máy
+  const [pro, setProState] = useState(() => { try { return localStorage.getItem("qws_coin_pro") === "1"; } catch { return false; } });
+  const setPro = (v) => { setProState(v); try { localStorage.setItem("qws_coin_pro", v ? "1" : "0"); } catch {} };
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.toggle("coin-pro", pro);
+    return () => el.classList.remove("coin-pro");
+  }, [pro]);
   const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div className={`flex gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
+      <div className="flex items-stretch gap-1 sm:gap-2">
+      <div className={`flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
         {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (
           <button key={k} onClick={() => pick(k)} className={`flex shrink-0 items-center justify-center gap-1 rounded-xl px-2.5 py-2 sm:px-1 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${cur === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
         ))}
+      </div>
+        <button onClick={() => setPro(!pro)} title={pro ? "Về giao diện thường" : "Giao diện Pro (nền tối kiểu sàn giao dịch)"} className={`flex shrink-0 items-center gap-1.5 rounded-none px-3 text-[12px] font-extrabold shadow-sm transition sm:rounded-2xl ${pro ? "pro-toggle-on" : "bg-white/70 text-slate-600 hover:text-slate-900"}`}>
+          {pro ? <Sun size={15} /> : <MonitorDot size={15} />}<span className="hidden sm:inline">{pro ? "Thường" : "Pro"}</span>
+        </button>
       </div>
       {isOwner && (seen.overview || cur === "overview") && <div className={cur === "overview" ? "" : "hidden"}><Suspense fallback={fb}><CoinOverview active={cur === "overview"} go={pick} /></Suspense></div>}
       {allowTab.invest && (seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><CoinInvest active={cur === "invest"} /></div>}
