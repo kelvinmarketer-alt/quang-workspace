@@ -291,7 +291,7 @@ function TestTradeCard({ st, cmd, online, stopped, onSent }) {
       </div>
       <div className="mt-1 flex items-center gap-1 text-[11.5px] text-slate-500">Kiểm tra trọn quy trình khi không ngồi ở máy <InfoTip>Bot đặt 1 lệnh LONG BTC (hoặc ETH) sát giá bằng tiền ảo → khớp → đặt SL/TP → giữ 1 phút → đóng → ghi lịch sử → gửi thông báo về điện thoại. Rủi ro 0,1% vốn, không tính vào thống kê.</InfoTip>{!online ? " · Bot đang mất liên lạc." : stopped ? " · Bot đang DỪNG — bấm Chạy lại trước." : ""}</div>
       {noReply && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot chưa nhận lệnh thử sau 3 phút — có thể máy bot chưa cập nhật bản mới (tự cập nhật trong ~5 phút) hoặc đang chờ khoá API.</div>}
-      {t?.doneAt && !showSteps && <button onClick={() => setShowSteps(true)} className="mt-1 text-[11.5px] font-bold text-indigo-600">{t.ok ? "✓" : "✖"} Lần thử gần nhất {new Date(t.doneAt).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })} · xem {t.steps.length} bước ▾</button>}
+      {t?.doneAt && !showSteps && <button onClick={() => setShowSteps(true)} className="mt-1 text-[11.5px] font-bold text-indigo-600">{t.ok ? "✓" : "✖"} Lần thử gần nhất {dt(t.doneAt)} · xem {t.steps.length} bước ▾</button>}
       {t?.steps?.length > 0 && (!t.doneAt || showSteps) && <ol className="mt-2 space-y-1">{t.steps.map((x, i) => (
         <li key={i} className={`flex gap-2 text-[12px] leading-snug ${x.ok ? "text-slate-700" : "font-bold text-rose-700"}`}><span className="w-[42px] shrink-0 tabular-nums text-[11px] text-slate-400">{new Date(x.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span><span>{x.ok ? "✓" : "✖"} {x.msg}</span></li>
       ))}</ol>}
