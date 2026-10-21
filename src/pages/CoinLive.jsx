@@ -131,7 +131,7 @@ export default function CoinLive({ active }) {
             <button disabled={busy} onClick={startCloseAll} className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-rose-300 bg-white px-2.5 py-2 text-[12px] font-bold text-rose-700 disabled:opacity-50"><XOctagon size={13} /> Đóng hết vị thế</button>
           </div>
         </div>
-        <div className="mt-1 text-[11.5px] text-slate-500">Rủi ro {fmtNum(st.risk, 2, 0)}%/lệnh · tối đa {st.maxOpen} lệnh · dừng ngày -{fmtNum(st.dailyStop ?? 6, 2, 0)}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
+        <div className="mt-1 text-[11.5px] text-slate-500">Rủi ro {fmtNum(st.risk, 2, 0)}%/lệnh{st.riskNow != null && st.riskNow < st.risk ? <b className="text-amber-700"> (đang thua {st.lossRun} lệnh liền → {fmtNum(st.riskNow, 2, 0)}% tới khi thắng lại)</b> : ""} · tối đa {st.maxOpen} lệnh · dừng ngày -{fmtNum(st.dailyStop ?? 6, 2, 0)}%{st.lastScan ? ` · quét tín hiệu ${ago(st.lastScan.at)}` : ""}{st.lastScan?.halted ? <b className="text-rose-600"> · {st.lastScan.halted}</b> : ""}</div>
         {closing && (
           <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] text-rose-800">
             <b>Bước 2/2 — xác nhận đóng hết:</b> huỷ mọi lệnh chờ + đóng {nLeft ? `${nLeft} lệnh/vị thế` : "mọi vị thế"} của bot bằng giá thị trường, rồi bot DỪNG. Gõ <b>ĐÓNG HẾT</b> vào ô dưới.

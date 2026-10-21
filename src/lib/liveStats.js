@@ -98,6 +98,8 @@ const RULES = [
   ["adaptive", "Tự tối ưu", onoff, "bool"],
   ["learnLoss", "Rút kinh nghiệm lệnh thua", onoff, "bool"],
   ["rr", "R:R", (v) => (fin(v) ? `1:${fmtNum(v, 2, 0)}` : "—")],
+  ["streakN", "Giảm rủi ro sau chuỗi thua", (v) => (Number(v) > 0 ? `thua ${v} lệnh liền` : "tắt")],
+  ["streakRiskPct", "Rủi ro khi đang chuỗi thua", (v) => (fin(v) ? `${fmtNum(v, 2, 0)}%` : "—")],
   ["cfgVer", "Phiên bản luật", (v) => (v ? `v${v}` : "—")],
 ];
 const same = (a, b, kind) => (kind === "arr" ? [...(a || [])].sort().join() === [...(b || [])].sort().join() : kind === "bool" ? !!a === !!b : Number(a) === Number(b));
@@ -117,6 +119,7 @@ export function rulesText(c) {
   if (Number(c.minSlAtr) > 0) p.push(`SL ≥ ${fmtNum(c.minSlAtr, 2, 0)} ATR`);
   if (c.adaptive !== undefined) p.push(c.adaptive ? `tối ưu${c.learnLoss ? " + rút kinh nghiệm" : ""}` : "luật cố định (không tối ưu)");
   if (fin(c.rr)) p.push(`R:R 1:${fmtNum(c.rr, 2, 0)}`);
+  if (Number(c.streakN) > 0) p.push(`thua ${c.streakN} liền → rủi ro ${fmtNum(c.streakRiskPct, 2, 0)}%`);
   if (c.cfgVer) p.push(`v${c.cfgVer}`);
   return p.filter(Boolean).join(" · ");
 }

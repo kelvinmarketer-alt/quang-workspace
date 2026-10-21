@@ -209,7 +209,7 @@ function SetupForm({ initial, onStart, onCancel }) {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {field("capital", "Vốn ảo", 100, "$")}{field("riskPct", "Rủi ro / lệnh", 0.25, "%")}{field("maxOpen", "Tối đa lệnh mở")}{field("maxLev", "Đòn bẩy tối đa", 1, "x")}
           {field("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}{field("rr", `Chốt lời gốc (R:R ≥ ${MIN_RR})`, 0.5, "R", MIN_RR)}{field("beAtR", "Dời hoà vốn ở (0=tắt)", 0.5, "R")}{field("feePct", "Phí mỗi chiều", 0.01, "%")}
-          {field("maxFeeR", "Bỏ lệnh khi phí > (0=tắt)", 0.05, "R")}
+          {field("maxFeeR", "Bỏ lệnh khi phí > (0=tắt)", 0.05, "R")}{field("streakN", "Thua liền N lệnh → giảm rủi ro (0=tắt)", 1, "lệnh")}{field("streakRiskPct", "Rủi ro khi đang chuỗi thua", 0.25, "%")}
         </div>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3">
           <div className="text-[13px] font-extrabold text-emerald-800">Chỉ vào LỆNH CHỜ (limit) — đúng điểm đẹp mới vào, không thì bỏ</div>
@@ -458,7 +458,7 @@ export default function CoinBot({ active: visible = true }) {
               <div className="mt-1 text-[11px] leading-snug text-slate-500">Lưu xong Demo chạy lại từ {dt(session.startAt)} với danh sách cặp mới (cặp xoá → lệnh demo của cặp đó biến mất). Bot thật nhận trong ~5 phút; lệnh/vị thế đang mở của cặp vừa xoá vẫn được bot quản lý (SL/TP) tới khi đóng.</div>
             </div>
           )}
-          {showRules && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng: {cfg.htfFilter ? "thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""} · bias {cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}{cfg.d1Bias ? " + D1" : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
+          {showRules && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng: {cfg.htfFilter ? "thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.streakN > 0 ? ` · thua ${cfg.streakN} lệnh liền → rủi ro ${fmtNum(cfg.streakRiskPct, 2, 0)}% tới khi thắng lại` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""} · bias {cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}{cfg.d1Bias ? " + D1" : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
         </div>
