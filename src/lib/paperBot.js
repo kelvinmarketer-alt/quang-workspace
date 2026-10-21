@@ -122,17 +122,22 @@ export function loadKlines(symbol, tf, fromTs) {
   if (!INFLIGHT.has(key)) INFLIGHT.set(key, loadKlines0(symbol, tf, fromTs).finally(() => INFLIGHT.delete(key)));
   return INFLIGHT.get(key);
 }
+// Bộ đệm nến TỰ LÀNH (21/10): mỗi lần tải luôn tải lại ~REFETCH nến gần nhất và GHI ĐÈ theo thời gian mở.
+// Lý do: nến đã lưu trước đây không bao giờ được tải lại → máy có đồng hồ nhanh vài giây / Binance trả trễ có thể lưu 1 nến CHƯA ĐÓNG
+// (thiếu giá/khối lượng) mãi mãi → Demo máy đó ra tín hiệu giả, khác máy khác và khác bot thật. "v2" = bỏ bộ đệm cũ, tải lại sạch 1 lần.
+const KCACHE = "v2", REFETCH = 300;
 async function loadKlines0(symbol, tf, fromTs) {
-  const key = `${symbol}|${tf}`, step = TFS[tf].ms, now = Date.now();
+  const key = `${KCACHE}|${symbol}|${tf}`, step = TFS[tf].ms, now = Date.now();
   let rows = MEM.get(key) || (await idbGet(key)) || [];
   if (!rows.length || rows[0][0] > fromTs + step) rows = []; // cache bắt đầu muộn hơn mức cần → tải lại từ đầu
+  else rows = rows.slice(0, Math.max(0, rows.length - REFETCH)); // bỏ ~300 nến cuối → tải lại bản chuẩn từ sàn
   let start = rows.length ? rows[rows.length - 1][0] + step : fromTs;
   for (let guard = 0; guard < 80 && start < now - step; guard++) {
     const limit = Math.min(1500, Math.max(2, Math.ceil((now - start) / step) + 1)); // phần mới ít → limit nhỏ (trọng số API thấp)
     const j = await getJson(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=${limit}&startTime=${start}`);
     pageHook?.(j.length);
     if (!j.length) break;
-    for (const k of j) if (k[6] < now) rows.push([k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]);
+    for (const k of j) if (k[6] < now - 2000 && (!rows.length || k[0] > rows[rows.length - 1][0])) rows.push([k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]); // chỉ nến đã đóng ≥ 2 giây, không trùng
     start = j[j.length - 1][0] + step;
     if (j.length < limit) break;
   }
