@@ -20,6 +20,8 @@ create policy "members update workspace" on public.qws_workspaces
   with check ( true );
 ```
 
+> ⚠️ 22/10/2026: 2 policy trên ĐÃ ĐƯỢC THAY bằng `SETUP-MEMBER-SCOPE.sql` (máy chủ lọc dữ liệu theo quyền + phạm vi dự án). KHÔNG chạy lại 2 policy này.
+
 (2 policy này CỘNG THÊM vào policy chủ-sở-hữu sẵn có — không xoá gì, không ảnh hưởng dữ liệu của bạn.)
 
 ## Thành viên vào app thế nào

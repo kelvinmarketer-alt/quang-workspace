@@ -401,10 +401,10 @@ export async function runSession(session, onProgress = () => {}) {
   let done = 0, bars = 0;
   const say = () => onProgress(`Tải nến ${done}/${need.size} luồng${bars ? ` · đã tải ${bars.toLocaleString("vi-VN")} nến mới` : ""}…`);
   pageHook = (n) => { bars += n; say(); };
-  const fund = {};
+  const fund = {}, got = new Map(); // 22/10: giữ nến vừa tải song song → vòng tính dùng lại, không gọi Binance lần 2 tuần tự (trước đây ~4 giây chờ mạng)
   try {
     await Promise.all([
-      ...[...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => { done++; say(); })),
+      ...[...need].map(([k, [sym, tf, from]]) => loadKlines(sym, tf, from).then((r) => { got.set(k, r); done++; say(); })),
       ...cfg.coins.map((c) => loadFunding(symOf(c), learnFrom - 86400000).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })), // lỗi tải funding → bỏ qua (không chặn bot)
     ]);
   }
@@ -412,13 +412,13 @@ export async function runSession(session, onProgress = () => {}) {
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
     if (off.has(`${coin}|${tf}`)) { streams.push({ coin, tf, bars: 0, note: "đã tắt" }); continue; }
     const symbol = symOf(coin), step = TFS[tf].ms, key = `${coin}|${tf}`;
-    const K = (await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
+    const K = (got.get(key) || await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
     if (K.length < 260) { streams.push({ coin, tf, bars: K.length, note: "thiếu dữ liệu" }); continue; }
     const found = findSignals(K, cfg.setups);
     const atr = found.atr; let sig = found.sig.filter((x) => K[x.i][0] >= learnFrom);
     if (cfg.htfFilter) {
       const htf = TFS[tf].htf, hs = TFS[htf].ms;
-      const HK = (await loadKlines(symbol, htf, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until);
+      const HK = (got.get(`${coin}|${htf}`) || await loadKlines(symbol, htf, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until);
       const he = emaArr(HK.map((k) => k[4]), 200);
       // xu hướng khung lớn tại thời điểm nến LTF đóng = nến khung lớn ĐÃ ĐÓNG gần nhất
       const biasAt = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
@@ -430,7 +430,7 @@ export async function runSession(session, onProgress = () => {}) {
     // Bias các khung lớn (H1, H4, D1) tại lúc nến tín hiệu đóng — chỉ để xác định xu hướng
     const biasFns = {};
     for (const h of ["1h", "4h", "1d"]) {
-      const hs = TFS[h].ms, HK = (await loadKlines(symbol, h, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until), he = emaArr(HK.map((k) => k[4]), 200);
+      const hs = TFS[h].ms, HK = (got.get(`${coin}|${h}`) || await loadKlines(symbol, h, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until), he = emaArr(HK.map((k) => k[4]), 200);
       biasFns[h] = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
     }
     const htfTags = (s) => { const t = K[s.i][0] + step, b = ["1h", "4h", "1d"].map((h) => biasFns[h](t)); return [b.every((x) => x === s.side) ? "htf:all" : "htf:mixed", b[2] === s.side ? "d1:with" : "d1:against"]; };

@@ -405,6 +405,23 @@ function weakAlert() {
     note(`⚠ ${coin} ${TFS[tf].label} đang âm 30 ngày qua`, `${L.length} lệnh Demo · thắng ${vn(win, 0)}% · TB ${avg.toFixed(2).replace(".", ",")}R. Mở Demo → Thống kê để xem nên giữ hay "Tắt khung" (bot không tự tắt).`, tag, "/coin?tab=bot");
   }
 }
+// Báo khi TESTNET đạt đủ 6/6 điều kiện bật tiền thật (giống danh sách trong app → Bot thật → Cài đặt bot). CHỈ báo — bot không tự chuyển tiền thật.
+// Đạt lại sau khi từng tụt → báo lại, tối đa 1 lần / 3 ngày.
+function readyAlert() {
+  if (DRY || ONCE || MODE !== "testnet" || !lastRaw) return;
+  const tn = HIST.filter((t) => t.setup !== "TEST" && t.mode === "testnet" && t.exitAt);
+  const first = tn.length ? Math.min(...tn.map((t) => Number(t.exitAt))) : null, pnl = tn.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
+  const D = new Map(finalize(lastRaw, null).portfolio.trades.filter((t) => t.status === "done" && t.r != null).map((t) => [t.id, t]));
+  const pairs = tn.map((t) => [t, D.get(t.id)]).filter(([t, d]) => d && t.R != null && isFinite(Number(t.R)));
+  const diff = pairs.length ? pairs.reduce((x, [t, d]) => x + (Number(t.R) - d.r), 0) / pairs.length : null;
+  const ok = [!!first && now() - first >= 14 * 86400000, tn.length >= 20, tn.length > 0 && pnl > 0, S.test?.ok === true, !!demoCfg && appCfg.followDemo !== false, pairs.length >= 10 && diff != null && diff >= -0.15];
+  const ready = ok.every(Boolean), was = !!S.liveReady;
+  if (ready !== was) { S.liveReady = ready; save(); }
+  if (!ready || was || now() - (S.liveReadyAt || 0) < 3 * 86400000) return;
+  S.liveReadyAt = now(); save();
+  log(`✅ Testnet đạt đủ 6/6 điều kiện bật tiền thật (${tn.length} lệnh, ${sgn(pnl, 2)}$, ${pairs.length} lệnh khớp Demo)`);
+  note("✅ Testnet đạt đủ 6/6 điều kiện tiền thật", `${tn.length} lệnh · ${sgn(pnl, 2)}$ · ${pairs.length} lệnh trùng Demo, chênh ${diff >= 0 ? "+" : ""}${diff.toFixed(2).replace(".", ",")}R. Bật tiền thật hay chưa là sếp quyết (Bot thật → Cài đặt bot) — bot không tự chuyển. Không phải tư vấn đầu tư.`, `qws-bot-ready-${Math.floor(now() / 86400000)}`, "/coin?tab=live");
+}
 function weeklyReport() {
   if (DRY || ONCE || !lastRaw) return;
   const vnNow = new Date(now() + VN), sun = new Date(vnNow); sun.setUTCHours(20, 0, 0, 0); sun.setUTCDate(sun.getUTCDate() - sun.getUTCDay()); // Chủ nhật gần nhất 20:00 (giờ VN, dạng UTC giả)
@@ -475,6 +492,7 @@ async function cycle(state) {
   await syncHistory();
   try { weeklyReport(); } catch (e) { log("Lỗi báo cáo tuần:", e.message); }
   try { weakAlert(); } catch (e) { log("Lỗi cảnh báo cặp yếu:", e.message); }
+  try { readyAlert(); } catch (e) { log("Lỗi kiểm điều kiện tiền thật:", e.message); }
 }
 
 // Tự cập nhật: 5 phút/lần hoặc khi bấm "Cập nhật ngay" trong app; có bản mới → thoát để vòng chạy bật bản mới

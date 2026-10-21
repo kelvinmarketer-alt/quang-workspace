@@ -127,6 +127,18 @@ export function DataProvider({ children }) {
   const baseRef = useRef(null);
   const baseAtRef = useRef(null);
   const casOff = useRef(false);
+  // 22/10: tài khoản phụ đọc/ghi qua hàm máy chủ (supabase/SETUP-MEMBER-SCOPE.sql) — máy chủ lọc theo quyền + phạm vi dự án.
+  // null = chưa biết · true = dùng hàm máy chủ · false = máy chủ chưa có hàm (đọc thẳng kiểu cũ)
+  const memberRpc = useRef(null);
+  const isMemberRef = useRef(false);
+  const readRemote = async (owner) => {
+    if (isMemberRef.current && memberRpc.current) {
+      const { data, error } = await supabase.rpc("qws_member_load");
+      const row = Array.isArray(data) ? data[0] : data;
+      return error ? { error } : row ? { data: { data: row.data, updated_at: row.updated_at } } : { error: new Error("Không còn quyền xem dữ liệu chung") };
+    }
+    return supabase.from(WORKSPACE_TABLE).select("data,updated_at").eq("user_id", owner).single();
+  };
   const pushing = useRef(false);
   const pendingPush = useRef(false);
   // KHO RIÊNG của chủ (qws_private): vault + OpenAI key. privAvail: null=chưa biết/không phải chủ, true=dùng kho riêng, false=chưa tạo bảng (giữ cách cũ)
@@ -157,6 +169,18 @@ export function DataProvider({ children }) {
       const owner = ownerRef.current || user.id;
       for (let attempt = 0; attempt < 4; attempt++) {
         const local = outgoing(stateRef.current);
+        if (isMemberRef.current && memberRpc.current) { // máy chủ chỉ nhận phần được quyền Sửa
+          const { data, error } = await supabase.rpc("qws_member_save", { p_owner: owner, p_data: local, p_expect: baseAtRef.current });
+          if (error) throw error;
+          const row = Array.isArray(data) ? data[0] : data;
+          if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; break; }
+          const rem = await readRemote(owner);
+          if (rem.error) throw rem.error;
+          const merged = migrate(merge3(baseRef.current, local, rem.data.data || {}));
+          baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
+          stateRef.current = merged; skipSave.current = true; setState(stateRef.current);
+          continue;
+        }
         if (casOff.current || !baseAtRef.current) {
           const { data, error } = await supabase.from(WORKSPACE_TABLE).upsert({ user_id: owner, data: local }).select("updated_at").maybeSingle();
           if (error) throw error;
@@ -172,7 +196,7 @@ export function DataProvider({ children }) {
         const row = Array.isArray(data) ? data[0] : data;
         if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; break; }
         // XUNG ĐỘT: nơi khác đã lưu trước → gộp
-        const rem = await supabase.from(WORKSPACE_TABLE).select("data,updated_at").eq("user_id", owner).single();
+        const rem = await readRemote(owner);
         if (rem.error) throw rem.error;
         const merged = migrate(merge3(baseRef.current, local, rem.data.data || {}));
         baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
@@ -199,9 +223,11 @@ export function DataProvider({ children }) {
   const pullCloud = async () => {
     if (!user || !ownerRef.current || dirty.current || pushing.current) return;
     const owner = ownerRef.current;
-    const head = await supabase.from(WORKSPACE_TABLE).select("updated_at").eq("user_id", owner).maybeSingle();
+    const head = isMemberRef.current && memberRpc.current
+      ? await supabase.rpc("qws_member_head", { p_owner: owner }).then((r) => ({ error: r.error, data: r.data ? { updated_at: r.data } : null }))
+      : await supabase.from(WORKSPACE_TABLE).select("updated_at").eq("user_id", owner).maybeSingle();
     if (head.error || !head.data || head.data.updated_at === baseAtRef.current) return;
-    const rem = await supabase.from(WORKSPACE_TABLE).select("data,updated_at").eq("user_id", owner).single();
+    const rem = await readRemote(owner);
     if (rem.error || dirty.current || pushing.current) return;
     baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
     const next = migrate(rem.data.data || {});
@@ -299,6 +325,7 @@ export function DataProvider({ children }) {
     let alive = true;
     setSynced(false);
     (async () => {
+      isMemberRef.current = false;
       // 1) Thử dòng của CHÍNH MÌNH (chủ workspace)
       const own = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").eq("user_id", user.id).maybeSingle();
       if (!alive) return;
@@ -310,15 +337,17 @@ export function DataProvider({ children }) {
       }
       let owner = user.id, blob = own.data?.data, blobAt = own.data?.updated_at || null;
       if (!own.data) {
-        // 2) Không có dòng riêng → có thể là THÀNH VIÊN: RLS cho phép thấy dòng của CHỦ đã chia sẻ cho mình
-        const shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").neq("user_id", user.id).limit(1);
+        // 2) Không có dòng riêng → có thể là THÀNH VIÊN: máy chủ trả dữ liệu của CHỦ đã lọc theo quyền (hàm chưa có → đọc thẳng kiểu cũ)
+        let shared = await supabase.rpc("qws_member_load");
+        memberRpc.current = !(shared.error && (shared.error.code === "PGRST202" || /qws_member_load/.test(shared.error.message || "")));
+        if (!memberRpc.current) shared = await supabase.from(WORKSPACE_TABLE).select("user_id,data,updated_at").neq("user_id", user.id).limit(1);
         if (!alive) return;
         if (shared.error) { // lỗi mạng khi dò dòng được chia sẻ → KHÔNG tự coi là chủ (tránh tách thành bản dữ liệu riêng), thử lại sau
           setSyncStatus("error");
           setTimeout(() => { if (alive) setReloadTick((t) => t + 1); }, 4000);
           return;
         }
-        if (shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; blobAt = shared.data[0].updated_at; }
+        if (shared.data && shared.data[0]) { owner = shared.data[0].user_id; blob = shared.data[0].data; blobAt = shared.data[0].updated_at; isMemberRef.current = true; }
       }
       ownerRef.current = owner;
       setOwnerId(owner);

@@ -1,7 +1,7 @@
 {
-  "sha": "6e280ea3ef06653c98a948ed2fb4b41b0df0d4c5",
-  "date": "2026-10-21T23:54:45+07:00",
-  "msg": "Nến: lần tính lại trong cùng tiến trình chỉ tải lại 20 nến cuối (lần đầu vẫn 300 để chữa bộ đệm) · báo cáo tuần mở thẳng Tổng quan Coin",
+  "sha": "048d37b7c12138c5d78ef8f3257d2f91123e8e94",
+  "date": "2026-10-22T00:06:42+07:00",
+  "msg": "Demo/bot tính lại nhanh hơn ~20 lần (dùng lại nến vừa tải, không gọi Binance lần 2 tuần tự) · báo điện thoại khi testnet đạt đủ 6/6 điều kiện tiền thật (chỉ báo, không tự chuyển)",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "a2c7402d9a9cc0425a55f55588fd66a9427a222e"
+      "sha": "91a5c87ee9430b7b1b4133a2defdcf06a3d8eda9"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "329c03f5e91745fc2ccf100b8502560ba79fda4b"
+      "sha": "38a0d513ef71101506c61f915ba057ca8bd26d7c"
     },
     {
       "path": "lib/report.js",
