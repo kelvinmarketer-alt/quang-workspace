@@ -1,7 +1,7 @@
 {
-  "sha": "668fb39000005ffa9fae00bf64cb43dc4ec3d48b",
-  "date": "2026-10-21T10:48:59+07:00",
-  "msg": "Bot: luật v9 — giảm rủi ro sau chuỗi thua (đếm từ lịch sử lệnh thật cùng chế độ, bỏ lệnh thử), báo lossRun/riskNow về app",
+  "sha": "fce92299cf90230ba72545783784d3ead72c93a6",
+  "date": "2026-10-21T11:36:39+07:00",
+  "msg": "Bot: luật v10 (rủi ro cố định 2%)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "13c56eb0efb336cb466e60ff51e86dfef92e4c8b"
+      "sha": "6a440a7edc981844846113efff56021435ed190c"
     },
     {
       "path": "lib/report.js",
