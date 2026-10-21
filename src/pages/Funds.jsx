@@ -834,7 +834,7 @@ function FundsMain() {
         </div>
 
         {personalWithBal.length === 0 ? (
-          <Card><div className="py-10 text-center"><PiggyBank size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có quỹ cá nhân nào</div><div className="mt-1 text-xs text-slate-400">Tạo các quỹ: Đầu tư, Cá nhân, Gia đình, Du lịch…</div></div></Card>
+          <Card><div className="py-10 text-center"><PiggyBank size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có quỹ cá nhân nào</div><div className="mt-1 text-xs text-slate-400">Tạo các quỹ: Đầu tư, Cá nhân, Gia đình, Du lịch… rồi bấm Phân bổ để chia lợi nhuận vào từng quỹ.</div><button onClick={() => setFundModal({})} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow"><Plus size={15} /> Tạo quỹ đầu tiên</button></div></Card>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {personalWithBal.map((f) => (

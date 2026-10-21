@@ -23,19 +23,34 @@ const TONES = {
   rose: "from-rose-500 to-pink-500 shadow-rose-500/30",
 };
 
+// Số tiền tự vừa ô: đủ chỗ thì hiện đầy đủ "886.003.879 đ", hẹp (điện thoại, iPad, laptop nhỏ) thì tự rút gọn "886 tr" —
+// KHÔNG BAO GIỜ ngắt dòng giữa con số. Rê chuột / giữ ngón tay để xem số đầy đủ.
+export function FitMoney({ value, className = "" }) {
+  const box = useRef(null), full = useRef(null);
+  const [short, setShort] = useState(false);
+  useLayoutEffect(() => {
+    const b = box.current, f = full.current; if (!b || !f) return undefined;
+    const check = () => setShort(f.scrollWidth > b.clientWidth + 1);
+    check();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(check); ro.observe(b); return () => ro.disconnect();
+  }, [value]);
+  return (
+    <span ref={box} className={`relative block min-w-0 overflow-hidden whitespace-nowrap ${className}`} title={formatVND(value)}>
+      <span ref={full} className={short ? "invisible absolute left-0 top-0" : ""} aria-hidden={short}>{formatVND(value)}</span>
+      {short && <span>{formatShort(value)}</span>}
+    </span>
+  );
+}
+
 export function StatCard({ icon: Icon, label, value, sub, tone = "indigo", money = true }) {
   return (
     <div className="card fade-up p-3.5 sm:p-5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[12px]">{label}</div>
           <div className="mt-0.5 text-lg font-extrabold leading-tight tracking-tight text-slate-900 sm:mt-1 sm:text-2xl">
-            {money ? (
-              <>
-                <span className="sm:hidden">{formatShort(value)}</span>
-                <span className="hidden break-words sm:inline">{formatVND(value)}</span>
-              </>
-            ) : value}
+            {money ? <FitMoney value={value} /> : value}
           </div>
           {sub && <div className="mt-0.5 truncate text-[11px] font-medium text-slate-400 sm:mt-1 sm:text-[12px]">{sub}</div>}
         </div>

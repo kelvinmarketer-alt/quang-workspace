@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, ChevronDown, Check, Search, Trash2, History } from "lucide-react";
-import { Card, SectionTitle, Badge, MoneyInput, DateField, formatVND, formatShort } from "../components/ui.jsx";
+import { Card, SectionTitle, Badge, MoneyInput, DateField, FitMoney, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
@@ -55,11 +55,10 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
   return (
     <div className="card p-3.5 sm:p-5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[12px]">{label}</div>
           <div className="mt-0.5 text-lg font-extrabold leading-tight tracking-tight text-slate-900 sm:mt-1 sm:text-2xl">
-            <span className="sm:hidden">{formatShort(value)}</span>
-            <span className="hidden break-words sm:inline">{formatVND(value)}</span>
+            <FitMoney value={value} />
           </div>
           {compare && <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5"><Delta cur={value} prev={prev} /><span className="text-[11px] text-slate-400">kỳ trước {formatShort(prev)}</span></div>}
         </div>

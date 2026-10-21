@@ -47,15 +47,20 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Lời chào + ngày (đầu trang) → việc Hôm nay → số liệu cả năm */}
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 sm:px-0">
+        <h1 className="text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl">Xin chào Quang 👋</h1>
+        <span className="text-[13px] font-medium text-slate-500">Hôm nay {fmtDateVI(new Date())} · Âm lịch {li.label} {li.special ? "· " + li.special : ""} · {li.canChiYear}</span>
+      </div>
+
       <TodayPanel />
 
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 p-6 text-white sm:p-8">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-500 to-sky-500 px-6 py-5 text-white sm:px-8 sm:py-6">
         <div className="absolute -right-10 -top-10 h-48 w-48 animate-floaty rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="text-sm font-medium text-indigo-100">Xin chào Quang 👋</div>
-            <div className="mt-1 text-2xl font-extrabold sm:text-3xl">Tổng quan năm {year}</div>
-            <div className="mt-1 text-sm text-indigo-100">Hôm nay {fmtDateVI(new Date())} · Âm lịch {li.label} {li.special ? "· " + li.special : ""} · {li.canChiYear}</div>
+            <div className="text-[12px] font-bold uppercase tracking-wider text-indigo-100">Kinh doanh</div>
+            <div className="mt-0.5 text-2xl font-extrabold sm:text-3xl">Tổng quan năm {year}</div>
           </div>
           <div className="flex gap-2">
             {years.map((y) => (

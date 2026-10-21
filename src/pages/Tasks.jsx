@@ -116,7 +116,12 @@ function TaskBoard() {
 
       <div className="space-y-2.5">
         {filtered.length === 0 && (
-          <Card><div className="py-8 text-center text-sm text-slate-400">Không có công việc.</div></Card>
+          <Card><div className="py-10 text-center">
+            <div className="text-3xl">{filter === "done" ? "📋" : "🎉"}</div>
+            <div className="mt-2 text-sm font-bold text-slate-600">{filter === "done" ? "Chưa có việc nào hoàn thành" : filter === "today" ? "Hôm nay không có việc nào" : filter === "upcoming" ? "Không có việc sắp tới" : "Chưa có công việc nào"}</div>
+            <div className="mt-1 text-xs text-slate-400">Ghi lại việc cần làm, đặt ngày để được nhắc trong khung Hôm nay và thông báo đẩy.</div>
+            {canW && filter !== "done" && <button onClick={() => setModal({})} className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow"><Plus size={15} /> Thêm việc</button>}
+          </div></Card>
         )}
         {filtered.map((t) => {
           const [tone, pl] = PRIO[t.priority] || PRIO.med;

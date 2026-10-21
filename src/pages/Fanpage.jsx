@@ -4,7 +4,8 @@ import { RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, EyeOff, Eye, Ex
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy } from "../lib/fbPages.js";
+import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy, pageVerdict } from "../lib/fbPages.js";
+import InfoTip from "../components/InfoTip.jsx";
 import { aiPageAnalysis } from "../lib/ai.js";
 import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod } from "./Web.jsx";
 
@@ -235,6 +236,7 @@ export default function Fanpage() {
     return () => { alive = false; };
   }, [canView, member, ownerId, tick]);
   const shown = (pages || []).filter((p) => !hidden.includes(p.page_id));
+  const isIdle = (p) => { const sm = sums[p.page_id]; return !!sm?.cur && pageVerdict(sm).key === "off"; }; // page không hoạt động → gom xuống cuối, thu gọn
   const hid = (pages || []).filter((p) => hidden.includes(p.page_id));
 
   useEffect(() => {
@@ -267,7 +269,7 @@ export default function Fanpage() {
           <span className="w-full text-[11px] text-slate-400 sm:w-auto">{dm(R.cur[0])}/{R.cur[0].slice(2, 4)}{R.cur[0] !== R.cur[1] ? ` → ${dm(R.cur[1])}/${R.cur[1].slice(2, 4)}` : ""} · so với {R.days} ngày liền trước{R.hasToday ? " · số hôm nay Facebook chốt sau nửa đêm" : ""}</span>
           <button onClick={() => { CACHE.clear(); setTick((t) => t + 1); }} className="ml-auto flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white"><RefreshCw size={13} /> Làm mới</button>
         </div>
-        <div className="mt-1.5 hidden text-[11px] text-slate-400 sm:block">Dùng kết nối Facebook của Văn phòng AI ({meta.conns || 0} token BM). Chỉ hiện page đang <b>bật</b> bên Văn phòng AI{meta.offCount ? ` (${meta.offCount} page đang tắt)` : ""}. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</div>
+        <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">Kết nối Facebook · {meta.conns || 0} token BM{meta.offCount ? ` · ${meta.offCount} page đang tắt` : ""} <InfoTip label="Cách thêm page">Dùng kết nối Facebook của Văn phòng AI. Chỉ hiện page đang <b>bật</b> bên Văn phòng AI. <b>Thêm page mới:</b> gán page cho System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới → bật công tắc.</InfoTip></div>
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
@@ -283,9 +285,17 @@ export default function Fanpage() {
         {!pages ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : shown.length === 0 ? (
           <Card><div className="py-8 text-center text-sm text-slate-500">{meta.offCount ? <>Có {meta.offCount} page nhưng đang <b>tắt</b> bên Văn phòng AI. Vào <b>Văn phòng AI → Kết nối → Facebook</b> bật công tắc page cần theo dõi.</> : <>Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</>}</div></Card>
         ) : (
+          <>
           <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
-            {shown.map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
+            {shown.filter((p) => !isIdle(p)).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
           </div>
+          {shown.some(isIdle) && (
+            <details className="group px-3 sm:px-0">
+              <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {shown.filter(isIdle).length} page không hoạt động trong kỳ này (không có tiếp cận / lượt xem)</summary>
+              <div className="mt-2 grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">{shown.filter(isIdle).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}</div>
+            </details>
+          )}
+          </>
         )}
         {hid.length > 0 && (
           <div className="px-3 text-[11px] text-slate-400">

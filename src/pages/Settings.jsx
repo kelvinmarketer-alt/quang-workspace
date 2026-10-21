@@ -1,7 +1,7 @@
 import AdsAccounts from "../components/AdsAccounts.jsx";
 import OfficeSettings from "../components/OfficeSettings.jsx";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2 } from "lucide-react";
+import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2, Building2, Plug } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -191,6 +191,14 @@ export default function Settings() {
     e.target.value = "";
   };
 
+  // Chia trang thành các mục (nhớ mục đang mở trên máy này) — trước đây 1 trang cuộn rất dài
+  const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["office", "Văn phòng AI", Building2], ["members", "Phân quyền", Users2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
+  const [sec, setSec0] = useState(() => { try { return localStorage.getItem("qws_settings_sec") || "account"; } catch { return "account"; } });
+  const cur = SECS.some(([k]) => k === sec) ? sec : "account";
+  const setSec = (k) => { setSec0(k); try { localStorage.setItem("qws_settings_sec", k); } catch { /* bỏ qua */ } };
+  const [resetTxt, setResetTxt] = useState("");
+  const resetOk = resetTxt.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/Đ/g, "D") === "DAT LAI";
+
   const counts = [
     ["Khách hàng", customerList.length],
     ["Dự án", projects.length],
@@ -201,6 +209,15 @@ export default function Settings() {
 
   return (
     <div className="space-y-3">
+      <div className="sticky top-0 z-10 -mx-3 flex gap-1 overflow-x-auto bg-slate-50/90 px-3 py-1.5 backdrop-blur [scrollbar-width:none] sm:mx-0 sm:rounded-2xl sm:bg-white/70 sm:p-1 sm:shadow-sm">
+        {SECS.map(([k, label, Icon]) => (
+          <button key={k} onClick={() => setSec(k)} className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-extrabold transition ${cur === k ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "text-slate-500 hover:bg-white hover:text-slate-800"}`}>
+            <Icon size={15} className="shrink-0" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {cur === "account" && <>
       <Card>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -221,20 +238,21 @@ export default function Settings() {
           {pwMsg && <div className={`mt-2 text-xs font-semibold ${pwMsg.t === "err" ? "text-rose-600" : "text-emerald-600"}`}>{pwMsg.m}</div>}
         </div>
       </Card>
+      </>}
 
-      <PushCard userId={user?.id} />
+      {cur === "notify" && <PushCard userId={user?.id} />}
 
-      {isOwner && <OfficeSettings />}
+      {cur === "office" && isOwner && <OfficeSettings />}
 
-      {isOwner && <MembersCard />}
+      {cur === "members" && isOwner && <MembersCard />}
 
-      {isOwner && <AiImport />}
+      {cur === "connect" && isOwner && <>
+        <AiImport />
+        <AiUsage />
+        <AdsAccounts />
+      </>}
 
-      {isOwner && <AiUsage />}
-
-      {isOwner && <AdsAccounts />}
-
-      <Card>
+      {cur === "account" && <Card>
         <SectionTitle action={<Database size={18} className="text-slate-400" />}>Dữ liệu hiện có</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {counts.map(([l, n]) => (
@@ -248,9 +266,9 @@ export default function Settings() {
           <Cloud size={16} className="mt-0.5 shrink-0" />
           <span>Dữ liệu <b>tự đồng bộ lên đám mây (Supabase)</b> theo tài khoản của bạn — đăng nhập máy nào cũng thấy. Vẫn nên <b>tải sao lưu</b> định kỳ cho chắc.</span>
         </div>
-      </Card>
+      </Card>}
 
-      {isOwner && (<>
+      {cur === "data" && isOwner && (<>
       <Card>
         <SectionTitle action={<ShieldCheck size={18} className="text-emerald-500" />}>Sao lưu & Khôi phục</SectionTitle>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -275,15 +293,22 @@ export default function Settings() {
 
       <CloudBackups />
 
-      <Card>
-        <SectionTitle action={<RotateCcw size={18} className="text-rose-500" />}>Khôi phục mặc định</SectionTitle>
-        <p className="text-sm text-slate-500">Đặt lại toàn bộ về dữ liệu gốc từ sheet. Mọi thay đổi & giao dịch bạn nhập thêm sẽ mất.</p>
-        <button
-          onClick={async () => { if (await ask("Đặt lại toàn bộ dữ liệu về mặc định? Hành động này không hoàn tác được.")) { reset(); setMsg("✓ Đã đặt lại dữ liệu gốc."); } }}
-          className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-100">
-          Đặt lại dữ liệu gốc
-        </button>
-      </Card>
+      {/* VÙNG NGUY HIỂM: thu gọn sẵn, phải gõ "ĐẶT LẠI" mới bấm được */}
+      <details className="card overflow-hidden border border-rose-100">
+        <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-extrabold text-rose-700 sm:px-5"><AlertTriangle size={16} /> Vùng nguy hiểm</summary>
+        <div className="border-t border-rose-100 px-4 pb-4 pt-3 sm:px-5">
+          <div className="flex items-center gap-1.5 text-sm font-bold text-slate-800"><RotateCcw size={15} className="text-rose-500" /> Đặt lại dữ liệu gốc</div>
+          <p className="mt-1 text-[12.5px] text-slate-500">Đưa toàn bộ về dữ liệu gốc từ sheet — <b className="text-rose-600">mọi thay đổi & giao dịch bạn nhập thêm sẽ mất</b>. Nên tải file sao lưu trước. Gõ <b>ĐẶT LẠI</b> để mở nút.</p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input value={resetTxt} onChange={(e) => setResetTxt(e.target.value)} placeholder='Gõ "ĐẶT LẠI"' className="w-full rounded-xl border border-rose-200 px-3 py-2 text-sm sm:max-w-xs" />
+            <button disabled={!resetOk}
+              onClick={async () => { if (await ask("Đặt lại toàn bộ dữ liệu về mặc định? Hành động này không hoàn tác được.", { ok: "Đặt lại", danger: true })) { reset(); setResetTxt(""); setMsg("✓ Đã đặt lại dữ liệu gốc."); } }}
+              className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-40">
+              Đặt lại dữ liệu gốc
+            </button>
+          </div>
+        </div>
+      </details>
       </>)}
     </div>
   );
