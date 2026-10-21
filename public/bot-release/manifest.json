@@ -1,7 +1,7 @@
 {
-  "sha": "61ca0fff36082a4640ee37893c89d726fc3ca0dd",
-  "date": "2026-10-21T21:43:35+07:00",
-  "msg": "Bot: đồng bộ luật app (bộ đệm nến tự lành)",
+  "sha": "6b5074648a9ec3a717fd68afbe30d0ee7a439773",
+  "date": "2026-10-21T23:19:32+07:00",
+  "msg": "Báo điện thoại khi ĐẶT lệnh chờ (tắt riêng bằng config.notifyPending=false)",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "bf4bd9d43df0cded0159672d58107013aa755430"
+      "sha": "e0b75bb7f502d9e954acbab97cfea58868108964"
     },
     {
       "path": "lib/paperBot.js",
@@ -53,7 +53,7 @@
     },
     {
       "path": "supabase.sql",
-      "sha": "439a6857c7cba98d5964f6a4e099f49664a39e94"
+      "sha": "d896a13e755d0acd64a12f36d5f3a05dcca61621"
     },
     {
       "path": "windows/install.ps1",

@@ -62,74 +62,73 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
     return { coin, tf, open, pend, last, st, n: mine.length, price: live?.current?.[`px|${coin}`] };
   });
   const order = { open: 0, pend: 1, block: 2, wait: 3, stop: 4 };
-  rows.sort((a, b) => order[a.st] - order[b.st]);
+  // Gộp theo coin (21/10): 1 dòng / coin, các khung xếp trong dòng; coin có lệnh đang mở / chờ lên đầu
+  const groups = cfg.coins.map((coin) => {
+    const items = rows.filter((r) => r.coin === coin);
+    return { coin, items, best: Math.min(...items.map((r) => order[r.st])), price: items[0]?.price };
+  }).sort((a, b) => a.best - b.best);
+  const planOf = (r) => (r.open ? { side: r.open.side, entry: r.open.entry, sl: r.open.curSl ?? r.open.sl, tp: r.open.tp, setup: r.open.setup, rr: r.open.uR, at: r.open.entryAt }
+    : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.until } : null);
 
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
         <Radar size={15} className="text-cyan-500" />
         <span className="text-[13px] font-extrabold uppercase tracking-wide text-slate-800">Bảng tín hiệu bot</span>
-        <span className="text-[11px] text-slate-400">{rows.filter((r) => r.st === "open").length} đã khớp · {rows.filter((r) => r.st === "pend").length} chờ khớp · bấm dòng để xem biểu đồ</span>
+        <span className="text-[11px] text-slate-400">{rows.filter((r) => r.st === "open").length} đã khớp · {rows.filter((r) => r.st === "pend").length} chờ khớp · bấm khung để xem biểu đồ</span>
       </div>
-      <div className="hidden grid-cols-[150px_1fr_160px] gap-3 border-b border-slate-100 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400 md:grid">
-        <span>Cặp · khung</span><span>Lệnh theo luật bot</span><span className="text-right">Lực mua / bán</span>
+      <div className="hidden grid-cols-[130px_1fr_150px] gap-3 border-b border-slate-100 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400 md:grid">
+        <span>Cặp</span><span>Lệnh theo luật bot (từng khung)</span><span className="text-right">Lực mua / bán 20 nến</span>
       </div>
       <div className="divide-y divide-slate-100">
-        {rows.map((r) => {
-          const [label, cls] = STATUS[r.st], p = press[`${r.coin}|${r.tf}`], on = sel && sel.coin === r.coin && sel.tf === r.tf;
-          const t = r.open, q = r.pend;
-          const plan = t ? { side: t.side, entry: t.entry, sl: t.curSl ?? t.sl, tp: t.tp, setup: t.setup, rr: t.uR, at: t.entryAt }
-            : q ? { side: q.side, entry: q.lim, sl: q.sl, tp: q.lim + q.side * (q.rr ?? cfg.rr) * Math.abs(q.lim - q.sl), setup: q.setup, at: q.signalAt, until: q.until } : null;
-          const box = !plan ? "border-slate-200" : plan.side === 1 ? "border-emerald-300/70 shadow-[0_0_0_1px_rgba(16,185,129,.08)]" : "border-rose-300/70 shadow-[0_0_0_1px_rgba(244,63,94,.08)]";
+        {groups.map((g) => {
+          const [gLabel, gCls] = STATUS[Object.keys(order).find((k) => order[k] === g.best)];
           return (
-            <button key={r.coin + r.tf} onClick={() => onPick?.(r.coin, r.tf)} className={`grid w-full gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50 md:grid-cols-[150px_1fr_160px] md:gap-3 ${on ? "bg-cyan-50/50" : ""}`}>
+            <div key={g.coin} className="grid gap-2 px-3 py-2.5 md:grid-cols-[130px_1fr_150px] md:gap-3">
               <div className="flex items-center gap-2 md:block">
-                <div className="flex items-center gap-1.5">
-                  <b className="text-[14px] text-slate-800">{r.coin}/USDT</b>
-                  <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
-                </div>
-                <div className="flex items-center gap-1 md:mt-1">
-                  <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{label}</span>
-                  {plan && <span className="text-[10.5px] tabular-nums text-slate-400">{ago(plan.at)}</span>}
-                </div>
-                {r.price != null && <div className="ml-auto text-[12px] font-bold tabular-nums text-slate-600 md:ml-0 md:mt-1">{fmtPx(r.price)}</div>}
+                <b className="text-[14px] text-slate-800">{g.coin}/USDT</b>
+                <div className="md:mt-1"><span className={`rounded border px-1.5 text-[10px] font-extrabold ${gCls}`}>{gLabel}</span></div>
+                {g.price != null && <div className="ml-auto text-[12px] font-bold tabular-nums text-slate-600 md:ml-0 md:mt-1">{fmtPx(g.price)}</div>}
               </div>
-
-              <div className={`rounded-xl border bg-slate-50/50 px-2.5 py-2 ${box}`}>
-                {plan ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px]">
-                      <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "LONG" : "SHORT"}</span>
-                      <span className="text-slate-500">{setupName(plan.setup)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
-                      <span className="ml-auto text-[10.5px] font-bold text-cyan-600">R:R 1:{fmtNum(q?.rr ?? cfg.rr, 1, 0)}</span>
-                    </div>
-                    <div className="mt-1 flex items-baseline justify-between text-[11px] text-slate-500"><span>{t ? "Đã vào" : "Chờ ở"}</span><b className="text-[15px] tabular-nums text-amber-500">{fmtPx(plan.entry)}</b></div>
-                    <div className="mt-1 grid grid-cols-3 gap-2 border-t border-slate-200/70 pt-1 text-[11px] tabular-nums">
-                      <div><div className="text-rose-500">SL</div><b className="text-rose-600">{fmtPx(plan.sl)}</b></div>
-                      <div><div className="text-emerald-500">TP</div><b className="text-emerald-600">{fmtPx(plan.tp)}</b></div>
-                      <div className="text-right">{t ? <><div className="text-slate-400">tạm tính</div><b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b></> : <><div className="text-slate-400">huỷ lúc</div><b className="text-slate-600">{plan.until ? dt(plan.until).slice(6) : "—"}</b></>}</div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2 text-[11.5px] text-slate-500">
-                    <Clock size={13} className="shrink-0 text-slate-400" />
-                    <span>{r.last ? <>Lệnh gần nhất {dt(r.last.entryAt)} · {r.last.side === 1 ? "LONG" : "SHORT"} · <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{r.last.reason} {rr(r.last.r)}</b></> : "Chưa có lệnh ở cặp/khung này"}</span>
-                    <span className="ml-auto shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh</span>
+              <div className="space-y-1.5">
+                {g.items.map((r) => {
+                  const [label, cls] = STATUS[r.st], plan = planOf(r), on = sel && sel.coin === r.coin && sel.tf === r.tf, t = r.open, q = r.pend;
+                  const box = !plan ? "border-slate-200" : plan.side === 1 ? "border-emerald-300/70" : "border-rose-300/70";
+                  return (
+                    <button key={r.tf} onClick={() => onPick?.(r.coin, r.tf)} className={`block w-full rounded-xl border bg-slate-50/50 px-2.5 py-1.5 text-left transition hover:bg-slate-100 ${box} ${on ? "ring-2 ring-cyan-400/50" : ""}`}>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px]">
+                        <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
+                        {plan ? <>
+                          <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "LONG" : "SHORT"}</span>
+                          <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{label}</span>
+                          <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
+                          <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums">
+                            <span>{t ? "vào" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b></span>
+                            <span className="text-rose-600">SL <b>{fmtPx(plan.sl)}</b></span>
+                            <span className="text-emerald-600">TP <b>{fmtPx(plan.tp)}</b></span>
+                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">huỷ {dt(plan.until).slice(6)}</span> : null}
+                          </span>
+                        </> : <>
+                          <Clock size={12} className="shrink-0 text-slate-400" />
+                          <span className="min-w-0 flex-1 truncate text-slate-500">{r.last ? <>Gần nhất {dt(r.last.entryAt)} · {r.last.side === 1 ? "LONG" : "SHORT"} · <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{r.last.reason} {rr(r.last.r)}</b></> : "Chưa có lệnh"}</span>
+                          <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh</span>
+                        </>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex flex-col justify-center gap-1">
+                {g.items.map((r) => { const p = press[`${r.coin}|${r.tf}`]; return (
+                  <div key={r.tf}>
+                    {p == null ? <div className="text-right text-[11px] text-slate-400">…</div> : <>
+                      <div className="flex justify-between text-[10.5px] font-bold tabular-nums"><span className="text-emerald-600">{TFS[r.tf].label} · {p}% Mua</span><span className="text-rose-600">{100 - p}%</span></div>
+                      <div className="mt-0.5 flex h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="bg-emerald-500" style={{ width: `${p}%` }} /><div className="bg-rose-500" style={{ width: `${100 - p}%` }} /></div>
+                    </>}
                   </div>
-                )}
+                ); })}
               </div>
-
-              <div className="flex flex-col justify-center">
-                {p == null ? <div className="text-right text-[11px] text-slate-400">…</div> : (
-                  <>
-                    <div className="flex justify-between text-[11px] font-bold tabular-nums"><span className="text-emerald-600">{p}% Mua</span><span className="text-rose-600">{100 - p}% Bán</span></div>
-                    <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="bg-emerald-500" style={{ width: `${p}%` }} /><div className="bg-rose-500" style={{ width: `${100 - p}%` }} />
-                    </div>
-                  </>
-                )}
-              </div>
-            </button>
+            </div>
           );
         })}
       </div>

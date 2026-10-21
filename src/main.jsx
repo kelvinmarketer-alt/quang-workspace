@@ -7,6 +7,7 @@ import { DataProvider } from "./lib/store.jsx";
 import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
 import "./index.css";
+import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
 
 function Gate() {
   const { loading, session } = useAuth();

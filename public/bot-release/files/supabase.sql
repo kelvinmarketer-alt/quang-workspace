@@ -14,3 +14,12 @@ drop policy if exists "owner command" on public.qws_live_bot;
 create policy "owner command" on public.qws_live_bot for all to authenticated
   using (id = 'command' and exists (select 1 from public.qws_workspaces w where w.user_id = auth.uid()))
   with check (id = 'command' and exists (select 1 from public.qws_workspaces w where w.user_id = auth.uid()));
+
+-- (21/10) Thành viên được chủ cấp quyền "Bot thật" (members[].access.coinLive = view) → CHỈ ĐỌC trạng thái + lịch sử.
+-- Dòng 'command' (lệnh dừng/đóng, khoá API đã mã hoá) vẫn chỉ chủ đọc/ghi.
+drop policy if exists "member read bot" on public.qws_live_bot;
+create policy "member read bot" on public.qws_live_bot for select to authenticated
+  using (id in ('status', 'history') and exists (
+    select 1 from public.qws_workspaces w, jsonb_array_elements(coalesce(w.data->'members', '[]'::jsonb)) m
+    where lower(m->>'email') = lower(coalesce(auth.jwt()->>'email', ''))
+      and m->'access'->>'coinLive' in ('view', 'edit')));

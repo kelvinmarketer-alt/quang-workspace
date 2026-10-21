@@ -78,9 +78,9 @@ body {
 }
 
 /* ===== GIAO DIỆN PRO — module Đầu tư Coin (nút "Pro" trên thanh tab Coin) =====
-   Nền tối kiểu sàn giao dịch, BỐ CỤC GIỮ NGUYÊN: chỉ đổi biến --color-* của Tailwind trong html.coin-pro
+   Nền tối kiểu sàn giao dịch, BỐ CỤC GIỮ NGUYÊN: chỉ đổi biến --color-* của Tailwind trong html.theme-dark
    (Coin.jsx gắn/gỡ class khi vào/ra trang Coin). Slate đảo sáng↔tối; màu nhấn 50–200 = nền ánh màu, 600–800 = chữ sáng hơn. */
-html.coin-pro {
+html.theme-dark {
   color-scheme: dark;
   --pro-bg: #060a13;
   --color-white: #0c1322;
@@ -123,21 +123,21 @@ html.coin-pro {
   --color-lime-50: color-mix(in srgb, #84cc16 10%, #0c1322); --color-lime-100: color-mix(in srgb, #84cc16 17%, #0c1322); --color-lime-200: color-mix(in srgb, #84cc16 32%, #0c1322);
   --color-lime-600: #84cc16; --color-lime-700: #a3e635; --color-lime-800: #bef264;
 }
-html.coin-pro body, html.coin-pro .aurora {
+html.theme-dark body, html.theme-dark .aurora {
   background:
     radial-gradient(900px 500px at 15% -10%, rgba(20,184,166,.10), transparent 60%),
     radial-gradient(800px 500px at 100% 0%, rgba(56,189,248,.08), transparent 55%),
     var(--pro-bg);
   color: #dde4ef;
 }
-html.coin-pro .card {
+html.theme-dark .card {
   background: linear-gradient(180deg, #0d1526, #0a1120);
   border-color: rgba(45,212,191,.14);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 0 0 1px rgba(15,23,42,.6), 0 10px 30px -18px rgba(20,184,166,.35);
 }
-html.coin-pro .glass { background: rgba(12,19,34,.72); border-color: rgba(45,212,191,.12); }
+html.theme-dark .glass { background: rgba(12,19,34,.72); border-color: rgba(45,212,191,.12); }
 /* Trong khối nền tối có chữ trắng (banner tổng tài sản, nút màu): dùng lại màu nhạt gốc cho chữ phụ + ô kính trắng mờ */
-html.coin-pro .text-white {
+html.theme-dark .text-white {
   --color-white: #fff;
   --color-slate-200: #e2e8f0; --color-slate-300: #cbd5e1; --color-slate-400: #94a3b8;
   --color-amber-50: #fffbeb; --color-amber-100: #fef3c7; --color-amber-200: #fde68a;
@@ -152,28 +152,28 @@ html.coin-pro .text-white {
   --color-blue-50: #eff6ff; --color-blue-100: #dbeafe; --color-blue-200: #bfdbfe;
 }
 /* Chữ trắng trên nút màu giữ trắng; khối nền tối (banner, nút đen) giữ tối */
-html.coin-pro .text-white { color: #fff; }
-html.coin-pro .text-white\/70 { color: rgb(255 255 255 / .7); }
-html.coin-pro .text-white\/60 { color: rgb(255 255 255 / .6); }
-html.coin-pro .bg-slate-900 { background-color: #04070e; }
-html.coin-pro .bg-slate-800 { background-color: #0b1220; }
-html.coin-pro .bg-slate-900\/40 { background-color: rgb(0 0 0 / .6); }
-html.coin-pro .from-slate-900 { --tw-gradient-from: #04070e; }
-html.coin-pro .to-indigo-900 { --tw-gradient-to: #0b1a3a; }
+html.theme-dark .text-white { color: #fff; }
+html.theme-dark .text-white\/70 { color: rgb(255 255 255 / .7); }
+html.theme-dark .text-white\/60 { color: rgb(255 255 255 / .6); }
+html.theme-dark .bg-slate-900 { background-color: #04070e; }
+html.theme-dark .bg-slate-800 { background-color: #0b1220; }
+html.theme-dark .bg-slate-900\/40 { background-color: rgb(0 0 0 / .6); }
+html.theme-dark .from-slate-900 { --tw-gradient-from: #04070e; }
+html.theme-dark .to-indigo-900 { --tw-gradient-to: #0b1a3a; }
 /* Ô nhập */
-html.coin-pro input, html.coin-pro select, html.coin-pro textarea { background-color: #0a1120; color: #eef2f8; }
-html.coin-pro input::placeholder, html.coin-pro textarea::placeholder { color: #55627c; }
+html.theme-dark input, html.theme-dark select, html.theme-dark textarea { background-color: #0a1120; color: #eef2f8; }
+html.theme-dark input::placeholder, html.theme-dark textarea::placeholder { color: #55627c; }
 /* Số kiểu terminal */
-html.coin-pro .tabular-nums { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.01em; }
+html.theme-dark .tabular-nums { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -.01em; }
 /* Biểu đồ recharts */
-html.coin-pro .recharts-cartesian-grid line { stroke: rgba(148,163,184,.12); }
-html.coin-pro .recharts-cartesian-axis-tick-value { fill: #7d8ba6; }
-html.coin-pro .recharts-pie-sector path { stroke: #0c1322; }
-html.coin-pro .recharts-default-tooltip { background: #0d1526 !important; border-color: #1f2c47 !important; color: #dde4ef; }
-html.coin-pro .recharts-legend-item-text { color: #aab7cc !important; }
+html.theme-dark .recharts-cartesian-grid line { stroke: rgba(148,163,184,.12); }
+html.theme-dark .recharts-cartesian-axis-tick-value { fill: #7d8ba6; }
+html.theme-dark .recharts-pie-sector path { stroke: #0c1322; }
+html.theme-dark .recharts-default-tooltip { background: #0d1526 !important; border-color: #1f2c47 !important; color: #dde4ef; }
+html.theme-dark .recharts-legend-item-text { color: #aab7cc !important; }
 /* Nút bật Pro + tab đang chọn phát sáng */
 .pro-toggle-on { background: linear-gradient(90deg, #0f766e, #0e7490); color: #fff; box-shadow: 0 0 0 1px rgba(45,212,191,.45), 0 0 18px -4px rgba(45,212,191,.7); }
-html.coin-pro .from-amber-500.to-orange-500 { box-shadow: 0 0 0 1px rgba(251,191,36,.5), 0 0 18px -6px rgba(251,191,36,.8); }
-html.coin-pro ::-webkit-scrollbar { width: 8px; height: 8px; }
-html.coin-pro ::-webkit-scrollbar-thumb { background: #1f2c47; border-radius: 8px; }
-html.coin-pro ::-webkit-scrollbar-track { background: transparent; }
+html.theme-dark .from-amber-500.to-orange-500 { box-shadow: 0 0 0 1px rgba(251,191,36,.5), 0 0 18px -6px rgba(251,191,36,.8); }
+html.theme-dark ::-webkit-scrollbar { width: 8px; height: 8px; }
+html.theme-dark ::-webkit-scrollbar-thumb { background: #1f2c47; border-radius: 8px; }
+html.theme-dark ::-webkit-scrollbar-track { background: transparent; }

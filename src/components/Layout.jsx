@@ -1,12 +1,13 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Moon, Sun,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
+import { useTheme } from "../lib/theme.js";
 import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
@@ -200,6 +201,17 @@ function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini }) {
   );
 }
 
+// Sáng / tối toàn app (lib/theme.js) — nhớ theo máy
+function ThemeButton() {
+  const [t, setT] = useTheme();
+  return (
+    <button type="button" onClick={() => setT(t === "dark" ? "light" : "dark")} title={t === "dark" ? "Giao diện sáng" : "Giao diện tối (Pro)"} aria-label="Đổi giao diện sáng / tối"
+      className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+      {t === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+    </button>
+  );
+}
+
 // Nút giả ô tìm kiếm → mở CommandPalette (Ctrl/Cmd+K, "/")
 function SearchButton({ onOpen }) {
   return (
@@ -385,6 +397,7 @@ export default function Layout({ children }) {
             <div className="ml-auto flex items-center gap-2">
               <SyncBadge />
               <SearchButton onOpen={() => setPaletteOpen(true)} />
+              <ThemeButton />
               <Notifications />
               <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-sky-500 text-sm font-bold text-white">
                 Q

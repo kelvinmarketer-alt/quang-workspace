@@ -9,6 +9,7 @@ import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "
 import { useBinance, useUsdVnd, depositInfo } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 import { cfgOf } from "../lib/paperBot.js";
+import { useTheme } from "../lib/theme.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 // Đọc số kiểu VN: phẩy = thập phân ("0,5"); chấm + đúng 3 số = phân cách nghìn ("60.000", "1.234.567");
@@ -123,15 +124,10 @@ export default function Coin() {
     const nx = new URLSearchParams(sp); nx.delete("tab"); setSp(nx, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTab]);
+  // Giao diện Pro = giao diện tối TOÀN APP (21/10, lib/theme.js) — nút ở đây và ở thanh trên cùng là một
+  const [theme, setTheme] = useTheme(), pro = theme === "dark";
+  const setPro = (v) => setTheme(v ? "dark" : "light");
   // "Bot thật" + "Tổng quan" chỉ chủ xem → người khác (hoặc lúc chưa xác định chủ) rơi về Đầu tư
-  // Giao diện Pro (21/10): nền tối kiểu sàn giao dịch, bố cục giữ nguyên — chỉ đổi biến màu (html.coin-pro trong index.css), nhớ theo máy
-  const [pro, setProState] = useState(() => { try { return localStorage.getItem("qws_coin_pro") === "1"; } catch { return false; } });
-  const setPro = (v) => { setProState(v); try { localStorage.setItem("qws_coin_pro", v ? "1" : "0"); } catch {} };
-  useEffect(() => {
-    const el = document.documentElement;
-    el.classList.toggle("coin-pro", pro);
-    return () => el.classList.remove("coin-pro");
-  }, [pro]);
   const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (

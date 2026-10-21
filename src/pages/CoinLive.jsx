@@ -521,7 +521,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   const save = async () => {
     setMsg(null);
     const src = follow ? demo : f;
-    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false };
+    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false, notifyPending: f.notifyPending !== false };
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
     if (!(v.maxOpen >= 1 && v.maxOpen <= 5)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–5" });
     if (!(v.dailyStopPct >= 1 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 1–20%" });
@@ -586,6 +586,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
           <div className="rounded-xl border border-slate-200 p-3">
             <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><input type="checkbox" checked={f.notify !== false} onChange={(e) => setF({ ...f, notify: e.target.checked })} /><BellRing size={14} className="text-indigo-500" /> Gửi thông báo về điện thoại</label>
             <div className="mt-0.5 text-[11.5px] text-slate-500">Bot báo khi đặt / khớp / đóng lệnh, chạm dừng ngày hoặc gặp lỗi — gửi tới mọi máy đã bật thông báo đẩy của app. Lưu cùng cài đặt bên dưới.</div>
+            {f.notify !== false && <label className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-600"><input type="checkbox" checked={f.notifyPending !== false} onChange={(e) => setF({ ...f, notifyPending: e.target.checked })} /> Báo cả lúc <b>đặt lệnh chờ</b> (bỏ tick nếu chỉ muốn báo khi khớp / đóng)</label>}
             {f.notify !== false && <PushHint />}
           </div>
           {live && cmd?.config?.mode !== "live" && (

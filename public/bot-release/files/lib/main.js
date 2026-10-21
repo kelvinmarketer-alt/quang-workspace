@@ -297,6 +297,8 @@ async function place(p, symbol) {
   if (rp < RISK && !p.test) log(`↓ Đang chuỗi thua ${lossRun()} lệnh → rủi ro lệnh này ${rp}% (thay vì ${RISK}%)`);
   log(`📌 ${DRY ? "[thử] " : ""}Lệnh chờ ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"} @ ${lim} · SL ${sl} · TP ${tp} · KL ${qty} · rủi ro ${(qty * risk).toFixed(2)}$ · huỷ lúc ${stamp(p.until)}`);
   journal({ ev: "placed", ...a });
+  // Báo điện thoại khi ĐẶT lệnh chờ (21/10) — tắt riêng được bằng config.notifyPending = false; lệnh thử đã có báo riêng
+  if (!p.test && appCfg.notifyPending !== false) note(`📌 Lệnh chờ ${dirStr(p.side)} ${p.coin} ${TFS[p.tf].label} @ ${px(lim)}`, `SL ${px(sl)} · TP ${px(tp)} · rủi ro ${vn(qty * risk, 2)}$ · huỷ lúc ${stamp(p.until)} · ${modeLbl()}`, `qws-bot-place-${p.id}`);
 }
 
 // ---------- Lệnh thử (chỉ Testnet) từ app (command.testTradeAt) ----------

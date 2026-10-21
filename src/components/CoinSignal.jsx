@@ -1,7 +1,7 @@
 // Thẻ "Điểm kỹ thuật" tab Thị trường (21/10, tham khảo bố cục viaitrading): đồng hồ MUA/BÁN + 4 điểm thành phần
 // + vùng tham khảo R:R 1:2 + đồng thuận đa khung + lực mua/bán (taker). Chỉ đọc chỉ báo — KHÔNG phải tín hiệu bot.
 import { useEffect, useRef, useState } from "react";
-import { Gauge, ChevronDown, Layers, Info } from "lucide-react";
+import { Gauge, ChevronDown, Layers, Info, FlaskConical, Loader2 } from "lucide-react";
 import { Card } from "./ui.jsx";
 import { analyze, fetchKlines } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
@@ -84,12 +84,51 @@ function Arc({ pct, color, size = 220, stroke = 16, children }) {
   );
 }
 
+// Kiểm chứng: chấm lại điểm trên nến QUÁ KHỨ (mỗi 2 nến, cửa sổ 300 nến như lúc xem), nghiêng rõ thì "vào" theo vùng tham khảo
+// (SL ≥ 2 ATR, TP 2R), đi tiếp tối đa 48 nến: chạm TP trước = +2R, SL trước (hoặc cùng nến) = −1R, hết giờ = R theo giá đóng. Không tính phí.
+const VERIFY = new Map();
+async function verify(sym, tf, market) {
+  const key = `${sym}|${tf}|${market}`, c = VERIFY.get(key);
+  if (c && Date.now() - c.at < 1800000) return c;
+  const K = await fetchKlines(sym, tf, 1000, { market });
+  const H = 48, out = [];
+  for (let i = 299; i < K.length - 2; i += 2) {
+    if (i % 40 === 1) await new Promise((r) => setTimeout(r, 0)); // nhường giao diện
+    const sm = analyze(K.slice(i - 299, i + 1)).summary, b = biasOf(sm);
+    if (!b.dir) continue;
+    const pl = planOf(sm, b.dir); if (!pl) continue;
+    const risk = Math.abs(pl.entry - pl.sl); let r = null;
+    const end = Math.min(K.length - 1, i + H);
+    for (let j = i + 1; j <= end && r == null; j++) {
+      const hitSl = b.dir === 1 ? K[j].low <= pl.sl : K[j].high >= pl.sl, hitTp = b.dir === 1 ? K[j].high >= pl.tp : K[j].low <= pl.tp;
+      if (hitSl) r = -1; else if (hitTp) r = 2;
+    }
+    const done = r != null || i + H <= K.length - 1;
+    if (r == null) r = ((K[end].close - pl.entry) * b.dir) / risk;
+    out.push({ dir: b.dir, r, done });
+    i += 4; // tín hiệu liền nhau gần như trùng → giãn ra (mỗi lần nghiêng rõ coi như 1 lệnh, cách ≥ 6 nến)
+  }
+  const fin = out.filter((x) => x.done), n = fin.length, win = fin.filter((x) => x.r > 0).length;
+  const res = { at: Date.now(), n, win: n ? (win / n) * 100 : null, avgR: n ? fin.reduce((a, x) => a + x.r, 0) / n : null, bars: K.length, from: K[299]?.time,
+    long: fin.filter((x) => x.dir === 1).length, short: fin.filter((x) => x.dir === -1).length };
+  VERIFY.set(key, res);
+  return res;
+}
+
 const TFS_MTF = [["1d", "D1"], ["4h", "H4"], ["1h", "H1"], ["15m", "M15"], ["5m", "M5"]];
 const BOT_TF = new Set(["15m", "5m"]);
 const MTF = new Map(); // nhớ 5 phút theo coin|sàn
 
 export default function CoinSignal({ sym, tf, market, summary: s, stale, active }) {
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem("qws_mkt_sig") !== "0"; } catch { return true; } });
+  // Mặc định mở trên máy tính, thu gọn trên điện thoại (thẻ cao); bấm 1 lần thì nhớ lựa chọn
+  const [open, setOpen] = useState(() => { try { const v = localStorage.getItem("qws_mkt_sig"); return v == null ? window.innerWidth >= 640 : v !== "0"; } catch { return true; } });
+  const [ver, setVer] = useState(null), [vBusy, setVBusy] = useState(false), [vErr, setVErr] = useState("");
+  useEffect(() => { setVer(VERIFY.get(`${sym}|${tf}|${market}`) || null); setVErr(""); }, [sym, tf, market]);
+  const runVerify = async () => {
+    setVBusy(true); setVErr("");
+    try { const r = await verify(sym, tf, market); if (keyRef.current === `${sym}|${market}`) setVer(r); } catch (e) { setVErr(e.message || String(e)); }
+    setVBusy(false);
+  };
   const toggle = () => { const v = !open; setOpen(v); try { localStorage.setItem("qws_mkt_sig", v ? "1" : "0"); } catch {} };
   const mkey = `${sym}|${market}`;
   const [mtf, setMtf] = useState(() => MTF.get(mkey)?.rows || null);
@@ -205,6 +244,15 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
               </div>
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-[12px]">
+            <FlaskConical size={14} className="shrink-0 text-violet-500" />
+            {ver && ver.n ? (
+              <span className="text-slate-600">Kiểm chứng {tfLabel} · <b>{ver.n}</b> lần nghiêng rõ trên {ver.bars} nến gần nhất ({ver.long} mua · {ver.short} bán): thắng <b className={ver.win >= 34 ? "text-emerald-600" : "text-rose-600"}>{fmtNum(ver.win, 0, 0)}%</b> · TB <b className={ver.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{ver.avgR >= 0 ? "+" : ""}{fmtNum(ver.avgR, 2, 2)}R</b>/lần <span className="text-slate-400">(TP 2R / SL −1R / quá 48 nến thì đóng theo giá · hoà vốn ≈ 34% · chưa trừ phí)</span></span>
+            ) : ver ? <span className="text-slate-500">Chưa có lần nào nghiêng rõ trong {ver.bars} nến gần nhất.</span>
+              : <span className="text-slate-500">Điểm này đúng bao nhiêu? Chạy lại trên ~700 nến quá khứ của {sym} {tfLabel}.</span>}
+            {vErr && <span className="text-rose-600">{vErr}</span>}
+            <button onClick={runVerify} disabled={vBusy} className="ml-auto flex shrink-0 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11.5px] font-bold text-violet-700 disabled:opacity-60">{vBusy ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}{ver ? "Chạy lại" : "Kiểm chứng"}</button>
+          </div>
           <div className="text-[10.5px] text-slate-400">Chấm điểm tự động từ chỉ báo trên nến Binance, để đọc nhanh bối cảnh. Bot chỉ vào khi có setup (Thuận xu hướng / SFP / Breakout / SMC) + thuận D1 + vùng Key Volume. Không phải tư vấn đầu tư.</div>
         </div>
       )}
