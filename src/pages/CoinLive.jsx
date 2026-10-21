@@ -63,7 +63,7 @@ export default function CoinLive({ active }) {
   };
   // Đóng hết: bước 1 = popup giải thích, bước 2 = gõ "ĐÓNG HẾT" ngay trong thẻ rồi mới gửi lệnh
   const startCloseAll = async () => {
-    const ok = await ask(`Đóng hết vị thế của bot?\nBot sẽ HUỶ mọi lệnh chờ và ĐÓNG TẤT CẢ vị thế do bot mở (chỉ BTC/ETH/XAU trên ví Futures) bằng giá THỊ TRƯỜNG ngay — lãi/lỗ chốt theo giá lúc đóng, có thể trượt giá.\nSau đó bot ở trạng thái DỪNG, không mở lệnh mới cho tới khi bạn bấm "Chạy lại".${st?.mode === "live" ? "\n⚠ Đang chạy TIỀN THẬT." : ""}`, { ok: "Tiếp tục", danger: true });
+    const ok = await ask(`Đóng hết vị thế của bot?\nBot sẽ HUỶ mọi lệnh chờ và ĐÓNG TẤT CẢ vị thế do bot mở (chỉ các cặp của bot trên ví Futures) bằng giá THỊ TRƯỜNG ngay — lãi/lỗ chốt theo giá lúc đóng, có thể trượt giá.\nSau đó bot ở trạng thái DỪNG, không mở lệnh mới cho tới khi bạn bấm "Chạy lại".${st?.mode === "live" ? "\n⚠ Đang chạy TIỀN THẬT." : ""}`, { ok: "Tiếp tục", danger: true });
     if (ok) { setClosing(true); setCloseTxt(""); }
   };
   const closeOk = plain(closeTxt) === "DONG HET";

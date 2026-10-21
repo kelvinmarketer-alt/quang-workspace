@@ -10,7 +10,7 @@ import { aiMarketAnalysis } from "../lib/ai.js";
 import { KNOWLEDGE, KNOWLEDGE_SOURCES } from "../lib/tradeKnowledge.js";
 import { fmtPx, fmtNum, fmtPct } from "../lib/format.js";
 import { runSessionAsync } from "../lib/botRunner.js";
-import { finalize, cfgOf, SYMBOLS } from "../lib/paperBot.js";
+import { finalize, cfgOf } from "../lib/paperBot.js";
 import { gradeRecord, cachedGrade, gradeSummary } from "../lib/aiGrade.js";
 import { isSubscribed } from "../lib/push.js";
 
@@ -447,10 +447,10 @@ export default function CoinMarket({ active = true }) {
   const prec = precisionOf(price);
   const ai = cache[aiKey];
 
-  // Lệnh bot demo trên biểu đồ (chỉ chủ): BTC/ETH/XAU × M5/M15 — tính lười, dùng chung kết quả 5 phút
+  // Lệnh bot demo trên biểu đồ (chỉ chủ): các cặp của bot × M5/M15 — tính lười, dùng chung kết quả 5 phút
   const session = isOwner ? settings.paperBot || null : null;
   const sessKey = sessKeyOf(session);
-  const botEligible = !!SYMBOLS[sym] && (tf === "5m" || tf === "15m");
+  const botEligible = !!session && cfgOf(session).coins.includes(sym) && (tf === "5m" || tf === "15m"); // cặp bot đang chạy (user tự thêm/sửa/xoá)
   const [botOn, setBotOn] = useState(() => ls.get("qws_mkt_bot", true) !== false);
   const [bot, setBot] = useState(() => ({ key: BOT.key, trades: BOT.trades, busy: false, err: "" }));
   const botShow = botEligible && botOn && !!session;
@@ -630,7 +630,7 @@ export default function CoinMarket({ active = true }) {
               </div>
             </div>
           )}
-          {/* Lệnh bot demo trên biểu đồ (BTC/ETH/XAU × M5/M15) */}
+          {/* Lệnh bot demo trên biểu đồ (các cặp của bot × M5/M15) */}
           {botEligible && isOwner && (
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-100 pt-1.5 text-[11px]">
               {session ? (<>

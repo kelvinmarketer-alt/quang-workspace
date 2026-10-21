@@ -7,7 +7,7 @@ import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
-import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, SYMBOLS, LEVELS } from "../lib/paperBot.js";
+import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
 // từng nến mới cho tới khi chủ bấm Dừng. Phiên lưu ở settings.paperBot; kết quả tính lại từ nến Binance (luật cố định
@@ -53,7 +53,7 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
   // nến đã đóng (lấy từ bộ nhớ đệm của bot) — tải lại khi đổi luồng hoặc bot vừa xét nến mới
   useEffect(() => { // đổi luồng → xoá nến cũ ngay, hiện "đang tải"
     let off = false; setKState((s) => (K.length && fitted.current === `${coin}|${tf}` ? s : "loading"));
-    loadKlines(SYMBOLS[coin], tf, startAt - 120 * step).then((k) => { if (!off) { setK(k); setKState("ok"); } }).catch(() => { if (!off) setKState("error"); });
+    loadKlines(symOf(coin), tf, startAt - 120 * step).then((k) => { if (!off) { setK(k); setKState("ok"); } }).catch(() => { if (!off) setKState("error"); });
     return () => { off = true; };
   }, [coin, tf, startAt, rawAt, step, retry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -133,6 +133,54 @@ function StatTable({ title, rows }) {
   );
 }
 
+// Thêm / sửa / xoá cặp cho bot (Demo + bot thật dùng chung danh sách). Cặp mới phải có trên Binance USDⓈ-M Futures.
+const SUGGEST = ["BTC", "ETH", "XAU", "SOL", "BNB", "XRP", "DOGE", "LINK"];
+const normCoin = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
+async function futuresHas(c) {
+  try { const r = await fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symOf(c)}`, { signal: AbortSignal.timeout(15000) }); if (!r.ok) return false; const j = await r.json(); return Number(j.markPrice) > 0; } catch { return null; }
+}
+function CoinsEditor({ coins, onChange }) {
+  const [add, setAdd] = useState(""), [edit, setEdit] = useState(null), [msg, setMsg] = useState(null), [busy, setBusy] = useState(false);
+  const submit = async (raw, idx = null) => {
+    setMsg(null);
+    const c = normCoin(raw); if (!c) return;
+    if (idx != null && coins[idx] === c) { setEdit(null); return; }
+    if (coins.includes(c)) return setMsg(`${c}USDT đã có trong danh sách`);
+    if (idx == null && coins.length >= MAX_COINS) return setMsg(`Tối đa ${MAX_COINS} cặp (nhiều cặp chạy chậm và dễ bị Binance giới hạn tần suất)`);
+    setBusy(true); const ok = await futuresHas(c); setBusy(false);
+    if (ok === null) return setMsg("Không kiểm tra được với Binance (mạng) — thử lại");
+    if (!ok) return setMsg(`Binance Futures không có cặp ${c}USDT (gõ mã coin, vd SOL, 1000PEPE)`);
+    onChange(idx == null ? [...coins, c] : coins.map((x, i) => (i === idx ? c : x)));
+    setAdd(""); setEdit(null);
+  };
+  const remove = (c) => { if (coins.length <= 1) return setMsg("Cần ít nhất 1 cặp"); setMsg(null); onChange(coins.filter((x) => x !== c)); };
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5">
+        {coins.map((c, i) => edit?.i === i ? (
+          <span key={c} className="flex items-center gap-1 rounded-lg border border-indigo-300 bg-white px-1.5 py-1">
+            <input autoFocus value={edit.v} onChange={(e) => setEdit({ i, v: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") submit(edit.v, i); if (e.key === "Escape") setEdit(null); }} className="w-20 text-[12px] font-bold uppercase outline-none" />
+            <button disabled={busy} onClick={() => submit(edit.v, i)} className="text-[11px] font-bold text-indigo-600">Lưu</button>
+            <button onClick={() => setEdit(null)} className="text-[11px] text-slate-400">Huỷ</button>
+          </span>
+        ) : (
+          <span key={c} className="flex items-center overflow-hidden rounded-lg bg-slate-900 text-[12px] font-bold text-white">
+            <button onClick={() => setEdit({ i, v: c })} title="Sửa" className="px-2.5 py-1.5">{c}USDT</button>
+            <button onClick={() => remove(c)} aria-label={`Xoá ${c}`} className="border-l border-white/20 px-2 py-1.5 text-white/70 hover:text-white">✕</button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-1.5 flex gap-1.5">
+        <input value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") submit(add); }} placeholder="Thêm cặp: gõ mã coin (vd SOL)" className="w-full min-w-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12.5px] uppercase placeholder:normal-case" />
+        <button disabled={busy || !add.trim()} onClick={() => submit(add)} className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-40">{busy ? <Loader2 size={13} className="animate-spin" /> : "Thêm"}</button>
+      </div>
+      {SUGGEST.some((x) => !coins.includes(x)) && <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-slate-400">Gợi ý: {SUGGEST.filter((x) => !coins.includes(x)).map((x) => <button key={x} disabled={busy} onClick={() => submit(x)} className="rounded-md bg-slate-100 px-1.5 py-0.5 font-bold text-slate-600">+{x}</button>)}</div>}
+      {msg && <div className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11.5px] font-semibold text-rose-700">{msg}</div>}
+      <div className="mt-1 text-[11px] leading-snug text-slate-400">Bấm tên cặp để sửa, ✕ để xoá. Bot thật dùng chung danh sách này. Cặp mới chưa được kiểm chứng — theo dõi Thống kê → Theo cặp. (Thử 270 ngày: thêm SOL + BNB nhiều lệnh hơn nhưng R giảm, sụt vốn sâu hơn.)</div>
+    </div>
+  );
+}
+
 function SetupForm({ initial, onStart, onCancel }) {
   const [days, setDays] = useState(90);
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
@@ -149,7 +197,7 @@ function SetupForm({ initial, onStart, onCancel }) {
       <div className="mb-3 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Cấu hình phiên demo</div>
       <div className="space-y-3">
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><div className="flex flex-wrap gap-1.5">{Object.keys(SYMBOLS).map((k) => <button key={k} onClick={() => tog("coins", k)} className={chip(c.coins.includes(k))}>{k}USDT</button>)}</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{["5m", "15m"].map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Setup theo bộ kiến thức</div>
           <div className="space-y-1">{Object.entries(SETUPS).map(([k, s]) => (
@@ -204,8 +252,8 @@ function useLive(active, coins, tfs, onClose) {
   useEffect(() => {
     if (!active) { setStatus("off"); return undefined; }
     let ws = null, stop = false, retry = 0, timer = null;
-    const sym2coin = Object.fromEntries(coins.map((c) => [SYMBOLS[c], c]));
-    const streams = coins.flatMap((c) => tfs.map((tf) => `${SYMBOLS[c].toLowerCase()}@kline_${tf}`)).join("/");
+    const sym2coin = Object.fromEntries(coins.map((c) => [symOf(c), c]));
+    const streams = coins.flatMap((c) => tfs.map((tf) => `${symOf(c).toLowerCase()}@kline_${tf}`)).join("/");
     const connect = () => {
       setStatus(retry ? "reconnect" : "connecting");
       ws = new WebSocket(`wss://fstream.binance.com/market/stream?streams=${streams}`);
@@ -253,7 +301,14 @@ export default function CoinBot({ active: visible = true }) {
   const [view, setView] = useState("auto");
   const [optAll, setOptAll] = useState(false);
   const [tab, setTab] = useState("chart");
-  const [showRules, setShowRules] = useState(false);
+  const [showRules, setShowRules] = useState(false), [editCoins, setEditCoins] = useState(null);
+  const saveCoins = async () => {
+    if (!editCoins?.length) return;
+    const added = editCoins.filter((x) => !cfg.coins.includes(x)), removed = cfg.coins.filter((x) => !editCoins.includes(x));
+    if (!(await ask(`Lưu danh sách cặp: ${editCoins.join(", ")}?${added.length ? `\nThêm: ${added.join(", ")}` : ""}${removed.length ? `\nXoá: ${removed.join(", ")}` : ""}\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại" }))) return;
+    setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), coins: editCoins }, createdAt: Date.now() } });
+    setEditCoins(null);
+  };
   const [focus, setFocus] = useState(null);
   const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
   const [toast, setToast] = useState(null);
@@ -391,7 +446,18 @@ export default function CoinBot({ active: visible = true }) {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => setEditCoins((v) => (v ? null : [...cfg.coins]))} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa cặp ▴" : "Thêm/sửa cặp ▾"}</button></>}
+          {editCoins && (
+            <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+              <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Cặp bot giao dịch (Demo + bot thật)</div>
+              <CoinsEditor coins={editCoins} onChange={setEditCoins} />
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => setEditCoins(null)} className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-[12px] font-bold text-slate-600">Huỷ</button>
+                <button disabled={editCoins.join() === cfg.coins.join()} onClick={saveCoins} className="flex-1 rounded-lg bg-indigo-600 py-2 text-[12px] font-bold text-white disabled:opacity-40">Lưu & chạy lại</button>
+              </div>
+              <div className="mt-1 text-[11px] leading-snug text-slate-500">Lưu xong Demo chạy lại từ {dt(session.startAt)} với danh sách cặp mới (cặp xoá → lệnh demo của cặp đó biến mất). Bot thật nhận trong ~5 phút; lệnh/vị thế đang mở của cặp vừa xoá vẫn được bot quản lý (SL/TP) tới khi đóng.</div>
+            </div>
+          )}
           {showRules && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng: {cfg.htfFilter ? "thuận khung lớn" : ""}{cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""} · bias {cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}{cfg.d1Bias ? " + D1" : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
