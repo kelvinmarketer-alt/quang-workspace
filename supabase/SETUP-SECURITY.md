@@ -7,7 +7,9 @@ Code app đã sẵn sàng: chưa làm bước dưới thì app vẫn chạy ki�
 1. Mở https://supabase.com/dashboard/project/dbfffwtnxhytcoczhxhf/sql/new
 2. Dán TOÀN BỘ nội dung file `supabase/SETUP-SECURITY.sql` → bấm **Run**.
    (Nếu hiện hộp cảnh báo "destructive operation" do có `drop policy if exists` → bấm xác nhận chạy; lệnh chỉ thay chính sách cũ cùng tên, không xoá dữ liệu.)
-3. Kết quả mong đợi: "Success". Đã tạo: `qws_private`, `qws_backups` (+ 1 bản sao lưu đầu tiên), `qws_ai_usage`, hàm `qws_save`, trigger `qws_guard`, lịch cron `qws-daily-backup` (3h sáng VN).
+3. Kết quả mong đợi: "Success". Đã tạo: `qws_private`, `qws_backups` (+ 1 bản sao lưu đầu tiên), `qws_ai_usage`, hàm `qws_save`, trigger `qws_guard`.
+4. Mở thêm 1 tab SQL mới, dán `supabase/SETUP-BACKUP-CRON.sql` → **Run**. File này đặt lịch `qws-daily-backup` lúc 3h sáng giờ VN.
+   - Nếu báo lỗi pg_cron: vào Database → Extensions, bật **pg_cron**, rồi chạy lại file này. Phần ở bước 2 không bị ảnh hưởng.
 
 ## Bước 2 — Bật hàm AI `qws-ai`
 1. Mở https://supabase.com/dashboard/project/dbfffwtnxhytcoczhxhf/functions → **Deploy a new function** → **Via Editor**.

@@ -63,14 +63,7 @@ create policy "own backups read" on public.qws_backups for select to authenticat
 drop policy if exists "own backups insert" on public.qws_backups;
 create policy "own backups insert" on public.qws_backups for insert to authenticated with check (auth.uid() = user_id);
 
-create extension if not exists pg_cron;
-select cron.unschedule('qws-daily-backup') where exists (select 1 from cron.job where jobname = 'qws-daily-backup');
--- 3h sáng giờ VN (20:00 UTC)
-select cron.schedule('qws-daily-backup', '0 20 * * *', $$
-  insert into public.qws_backups(user_id, kind, data, private)
-    select w.user_id, 'auto', w.data, p.data from public.qws_workspaces w left join public.qws_private p using (user_id);
-  delete from public.qws_backups where created_at < now() - interval '30 days';
-$$);
+-- (Lịch sao lưu tự động 3h sáng nằm ở file SETUP-BACKUP-CRON.sql — chạy RIÊNG sau file này)
 -- Bản sao lưu đầu tiên ngay bây giờ
 insert into public.qws_backups(user_id, kind, data, private)
   select w.user_id, 'auto', w.data, p.data from public.qws_workspaces w left join public.qws_private p using (user_id);
