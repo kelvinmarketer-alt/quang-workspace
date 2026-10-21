@@ -29,7 +29,7 @@ Bot chạy nền 24/7 trên máy chạy bot (máy bàn Windows; VPS cũng đư�
   - App hiện từng bước. Thống kê lệnh thật không tính lệnh thử.
 - **Đóng tất cả:** bấm "Đóng tất cả" trong app.
   - Bot huỷ mọi lệnh (lệnh chờ, SL/TP) và đóng vị thế theo giá thị trường.
-  - Chỉ đụng BTCUSDT/ETHUSDT/XAUUSDT trong ví Futures, **không đụng ví Spot**.
+  - Chỉ đụng các cặp của bot (danh sách cặp chọn trong app: Demo → Thêm/sửa cặp, mặc định BTC/ETH/XAU) trong ví Futures, **không đụng ví Spot**.
   - Bot đứng ở trạng thái DỪNG cho tới khi bấm "Chạy lại".
   - Cặp nào đóng không được thì bot giữ SL/TP, thử lại 5 lần rồi báo lỗi.
 - **Nhật ký và lịch sử:** từng lệnh ghi vào `data/trades.jsonl`. Trạng thái đẩy về app qua bảng Supabase `qws_live_bot` (dòng `status`). Lịch sử lệnh đã đóng nằm ở dòng `history`, giữ 1.000 lệnh gần nhất, có lãi/lỗ sau phí, R và lý do đóng.

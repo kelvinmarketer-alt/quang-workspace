@@ -3,13 +3,13 @@
 // - Mỗi tín hiệu = LỆNH CHỜ (limit) ở giá đóng nến tín hiệu, hết hạn 3 nến chưa khớp → huỷ. Khớp → đặt SL (Stop-Market) + TP (Take-Profit-Market) đóng toàn bộ vị thế.
 // - Quản lý rủi ro: % vốn/lệnh, tối đa N vị thế, 1 vị thế/cặp, đòn bẩy trần, dừng ngày khi lỗ X%, đóng khi giữ quá lâu (time stop).
 // - Dừng khẩn: tạo file data/STOP (hoặc lệnh "Dừng" từ app) → huỷ lệnh chờ, không mở lệnh mới (vị thế đang mở giữ nguyên SL/TP).
-// - "Đóng tất cả" từ app (command.closeAllAt): huỷ mọi lệnh + đóng vị thế BTC/ETH/XAU của ví Futures (KHÔNG đụng Spot).
+// - "Đóng tất cả" từ app (command.closeAllAt): huỷ mọi lệnh + đóng vị thế các cặp của bot trong ví Futures (KHÔNG đụng Spot).
 // - Báo về app: trạng thái (dòng 'status'), lịch sử lệnh đã đóng (dòng 'history'), thông báo đẩy về điện thoại (qws-send-push).
 // Chạy: npm start · thử không đặt lệnh: npm run dry · 1 vòng: npm run once
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
-import { runSession, cfgOf, SYMBOLS, TFS } from "./paperBot.js";
+import { runSession, cfgOf, SYMBOLS, TFS, symOf } from "./paperBot.js";
 import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
@@ -134,7 +134,9 @@ async function refreshCfg() {
   const next = { ...cfgOf(demo), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
   if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; cfgSrc = "phiên Demo trong app"; console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}`); }
 }
-const symCoin = Object.fromEntries(Object.entries(SYMBOLS).map(([c, s]) => [s, c]));
+const symCoin = (s) => Object.entries(SYMBOLS).find(([, v]) => v === s)?.[0] || String(s).replace(/USDT$/, "");
+// Cặp của bot = cặp trong luật Demo (user thêm/sửa/xoá trong app) + cặp mặc định + cặp còn lệnh/vị thế bot đang giữ (vd cặp vừa bị xoá khỏi danh sách)
+const botSymbols = () => [...new Set([...cfg.coins.map(symOf), ...Object.values(SYMBOLS), ...Object.keys(S.active)])];
 const sideStr = (s) => (s === 1 ? "BUY" : "SELL"), closeSide = (s) => (s === 1 ? "SELL" : "BUY");
 const cid = (p, kind) => `qws${kind}${Math.floor(p.signalAt / 1000).toString(36)}${p.coin}${p.tf}`.slice(0, 36);
 
@@ -239,8 +241,8 @@ async function scan(posMap, halted) {
   const fresh = (raw.pending || []).filter((p) => !S.handled[p.id] && now() < p.until);
   // THỬ QUY TRÌNH (chỉ testnet/thử): FAKE_SIGNAL=BTC → 1 lệnh LONG giả sát giá hiện tại để kiểm tra đặt lệnh → khớp → SL/TP → đóng
   const fc = (process.env.FAKE_SIGNAL || "").trim().toUpperCase();
-  if (fc && SYMBOLS[fc] && MODE !== "live" && !S.fakeDone) {
-    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[fc]}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
+  if (fc && MODE !== "live" && !S.fakeDone) {
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symOf(fc)}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
     const px = Number(m.markPrice), lim = px * 0.9995;
     fresh.push({ id: `fake-${now()}`, coin: fc, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.995, signalAt: now(), until: now() + 15 * 60000 });
     S.fakeDone = true;
@@ -248,7 +250,7 @@ async function scan(posMap, halted) {
   }
   for (const p of fresh) {
     S.handled[p.id] = now();
-    const symbol = SYMBOLS[p.coin];
+    const symbol = symOf(p.coin);
     if (p.blocked) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label}: ${p.blocked} (giống Demo)`); journal({ ev: "skip", why: p.blocked, ...p, tags: undefined }); continue; }
     const why = halted || (S.active[symbol] || posMap[symbol] ? `đã có lệnh/vị thế ${p.coin}` : Object.keys(S.active).length >= MAX_OPEN ? `đủ ${MAX_OPEN} lệnh` : null);
     if (why) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"}: ${why}`); journal({ ev: "skip", why, ...p, tags: undefined }); continue; }
@@ -301,33 +303,34 @@ async function startTest(at, posMap, stop) {
   if (MODE !== "testnet") return fail("Lệnh thử chỉ chạy ở Testnet");
   if (stop) return fail("Bot đang DỪNG — bấm “Chạy lại” rồi thử lại");
   if (Object.keys(S.active).length >= MAX_OPEN) return fail(`Đang đủ ${MAX_OPEN} lệnh — thử lại sau`);
-  const coin = ["BTC", "ETH"].find((c) => !S.active[SYMBOLS[c]] && !posMap[SYMBOLS[c]]);
+  const coin = ["BTC", "ETH"].find((c) => !S.active[symOf(c)] && !posMap[symOf(c)]);
   if (!coin) return fail("BTC và ETH đều đang có lệnh — thử lại sau");
   try {
-    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[coin]}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symOf(coin)}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
     const lim = Number(m.markPrice) * 1.001; // LONG cao hơn giá 0,1% → khớp ngay
     if (!(lim > 0)) return fail("Không lấy được giá");
     const p = { id: `test-${at}`, coin, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.996, rr: 1.5, riskPct: 0.1, test: true, signalAt: now(), until: now() + 10 * 60000 };
     Object.assign(S.test, { id: p.id, coin });
     testStep(`Bắt đầu: LONG ${coin} sát giá, rủi ro 0,1% vốn (Testnet)`);
-    await place(p, SYMBOLS[coin]);
-    const a = S.active[SYMBOLS[coin]];
+    await place(p, symOf(coin));
+    const a = S.active[symOf(coin)];
     if (a?.test) testStep(`Đã đặt lệnh chờ ${coin} @ ${px(a.lim)} · KL ${px(a.qty)} · SL ${px(a.sl)} · TP ${px(a.tp)}`);
     else fail("Không đặt được lệnh (khối lượng dưới mức tối thiểu của sàn)");
   } catch (e) { fail(`Lỗi đặt lệnh: ${e.message}`); }
 }
 
 // ---------- 3) "Đóng tất cả" từ app ----------
-// CHỈ các cặp của bot (BTCUSDT/ETHUSDT/XAUUSDT) trong ví Futures. Đóng vị thế bằng MARKET reduceOnly rồi huỷ mọi lệnh (thường + algo/điều kiện).
+// CHỈ các cặp của bot (botSymbols: cặp trong luật + mặc định + cặp còn lệnh bot) trong ví Futures. Đóng vị thế bằng MARKET reduceOnly rồi huỷ mọi lệnh (thường + algo/điều kiện).
 // Cặp nào đóng không được → giữ SL/TP + theo dõi tiếp, chỉ huỷ lệnh chờ vào; thử lại tối đa 5 vòng rồi báo lỗi.
 const CA = { tries: 0, done: [] };
 async function closeAll(at, posMap) {
-  if (!CA.tries) log("🧹 Nhận lệnh ĐÓNG TẤT CẢ từ app — đóng vị thế + huỷ mọi lệnh của bot (BTC/ETH/XAU, ví Futures; không đụng Spot)");
+  if (!CA.tries) log("🧹 Nhận lệnh ĐÓNG TẤT CẢ từ app — đóng vị thế + huỷ mọi lệnh của bot (các cặp của bot, ví Futures; không đụng Spot)");
   CA.tries++;
   const errs = [];
   if (!DRY) {
-    for (const symbol of Object.values(SYMBOLS)) {
-      const amt = posMap[symbol] || 0, coin = symCoin[symbol];
+    const mine = botSymbols();
+    for (const symbol of mine) {
+      const amt = posMap[symbol] || 0, coin = symCoin(symbol);
       try {
         if (amt) { await ex.marketClose({ symbol, side: amt > 0 ? "SELL" : "BUY", quantity: Math.abs(amt) }); if (!CA.done.includes(coin)) CA.done.push(coin); }
         await ex.cancelAll(symbol);
@@ -339,13 +342,13 @@ async function closeAll(at, posMap) {
     }
     if (CA.done.length) await sleep(1500); // chờ sàn chốt khớp lệnh đóng
     const left = {};
-    for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0 && symCoin[p.symbol]) left[p.symbol] = Number(p.positionAmt);
+    for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0 && mine.includes(p.symbol)) left[p.symbol] = Number(p.positionAmt);
     for (const [symbol, a] of Object.entries(S.active)) {
       if (left[symbol]) continue; // còn vị thế → giữ để bot tiếp tục bảo vệ SL/TP
       if (a.stage === "open" || posMap[symbol]) { if (!a.openedAt) a.openedAt = a.placedAt || now(); await closed(symbol, a, "Đóng tất cả").catch((e) => log(`Lỗi ghi kết quả ${symbol}:`, e.message)); }
       delete S.active[symbol];
     }
-    for (const symbol of Object.keys(left)) if (!errs.some((e) => e.startsWith(`${symCoin[symbol]}:`))) errs.push(`${symCoin[symbol]}: vẫn còn vị thế ${left[symbol]}`);
+    for (const symbol of Object.keys(left)) if (!errs.some((e) => e.startsWith(`${symCoin(symbol)}:`))) errs.push(`${symCoin(symbol)}: vẫn còn vị thế ${left[symbol]}`);
   } else S.active = {};
   if (errs.length && CA.tries < 5) { log(`⚠ Đóng tất cả chưa xong (lần ${CA.tries}/5): ${errs.join("; ")} — thử lại vòng sau`); save(); return false; }
   S.closeAllHandled = at;

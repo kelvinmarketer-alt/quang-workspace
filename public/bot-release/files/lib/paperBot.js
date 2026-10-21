@@ -7,7 +7,9 @@
 // kỳ vọng âm thì bỏ tín hiệu. Chạy song song "Luật gốc" để so sánh bộ tối ưu giúp hay hại.
 
 export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 } };
-export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" };
+export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" }; // cặp mặc định; cặp do user thêm = <MÃ>USDT (Binance USDⓈ-M)
+export const symOf = (c) => SYMBOLS[c] || `${String(c || "").toUpperCase()}USDT`;
+export const MAX_COINS = 8;
 export const SETUPS = {
   TREND: { label: "Thuận xu hướng (TREND_CONFIRM)", desc: "Giá trên/dưới EMA200 + EMA50 cùng hướng, ADX ≥ 20; hồi về EMA50 → nến tín hiệu (engulfing/nến lớn ≥0.8 ATR, volume > TB20) → nến xác nhận đóng vượt nến tín hiệu." },
   SFP: { label: "Quét thanh khoản (SFP)", desc: "Râu quét qua đỉnh/đáy swing (cao nhất/thấp nhất 20 nến) rồi đóng cửa quay lại, râu ≥40% thân nến, volume ≥ 1.5× TB20." },
@@ -17,22 +19,24 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 7,
+  cfgVer: 8,
   capital: 1000, riskPct: 2, maxOpen: 3, maxLev: 20, dailyStopPct: 6, // v7 (user chốt 20/10): rủi ro 2%/lệnh, dừng ngày -6% (= 3 lệnh thua)
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
-  sigVol: true, noEngulf: true, d1Bias: true, // v6: nến tín hiệu volume > TB20 · bỏ vào ngay sau engulfing lớn · (tuỳ chọn) chỉ thuận D1
+  sigVol: false, noEngulf: true, d1Bias: true, // v6: bỏ vào ngay sau engulfing lớn · chỉ thuận D1 · v8: TẮT lọc volume nến tín hiệu (Key Volume vẫn xét volume)
   keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
-  maxExtAtr: 2, minSlAtr: 2, limitAt: "close", fillBars: 3, // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
+  maxExtAtr: 1.5, minSlAtr: 2, limitAt: "close", fillBars: 3, // v8: không đuổi giá siết 2 → 1,5 ATR // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
   partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
   // Tự tối ưu: học thêm 90 ngày trước ngày bắt đầu; xét 60 lệnh gần nhất, cần ≥20 mẫu; điểm thận trọng = kỳ vọng − 1×sai số chuẩn ≥ 0 mới vào;
   // cổng khung giờ: cả khung đang âm thì nghỉ khung đó. Kiểm tra 30–150 ngày: vốn giữ 959–1.073$ trong khi luật gốc còn 530–813$.
   learnLoss: true, lessonN: 30, lessonMin: 15, verifyOpt: true, optVariants: false, // v4: tự kiểm chứng — bộ lọc chỉ được chặn khi tín hiệu nó chặn thật sự tệ hơn; giữ R:R cố định (chọn R:R theo kết quả gần đây làm giảm tỉ lệ thắng) // v4: rút kinh nghiệm từ lệnh thua (30 lệnh gần nhất có cùng đặc điểm, cần ≥15)
   adaptive: true, warmupDays: 0, lookback: 60, minSample: 20, minExp: -0.1, confK: 0, tfGate: true, // v3: luật vào đẹp đã lọc tín hiệu → tối ưu nhẹ tay (nghỉ khung đang lỗ + tắt ô âm rõ < -0.1R), thận trọng quá làm mất lệnh tốt
-  htfFilter: true, // Đa khung (luật cốt lõi): chỉ đánh THUẬN xu hướng khung lớn (giá so EMA200 khung lớn: M5→H1, M15/H1→H4, H4→D1)
+  htfFilter: false, // v8: TẮT lọc thuận H1/H4 — khung lớn chỉ để bias, bias = D1 (d1Bias). Bật lại: M5→H1, M15→H4 (EMA200)
+  // v8 (user chốt 21/10, cần ≥10 lệnh/tháng): 270 ngày 3 kỳ: 7,7 → 14,6 lệnh/tháng, tháng ít nhất 3 → 12, thắng 55→50%, R +0,52→+0,38, lời +768$→+2.083$, sụt vốn tối đa 10→15%
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V8_KEYS = ["htfFilter", "sigVol", "maxExtAtr"];
 const V7_KEYS = ["riskPct", "dailyStopPct", "d1Bias"];
 const V6_KEYS = ["sigVol", "noEngulf", "d1Bias"];
 const V5_KEYS = ["keyVolume"];
@@ -47,8 +51,10 @@ export function cfgOf(session) {
   if (ver < 3) for (const k of V3_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 7) for (const k of V7_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 8) for (const k of V8_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
+  c.coins = [...new Set((c.coins || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); if (!c.coins.length) c.coins = [...DEFAULT_CFG.coins]; // cặp do user chọn (thêm/sửa/xoá trong app)
   c.entryMode = "limit"; c.cfgVer = DEFAULT_CFG.cfgVer; // luật của Quang: CHỈ vào lệnh chờ (limit), giá không về điểm đẹp thì bỏ
   c.rr = Math.max(MIN_RR, Number(c.rr) || MIN_RR);
   if (c.partialAtR > 0 && c.partialAtR < MIN_RR) c.partialAtR = MIN_RR;
@@ -357,9 +363,9 @@ export async function runSession(session, onProgress = () => {}) {
   // tải song song mọi cặp × khung (kể cả khung lớn để lọc) — lần sau chỉ tải phần nến mới
   const need = new Map();
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
-    need.set(`${coin}|${tf}`, [SYMBOLS[coin], tf, learnFrom - 260 * TFS[tf].ms]);
-    for (const h of ["1h", "4h", "1d"]) need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]);
-    if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [SYMBOLS[coin], h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
+    need.set(`${coin}|${tf}`, [symOf(coin), tf, learnFrom - 260 * TFS[tf].ms]);
+    for (const h of ["1h", "4h", "1d"]) need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]);
+    if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
   }
   onProgress(`Tải nến ${need.size} luồng…`);
   let done = 0, bars = 0;
@@ -369,12 +375,12 @@ export async function runSession(session, onProgress = () => {}) {
   try {
     await Promise.all([
       ...[...need.values()].map(([sym, tf, from]) => loadKlines(sym, tf, from).then(() => { done++; say(); })),
-      ...cfg.coins.map((c) => loadFunding(SYMBOLS[c], learnFrom - 86400000).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })), // lỗi tải funding → bỏ qua (không chặn bot)
+      ...cfg.coins.map((c) => loadFunding(symOf(c), learnFrom - 86400000).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })), // lỗi tải funding → bỏ qua (không chặn bot)
     ]);
   }
   finally { pageHook = null; }
   for (const coin of cfg.coins) for (const tf of cfg.tfs) {
-    const symbol = SYMBOLS[coin], step = TFS[tf].ms, key = `${coin}|${tf}`;
+    const symbol = symOf(coin), step = TFS[tf].ms, key = `${coin}|${tf}`;
     const K = (await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
     if (K.length < 260) { streams.push({ coin, tf, bars: K.length, note: "thiếu dữ liệu" }); continue; }
     const found = findSignals(K, cfg.setups);

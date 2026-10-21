@@ -1,11 +1,11 @@
 {
-  "sha": "09b3aa1a9e550fe26e8a0f50743685c6dd0deee5",
-  "date": "2026-10-21T09:09:47+07:00",
-  "msg": "Bot: mọi lệnh gọi mạng có giới hạn thời gian chờ (Binance 20s, Supabase 20–30s) + canh treo: 1 vòng quá 10 phút thì tự khởi động lại; đồng bộ luật app",
+  "sha": "3fa4f39f73726e8527e218c0ff84f02d3f28367b",
+  "date": "2026-10-21T10:17:11+07:00",
+  "msg": "Bot: luật v8 + giao dịch cặp do user chọn trong app (symOf), Đóng tất cả/lệnh thử theo danh sách cặp của bot",
   "files": [
     {
       "path": "README.md",
-      "sha": "1e8796c90c9fa2398bf4f9ce88219a879d93c767"
+      "sha": "dfcd9e10ec334fa5f80271a3e4b39f03043c1d9f"
     },
     {
       "path": "bot.js",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "9e6d9db44e3ce932b26dfca49644b63067754986"
+      "sha": "7c82c747b393a4644659c506dd2009966e3acb8b"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "20af85f717bb058a316f13a7e5b9cc65facf6ab7"
+      "sha": "b40b94a49a7347ec4da8da6aba83b7b6e5872b65"
     },
     {
       "path": "lib/report.js",
