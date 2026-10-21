@@ -1,7 +1,7 @@
 {
-  "sha": "3fa4f39f73726e8527e218c0ff84f02d3f28367b",
-  "date": "2026-10-21T10:17:11+07:00",
-  "msg": "Bot: luật v8 + giao dịch cặp do user chọn trong app (symOf), Đóng tất cả/lệnh thử theo danh sách cặp của bot",
+  "sha": "3fae9f82fa7adab7800496f7e033e5038c804728",
+  "date": "2026-10-21T10:19:36+07:00",
+  "msg": "Bot: nhãn 'Luật lấy từ' báo đúng 'phiên Demo trong app' cả khi cấu hình Demo trùng mặc định",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "7c82c747b393a4644659c506dd2009966e3acb8b"
+      "sha": "bb8ff6729f500dbf271b769c61af486399f69d5e"
     },
     {
       "path": "lib/paperBot.js",
