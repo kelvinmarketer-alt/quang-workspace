@@ -53,8 +53,15 @@ function VerBadge({ st }) {
   );
 }
 
+// Ghi thay đổi ở Bot thật vào CHUNG nhật ký luật với Demo (settings.paperBotLog, ≤ 100 dòng) — xem ở Demo → Tối ưu & bài học
+function useBotLog() {
+  const { settings = {}, setSettings, myEmail } = useData();
+  return (what) => setSettings({ paperBotLog: [{ at: Date.now(), by: myEmail || "", what: `Bot thật: ${what}`, src: "bot" }, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
+}
+
 export default function CoinLive({ active }) {
   const { settings = {}, isOwner } = useData(); // thành viên có quyền "Bot thật": CHỈ XEM — mọi nút điều khiển chỉ chủ
+  const logBot = useBotLog();
   const session = settings.paperBot || null;
   const [st, setSt] = useState(null), [cmd, setCmd] = useState(null), [hist, setHist] = useState(null), [err, setErr] = useState(""), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false);
   const [slow, setSlow] = useState(false), [note, setNote] = useState(null), [closing, setClosing] = useState(false), [closeTxt, setCloseTxt] = useState("");
@@ -76,7 +83,7 @@ export default function CoinLive({ active }) {
     if (!(await ask(stop ? "Dừng bot?\nBot huỷ các lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho bot chạy lại?\nBot sẽ tiếp tục đặt lệnh theo tín hiệu mới.", { ok: stop ? "Dừng bot" : "Chạy lại", danger: stop }))) return;
     setBusy(true);
     const { error } = await mergeCmd({ stop }, cmd);
-    setBusy(false); if (error) setErr(error.message); else { setNote({ t: stop ? "Đã gửi lệnh Dừng — bot áp dụng trong ~15–30 giây." : "Đã cho bot chạy lại." }); load(); }
+    setBusy(false); if (error) setErr(error.message); else { setNote({ t: stop ? "Đã gửi lệnh Dừng — bot áp dụng trong ~15–30 giây." : "Đã cho bot chạy lại." }); logBot(stop ? "dừng bot" : "cho bot chạy lại"); load(); }
   };
   // Đóng hết: bước 1 = popup giải thích, bước 2 = gõ "ĐÓNG HẾT" ngay trong thẻ rồi mới gửi lệnh
   const startCloseAll = async () => {
@@ -90,7 +97,7 @@ export default function CoinLive({ active }) {
     const { error } = await mergeCmd({ closeAllAt: Date.now(), stop: true }, cmd);
     setBusy(false);
     if (error) setNote({ bad: true, t: error.message });
-    else { setClosing(false); setCloseTxt(""); load(); }
+    else { setClosing(false); setCloseTxt(""); logBot("đóng hết vị thế + dừng bot"); load(); }
   };
 
   if (missing) return (
@@ -519,6 +526,7 @@ async function encryptFor(pubB64, text) {
   return bytesToB64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, pk, new TextEncoder().encode(text)));
 }
 function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }) {
+  const logBot = useBotLog();
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
   const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, notify: true, followDemo: true, ...(st.settings || {}), ...(cmd?.config || {}) };
   const [open, setOpen] = useState(defaultOpen);
@@ -560,6 +568,14 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
         keys: newKey ? { ...(cur.keys || {}), [f.mode]: newKey } : { ...(cur.keys || {}) },
       }), cmd);
       if (error) throw error;
+      // Nhật ký: chỉ ghi phần THẬT SỰ đổi so với cài đặt cũ
+      const old = cmd?.config || {}, L = [];
+      if (old.mode !== v.mode) L.push(`chế độ ${old.mode === "live" ? "TIỀN THẬT" : old.mode ? "Testnet" : "—"} → ${v.mode === "live" ? "TIỀN THẬT" : "Testnet"}`);
+      for (const [key, lbl, suf] of [["riskPct", "rủi ro", "%"], ["maxOpen", "tối đa lệnh", ""], ["dailyStopPct", "dừng ngày", "%"], ["maxLev", "đòn bẩy", "x"], ["capitalCap", "vốn tính lệnh", "$"]]) if (old[key] != null && Number(old[key]) !== Number(v[key])) L.push(`${lbl} ${old[key]}${suf} → ${v[key]}${suf}`);
+      if (old.followDemo !== undefined && old.followDemo !== v.followDemo) L.push(v.followDemo ? "bật theo Demo" : "tắt theo Demo");
+      for (const [key, lbl] of [["notify", "thông báo"], ["notifyPending", "báo đặt lệnh chờ"], ["notifyWeak", "báo cặp âm 30 ngày"]]) if (old[key] !== undefined && (old[key] !== false) !== (v[key] !== false)) L.push(`${v[key] !== false ? "bật" : "tắt"} ${lbl}`);
+      if (newKey) L.push(`đổi khoá API ${live ? "THẬT" : "Testnet"} (…${newKey.last4})`);
+      if (L.length) logBot(L.join(" · "));
       setK({ key: "", secret: "" }); setConfirm("");
       setMsg({ t: `Đã lưu. Bot áp dụng trong ~15 giây${cmd?.config?.mode && cmd.config.mode !== f.mode ? " (đổi chế độ → bot tự khởi động lại)" : ""}.` });
       onSaved?.();
@@ -569,7 +585,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   const removeKey = async () => {
     if (!(await ask(`Xoá khoá API ${live ? "THẬT" : "Testnet"} đã lưu?\nBot sẽ ngừng giao dịch ở chế độ này cho tới khi nhập khoá mới. Lệnh đang mở trên sàn vẫn giữ SL/TP.`, { ok: "Xoá khoá", danger: true }))) return;
     const { error } = await mergeCmd((cur) => { const keys = { ...(cur.keys || {}) }; delete keys[f.mode]; return { keys }; }, cmd);
-    setMsg(error ? { bad: true, t: error.message } : { t: "Đã xoá khoá." }); onSaved?.();
+    setMsg(error ? { bad: true, t: error.message } : { t: "Đã xoá khoá." }); if (!error) logBot(`xoá khoá API ${live ? "THẬT" : "Testnet"}`); onSaved?.();
   };
   return (
     <Card className="!p-3">

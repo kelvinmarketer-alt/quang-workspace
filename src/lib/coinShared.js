@@ -83,7 +83,7 @@ export function demoResult(session) {
   if (!session) return Promise.resolve(null);
   if (D.key === key && D.fin && Date.now() - D.at < 300000) return Promise.resolve(D.fin);
   if (D.key === key && D.p) return D.p;
-  const p = runSessionAsync(session).then((raw) => { const fin = finalize(raw, null); if (D.p === p) D = { key, at: Date.now(), fin, p: null }; return fin; }, (e) => { if (D.p === p) D = { ...D, p: null }; throw e; });
+  const p = runSessionAsync(session).then((raw) => { demoCacheSet(session, raw); const fin = finalize(raw, null); if (D.p === p) D = { key, at: Date.now(), fin, p: null }; return fin; }, (e) => { if (D.p === p) D = { ...D, p: null }; throw e; });
   D = { key, at: D.at, fin: D.key === key ? D.fin : null, p };
   return p;
 }
@@ -107,4 +107,23 @@ export function weakStreams(trades, cfg, days = 30) {
   }
   pairs.sort((a, b) => a.avgR - b.avgR);
   return { tfs, pairs, days };
+}
+
+// ---------- Bộ nhớ đệm kết quả Demo trong máy (IndexedDB) → mở tab hiện NGAY kết quả lần trước, tính lại ngầm ----------
+const CDB = "qws-demo-cache";
+const cdb = () => new Promise((ok, no) => { const r = indexedDB.open(CDB, 1); r.onupgradeneeded = () => r.result.createObjectStore("raw"); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+export async function demoCacheGet(session) {
+  try {
+    const key = demoKey(session); if (!key) return null;
+    const db = await cdb();
+    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get("last"); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
+    return v && v.key === key ? v.raw : null; // chỉ dùng khi đúng phiên (cùng luật) — đổi luật thì bỏ
+  } catch { return null; }
+}
+export async function demoCacheSet(session, raw) {
+  try {
+    const key = demoKey(session); if (!key || !raw) return;
+    const db = await cdb();
+    db.transaction("raw", "readwrite").objectStore("raw").put({ key, raw, at: Date.now() }, "last");
+  } catch { /* chế độ riêng tư / hết chỗ → bỏ qua */ }
 }

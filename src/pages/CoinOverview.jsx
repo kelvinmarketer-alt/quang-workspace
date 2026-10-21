@@ -5,8 +5,8 @@ import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { fmtUsd, fmtUsdSigned, fmtNum, fmtPct, fmtPx, formatVND } from "../lib/format.js";
-import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET, weakStreams } from "../lib/coinShared.js";
-import { cfgOf, statsOf, TFS } from "../lib/paperBot.js";
+import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet } from "../lib/coinShared.js";
+import { cfgOf, statsOf, TFS, finalize } from "../lib/paperBot.js";
 
 const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-800" : v >= 0 ? "text-emerald-600" : "text-rose-600");
@@ -55,6 +55,7 @@ export default function CoinOverview({ active, go }) {
   useEffect(() => {
     if (!active || !session) return undefined;
     let off = false;
+    demoCacheGet(session).then((c) => { if (c && !off) setDemo((d) => d || finalize(c, null)); }); // hiện ngay kết quả lần trước
     const load = () => demoResult(session).then((f) => { if (!off) { setDemo(f); setDemoErr(""); } }, (e) => { if (!off) setDemoErr(e.message || String(e)); });
     load(); const t = setInterval(() => { if (!document.hidden) load(); }, 300000);
     return () => { off = true; clearInterval(t); };

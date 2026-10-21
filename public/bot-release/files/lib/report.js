@@ -42,6 +42,14 @@ export async function readCommand() {
 }
 
 // Cấu hình phiên DEMO trong app (settings.paperBot) → bot thật dùng CÙNG luật (cặp, khung, setup, bộ lọc, tối ưu, bài học)
+// Nhật ký thay đổi luật (settings.paperBotLog — app ghi khi tắt/bật cặp, khung, đổi cài đặt bot…) cho báo cáo tuần
+export async function readRulesLog() {
+  if (!URL_ || !KEY) return [];
+  const r = await fetch(`${URL_}/rest/v1/qws_workspaces?select=pb:data->settings->paperBot,log:data->settings->paperBotLog`, { headers: H(), signal: AbortSignal.timeout(30000) });
+  if (!r.ok) return [];
+  const rows = (await r.json()).filter((x) => x.pb && x.pb.cfg).sort((a, b) => (b.pb.createdAt || 0) - (a.pb.createdAt || 0)); // cùng workspace với phiên Demo đang dùng
+  return Array.isArray(rows[0]?.log) ? rows[0].log : [];
+}
 export async function readDemoSession() {
   if (!URL_ || !KEY) return null;
   const r = await fetch(`${URL_}/rest/v1/qws_workspaces?select=pb:data->settings->paperBot`, { headers: H(), signal: AbortSignal.timeout(30000) });

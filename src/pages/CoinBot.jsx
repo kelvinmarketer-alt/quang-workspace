@@ -10,7 +10,7 @@ import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeri
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
-import { monthOf, monthLabel, MONTH_TARGET, weakStreams } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
@@ -304,7 +304,8 @@ function RulesLog({ log, list }) {
             return (
               <div key={r.at + "-" + i} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-[12px]">
                 <span className="tabular-nums text-slate-400">{dt(r.at)}</span>
-                <b className="text-slate-800">{r.what}</b>
+                <span className={`rounded px-1.5 text-[10px] font-bold ${r.src === "bot" ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600"}`}>{r.src === "bot" ? "Bot thật" : "Demo"}</span>
+                <b className="text-slate-800">{String(r.what || "").replace(/^Bot thật: /, "")}</b>
                 {r.by && <span className="text-[11px] text-slate-400">{r.by.split("@")[0]}</span>}
                 <span className="ml-auto flex flex-wrap gap-x-3 text-[11.5px] tabular-nums">
                   {r.snap && <span className="text-slate-500">lúc đổi: {r.snap.n} lệnh · {rr(r.snap.avgR)}{r.snap.eq != null ? ` · ${usd(r.snap.eq, 0)}` : ""}</span>}
@@ -386,7 +387,7 @@ export default function CoinBot({ active: visible = true }) {
     const ss = sessRef.current, same = () => sessRef.current?.createdAt === ss.createdAt && sessRef.current?.stoppedAt === ss.stoppedAt;
     try {
       const r = await runSessionAsync(ss, (m) => setBusy(m));
-      if (same()) { setRaw(r); lastRun.current = Date.now(); setRawOld(null); }
+      if (same()) { setRaw(r); lastRun.current = Date.now(); setRawOld(null); demoCacheSet(ss, r); }
     }
     catch (e) { setErr(e.message || String(e)); }
     running.current = false; setBusy("");
@@ -401,7 +402,14 @@ export default function CoinBot({ active: visible = true }) {
     setSettings({ paperBot: { ...session, startAt: Date.now() - 90 * 86400000, createdAt: Date.now(), cfg: { ...c, tfs: tfs.length ? tfs : c.tfs } } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.createdAt]);
-  useEffect(() => { setRaw(null); setRawOld(null); hits.current = new Map(); prevSt.current = null; if (session) run(); /* eslint-disable-next-line */ }, [session?.createdAt, session?.stoppedAt]);
+  useEffect(() => {
+    setRaw(null); setRawOld(null); hits.current = new Map(); prevSt.current = null;
+    if (!session) return;
+    // Hiện NGAY kết quả lần trước (đúng phiên) trong lúc tính lại ngầm — không phải chờ tải 25 luồng nến
+    const ss = session;
+    demoCacheGet(ss).then((c) => { if (c && sessRef.current?.createdAt === ss.createdAt && sessRef.current?.stoppedAt === ss.stoppedAt) setRaw((cur) => cur || c); });
+    run(); /* eslint-disable-next-line */
+  }, [session?.createdAt, session?.stoppedAt]);
   // Bản cũ (chưa lọc vào đẹp) chỉ để so sánh → CHỈ tính khi mở tab Thống kê (đỡ tốn máy)
   const oldBusy = useRef(false);
   useEffect(() => {
@@ -535,6 +543,7 @@ export default function CoinBot({ active: visible = true }) {
           {showRules && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng (v{cfg.cfgVer}){cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.streakN > 0 ? ` · thua ${cfg.streakN} lệnh liền → rủi ro ${fmtNum(cfg.streakRiskPct, 2, 0)}% tới khi thắng lại` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""}{cfg.htfFilter ? ` · thuận khung lớn ${cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}` : ""}{cfg.d1Bias ? " · bias D1 (chỉ thuận xu hướng D1)" : ""}{cfg.sigVol ? " · vol nến tín hiệu > TB20" : ""} · rủi ro {cfg.streakN > 0 ? "" : "cố định "}{fmtNum(cfg.riskPct, 2, 0)}%/lệnh · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
+          {res && busy && <span className="text-slate-400"> · đang hiện kết quả lúc {dt(res.at)}</span>}
         </div>
         {active && (
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-2">

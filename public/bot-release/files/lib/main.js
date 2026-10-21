@@ -10,7 +10,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
 import { runSession, cfgOf, SYMBOLS, TFS, symOf, finalize, statsOf } from "./paperBot.js";
-import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
+import { pushStatus, readCommand, readDemoSession, readRulesLog, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
 const DRY = process.argv.includes("--dry"), ONCE = process.argv.includes("--once");
@@ -128,7 +128,7 @@ async function syncHistory() { // chỉ ghi khi có thay đổi; lỗi → thử
 // Luật = cấu hình phiên Demo trong app (đọc lại mỗi lần quét ≈5 phút); vốn/rủi ro/giới hạn lấy từ .env (an toàn tiền thật)
 let cfg = { ...cfgOf({ cfg: {} }), riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV }, cfgAt = 0, cfgSrc = "mặc định";
 // ĐỒNG BỘ VỚI DEMO: luật (bộ lọc, cặp, setup, khung) + mốc dữ liệu học (startAt phiên Demo) + rủi ro & giới hạn (khi app bật "theo Demo" — mặc định bật)
-let demoCfg = null, demoStart = null;
+let demoCfg = null, demoStart = null, rulesLog = [];
 const clamp = (v, lo, hi, d) => (isFinite(Number(v)) && v !== null && v !== "" ? Math.min(hi, Math.max(lo, Number(v))) : d); // chặn giá trị lạ (an toàn tiền thật)
 function riskFrom(c) {
   const f = c.followDemo !== false && demoCfg;
@@ -140,6 +140,7 @@ function riskFrom(c) {
 async function refreshCfg() {
   if (Date.now() - cfgAt < 240000) return; cfgAt = Date.now(); // đọc cấu hình Demo mỗi lần quét (≈5 phút)
   const demo = await readDemoSession().catch(() => null);
+  rulesLog = await readRulesLog().catch(() => rulesLog);
   if (!demo) return;
   demoCfg = cfgOf(demo); demoStart = Number(demo.startAt) > 0 ? Number(demo.startAt) : null; riskFrom(appCfg);
   const next = { ...demoCfg, riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
@@ -417,7 +418,23 @@ function weeklyReport() {
   const L = HIST.filter((t) => t.setup !== "TEST" && (!t.mode || t.mode === MODE)), lW = L.filter((t) => t.exitAt >= from && t.exitAt < at), lPnl = lW.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
   const d2 = (t) => new Date(t + VN).toISOString().slice(5, 10).split("-").reverse().join("/");
   const title = `📅 Tuần ${d2(from)}–${d2(at - 1)}: Demo ${dW.length} lệnh ${sgn(dPnl, 2)}$ · Bot ${lW.length} lệnh ${sgn(lPnl, 2)}$`;
-  const body = `Demo: thắng ${dWs.n ? vn(dWs.winRate, 0) : "—"}% · tháng này ${P.filter((t) => inMon(t.entryAt)).length}/10 lệnh. Bot ${modeLbl()}: ${lW.filter((t) => Number(t.pnl) > 0).length} thắng · tháng này ${L.filter((t) => t.exitAt && inMon(t.exitAt)).length}/10 lệnh. Không phải tư vấn đầu tư.`;
+  // Cặp × khung đang yếu 30 ngày (≥ 5 lệnh, R TB < 0) — giống cảnh báo trong app
+  const d30 = P.filter((t) => t.status === "done" && t.r != null && t.entryAt >= at - 30 * 86400000), off = new Set(cfg.offStreams || []), weak = [];
+  for (const c of cfg.coins) for (const tf of cfg.tfs) {
+    if (off.has(`${c}|${tf}`)) continue;
+    const X = d30.filter((t) => t.coin === c && t.tf === tf);
+    if (X.length >= 5) { const a = X.reduce((x, t) => x + t.r, 0) / X.length; if (a < 0) weak.push({ k: `${c} ${TFS[tf].label}`, a, n: X.length }); }
+  }
+  weak.sort((x, y) => x.a - y.a);
+  const r2 = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(2).replace(".", ",")}R`;
+  // Thay đổi luật trong tuần + kết quả từ lúc đổi (lệnh Demo đã đóng)
+  const chg = (rulesLog || []).filter((x) => x.at >= from && x.at < at).slice(0, 3).map((x) => {
+    const A = P.filter((t) => t.status === "done" && t.entryAt >= x.at), a = A.length ? A.reduce((s, t) => s + t.r, 0) / A.length : null;
+    return `${String(x.what || "").slice(0, 40)} (${d2(x.at)}) → ${A.length ? `${A.length} lệnh ${r2(a)}` : "chưa có lệnh"}`;
+  });
+  const body = `Demo: thắng ${dWs.n ? vn(dWs.winRate, 0) : "—"}% · tháng này ${P.filter((t) => inMon(t.entryAt)).length}/10 lệnh. Bot ${modeLbl()}: ${lW.filter((t) => Number(t.pnl) > 0).length} thắng · tháng này ${L.filter((t) => t.exitAt && inMon(t.exitAt)).length}/10 lệnh.`
+    + (weak.length ? ` ⚠ Yếu 30 ngày: ${weak.slice(0, 3).map((w) => `${w.k} ${r2(w.a)} (${w.n})`).join(", ")}.` : " Không cặp nào âm 30 ngày.")
+    + (chg.length ? ` Đổi luật tuần này: ${chg.join("; ")}.` : "") + " Không phải tư vấn đầu tư.";
   log(`📅 Báo cáo tuần: ${title}`);
   note(title, body, `qws-bot-week-${key}`);
 }
