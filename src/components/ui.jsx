@@ -33,7 +33,7 @@ export function FitMoney({ value, className = "" }) {
     const check = () => {
       const w = b.clientWidth + 1;
       if (f.offsetWidth <= w) return setLvl(0); // f, sh là inline-block → đo được bề rộng thật
-      setLvl(sh.current && sh.current.offsetWidth > w ? 2 : 1);
+      setLvl((cur) => (sh.current && sh.current.offsetWidth / (cur === 2 ? 0.8 : 1) > w ? 2 : 1)); // quy về cỡ chữ gốc → không nhảy qua lại 1↔2
     };
     check();
     if (typeof ResizeObserver === "undefined") return undefined;
