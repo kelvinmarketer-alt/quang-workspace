@@ -29,6 +29,32 @@ async function googleToken(keyJson: string) {
   return j.access_token as string;
 }
 
+// ===== PHẠM VI DỰ ÁN của thành viên (21/10) — chủ giới hạn mỗi người chỉ thấy khách/thương hiệu được giao =====
+// members[].scope = { all:false, customers:[id khách QWS] }. Khớp: nguồn đã gắn trong Văn phòng AI (office_client_sources.ref_id)
+// HOẶC tên / từ khoá thương hiệu nằm trong tên TK quảng cáo · domain web · tên page (bỏ dấu, bỏ khoảng trắng).
+const squash = (x: unknown) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, "");
+type Scope = { keys: string[]; refs: Set<string> } | null;
+async function memberScopeOf(db: any, ownerId: string, mem: any): Promise<Scope> {
+  const sc = mem?.scope;
+  if (!sc || sc.all !== false || !Array.isArray(sc.customers)) return null;
+  const ids = new Set(sc.customers.map(String));
+  const { data: w } = await db.from("qws_workspaces").select("customers:data->customerList").eq("user_id", ownerId).maybeSingle();
+  const custs = (Array.isArray(w?.customers) ? w.customers : []).filter((c: any) => ids.has(String(c.id)));
+  const names = custs.map((c: any) => String(c.name || ""));
+  const { data: brands } = await db.from("office_brands").select("id,name,keywords,qws_customer_id,client_id").eq("owner_id", ownerId);
+  const sel = (brands || []).filter((b: any) => (b.qws_customer_id && ids.has(String(b.qws_customer_id))) || names.some((n: string) => { const a = squash(n), c = squash(b.name); return a && c && (a.includes(c) || c.includes(a)); }));
+  const keys = [...names, ...sel.flatMap((b: any) => [b.name, ...String(b.keywords || "").split(/[,;\n]/)])].map(squash).filter((k) => k.length >= 3);
+  const clientIds = sel.map((b: any) => b.client_id).filter(Boolean);
+  let refs = new Set<string>();
+  if (clientIds.length) {
+    const { data: src } = await db.from("office_client_sources").select("ref_id").in("client_id", clientIds);
+    refs = new Set((src || []).map((s: any) => String(s.ref_id || "").replace(/^act_/, "")));
+  }
+  return { keys: [...new Set(keys)], refs };
+}
+const inScope = (scope: Scope, text: unknown, ref?: unknown) =>
+  !scope || (ref != null && scope.refs.has(String(ref).replace(/^act_/, ""))) || scope.keys.some((k) => squash(text).includes(k));
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -41,7 +67,7 @@ Deno.serve(async (req) => {
     const feature = String(action || "").startsWith("google") ? "web" : action === "fbads" ? "ads" : "fanpage";
 
     // Chủ workspace của người gọi + quyền của họ với tính năng này
-    let ownerId: string | null = null;
+    let ownerId: string | null = null, scope: Scope = null;
     const own = await admin.from("qws_workspaces").select("user_id").eq("user_id", u.user.id).maybeSingle();
     if (own.data) ownerId = u.user.id;
     else {
@@ -50,7 +76,7 @@ Deno.serve(async (req) => {
         const m = (Array.isArray(r.members) ? r.members : []).find((x: { email?: string }) => (x.email || "").toLowerCase() === email);
         if (!m) continue;
         const acc = m.access?.[feature] ?? "none";
-        if (acc !== "none") ownerId = r.user_id;
+        if (acc !== "none") { ownerId = r.user_id; scope = await memberScopeOf(admin, r.user_id, m); } // giới hạn dự án → chỉ web/page/TK của khách được giao
         break;
       }
     }
@@ -61,7 +87,7 @@ Deno.serve(async (req) => {
         admin.from("office_google_props").select("kind,prop_id,name,extra,enabled,updated_at").eq("owner_id", ownerId).eq("enabled", true),
         admin.from("office_google").select("sa_email,last_sync_at,last_error").eq("owner_id", ownerId).maybeSingle(),
       ]);
-      return json({ props: props || [], conn });
+      return json({ props: (props || []).filter((x: any) => inScope(scope, `${x.name || ""} ${x.prop_id || ""}`, x.prop_id)), conn });
     }
     if (action === "google") {
       const url = String(p.url || "");
@@ -71,6 +97,7 @@ Deno.serve(async (req) => {
       const kind = m1 ? "gsc" : "ga4", id = m1 ? decodeURIComponent(m1[1]) : m2![1];
       const { data: ok } = await admin.from("office_google_props").select("prop_id").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).eq("enabled", true).maybeSingle();
       if (!ok) return json({ error: "Web/property này đang tắt bên Văn phòng AI" }, 403);
+      if (scope) { const { data: pr } = await admin.from("office_google_props").select("name").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).maybeSingle(); if (!inScope(scope, `${pr?.name || ""} ${id}`, id)) return json({ error: "Web này ngoài dự án được giao" }, 403); }
       const { data: g } = await admin.from("office_google").select("key_json").eq("owner_id", ownerId).maybeSingle();
       if (!g?.key_json) return json({ error: "Chưa kết nối Google" }, 400);
       const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${await googleToken(g.key_json)}`, "content-type": "application/json" }, body: JSON.stringify(p.body || {}) });
@@ -78,12 +105,13 @@ Deno.serve(async (req) => {
     }
     if (action === "fb_pages") {
       const { data } = await admin.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").eq("owner_id", ownerId).eq("enabled", true).order("fans", { ascending: false });
-      return json({ pages: data || [] });
+      return json({ pages: (data || []).filter((x: any) => inScope(scope, x.name, x.page_id)) });
     }
     if (action === "fb") {
       const pageId = String(p.page_id || "");
-      const { data: pg } = await admin.from("office_fb_pages").select("page_id,fb_id").eq("owner_id", ownerId).eq("page_id", pageId).eq("enabled", true).maybeSingle();
+      const { data: pg } = await admin.from("office_fb_pages").select("page_id,fb_id,name").eq("owner_id", ownerId).eq("page_id", pageId).eq("enabled", true).maybeSingle();
       if (!pg) return json({ error: "Page này đang tắt bên Văn phòng AI" }, 403);
+      if (!inScope(scope, pg.name, pg.page_id)) return json({ error: "Page này ngoài dự án được giao" }, 403);
       const { data: c } = await admin.from("office_fb").select("token").eq("id", pg.fb_id).maybeSingle();
       if (!c?.token) return json({ error: "Chưa kết nối Facebook" }, 400);
       const pt = await (await fetch(`${G}${pageId}?fields=access_token&access_token=${encodeURIComponent(c.token)}`)).json();
@@ -103,8 +131,9 @@ Deno.serve(async (req) => {
     if (action === "fbads") {
       // Quảng cáo trong 1 TK Meta: chỉ GET act_<id>/ads | act_<id>/insights, TK phải có trong office_fb_ads của chủ
       const acc = String(p.account_id || "").replace(/^act_/, "");
-      const { data: ad } = await admin.from("office_fb_ads").select("fb_id").eq("owner_id", ownerId).eq("account_id", acc).maybeSingle();
+      const { data: ad } = await admin.from("office_fb_ads").select("fb_id,name").eq("owner_id", ownerId).eq("account_id", acc).maybeSingle();
       if (!ad) return json({ error: "Tài khoản quảng cáo chưa kết nối bên Văn phòng AI" }, 403);
+      if (!inScope(scope, ad.name, acc)) return json({ error: "Tài khoản này ngoài dự án được giao" }, 403);
       const path = String(p.path || "");
       if (path !== `act_${acc}/ads` && path !== `act_${acc}/insights`) return json({ error: "Không cho phép" }, 400);
       const { data: c } = await admin.from("office_fb").select("token").eq("id", ad.fb_id).maybeSingle();

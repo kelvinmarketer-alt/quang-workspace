@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Building2, ExternalLink } from "lucide-react";
 import { Card, SectionTitle } from "./ui.jsx";
 import { useAuth } from "../lib/auth.jsx";
-import OfficeMembers from "./OfficeMembers.jsx";
 import { OFFICE_URL, OFFICE_AGENTS, OFFICE_KINDS, loadOfficePrefs, saveOfficePrefs, loadOfficeRunner, officeAgo } from "../lib/office.js";
 
 export default function OfficeSettings() {
@@ -81,7 +80,9 @@ export default function OfficeSettings() {
         {msg && <span className={`text-xs font-semibold ${msg.t === "err" ? "text-rose-600" : "text-emerald-600"}`}>{msg.m}</span>}
       </div>
 
-      <OfficeMembers ownerId={user.id} />
+      <div className="mt-4 rounded-xl bg-violet-50 p-3 text-[12px] text-violet-800">
+        <b>Ai được dùng Văn phòng AI, dùng vị trí nào, làm dự án nào</b> → quản lý tập trung ở mục <b>Phân quyền</b> (mỗi người 1 hồ sơ: module · phạm vi dự án · vai trò Văn phòng AI).
+      </div>
     </Card>
   );
 }

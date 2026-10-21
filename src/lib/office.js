@@ -68,6 +68,38 @@ export async function deleteOfficeMember(ownerId, email) {
   if (error) throw new Error(error.message);
 }
 
+// ===== Hồ sơ quyền tập trung (21/10): QWS → Cài đặt → Phân quyền ghi luôn office_members (tài khoản phụ dùng AI) và office_staff (nhân viên dự án) =====
+export async function loadOfficeStaff() {
+  const { data, error } = await supabase.from("office_staff").select("*").order("created_at");
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+export async function saveOfficeStaff(ownerId, st) {
+  const email = st.email.trim().toLowerCase();
+  const row = { owner_id: ownerId, email, name: st.name || email, title: st.title || null, brands: st.brands || [], view_brands: st.view_brands || [], perms: st.perms || {}, active: st.active !== false };
+  const { error } = await supabase.from("office_staff").upsert(row, { onConflict: "owner_id,email" });
+  if (error) throw new Error(error.message);
+}
+export async function deleteOfficeStaff(ownerId, email) {
+  const { error } = await supabase.from("office_staff").delete().eq("owner_id", ownerId).ilike("email", email);
+  if (error) throw new Error(error.message);
+}
+export async function loadOfficeBrandsLite() {
+  const { data, error } = await supabase.from("office_brands").select("id,name,keywords,qws_customer_id").order("sort").order("name");
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+// Quyền tính năng của nhân viên dự án (khớp SQL 38 bên Văn phòng AI; thiếu key = mặc định)
+export const STAFF_FLAGS = [
+  { k: "tick", label: "Tick xong việc + dán link", def: true },
+  { k: "add", label: "Ghi thêm việc ngoài lịch", def: true },
+  { k: "targets", label: "Xem chỉ tiêu theo kênh", def: true },
+  { k: "sheet", label: "Mở Google Sheet kế hoạch", def: true },
+  { k: "assign", label: "Giao việc cho người khác cùng dự án (trưởng nhóm)", def: false },
+  { k: "report", label: "Mở link báo cáo khách", def: false },
+  { k: "resources", label: "Xem tài nguyên dự án", def: false },
+];
+
 export function useOfficeNotifications(enabled, ownerView = true) {
   const [rows, setRows] = useState([]);
   useEffect(() => {

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { SEED_TASKS, SEED_FAMILY, SEED_CUSTOMERS, SEED_PROJECTS, SEED_SETTINGS, SEED_EXPENSES, SEED_FUNDS, SEED_FUND_TX, SEED_FUND_SCHEDULES, SEED_SPEND_CATS } from "../data/seed.js";
 import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
-import { ALL_FEATURES, ALL_KEYS, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess } from "./permissions.js";
+import { ALL_FEATURES, ALL_KEYS, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess, memberScope, SCOPE_BLOCKED } from "./permissions.js";
 import { merge3, deepEqual } from "./merge.js";
 import { deriveKey, encryptJSON, decryptJSON, newSalt, PIN_ITER } from "./crypto.js";
 
@@ -817,7 +817,10 @@ export function DataProvider({ children }) {
     const email = (user?.email || "").toLowerCase();
     const isOwner = !!user && !!ownerId && ownerId === user.id;
     const me = (state.members || []).find((m) => (m.email || "").toLowerCase() === email);
-    const access = isOwner || !ownerId ? null : memberAccess(me);
+    const access0 = isOwner || !ownerId ? null : memberAccess(me);
+    // Phạm vi dự án: null = tất cả; mảng id khách = chỉ thấy các khách đó (và dự án, tài nguyên của họ)
+    const scope = isOwner || !ownerId ? null : memberScope(me);
+    const access = access0 && scope ? { ...access0, ...Object.fromEntries(SCOPE_BLOCKED.map((k) => [k, "none"])) } : access0;
     // Chưa resolve owner → tạm full (tránh chớp). Chủ → full. Thành viên → theo access (none/view/edit).
     const perms = !ownerId || isOwner ? ALL_KEYS : ALL_KEYS.filter((k) => access[k] && access[k] !== "none"); // gồm cả quyền từng tab Coin
     const editable = !ownerId || isOwner ? ALL_FEATURES : ALL_FEATURES.filter((k) => access[k] === "edit");
@@ -839,7 +842,21 @@ export function DataProvider({ children }) {
     const key = usePriv ? openaiKey : (state.settings?.openaiKey || "");
     const settings = { ...state.settings, openaiKey: isOwner || !ownerId ? key : "", aiReady: !!(key || "").trim() || !!state.settings?.aiEnabled };
     const vApi = isOwner ? vaultApi : { vaultLocked: false, vaultHasPin: false, vaultPrivate: false };
-    return { ...guarded, ...vApi, vault, settings, syncStatus, isOwner, perms, editable, canEdit, myEmail: email, ownerId, toast, setToast, undoLast: api.undoLast };
+    // LỌC THEO PHẠM VI ngay tại kho dữ liệu → mọi trang tự chỉ thấy khách / dự án / tài nguyên được giao
+    let scoped = {}, scopeNames = null;
+    if (scope) {
+      const cs = new Set(scope);
+      const custs = (state.customerList || []).filter((c) => cs.has(c.id));
+      scopeNames = custs.map((c) => c.name).filter(Boolean);
+      scoped = {
+        customerList: custs,
+        projects: (state.projects || []).filter((p) => cs.has(p.customerId)),
+        resources: (state.resources || []).filter((r) => cs.has(r.customerId)),
+      };
+      // Không được tạo / xoá khách mới (ngoài phạm vi chủ giao)
+      for (const m of ["addCustomer", "addCustomers", "deleteCustomer", "deleteCustomers", "importParsed"]) if (m in guarded) guarded = { ...guarded, [m]: () => setToast({ text: "Bạn chỉ làm việc trong dự án được giao — nhờ chủ thêm khách mới", at: Date.now() }) };
+    }
+    return { ...guarded, ...scoped, ...vApi, vault, settings, syncStatus, isOwner, perms, editable, canEdit, scope, scopeNames, myEmail: email, ownerId, toast, setToast, undoLast: api.undoLast };
   }, [api, vaultApi, vaultMem, openaiKey, privAvail, syncStatus, user?.id, user?.email, ownerId, state.members, toast]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

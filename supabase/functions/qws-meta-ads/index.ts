@@ -230,6 +230,32 @@ const addDays = (iso: string, n: number) => isoOf(new Date(Date.parse(iso + "T00
 const fmt = (v: number) => Math.round(v || 0).toLocaleString("vi-VN") + "đ";
 
 // ---------- Cảnh báo ----------
+// ===== PHẠM VI DỰ ÁN của thành viên (21/10) — chủ giới hạn mỗi người chỉ thấy khách/thương hiệu được giao =====
+// members[].scope = { all:false, customers:[id khách QWS] }. Khớp: nguồn đã gắn trong Văn phòng AI (office_client_sources.ref_id)
+// HOẶC tên / từ khoá thương hiệu nằm trong tên TK quảng cáo · domain web · tên page (bỏ dấu, bỏ khoảng trắng).
+const squash = (x: unknown) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, "");
+type Scope = { keys: string[]; refs: Set<string> } | null;
+async function memberScopeOf(db: any, ownerId: string, mem: any): Promise<Scope> {
+  const sc = mem?.scope;
+  if (!sc || sc.all !== false || !Array.isArray(sc.customers)) return null;
+  const ids = new Set(sc.customers.map(String));
+  const { data: w } = await db.from("qws_workspaces").select("customers:data->customerList").eq("user_id", ownerId).maybeSingle();
+  const custs = (Array.isArray(w?.customers) ? w.customers : []).filter((c: any) => ids.has(String(c.id)));
+  const names = custs.map((c: any) => String(c.name || ""));
+  const { data: brands } = await db.from("office_brands").select("id,name,keywords,qws_customer_id,client_id").eq("owner_id", ownerId);
+  const sel = (brands || []).filter((b: any) => (b.qws_customer_id && ids.has(String(b.qws_customer_id))) || names.some((n: string) => { const a = squash(n), c = squash(b.name); return a && c && (a.includes(c) || c.includes(a)); }));
+  const keys = [...names, ...sel.flatMap((b: any) => [b.name, ...String(b.keywords || "").split(/[,;\n]/)])].map(squash).filter((k) => k.length >= 3);
+  const clientIds = sel.map((b: any) => b.client_id).filter(Boolean);
+  let refs = new Set<string>();
+  if (clientIds.length) {
+    const { data: src } = await db.from("office_client_sources").select("ref_id").in("client_id", clientIds);
+    refs = new Set((src || []).map((s: any) => String(s.ref_id || "").replace(/^act_/, "")));
+  }
+  return { keys: [...new Set(keys)], refs };
+}
+const inScope = (scope: Scope, text: unknown, ref?: unknown) =>
+  !scope || (ref != null && scope.refs.has(String(ref).replace(/^act_/, ""))) || scope.keys.some((k) => squash(text).includes(k));
+
 function admin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 }
@@ -592,14 +618,24 @@ Deno.serve(async (req) => {
   const { data: u } = await supa.auth.getUser();
   const email = ((u && u.user && u.user.email) || "").toLowerCase();
   if (!email) return json({ error: "Chưa đăng nhập" }, 401);
+  let scope: Scope = null; // thành viên bị giới hạn dự án → chỉ thấy TK quảng cáo của khách được giao
   if (!OWNER || email !== OWNER) {
     // Thành viên được chủ cấp quyền "Quảng cáo" (Xem/Sửa trong Cài đặt → Người dùng) → CHỈ các chế độ ĐỌC số liệu
     const READ_MODES = ["report", "alerts_list", "balance_list"];
-    const { data: rows } = await admin().from("qws_workspaces").select("members:data->members");
-    const mem = (rows || []).flatMap((r: any) => (Array.isArray(r.members) ? r.members : [])).find((m: any) => String(m?.email || "").toLowerCase() === email);
+    const { data: rows } = await admin().from("qws_workspaces").select("user_id, members:data->members");
+    let mem: any = null, ownerUid = "";
+    for (const r of rows || []) { const m = (Array.isArray(r.members) ? r.members : []).find((x: any) => String(x?.email || "").toLowerCase() === email); if (m) { mem = m; ownerUid = r.user_id; break; } }
     const acc = mem ? (mem.access?.ads ?? ((mem.perms || []).includes("ads") ? "edit" : "none")) : "none";
     if (acc === "none" || !READ_MODES.includes(mode)) return json({ error: "Chỉ chủ workspace (hoặc thành viên được cấp quyền Quảng cáo — chỉ xem số liệu) dùng được" }, 403);
+    scope = await memberScopeOf(admin(), ownerUid, mem);
   }
+  // TK quảng cáo trong phạm vi (Meta: brand + tên · Google: tên) — chỉ dùng khi thành viên bị giới hạn dự án
+  const allowedAccIds = async () => {
+    const meta = (await loadAccounts(true)).filter((a: any) => inScope(scope, `${a.brand || ""} ${a.name || ""}`, a.id)).map((a: any) => String(a.id));
+    const { data: g } = await admin().from("qws_gads_accounts").select("customer_id,name");
+    const goo = (g || []).filter((a: any) => inScope(scope, a.name, a.customer_id)).map((a: any) => "g" + a.customer_id);
+    return new Set([...meta, ...goo]);
+  };
 
   try {
     if (mode === "config_list") return json({ accounts: (await loadAccounts(true)).map(safe) });
@@ -685,6 +721,7 @@ Deno.serve(async (req) => {
     }
 
     if (mode === "balance_list") {
+      if (scope && !(await allowedAccIds()).has(String(body.accountId || ""))) return json({ error: "Tài khoản này ngoài dự án được giao" }, 403);
       const { data } = await admin().from("qws_ads_balance").select("*").eq("account_id", String(body.accountId || "")).order("at", { ascending: false }).limit(50);
       return json({ rows: data || [] });
     }
@@ -715,7 +752,8 @@ Deno.serve(async (req) => {
     }
     if (mode === "alerts_list") {
       const { data } = await admin().from("qws_ads_alerts").select("key,text,account_id,sent_at").gte("sent_at", new Date(Date.now() - 2 * 86400000).toISOString()).order("sent_at", { ascending: false }).limit(50);
-      return json({ alerts: (data || []).filter((r: any) => r.text) });
+      const ok = scope ? await allowedAccIds() : null;
+      return json({ alerts: (data || []).filter((r: any) => r.text && (!ok || ok.has(String(r.account_id || "")))) });
     }
 
     // report
@@ -736,7 +774,10 @@ Deno.serve(async (req) => {
     ]);
     const mLed = await ledgers(ACCOUNTS.map((a: any) => a.id));
     const mBal = await Promise.all(ACCOUNTS.map((a: any) => (mLed[a.id] ? metaBalance(a, mLed[a.id]).catch(() => null) : null)));
-    return json({ since, until, prev, accounts: [...meta.map((a: any, i: number) => ({ ...a, platform: "meta", bal: mBal[i] })), ...google], updatedAt: Date.now() });
+    const all = [...meta.map((a: any, i: number) => ({ ...a, platform: "meta", bal: mBal[i] })), ...google];
+    // Thành viên bị giới hạn dự án: chỉ TK của khách được giao (Meta theo brand/tên/nguồn đã gắn · Google theo tên/nguồn)
+    const accounts = scope ? all.filter((a: any) => inScope(scope, `${a.brand || ""} ${a.name || ""}`, a.platform === "google" ? a.cid : a.id)) : all;
+    return json({ since, until, prev, accounts, scoped: !!scope, updatedAt: Date.now() });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);
   }

@@ -86,3 +86,21 @@ export function memberAccess(member) {
   a.coin = a.coinInvest === "edit" ? "edit" : COIN_SUB_KEYS.some((k) => a[k] !== "none") ? "view" : "none";
   return a;
 }
+
+// ===== PHẠM VI DỰ ÁN (21/10) — mỗi nhân viên chỉ thấy các khách / thương hiệu được giao =====
+// member.scope = { all: true } (mặc định) | { customers: [customerId, …] }
+// Áp cho: Khách & Dự án, Tài nguyên, Tổng quan (chỉ số của dự án được giao), Quảng cáo / Website / Fanpage (khớp theo tên thương hiệu),
+// và Văn phòng AI (thương hiệu cùng tên). Bị giới hạn phạm vi thì KHÔNG cấp được Kế toán (sổ thu chi toàn công ty).
+export function memberScope(member) {
+  const sc = member && member.scope;
+  if (!sc || sc.all !== false || !Array.isArray(sc.customers)) return null;
+  return sc.customers.filter(Boolean);
+}
+export const SCOPE_BLOCKED = ["ketoan"]; // không cấp được khi đã giới hạn phạm vi
+// So khớp tên thương hiệu không phân biệt hoa thường / dấu: "Nông sản Tuấn Tú" ~ "NÔNG SẢN TUẤN TÚ HÀ NỘI"
+export const normBrand = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export function brandMatch(text, names) {
+  if (!names) return true; // không giới hạn
+  const t = normBrand(text);
+  return names.some((n) => { const k = normBrand(n); return k && (t.includes(k) || (t && k.includes(t))); });
+}
