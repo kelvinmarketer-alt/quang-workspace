@@ -1,7 +1,7 @@
 {
-  "sha": "3fae9f82fa7adab7800496f7e033e5038c804728",
-  "date": "2026-10-21T10:19:36+07:00",
-  "msg": "Bot: nhãn 'Luật lấy từ' báo đúng 'phiên Demo trong app' cả khi cấu hình Demo trùng mặc định",
+  "sha": "668fb39000005ffa9fae00bf64cb43dc4ec3d48b",
+  "date": "2026-10-21T10:48:59+07:00",
+  "msg": "Bot: luật v9 — giảm rủi ro sau chuỗi thua (đếm từ lịch sử lệnh thật cùng chế độ, bỏ lệnh thử), báo lossRun/riskNow về app",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "bb8ff6729f500dbf271b769c61af486399f69d5e"
+      "sha": "e1f85eacf882c6cbc5efc8beb2cfa0acc08c7b78"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "b40b94a49a7347ec4da8da6aba83b7b6e5872b65"
+      "sha": "13c56eb0efb336cb466e60ff51e86dfef92e4c8b"
     },
     {
       "path": "lib/report.js",

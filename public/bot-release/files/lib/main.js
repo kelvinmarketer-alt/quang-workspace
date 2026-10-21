@@ -272,7 +272,7 @@ async function place(p, symbol) {
   }
   const lim = ex.roundTo(p.lim * k, info.tick), sl = ex.roundTo(p.sl * k, info.tick);
   const risk = Math.abs(lim - sl), tp = ex.roundTo(lim + p.side * (p.rr || cfg.rr) * risk, info.tick);
-  const eq = await equityUsd(), riskUsd = (eq * (p.riskPct ?? RISK)) / 100; // lệnh thử: rủi ro nhỏ riêng
+  const rp = p.riskPct ?? riskNow(), eq = await equityUsd(), riskUsd = (eq * rp) / 100; // lệnh thử: rủi ro nhỏ riêng · chuỗi thua: rủi ro giảm
   let qty = riskUsd / risk; const maxQty = (MAX_LEV * eq) / lim; if (qty > maxQty) qty = maxQty;
   qty = ex.roundTo(qty, info.step, "floor");
   if (!(qty > 0) || qty * lim < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p }); return; }
@@ -283,6 +283,7 @@ async function place(p, symbol) {
     await ex.placeLimit({ symbol, side: sideStr(p.side), quantity: qty, price: lim, clientId: a.entryCid });
   }
   S.active[symbol] = a;
+  if (rp < RISK && !p.test) log(`↓ Đang chuỗi thua ${lossRun()} lệnh → rủi ro lệnh này ${rp}% (thay vì ${RISK}%)`);
   log(`📌 ${DRY ? "[thử] " : ""}Lệnh chờ ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"} @ ${lim} · SL ${sl} · TP ${tp} · KL ${qty} · rủi ro ${(qty * risk).toFixed(2)}$ · huỷ lúc ${stamp(p.until)}`);
   journal({ ev: "placed", ...a });
 }
@@ -360,7 +361,10 @@ async function closeAll(at, posMap) {
   save();
   return true;
 }
-const cfgSummary = () => { const { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, cfgVer } = cfg; return { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, cfgVer }; };
+const cfgSummary = () => { const { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, cfgVer } = cfg; return { coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, cfgVer }; };
+// Chuỗi thua (luật Demo v9): số lệnh THUA liền gần nhất của chế độ đang chạy (bỏ lệnh thử) → đủ streakN thì rủi ro = streakRiskPct (≤ rủi ro cài đặt) tới khi thắng lại
+function lossRun() { let n = 0; for (const t of HIST) { if (t.setup === "TEST" || (t.mode && t.mode !== MODE)) continue; if (Number(t.pnl) < 0) n++; else if (Number(t.pnl) > 0) break; } return n; }
+const riskNow = () => (cfg.streakN > 0 && lossRun() >= cfg.streakN ? Math.min(RISK, cfg.streakRiskPct ?? RISK / 2) : RISK);
 
 // ---------- Vòng lặp ----------
 async function cycle(state) {
@@ -393,7 +397,7 @@ async function cycle(state) {
     raw = await scan(posMap, halted);
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
   }
-  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
+  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
   await syncHistory();
 }
 

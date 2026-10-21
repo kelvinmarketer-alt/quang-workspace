@@ -19,8 +19,11 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 8,
+  cfgVer: 9,
   capital: 1000, riskPct: 2, maxOpen: 3, maxLev: 20, dailyStopPct: 6, // v7 (user chốt 20/10): rủi ro 2%/lệnh, dừng ngày -6% (= 3 lệnh thua)
+  streakN: 3, streakRiskPct: 1, // v9 (user duyệt 21/10): thua 3 lệnh liền → rủi ro 1%/lệnh tới khi thắng lại. 270 ngày: vốn cả 3 kỳ cao hơn (1207/1385/1491 → 1231/1410/1553$), sụt vốn tối đa 13–15% → 11%
+  // Thử 21/10 (mặc định TẮT, bot thật chưa hỗ trợ): thả TP trailAtR/trailAtr/trailLockR và cắt khi đảo chiều revExit/revMinR — thắng nhiều hơn nhưng R & lợi nhuận GIẢM ở cả 3 kỳ
+  trailAtR: 0, revExit: 0,
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
   sigVol: false, noEngulf: true, d1Bias: true, // v6: bỏ vào ngay sau engulfing lớn · chỉ thuận D1 · v8: TẮT lọc volume nến tín hiệu (Key Volume vẫn xét volume)
   keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
@@ -36,6 +39,7 @@ export const DEFAULT_CFG = {
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V9_KEYS = ["streakN", "streakRiskPct"];
 const V8_KEYS = ["htfFilter", "sigVol", "maxExtAtr"];
 const V7_KEYS = ["riskPct", "dailyStopPct", "d1Bias"];
 const V6_KEYS = ["sigVol", "noEngulf", "d1Bias"];
@@ -52,6 +56,7 @@ export function cfgOf(session) {
   if (ver < 4) for (const k of V4_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 7) for (const k of V7_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 8) for (const k of V8_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 9) for (const k of V9_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.coins = [...new Set((c.coins || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); if (!c.coins.length) c.coins = [...DEFAULT_CFG.coins]; // cặp do user chọn (thêm/sửa/xoá trong app)
@@ -251,14 +256,25 @@ function simTrade(K, s, cfg, atr, endIdx, e50, f) {
   const tp = entry + side * cfg.rr * risk, pAt = cfg.partialAtR > 0 ? entry + side * cfg.partialAtR * risk : null;
   const inFee = limit ? maker : taker;
   let sl = s.sl, be = false, exit = null, reason = null, exitIdx = null, maxR = 0, mae = 0, part = 0, exitFee = taker; // part: R đã chốt 1 nửa
+  // Thả TP (trailing): giá đạt +trailAtR → bỏ TP cố định, SL bám theo giá (đỉnh/đáy từ lúc vào − trailAtr×ATR), khoá lời tối thiểu trailLockR
+  let trail = false, ext = entry; const trailAtR = cfg.trailAtR || 0;
+  // Cắt khi đảo chiều: nến đóng có tín hiệu NGƯỢC chiều (bộ setup) — revExit 2: thêm nến engulfing ngược chiều thân ≥ 0,8 ATR
+  const opp = cfg.revExit && f ? (f.oppAt ||= (() => { const m = new Map(); for (const x of f.sig) m.set(x.i, (m.get(x.i) || 0) | (x.side === 1 ? 1 : 2)); return m; })()) : null;
+  const revEngulf = (k) => { const [, o, , , c] = K[k], [, po, , , pc] = K[k - 1], body = Math.abs(c - o); return body >= 0.8 * atr[k] && (side === 1 ? c < o && pc > po && c <= po && o >= pc : c > o && pc < po && c >= po && o <= pc); };
   for (let k = e; k <= endIdx; k++) {
     const [, , h, l, c] = K[k];
     const adv = side === 1 ? l : h, fav = side === 1 ? h : l, fillBar = limit && k === e;
     mae = Math.max(mae, Math.min(((entry - adv) * side) / risk, 1.2));
-    if ((adv - sl) * side <= 0) { exit = sl * (1 - side * slip); reason = be ? (part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ"; exitIdx = k; break; }
+    if ((adv - sl) * side <= 0) { exit = sl * (1 - side * slip); reason = trail ? "Dời SL theo giá" : be ? (part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ"; exitIdx = k; break; }
     if (fillBar) { maxR = Math.max(maxR, ((c - entry) * side) / risk); continue; } // nến khớp lệnh chờ: không tính chạm TP (không biết thứ tự)
-    if ((fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; maxR = cfg.rr; exitFee = maker; break; }
+    if (!trail && (fav - tp) * side >= 0) { exit = tp; reason = "Chốt lời"; exitIdx = k; maxR = cfg.rr; exitFee = maker; break; }
     maxR = Math.max(maxR, ((fav - entry) * side) / risk);
+    if (opp && (cfg.revMinR == null || maxR >= cfg.revMinR) && ((opp.get(k) || 0) & (side === 1 ? 2 : 1) || (cfg.revExit >= 2 && revEngulf(k)))) { exit = c * (1 - side * slip); reason = "Đảo chiều"; exitIdx = k; break; } // đóng ở giá đóng nến (thị trường)
+    if (trailAtR > 0) {
+      ext = side === 1 ? Math.max(ext, fav) : Math.min(ext, fav);
+      if (!trail && maxR >= trailAtR) trail = true;
+      if (trail) { const t = Math.max((ext - side * (cfg.trailAtr || 2) * atr[k] - entry) * side, (cfg.trailLockR ?? 0) * risk); if ((entry + side * t - sl) * side > 0) sl = entry + side * t; }
+    }
     if (pAt != null && !part && (fav - pAt) * side >= 0) { part = cfg.partialAtR; be = true; sl = entry + side * 0.05 * risk; } // chốt 50% + dời SL hoà vốn
     if (!be && cfg.beAtR > 0 && maxR >= cfg.beAtR) { be = true; sl = entry + side * 0.05 * risk; } // dời SL về hoà vốn (dương nhẹ) từ nến sau
     if (k - e >= cfg.timeStopBars) { exit = c; reason = "Hết thời gian"; exitIdx = k; break; }
@@ -266,7 +282,7 @@ function simTrade(K, s, cfg, atr, endIdx, e50, f) {
   const w = part ? 0.5 : 1; // khối lượng còn lại khi thoát
   const feeR = ((inFee + (part ? 0.5 * maker + 0.5 * exitFee : exitFee)) * entry) / risk;
   const r = exit == null ? null : (part ? 0.5 * part : 0) + (w * (exit - entry) * side) / risk - feeR;
-  return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp, risk, rr: cfg.rr, beAtR: cfg.beAtR, part, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r };
+  return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp: trail ? null : tp, trail, risk, rr: cfg.rr, beAtR: cfg.beAtR, part, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r };
 }
 
 // R của lệnh (đã chốt 1 nửa ở part R thì nửa còn lại tính theo giá px)
@@ -570,11 +586,12 @@ const dayOf = (t) => new Date(t + 7 * 3600000).toISOString().slice(0, 10); // ng
 function portfolio(trades, cfg, startAt, until) {
   let eq = cfg.capital, peak = eq, maxDD = 0, maxDDUsd = 0, fees = 0;
   const curve = [{ t: startAt, eq }], open = [], taken = [], dayPnl = {};
+  let lossRun = 0; // số lệnh thua liên tiếp (theo thứ tự đóng) — streakN > 0: thua ≥ N lệnh liền thì rủi ro = streakRiskPct tới khi thắng lại
   const evs = [...trades].sort((a, b) => a.entryAt - b.entryAt);
   const settle = (t) => {
     open.sort((a, b) => (a.exitAt ?? Infinity) - (b.exitAt ?? Infinity));
     while (open.length && open[0].exitAt != null && open[0].exitAt <= t) {
-      const p = open.shift(); eq += p.pnl; peak = Math.max(peak, eq); maxDD = Math.max(maxDD, (peak - eq) / peak); maxDDUsd = Math.max(maxDDUsd, peak - eq);
+      const p = open.shift(); eq += p.pnl; lossRun = p.pnl < 0 ? lossRun + 1 : p.pnl > 0 ? 0 : lossRun; peak = Math.max(peak, eq); maxDD = Math.max(maxDD, (peak - eq) / peak); maxDDUsd = Math.max(maxDDUsd, peak - eq);
       const d = dayOf(p.exitAt); dayPnl[d] = (dayPnl[d] || 0) + p.pnl;
       curve.push({ t: p.exitAt, eq });
     }
@@ -584,7 +601,8 @@ function portfolio(trades, cfg, startAt, until) {
     const day = dayOf(tr.entryAt);
     if (open.length >= cfg.maxOpen) { taken.push({ ...tr, status: "skip", why: `đủ ${cfg.maxOpen} lệnh mở` }); continue; }
     if ((dayPnl[day] || 0) <= -(cfg.dailyStopPct / 100) * eq) { taken.push({ ...tr, status: "skip", why: `chạm dừng ngày -${cfg.dailyStopPct}%` }); continue; }
-    const riskUsd = eq * (cfg.riskPct / 100);
+    const reduced = cfg.streakN > 0 && lossRun >= cfg.streakN;
+    const riskUsd = eq * ((reduced ? cfg.streakRiskPct ?? cfg.riskPct / 2 : cfg.riskPct) / 100);
     let qty = riskUsd / tr.risk; const maxQty = (cfg.maxLev * eq) / tr.entry;
     if (qty > maxQty) qty = maxQty;
     const lev = (qty * tr.entry) / eq;
@@ -592,7 +610,7 @@ function portfolio(trades, cfg, startAt, until) {
     const pnl = qty * tr.risk * R; // R đã trừ phí
     const fee = qty * tr.risk * tr.feeR;
     if (tr.exitAt != null) fees += fee;
-    const row = { ...tr, status: tr.exitAt == null ? "open" : "done", qty, lev, riskUsd: qty * tr.risk, pnl, fee, notional: qty * tr.entry };
+    const row = { ...tr, status: tr.exitAt == null ? "open" : "done", qty, lev, riskUsd: qty * tr.risk, pnl, fee, notional: qty * tr.entry, ...(reduced ? { reducedRisk: true } : {}) };
     taken.push(row);
     open.push(row);
   }
