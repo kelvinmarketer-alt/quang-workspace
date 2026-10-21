@@ -1,7 +1,7 @@
 {
-  "sha": "ae3fffae0fc11f1345ecd0f23b330449343e5b9e",
-  "date": "2026-10-21T23:37:54+07:00",
-  "msg": "Luật: tắt riêng 1 khung của 1 cặp (cfg.offStreams, đồng bộ từ app) + log hiển thị khung đã tắt",
+  "sha": "9577e97784f35024f02fc1171239fd1001e7c0f7",
+  "date": "2026-10-21T23:42:32+07:00",
+  "msg": "Báo điện thoại khi cặp × khung âm 30 ngày (≥10 lệnh Demo), 1 lần/tuần/cặp, mở thẳng Demo; tắt bằng config.notifyWeak=false — chỉ báo, không tự tắt",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "ead8efdf7bff08fbae0fac0a27fef1a8ea0cc294"
+      "sha": "92f000f65398ae052051dca074892f5010ae3ba7"
     },
     {
       "path": "lib/paperBot.js",
@@ -37,7 +37,7 @@
     },
     {
       "path": "lib/report.js",
-      "sha": "4470758b1d4e440d0a1c0f1a9ffeaecfb44f43eb"
+      "sha": "859f2c0233aca53ca83a27dc1c1ae6204943eb67"
     },
     {
       "path": "lib/updater.js",

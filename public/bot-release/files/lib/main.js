@@ -46,11 +46,11 @@ const decrypt = (b64) => crypto.privateDecrypt({ key: MK.priv, padding: crypto.c
 
 // Thông báo đẩy về điện thoại: tắt được trong app (config.notify = false); chống gửi trùng theo tag; chế độ thử chỉ ghi log
 const sentTags = new Set();
-function note(title, body, tag) {
+function note(title, body, tag, url) {
   if (appCfg.notify === false || (tag && sentTags.has(tag))) return;
   if (tag) { if (sentTags.size > 2000) sentTags.clear(); sentTags.add(tag); }
   if (DRY) { log(`🔔 [thử, không gửi] ${title} — ${body}`); return; }
-  notify(title, body, tag).catch(() => {});
+  notify(title, body, tag, url).catch(() => {});
 }
 
 let ghToken = null, healthy = false, lastForce = 0;
@@ -382,6 +382,28 @@ const riskNow = () => (cfg.streakN > 0 && lossRun() >= cfg.streakN ? Math.min(RI
 // ---------- Báo cáo tuần (tối Chủ nhật ≥ 20:00 giờ VN; máy tắt lúc đó thì gửi bù trong 16 giờ sau) ----------
 // Demo (chạy lại cùng luật/mốc học như tab Demo) + lệnh thật của bot trong 7 ngày, kèm tiến độ tháng so với mục tiêu 10 lệnh
 let lastRaw = null;
+// Cảnh báo cặp × khung đang âm 30 ngày (≥ 10 lệnh Demo, R TB < 0) — mỗi cặp × khung tối đa 1 lần / tuần; mở thẳng bảng "nên giữ hay tắt".
+// CHỈ báo — không tự tắt (sếp quyết ở Demo → Thống kê). Tắt riêng: config.notifyWeak = false.
+function weakAlert() {
+  if (DRY || ONCE || !lastRaw || appCfg.notifyWeak === false) return;
+  const since = now() - 30 * 86400000, off = new Set(cfg.offStreams || []), wk = Math.floor((now() + VN) / (7 * 86400000));
+  const T = finalize(lastRaw, null).portfolio.trades.filter((t) => t.status === "done" && t.r != null && t.entryAt >= since);
+  S.weakSent ||= {};
+  for (const [k, t] of Object.entries(S.weakSent)) if (now() - t > 35 * 86400000) delete S.weakSent[k];
+  for (const coin of cfg.coins) for (const tf of cfg.tfs) {
+    if (off.has(`${coin}|${tf}`)) continue;
+    const L = T.filter((t) => t.coin === coin && t.tf === tf);
+    if (L.length < 10) continue;
+    const avg = L.reduce((a, t) => a + t.r, 0) / L.length;
+    if (avg >= 0) continue;
+    const tag = `qws-bot-weak-${coin}-${tf}-${wk}`;
+    if (S.weakSent[tag]) continue;
+    S.weakSent[tag] = now(); save();
+    const win = (L.filter((t) => t.r > 0.05).length / L.length) * 100;
+    log(`⚠ ${coin} ${TFS[tf].label} âm 30 ngày: ${L.length} lệnh, TB ${avg.toFixed(2)}R`);
+    note(`⚠ ${coin} ${TFS[tf].label} đang âm 30 ngày qua`, `${L.length} lệnh Demo · thắng ${vn(win, 0)}% · TB ${avg.toFixed(2).replace(".", ",")}R. Mở Demo → Thống kê để xem nên giữ hay "Tắt khung" (bot không tự tắt).`, tag, "/coin?tab=bot");
+  }
+}
 function weeklyReport() {
   if (DRY || ONCE || !lastRaw) return;
   const vnNow = new Date(now() + VN), sun = new Date(vnNow); sun.setUTCHours(20, 0, 0, 0); sun.setUTCDate(sun.getUTCDate() - sun.getUTCDay()); // Chủ nhật gần nhất 20:00 (giờ VN, dạng UTC giả)
@@ -435,6 +457,7 @@ async function cycle(state) {
   await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
   await syncHistory();
   try { weeklyReport(); } catch (e) { log("Lỗi báo cáo tuần:", e.message); }
+  try { weakAlert(); } catch (e) { log("Lỗi cảnh báo cặp yếu:", e.message); }
 }
 
 // Tự cập nhật: 5 phút/lần hoặc khi bấm "Cập nhật ngay" trong app; có bản mới → thoát để vòng chạy bật bản mới

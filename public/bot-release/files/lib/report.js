@@ -25,10 +25,10 @@ export async function pushHistory(trades) {
 // Thông báo đẩy về điện thoại qua Edge Function qws-send-push (không bao giờ ném lỗi)
 let pushWarned = false;
 export let lastPush_ = null; // kết quả lần gửi gần nhất { ok, status, at } — lệnh thử báo về app
-export async function notify(title, body, tag) {
+export async function notify(title, body, tag, url = "/coin?tab=live") {
   if (!URL_ || !KEY) { lastPush_ = { ok: false, status: "thiếu SUPABASE_SERVICE_KEY", at: Date.now() }; return false; }
   try {
-    const r = await fetch(`${URL_}/functions/v1/qws-send-push`, { method: "POST", headers: H(), body: JSON.stringify({ title, body, url: "/coin?tab=live", tag }), signal: AbortSignal.timeout(15000) });
+    const r = await fetch(`${URL_}/functions/v1/qws-send-push`, { method: "POST", headers: H(), body: JSON.stringify({ title, body, url, tag }), signal: AbortSignal.timeout(15000) });
     if ((r.status === 401 || r.status === 403) && !pushWarned) { pushWarned = true; console.log(`(Không gửi được thông báo: qws-send-push trả ${r.status} — kiểm tra SUPABASE_SERVICE_KEY / cài đặt xác thực của hàm)`); }
     lastPush_ = { ok: r.ok, status: r.status, at: Date.now() };
     return r.ok;

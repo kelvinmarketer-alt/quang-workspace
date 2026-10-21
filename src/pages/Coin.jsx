@@ -135,12 +135,12 @@ export default function Coin() {
       <div className="flex items-stretch gap-1 sm:gap-2">
       <div className={`flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
         {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (
-          <button key={k} onClick={() => pick(k)} className={`flex shrink-0 items-center justify-center gap-1 rounded-xl px-2.5 py-2 sm:px-1 text-[13px] font-extrabold transition sm:gap-1.5 sm:text-sm ${cur === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
+          <button key={k} onClick={() => pick(k)} className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-extrabold transition sm:flex-row sm:gap-1.5 sm:py-2 sm:text-sm ${cur === k ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
         ))}
       </div>
-        <button onClick={() => setPro(!pro)} title={pro ? "Về giao diện thường" : "Giao diện Pro (nền tối kiểu sàn giao dịch)"} className={`flex shrink-0 items-center gap-1.5 rounded-none px-3 text-[12px] font-extrabold shadow-sm transition sm:rounded-2xl ${pro ? "pro-toggle-on" : "bg-white/70 text-slate-600 hover:text-slate-900"}`}>
+        <button onClick={() => setPro(!pro)} title={pro ? "Về giao diện thường" : "Giao diện Pro (nền tối kiểu sàn giao dịch)"} className={`hidden shrink-0 items-center gap-1.5 rounded-none px-3 text-[12px] font-extrabold shadow-sm transition sm:flex sm:rounded-2xl ${pro ? "pro-toggle-on" : "bg-white/70 text-slate-600 hover:text-slate-900"}`}>
           {pro ? <Sun size={15} /> : <MonitorDot size={15} />}<span className="hidden sm:inline">{pro ? "Thường" : "Pro"}</span>
         </button>
       </div>

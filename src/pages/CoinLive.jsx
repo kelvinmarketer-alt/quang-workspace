@@ -38,6 +38,21 @@ async function mergeCmd(patch, fallback) {
   return supabase.from("qws_live_bot").upsert({ id: "command", data: { ...base, ...p, at: Date.now() }, updated_at: new Date().toISOString() });
 }
 
+// Bản bot đang chạy so với bản mới nhất đã phát hành trên web app (/bot-release/manifest.json) — thấy ngay ở đầu trang
+let REL = null;
+function VerBadge({ st }) {
+  const [rel, setRel] = useState(REL);
+  useEffect(() => { fetch("/bot-release/manifest.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((m) => { if (m?.sha) { REL = m; setRel(m); } }).catch(() => {}); }, [st.version?.sha]);
+  const run = st.version?.sha;
+  if (!run) return null;
+  const ok = rel?.sha && rel.sha === run;
+  return (
+    <span title={rel ? `Bản mới nhất: ${rel.sha.slice(0, 7)} — ${rel.msg || ""}` : ""} className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${!rel ? "bg-slate-100 text-slate-500" : ok ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
+      bot {run.slice(0, 7)}{rel ? (ok ? " · mới nhất ✓" : ` · đang chờ cập nhật ${rel.sha.slice(0, 7)} (≤5 phút)`) : ""}
+    </span>
+  );
+}
+
 export default function CoinLive({ active }) {
   const { settings = {}, isOwner } = useData(); // thành viên có quyền "Bot thật": CHỈ XEM — mọi nút điều khiển chỉ chủ
   const session = settings.paperBot || null;
@@ -139,6 +154,7 @@ export default function CoinLive({ active }) {
           {online ? <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Đang chạy</span>
             : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Mất liên lạc · báo lần cuối {ago(st.at)}</span>}
           {stopped && <Badge tone="rose">ĐANG DỪNG</Badge>}
+          <VerBadge st={st} />
           {syncOk != null && <a href="#bot-rules" className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${syncOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{syncOk ? "✓ Đồng bộ Demo" : "⚠ Khác Demo — xem"}</a>}
           <div className="ml-auto flex flex-wrap justify-end gap-1.5">
             <button onClick={load} aria-label="Làm mới" className="rounded-lg border border-slate-200 p-2 text-slate-500"><RefreshCw size={14} /></button>
@@ -521,7 +537,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   const save = async () => {
     setMsg(null);
     const src = follow ? demo : f;
-    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false, notifyPending: f.notifyPending !== false };
+    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false, notifyPending: f.notifyPending !== false, notifyWeak: f.notifyWeak !== false };
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
     if (!(v.maxOpen >= 1 && v.maxOpen <= 5)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–5" });
     if (!(v.dailyStopPct >= 1 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 1–20%" });
@@ -587,6 +603,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
             <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><input type="checkbox" checked={f.notify !== false} onChange={(e) => setF({ ...f, notify: e.target.checked })} /><BellRing size={14} className="text-indigo-500" /> Gửi thông báo về điện thoại</label>
             <div className="mt-0.5 text-[11.5px] text-slate-500">Bot báo khi đặt / khớp / đóng lệnh, chạm dừng ngày hoặc gặp lỗi — gửi tới mọi máy đã bật thông báo đẩy của app. Lưu cùng cài đặt bên dưới.</div>
             {f.notify !== false && <label className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-600"><input type="checkbox" checked={f.notifyPending !== false} onChange={(e) => setF({ ...f, notifyPending: e.target.checked })} /> Báo cả lúc <b>đặt lệnh chờ</b> (bỏ tick nếu chỉ muốn báo khi khớp / đóng)</label>}
+            {f.notify !== false && <label className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-slate-600"><input type="checkbox" checked={f.notifyWeak !== false} onChange={(e) => setF({ ...f, notifyWeak: e.target.checked })} /> Báo khi 1 cặp × khung <b>âm 30 ngày</b> (≥ 10 lệnh, tối đa 1 lần/tuần — chỉ báo, không tự tắt)</label>}
             {f.notify !== false && <PushHint />}
           </div>
           {live && cmd?.config?.mode !== "live" && (
