@@ -41,9 +41,9 @@ async function loadAccounts(all = false) {
   if (!all) q = q.eq("active", true);
   const { data, error } = await q;
   if (error) throw new Error("Đọc bảng " + TABLE + ": " + error.message);
-  return (data || []).map((r: any) => ({ id: r.id, name: r.name, brand: r.brand, group: r.grp, services: r.services, active: r.active, sort: r.sort, token: r.token }));
+  return (data || []).map((r: any) => ({ id: r.id, name: r.name, brand: r.brand, group: r.grp, services: r.services, active: r.active, sort: r.sort, token: r.token, cust: r.qws_customer_id || null }));
 }
-const safe = (a: any) => ({ id: a.id, name: a.name, brand: a.brand, group: a.group, services: a.services, active: a.active, sort: a.sort, tokenTail: a.token ? "…" + String(a.token).slice(-6) : "" });
+const safe = (a: any) => ({ id: a.id, name: a.name, brand: a.brand, group: a.group, services: a.services, active: a.active, sort: a.sort, cust: a.cust || null, tokenTail: a.token ? "…" + String(a.token).slice(-6) : "" });
 
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
 const BASE_FIELDS = "spend,impressions,reach,frequency,cpm,ctr,cpc,clicks,actions,action_values,video_thruplay_watched_actions";
@@ -154,7 +154,7 @@ function sumMetrics(list: any[]) {
 // light = chỉ tổng + trạng thái (cho cron soát 15 phút) — bỏ daily/chiến dịch/quảng cáo cho đỡ tốn lượt gọi API
 async function fetchAccount(acc: any, since: string, until: string, prev: { since: string; until: string } | null, light = false) {
   const token = acc.token || "";
-  const base = { id: acc.id, name: acc.name, brand: acc.brand, group: acc.group, services: !!acc.services };
+  const base = { id: acc.id, name: acc.name, brand: acc.brand, group: acc.group, services: !!acc.services, cust: acc.cust || null };
   if (!token) return { ...base, error: "Chưa có token" };
   const act_ = "act_" + acc.id;
   const t = timeArgs(since, until);
@@ -234,7 +234,7 @@ const fmt = (v: number) => Math.round(v || 0).toLocaleString("vi-VN") + "đ";
 // members[].scope = { all:false, customers:[id khách QWS] }. Khớp: nguồn đã gắn trong Văn phòng AI (office_client_sources.ref_id)
 // HOẶC tên / từ khoá thương hiệu nằm trong tên TK quảng cáo · domain web · tên page (bỏ dấu, bỏ khoảng trắng).
 const squash = (x: unknown) => String(x || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z0-9]+/g, "");
-type Scope = { keys: string[]; refs: Set<string> } | null;
+type Scope = { keys: string[]; refs: Set<string>; custs: Set<string> } | null;
 async function memberScopeOf(db: any, ownerId: string, mem: any): Promise<Scope> {
   const sc = mem?.scope;
   if (!sc || sc.all !== false || !Array.isArray(sc.customers)) return null;
@@ -251,10 +251,13 @@ async function memberScopeOf(db: any, ownerId: string, mem: any): Promise<Scope>
     const { data: src } = await db.from("office_client_sources").select("ref_id").in("client_id", clientIds);
     refs = new Set((src || []).map((s: any) => String(s.ref_id || "").replace(/^act_/, "")));
   }
-  return { keys: [...new Set(keys)], refs };
+  return { keys: [...new Set(keys)], refs, custs: ids };
 }
 const inScope = (scope: Scope, text: unknown, ref?: unknown) =>
   !scope || (ref != null && scope.refs.has(String(ref).replace(/^act_/, ""))) || scope.keys.some((k) => squash(text).includes(k));
+// TK quảng cáo: đã gắn "Dự án" (qws_customer_id) ở Cài đặt → chỉ theo gắn đó (chính xác); chưa gắn → đoán theo tên/nguồn như cũ
+const inScopeAcc = (scope: Scope, a: any) =>
+  !scope || (a.cust ? scope.custs.has(String(a.cust)) : inScope(scope, `${a.brand || ""} ${a.name || ""}`, a.platform === "google" || a.cid ? a.cid : a.id));
 
 function admin() {
   return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -555,7 +558,7 @@ async function gadsReport(since: string, until: string, prev: { since: string; u
     const cur = mine.filter((r: any) => r.date >= since && r.date <= until);
     const pr = prev ? mine.filter((r: any) => r.date >= prev.since && r.date <= prev.until) : null;
     const base = {
-      id: "g" + a.customer_id, cid: a.customer_id, platform: "google", name: a.name, group: a.grp, currency: a.currency,
+      id: "g" + a.customer_id, cid: a.customer_id, platform: "google", name: a.name, group: a.grp, currency: a.currency, cust: a.qws_customer_id || null,
       lastSync: a.last_sync, status: a.status, issues: a.policy_issues ? [{ name: a.policy_issues + " quảng cáo bị từ chối / hạn chế chính sách", status: "POLICY" }] : [],
       totals: gMetrics(cur), prev: pr ? gMetrics(pr) : null, bal: balOf(a),
     };
@@ -631,9 +634,9 @@ Deno.serve(async (req) => {
   }
   // TK quảng cáo trong phạm vi (Meta: brand + tên · Google: tên) — chỉ dùng khi thành viên bị giới hạn dự án
   const allowedAccIds = async () => {
-    const meta = (await loadAccounts(true)).filter((a: any) => inScope(scope, `${a.brand || ""} ${a.name || ""}`, a.id)).map((a: any) => String(a.id));
-    const { data: g } = await admin().from("qws_gads_accounts").select("customer_id,name");
-    const goo = (g || []).filter((a: any) => inScope(scope, a.name, a.customer_id)).map((a: any) => "g" + a.customer_id);
+    const meta = (await loadAccounts(true)).filter((a: any) => inScopeAcc(scope, a)).map((a: any) => String(a.id));
+    const { data: g } = await admin().from("qws_gads_accounts").select("customer_id,name,qws_customer_id");
+    const goo = (g || []).filter((a: any) => inScopeAcc(scope, { name: a.name, cid: a.customer_id, cust: a.qws_customer_id })).map((a: any) => "g" + a.customer_id);
     return new Set([...meta, ...goo]);
   };
 
@@ -676,6 +679,7 @@ Deno.serve(async (req) => {
       const patch: any = {};
       if (p.name != null) patch.name = String(p.name).slice(0, 80);
       if (p.brand != null) patch.brand = String(p.brand).slice(0, 80);
+      if (p.cust !== undefined) patch.qws_customer_id = p.cust ? String(p.cust).slice(0, 80) : null;
       if (p.group != null) patch.grp = p.group === "brand" ? "brand" : "conv";
       if (p.services != null) patch.services = !!p.services;
       if (p.active != null) patch.active = !!p.active;
@@ -699,7 +703,7 @@ Deno.serve(async (req) => {
       return json({ key });
     }
     if (mode === "gads_list") {
-      const accs = await selectAll(() => admin().from("qws_gads_accounts").select("customer_id,name,name_meta,grp,active,policy_issues,last_sync,currency").order("sort").order("created_at"));
+      const accs = await selectAll(() => admin().from("qws_gads_accounts").select("customer_id,name,name_meta,grp,active,policy_issues,last_sync,currency,qws_customer_id").order("sort").order("created_at"));
       return json({ accounts: accs });
     }
     if (mode === "gads_update") {
@@ -707,6 +711,7 @@ Deno.serve(async (req) => {
       if (p.name != null) patch.name = String(p.name).slice(0, 80);
       if (p.group != null) patch.grp = p.group === "brand" ? "brand" : "conv";
       if (p.active != null) patch.active = !!p.active;
+      if (p.cust !== undefined) patch.qws_customer_id = p.cust ? String(p.cust).slice(0, 80) : null;
       const { error } = await admin().from("qws_gads_accounts").update(patch).eq("customer_id", cidOf(body.cid));
       if (error) throw new Error(error.message);
       return json({ ok: true });
@@ -776,7 +781,7 @@ Deno.serve(async (req) => {
     const mBal = await Promise.all(ACCOUNTS.map((a: any) => (mLed[a.id] ? metaBalance(a, mLed[a.id]).catch(() => null) : null)));
     const all = [...meta.map((a: any, i: number) => ({ ...a, platform: "meta", bal: mBal[i] })), ...google];
     // Thành viên bị giới hạn dự án: chỉ TK của khách được giao (Meta theo brand/tên/nguồn đã gắn · Google theo tên/nguồn)
-    const accounts = scope ? all.filter((a: any) => inScope(scope, `${a.brand || ""} ${a.name || ""}`, a.platform === "google" ? a.cid : a.id)) : all;
+    const accounts = scope ? all.filter((a: any) => inScopeAcc(scope, a)) : all;
     return json({ since, until, prev, accounts, scoped: !!scope, updatedAt: Date.now() });
   } catch (e) {
     return json({ error: String((e as Error).message || e) }, 500);

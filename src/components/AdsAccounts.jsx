@@ -4,6 +4,7 @@ import { Card, Badge } from "./ui.jsx";
 import { supabase } from "../lib/supabase.js";
 import GADS_SCRIPT from "../../supabase/gads-script.js?raw";
 import { ask } from "./ConfirmDialog.jsx";
+import { useData } from "../lib/store.jsx";
 
 // Quản lý TKQC Meta cho module Quảng cáo (CHỈ CHỦ). Token gửi thẳng lên edge fn qws-meta-ads,
 // lưu ở bảng qws_ads_accounts (chỉ service role đọc) — app không bao giờ nhận lại token, chỉ 6 ký tự cuối.
@@ -15,6 +16,19 @@ const call = async (body) => {
 };
 const inputCls = "rounded-lg border border-slate-200 px-2 py-1.5 text-xs";
 const GROUPS = [["conv", "Chuyển đổi"], ["brand", "Thương hiệu"]];
+
+// Gắn TK với 1 Dự án/khách → phân quyền theo dự án lọc CHÍNH XÁC (chưa gắn = tự đoán theo tên)
+function CustSelect({ value, onChange }) {
+  const { customerList = [] } = useData();
+  const list = [...customerList].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "vi"));
+  return (
+    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} title="Dự án của tài khoản — nhân viên chỉ được giao dự án này mới thấy" className={`${inputCls} max-w-44 ${value ? "border-indigo-200 bg-indigo-50 font-bold text-indigo-700" : "text-slate-500"}`}>
+      <option value="">Dự án: tự nhận theo tên</option>
+      {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      {value && !list.some((c) => String(c.id) === String(value)) && <option value={value}>(khách đã xoá)</option>}
+    </select>
+  );
+}
 
 function GroupSelect({ value, onChange }) {
   return (
@@ -59,6 +73,7 @@ function GoogleSection() {
           <div key={a.customer_id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 ${a.active ? "border-slate-100" : "border-dashed border-slate-200 opacity-60"}`}>
             <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.customer_id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
             <GroupSelect value={a.grp} onChange={(v) => update(a.customer_id, { group: v })} />
+            <CustSelect value={a.qws_customer_id} onChange={(v) => update(a.customer_id, { cust: v })} />
             <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.customer_id, { active: e.target.checked })} />Đang dùng</label>
             <span className="text-[11px] text-slate-400">{String(a.customer_id).replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")} · {ago(a.last_sync)}</span>
             {a.policy_issues > 0 && <Badge tone="rose">{a.policy_issues} QC bị hạn chế</Badge>}
@@ -147,6 +162,7 @@ export default function AdsAccounts() {
             <div className="flex flex-wrap items-center gap-2">
               <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
               <GroupSelect value={a.group} onChange={(v) => update(a.id, { group: v })} />
+              <CustSelect value={a.cust} onChange={(v) => update(a.id, { cust: v })} />
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => update(a.id, { services: e.target.checked })} />Gom theo dịch vụ TMV</label>
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.id, { active: e.target.checked })} />Đang dùng</label>
               <span className="text-[11px] text-slate-400">ID {a.id} · token {a.tokenTail || "—"}</span>
