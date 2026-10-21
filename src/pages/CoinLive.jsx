@@ -11,7 +11,7 @@ import { pushSupported, permission, isSubscribed, enablePush } from "../lib/push
 import { runSessionAsync } from "../lib/botRunner.js";
 import { finalize, cfgOf } from "../lib/paperBot.js";
 import { normLive, liveSummary, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
-import { monthOf, monthLabel, MONTH_TARGET } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Bot thật": theo dõi bot giao dịch chạy nền trên máy bàn ở nhà (repo qws-live-bot) qua bảng Supabase qws_live_bot
@@ -56,7 +56,7 @@ function VerBadge({ st }) {
 // Ghi thay đổi ở Bot thật vào CHUNG nhật ký luật với Demo (settings.paperBotLog, ≤ 100 dòng) — xem ở Demo → Tối ưu & bài học
 function useBotLog() {
   const { settings = {}, setSettings, myEmail } = useData();
-  return (what) => setSettings({ paperBotLog: [{ at: Date.now(), by: myEmail || "", what: `Bot thật: ${what}`, src: "bot" }, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
+  return (what, reason = "") => setSettings({ paperBotLog: [{ at: Date.now(), by: myEmail || "", what: `Bot thật: ${what}`, src: "bot", ...(reason ? { reason: String(reason).slice(0, 200) } : {}) }, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
 }
 
 export default function CoinLive({ active }) {
@@ -79,11 +79,20 @@ export default function CoinLive({ active }) {
   const hasSt = !!st;
   useEffect(() => { if (!active || hasSt) return undefined; const t = setTimeout(() => setSlow(true), 20000); return () => clearTimeout(t); }, [active, hasSt]);
   useEffect(() => { if (!note) return undefined; const t = setTimeout(() => setNote(null), 12000); return () => clearTimeout(t); }, [note]);
+  // Kết quả Demo (dùng chung bộ đệm 5 phút + bộ nhớ máy) → điều kiện "testnet khớp Demo" trước khi bật tiền thật
+  const [demoFin, setDemoFin] = useState(null);
+  useEffect(() => {
+    if (!active || !session || !isOwner) return undefined;
+    let off = false;
+    demoCacheGet(session).then((c) => { if (c && !off) setDemoFin((d) => d || finalize(c, null)); });
+    demoResult(session).then((f) => { if (!off && f) setDemoFin(f); }).catch(() => {});
+    return () => { off = true; };
+  }, [active, session?.createdAt, session?.stoppedAt, isOwner]); // eslint-disable-line react-hooks/exhaustive-deps
   const setStop = async (stop) => {
-    if (!(await ask(stop ? "Dừng bot?\nBot huỷ các lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho bot chạy lại?\nBot sẽ tiếp tục đặt lệnh theo tín hiệu mới.", { ok: stop ? "Dừng bot" : "Chạy lại", danger: stop }))) return;
+    const ans = await ask(stop ? "Dừng bot?\nBot huỷ các lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho bot chạy lại?\nBot sẽ tiếp tục đặt lệnh theo tín hiệu mới.", { ok: stop ? "Dừng bot" : "Chạy lại", danger: stop, input: "Lý do (không bắt buộc)…" }); if (!ans) return;
     setBusy(true);
     const { error } = await mergeCmd({ stop }, cmd);
-    setBusy(false); if (error) setErr(error.message); else { setNote({ t: stop ? "Đã gửi lệnh Dừng — bot áp dụng trong ~15–30 giây." : "Đã cho bot chạy lại." }); logBot(stop ? "dừng bot" : "cho bot chạy lại"); load(); }
+    setBusy(false); if (error) setErr(error.message); else { setNote({ t: stop ? "Đã gửi lệnh Dừng — bot áp dụng trong ~15–30 giây." : "Đã cho bot chạy lại." }); logBot(stop ? "dừng bot" : "cho bot chạy lại", ans.text); load(); }
   };
   // Đóng hết: bước 1 = popup giải thích, bước 2 = gõ "ĐÓNG HẾT" ngay trong thẻ rồi mới gửi lệnh
   const startCloseAll = async () => {
@@ -149,6 +158,9 @@ export default function CoinLive({ active }) {
   const monthN = realT.filter((t) => t.exitAt && monthOf(t.exitAt) === monthOf(Date.now())).length;
   const syncOk = (() => { const demo = session ? cfgOf(session) : null; if (!demo || !st.cfgSummary) return null; const set = st.settings || {}; return !cfgDiff(st.cfgSummary, demo).length && ["riskPct", "maxOpen", "dailyStopPct", "maxLev"].every((k) => set[k] == null || Number(set[k]) === Number(demo[k])) && (!st.rulesHash || !APP_RULES_HASH || st.rulesHash === APP_RULES_HASH) && (!st.learnFrom || Math.abs(st.learnFrom - session.startAt) < 60000); })();
   liveChecks.push({ ok: syncOk === true, t: "Bot đồng bộ hoàn toàn với Demo", v: syncOk ? "đạt" : "chưa" });
+  // Testnet phải KHỚP Demo thực tế: ≥ 10 cặp lệnh cùng tín hiệu đã đóng, chênh R TB (thật − demo) không tệ hơn −0,15R
+  const cmp = demoFin && tn.length ? compareDemoLive(demoFin, demoFin, tn.map((t) => normLive(t, "testnet"))) : null;
+  liveChecks.push({ ok: !!cmp && cmp.nPairs >= 10 && cmp.diffR != null && cmp.diffR >= -0.15, t: "Testnet khớp Demo (≥ 10 lệnh trùng, chênh R TB ≥ −0,15R)", v: !demoFin ? "đang tính…" : cmp ? `${cmp.nPairs} lệnh trùng · chênh ${fmtR(cmp.diffR)}` : "chưa có lệnh" });
   const closeSent = cmd?.closeAllAt && Date.now() - cmd.closeAllAt < 15 * 60000 ? cmd.closeAllAt : null;
   const todayPnl = st.lastScan?.pnl;
   return (

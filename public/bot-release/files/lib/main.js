@@ -436,7 +436,7 @@ function weeklyReport() {
     + (weak.length ? ` ⚠ Yếu 30 ngày: ${weak.slice(0, 3).map((w) => `${w.k} ${r2(w.a)} (${w.n})`).join(", ")}.` : " Không cặp nào âm 30 ngày.")
     + (chg.length ? ` Đổi luật tuần này: ${chg.join("; ")}.` : "") + " Không phải tư vấn đầu tư.";
   log(`📅 Báo cáo tuần: ${title}`);
-  note(title, body, `qws-bot-week-${key}`);
+  note(title, body, `qws-bot-week-${key}`, "/coin?tab=overview"); // mở thẳng thẻ "Tuần này" ở Tổng quan Coin
 }
 
 // ---------- Vòng lặp ----------

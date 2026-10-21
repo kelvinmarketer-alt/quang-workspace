@@ -174,6 +174,31 @@ export default function CoinOverview({ active, go }) {
           <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11.5px] text-slate-500"><Target size={13} className="shrink-0 text-indigo-500" /> Mục tiêu: tối thiểu {MONTH_TARGET} lệnh/tháng cho cả Demo và bot.</div>
         </Card>
       </div>
+      {/* Tuần này (từ 0h thứ Hai, giờ VN) — giống báo cáo tuần bot gửi tối Chủ nhật, xem được bất cứ lúc nào */}
+      {(() => {
+        const vnNow = new Date(Date.now() + 7 * 3600000), dow = (vnNow.getUTCDay() + 6) % 7; // 0 = thứ Hai
+        const wk = Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate() - dow) - 7 * 3600000;
+        const dW = dTrades.filter((t) => t.entryAt >= wk), dWs = statsOf(dW.filter((t) => t.status === "done")), dPnl = dW.reduce((x, t) => x + (t.pnl || 0), 0);
+        const lW = live.filter((t) => t.exitAt && t.exitAt >= wk), lPnl = lW.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
+        const weak = demo && cfg ? weakStreams(demo.portfolio.trades, cfg) : { tfs: [], pairs: [] };
+        const chg = (Array.isArray(settings.paperBotLog) ? settings.paperBotLog : []).filter((x) => x.at >= wk);
+        const rr = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2, 2)}R`);
+        return (
+          <Card className="!p-3 sm:!p-4">
+            <div className="mb-2 flex items-center gap-2"><Target size={16} className="text-indigo-500" /><span className="text-[13.5px] font-extrabold text-slate-800">Tuần này</span><span className="text-[11.5px] text-slate-400">từ thứ Hai {dm(wk).slice(0, 5)}</span></div>
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] font-bold uppercase text-slate-400">Demo</div><div className={`text-[16px] font-extrabold tabular-nums ${tone(dPnl)}`}>{fmtUsdSigned(dPnl)}</div><div className="text-[11.5px] text-slate-500">{dW.length} lệnh · thắng {dWs.n ? `${fmtNum(dWs.winRate, 0, 0)}%` : "—"} · {rr(dWs.avgR)}</div></div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] font-bold uppercase text-slate-400">Bot thật ({st?.mode === "live" ? "tiền thật" : "testnet"})</div><div className={`text-[16px] font-extrabold tabular-nums ${tone(lPnl)}`}>{fmtUsdSigned(lPnl)}</div><div className="text-[11.5px] text-slate-500">{lW.length} lệnh đóng · {lW.filter((t) => Number(t.pnl) > 0).length} thắng</div></div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] font-bold uppercase text-slate-400">Đang yếu 30 ngày</div>
+                {weak.tfs.length || weak.pairs.length ? <div className="text-[12px] leading-snug text-amber-700">{[...weak.tfs.map((x) => `khung ${TFS[x.tf]?.label} ${rr(x.avgR)}`), ...weak.pairs.slice(0, 3).map((x) => `${x.coin} ${TFS[x.tf]?.label} ${rr(x.avgR)}`)].join(" · ")}</div> : <div className="text-[12px] text-emerald-700">Không cặp nào âm</div>}
+              </div>
+              <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] font-bold uppercase text-slate-400">Đổi luật tuần này</div>
+                {chg.length ? chg.slice(0, 3).map((x, i) => { const A = dTrades.filter((t) => t.status === "done" && t.entryAt >= x.at), a = A.length ? A.reduce((q, t) => q + t.r, 0) / A.length : null; return <div key={i} className="truncate text-[12px] text-slate-600" title={x.reason || ""}>{String(x.what || "").slice(0, 38)} → {A.length ? `${A.length} lệnh ${rr(a)}` : "chưa có lệnh"}</div>; }) : <div className="text-[12px] text-slate-400">Không đổi gì</div>}
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
       <div className="px-3 text-center text-[11px] text-slate-400 sm:px-0">Không phải tư vấn đầu tư. Kết quả Demo là chạy lại trên dữ liệu thật, không đảm bảo tương lai.</div>
     </div>
   );

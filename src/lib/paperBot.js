@@ -129,9 +129,12 @@ export function loadKlines(symbol, tf, fromTs) {
 const KCACHE = "v2", REFETCH = 300;
 async function loadKlines0(symbol, tf, fromTs) {
   const key = `${KCACHE}|${symbol}|${tf}`, step = TFS[tf].ms, now = Date.now();
+  // 21/10: lần ĐẦU trong phiên chạy (tab / tiến trình bot) mới tải lại 300 nến để chữa bộ đệm trên đĩa; các lần sau nến trong RAM
+  // đã được chính lần trước kiểm (chỉ nhận nến đóng ≥ 2 giây) → chỉ tải lại 20 nến cuối: nhanh hơn, nhẹ mạng, kết quả như nhau
+  const warm = MEM.has(key), refetch = warm ? 20 : REFETCH;
   let rows = MEM.get(key) || (await idbGet(key)) || [];
   if (!rows.length || rows[0][0] > fromTs + step) rows = []; // cache bắt đầu muộn hơn mức cần → tải lại từ đầu
-  else rows = rows.slice(0, Math.max(0, rows.length - REFETCH)); // bỏ ~300 nến cuối → tải lại bản chuẩn từ sàn
+  else rows = rows.slice(0, Math.max(0, rows.length - refetch)); // bỏ ~300 nến cuối (lần đầu) / 20 nến (các lần sau) → tải lại bản chuẩn từ sàn
   let start = rows.length ? rows[rows.length - 1][0] + step : fromTs;
   for (let guard = 0; guard < 80 && start < now - step; guard++) {
     const limit = Math.min(1500, Math.max(2, Math.ceil((now - start) / step) + 1)); // phần mới ít → limit nhỏ (trọng số API thấp)

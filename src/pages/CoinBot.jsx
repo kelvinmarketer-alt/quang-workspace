@@ -307,6 +307,7 @@ function RulesLog({ log, list }) {
                 <span className={`rounded px-1.5 text-[10px] font-bold ${r.src === "bot" ? "bg-rose-50 text-rose-600" : "bg-indigo-50 text-indigo-600"}`}>{r.src === "bot" ? "Bot thật" : "Demo"}</span>
                 <b className="text-slate-800">{String(r.what || "").replace(/^Bot thật: /, "")}</b>
                 {r.by && <span className="text-[11px] text-slate-400">{r.by.split("@")[0]}</span>}
+                {r.reason && <span className="text-[11.5px] italic text-slate-500">“{r.reason}”</span>}
                 <span className="ml-auto flex flex-wrap gap-x-3 text-[11.5px] tabular-nums">
                   {r.snap && <span className="text-slate-500">lúc đổi: {r.snap.n} lệnh · {rr(r.snap.avgR)}{r.snap.eq != null ? ` · ${usd(r.snap.eq, 0)}` : ""}</span>}
                   <span className={after.n ? tone(after.avgR) : "text-slate-400"}>sau đó: {after.n ? `${after.n} lệnh · thắng ${fmtNum(after.winRate, 0, 0)}% · ${rr(after.avgR)}` : "chưa có lệnh đóng"}</span>
@@ -326,10 +327,10 @@ export default function CoinBot({ active: visible = true }) {
   const { settings = {}, setSettings, isOwner, perms = [], myEmail } = useData();
   // Nhật ký thay đổi luật (21/10): mỗi lần tắt/bật cặp, khung, sửa cặp, phiên mới, dừng → ghi ai đổi, lúc nào, kèm số liệu LÚC ĐỔI
   // để sau đối chiếu "sau khi đổi" tốt lên hay xấu đi. Giữ 100 dòng gần nhất (settings.paperBotLog).
-  const saveWithLog = (paperBot, what) => {
+  const saveWithLog = (paperBot, what, reason = "") => {
     let snap = null;
     try { snap = { n: all.n, winRate: all.winRate, avgR: all.avgR, eq: eqNow }; } catch { /* chưa có kết quả */ }
-    const row = { at: Date.now(), by: myEmail || "", what, snap };
+    const row = { at: Date.now(), by: myEmail || "", what, snap, ...(reason ? { reason: String(reason).slice(0, 200) } : {}) };
     setSettings({ paperBot, paperBotLog: [row, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
   };
   const canView = isOwner || perms.includes("coinDemo"); // thành viên được cấp quyền: CHỈ XEM (không dừng / phiên mới / sửa cặp)
@@ -351,16 +352,16 @@ export default function CoinBot({ active: visible = true }) {
   const saveCoins = async () => {
     if (!editCoins?.length) return;
     const added = editCoins.filter((x) => !cfg.coins.includes(x)), removed = cfg.coins.filter((x) => !editCoins.includes(x));
-    if (!(await ask(`Lưu danh sách cặp: ${editCoins.join(", ")}?${added.length ? `\nThêm: ${added.join(", ")}` : ""}${removed.length ? `\nXoá: ${removed.join(", ")}` : ""}\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại" }))) return;
-    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: editCoins }, createdAt: Date.now() }, `Sửa cặp: ${editCoins.join(", ")}${added.length ? ` (thêm ${added.join(", ")})` : ""}${removed.length ? ` (bỏ ${removed.join(", ")})` : ""}`);
+    const ans = await ask(`Lưu danh sách cặp: ${editCoins.join(", ")}?${added.length ? `\nThêm: ${added.join(", ")}` : ""}${removed.length ? `\nXoá: ${removed.join(", ")}` : ""}\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do đổi (không bắt buộc)…" }); if (!ans) return;
+    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: editCoins }, createdAt: Date.now() }, `Sửa cặp: ${editCoins.join(", ")}${added.length ? ` (thêm ${added.join(", ")})` : ""}${removed.length ? ` (bỏ ${removed.join(", ")})` : ""}`, ans.text);
     setEditCoins(null);
   };
   // Tắt 1 cặp từ bảng "nên giữ hay tắt" (cùng cơ chế Thêm/sửa cặp: Demo chạy lại, bot thật áp dụng ~5 phút)
   const removeCoin = async (c) => {
     const next = cfg.coins.filter((x) => x !== c), offNext = (cfg.offStreams || []).filter((k) => !k.startsWith(c + "|"));
     if (!next.length) return;
-    if (!(await ask(`Tắt cặp ${c} khỏi bot?\nCòn lại: ${next.join(", ")}.\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút (lệnh ${c} đang mở trên sàn — nếu có — vẫn giữ SL/TP tới khi đóng). Bật lại được ở "Thêm/sửa cặp".`, { ok: `Tắt ${c}`, danger: true }))) return;
-    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: next, offStreams: offNext }, createdAt: Date.now() }, `Tắt cặp ${c}`);
+    const ans = await ask(`Tắt cặp ${c} khỏi bot?\nCòn lại: ${next.join(", ")}.\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút (lệnh ${c} đang mở trên sàn — nếu có — vẫn giữ SL/TP tới khi đóng). Bật lại được ở "Thêm/sửa cặp".`, { ok: `Tắt ${c}`, danger: true, input: "Lý do (không bắt buộc)…" }); if (!ans) return;
+    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: next, offStreams: offNext }, createdAt: Date.now() }, `Tắt cặp ${c}`, ans.text);
   };
   // Tắt / bật RIÊNG 1 khung của 1 cặp (cfg.offStreams) — Demo chạy lại, bot thật áp dụng ~5 phút
   const toggleStream = async (c, tf) => {
@@ -368,8 +369,8 @@ export default function CoinBot({ active: visible = true }) {
     const next = on ? cur.filter((x) => x !== key) : [...cur, key];
     if (!on && cfg.coins.every((x) => cfg.tfs.every((t) => next.includes(`${x}|${t}`)))) return;
     const lbl = `${c} ${TFS[tf].label}`;
-    if (!(await ask(on ? `Bật lại ${lbl}?\nDemo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút.` : `Tắt riêng ${lbl}?\nBot không quét / không vào lệnh ở khung này nữa (các khung khác của ${c} vẫn chạy). Demo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút. Bật lại được ngay tại bảng này.`, { ok: on ? `Bật ${lbl}` : `Tắt ${lbl}`, danger: !on }))) return;
-    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), offStreams: next }, createdAt: Date.now() }, `${on ? "Bật lại" : "Tắt khung"} ${lbl}`);
+    const ans = await ask(on ? `Bật lại ${lbl}?\nDemo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút.` : `Tắt riêng ${lbl}?\nBot không quét / không vào lệnh ở khung này nữa (các khung khác của ${c} vẫn chạy). Demo chạy lại từ đầu phiên; bot thật áp dụng trong ~5 phút. Bật lại được ngay tại bảng này.`, { ok: on ? `Bật ${lbl}` : `Tắt ${lbl}`, danger: !on, input: "Lý do (không bắt buộc)…" }); if (!ans) return;
+    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), offStreams: next }, createdAt: Date.now() }, `${on ? "Bật lại" : "Tắt khung"} ${lbl}`, ans.text);
   };
   const [focus, setFocus] = useState(null);
   const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
@@ -503,7 +504,7 @@ export default function CoinBot({ active: visible = true }) {
   if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
   if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} onStart={(s) => { saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
 
-  const stop = async () => { if (await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.", { ok: "Dừng phiên", danger: true })) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo"); };
+  const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
   const eqNow = P ? P.equity + P.unrealized : null, pnl = eqNow != null ? eqNow - cfg.capital : null;
   const open = P ? P.trades.filter((t) => t.status === "open") : [];
   const done = P ? P.trades.filter((t) => t.status === "done") : [];

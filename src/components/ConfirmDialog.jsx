@@ -3,6 +3,7 @@ import { AlertTriangle, HelpCircle } from "lucide-react";
 
 // Popup xác nhận theo giao diện app (thay cho confirm() của trình duyệt — user không muốn hộp thoại mặc định).
 // Dùng: if (await ask("Xoá khách này?")) … · tuỳ chọn: ask(msg, { ok: "Xoá", danger: true, title })
+// Có ô nhập: ask(msg, { input: "Lý do…" }) → bấm đồng ý trả { text } (có thể rỗng), huỷ trả false
 let push = null;
 export function ask(message, opts = {}) {
   if (!push) return Promise.resolve(window.confirm(message)); // dự phòng khi chưa gắn ConfirmHost
@@ -12,19 +13,19 @@ export function ask(message, opts = {}) {
 const DANGER = /^(xoá|xóa|gỡ|đặt lại|khôi phục|bỏ khoá|bỏ khóa|tạo khoá mới)/i;
 
 export function ConfirmHost() {
-  const [q, setQ] = useState(null);
+  const [q, setQ] = useState(null), [text, setText] = useState("");
   const okRef = useRef(null);
-  useEffect(() => { push = (x) => setQ(x); return () => { push = null; }; }, []);
+  useEffect(() => { push = (x) => { setText(""); setQ(x); }; return () => { push = null; }; }, []);
   useEffect(() => {
     if (!q) return;
-    okRef.current?.focus();
+    if (!q.input) okRef.current?.focus();
     const onKey = (e) => { if (e.key === "Escape") done(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
   if (!q) return null;
-  const done = (v) => { q.resolve(v); setQ(null); };
+  const done = (v) => { q.resolve(v && q.input ? { text: text.trim() } : v); setQ(null); };
   const lines = String(q.message || "").split("\n");
   const danger = q.danger ?? DANGER.test(lines[0].trim());
   const title = q.title || lines[0];
@@ -43,6 +44,7 @@ export function ConfirmHost() {
             {body.filter((l) => l.trim()).map((l, i) => <div key={i} className="mt-1 text-[13px] leading-snug text-slate-500">{l}</div>)}
           </div>
         </div>
+        {q.input && <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={200} placeholder={typeof q.input === "string" ? q.input : "Ghi chú (không bắt buộc)"} className="mt-3 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-300" />}
         <div className="mt-4 flex gap-2">
           <button onClick={() => done(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Huỷ</button>
           <button ref={okRef} onClick={() => done(true)} className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white ${danger ? "bg-rose-600 hover:bg-rose-700" : "bg-gradient-to-r from-indigo-500 to-sky-500"}`}>{okText}</button>

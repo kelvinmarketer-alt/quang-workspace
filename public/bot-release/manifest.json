@@ -1,7 +1,7 @@
 {
-  "sha": "c9803494efdd7852b429ff9315f60dade034be5b",
-  "date": "2026-10-21T23:49:12+07:00",
-  "msg": "Báo cáo tuần: thêm cặp × khung yếu 30 ngày + thay đổi luật trong tuần kèm kết quả từ lúc đổi (đọc settings.paperBotLog)",
+  "sha": "6e280ea3ef06653c98a948ed2fb4b41b0df0d4c5",
+  "date": "2026-10-21T23:54:45+07:00",
+  "msg": "Nến: lần tính lại trong cùng tiến trình chỉ tải lại 20 nến cuối (lần đầu vẫn 300 để chữa bộ đệm) · báo cáo tuần mở thẳng Tổng quan Coin",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "bd38d8981b5100915116bf80934d80ae5603e652"
+      "sha": "a2c7402d9a9cc0425a55f55588fd66a9427a222e"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "29e13c1b8a2cea3f501789ff55c4913b5169e053"
+      "sha": "329c03f5e91745fc2ccf100b8502560ba79fda4b"
     },
     {
       "path": "lib/report.js",
