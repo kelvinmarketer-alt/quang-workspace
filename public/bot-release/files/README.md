@@ -23,6 +23,10 @@ Bot chạy nền 24/7 trên máy chạy bot (máy bàn Windows; VPS cũng đư�
   - **Dừng trong ngày khi lỗ 6%**.
   - Giữ lệnh quá 96 nến thì đóng.
 - **Dừng khẩn:** bấm "Dừng bot" trong app, hoặc tạo file `data/STOP`. Bot huỷ các lệnh chờ và không mở lệnh mới. Vị thế đang mở vẫn giữ SL/TP.
+- **Lệnh thử (chỉ Testnet):** bấm "Lệnh thử" trong app để kiểm tra trọn quy trình khi không ngồi ở máy.
+  - Bot đặt 1 lệnh LONG BTC (hoặc ETH) sát giá, rủi ro 0,1% vốn, khớp ngay rồi đặt SL/TP.
+  - Giữ 1 phút, đóng theo giá thị trường, ghi lịch sử và gửi thông báo về điện thoại.
+  - App hiện từng bước. Thống kê lệnh thật không tính lệnh thử.
 - **Đóng tất cả:** bấm "Đóng tất cả" trong app.
   - Bot huỷ mọi lệnh (lệnh chờ, SL/TP) và đóng vị thế theo giá thị trường.
   - Chỉ đụng BTCUSDT/ETHUSDT/XAUUSDT trong ví Futures, **không đụng ví Spot**.

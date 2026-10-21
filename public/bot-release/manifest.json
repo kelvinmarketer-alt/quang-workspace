@@ -1,11 +1,11 @@
 {
-  "sha": "826a618850c8a66f5717bba0a2dbb1562f4cb503",
-  "date": "2026-10-21T00:16:00+07:00",
-  "msg": "Bot: Đóng hết vị thế từ app, lưu lịch sử lệnh lên app (history), thông báo đẩy (khớp/đóng/lỗi/dừng ngày/chạy lại/cập nhật), báo luật đang chạy (cfgSummary, rulesHash), TỰ CẬP NHẬT TỪ TRANG APP không cần token (GitHub chỉ dự phòng), scripts/release.mjs; luật mới từ app (tín hiệu bị bỏ + lý do)",
+  "sha": "4cf361f34048107acf4625c978e31665b04f6cfa",
+  "date": "2026-10-21T08:58:07+07:00",
+  "msg": "Bot: Lệnh thử từ app (chỉ Testnet) — LONG sát giá rủi ro 0,1% → khớp → SL/TP → đóng sau 1 phút → lịch sử → thông báo (ghi kết quả gửi), báo từng bước qua status.test",
   "files": [
     {
       "path": "README.md",
-      "sha": "bce7d392eed42c1f21e048d1d79e7c98c2d27d64"
+      "sha": "1e8796c90c9fa2398bf4f9ce88219a879d93c767"
     },
     {
       "path": "bot.js",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "126dc10059fd36416ed174d0376164332622bd83"
+      "sha": "682475017ca7ef1fb4e3e452141c3c0a95397af3"
     },
     {
       "path": "lib/paperBot.js",
@@ -37,7 +37,7 @@
     },
     {
       "path": "lib/report.js",
-      "sha": "c7758ab7830c5f3fb79cf74800d7964fa08bdf77"
+      "sha": "2fc01c38657485728469f184d273b7e2b06dfcfb"
     },
     {
       "path": "lib/updater.js",

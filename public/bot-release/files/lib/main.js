@@ -10,7 +10,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
 import { runSession, cfgOf, SYMBOLS, TFS } from "./paperBot.js";
-import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify } from "./report.js";
+import { pushStatus, readCommand, readDemoSession, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
 const DRY = process.argv.includes("--dry"), ONCE = process.argv.includes("--once");
@@ -98,6 +98,7 @@ function initState() {
   S.mode = MODE;
   // Lệnh "Đóng tất cả" đã có từ trước khi bot có trạng thái này (cài mới/đổi chế độ/bản cũ) mà đã quá 10 phút → coi như đã xử lý, không chạy lại
   if (S.closeAllHandled == null) { const c = Number(lastCmd?.closeAllAt) || 0; S.closeAllHandled = c && now() - c > 600000 ? c : 0; }
+  if (S.testHandled == null) { const c = Number(lastCmd?.testTradeAt) || 0; S.testHandled = c && now() - c > 1800000 ? c : 0; } // lệnh thử cũ (>30 phút) → không chạy lại
 }
 const save = () => fs.writeFileSync(STATE_F, JSON.stringify(S, null, 2));
 const journal = (o) => { const e = { at: stamp(), ...o }; fs.appendFileSync(LOG_F, JSON.stringify(e) + "\n"); S.events = [e, ...(S.events || [])].slice(0, 60); };
@@ -121,7 +122,7 @@ const addHist = (row) => { HIST = [row, ...HIST].slice(0, HIST_MAX); histDirty =
 async function syncHistory() { // chỉ ghi khi có thay đổi; lỗi → thử lại sau ≥ 60 giây. Chế độ thử không ghi (tránh đè lịch sử thật)
   if (DRY || !histDirty || now() - histTry < 60000) return;
   histTry = now();
-  if (await pushHistory(HIST)) { histDirty = false; histTry = 0; }
+  if (await pushHistory(HIST)) { histDirty = false; histTry = 0; if (S.test?.closed && !S.test.doneAt) testStep("Đã ghi lệnh vào lịch sử trên app — lệnh thử XONG", true, true); }
 }
 
 // Luật = cấu hình phiên Demo trong app (đọc lại mỗi lần quét ≈5 phút); vốn/rủi ro/giới hạn lấy từ .env (an toàn tiền thật)
@@ -165,10 +166,17 @@ async function manage(posMap) {
         else if (now() > a.until) {
           await ex.cancel(symbol, a.entryCid).catch(() => {});
           if (filled > 0) await protect(symbol, a, Math.abs(amt) || filled, "khớp một phần, huỷ phần còn lại");
-          else { log(`⌛ ${a.coin} ${a.tf} giá không về điểm vào — huỷ lệnh chờ`); journal({ ev: "expired", ...a }); delete S.active[symbol]; }
+          else { log(`⌛ ${a.coin} ${a.tf} giá không về điểm vào — huỷ lệnh chờ`); journal({ ev: "expired", ...a }); delete S.active[symbol]; if (a.test) testStep("Lệnh thử không khớp sau 10 phút — đã huỷ", false, true); }
         }
       } else if (a.stage === "open") {
         if (amt === 0) { await closed(symbol, a); continue; }
+        // lệnh thử: giữ 1 phút rồi đóng theo giá thị trường (kiểm tra đường đóng lệnh)
+        if (a.test && !a.closeWhy && now() - a.openedAt > 60000) {
+          a.closeWhy = "Lệnh thử";
+          await ex.marketClose({ symbol, side: closeSide(a.side), quantity: Math.abs(amt) });
+          testStep(`Đóng vị thế thử theo giá thị trường`);
+          continue;
+        }
         // giữ lệnh quá lâu (time stop như demo) → đóng theo giá thị trường
         if (now() - a.openedAt > cfg.timeStopBars * TFS[a.tf].ms) {
           log(`⏱ ${a.coin} ${a.tf} giữ quá ${cfg.timeStopBars} nến → đóng thị trường`);
@@ -193,7 +201,9 @@ async function placeProtection(symbol, a) {
 async function protect(symbol, a, qty, why) {
   a.stage = "open"; a.openedAt = now(); a.filledQty = qty;
   note(`✅ Khớp ${dirStr(a.side)} ${a.coin} ${TFS[a.tf].label} @ ${px(a.lim)} · SL ${px(a.sl)} · TP ${px(a.tp)}`, `KL ${px(qty)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${why} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
-  try { await placeProtection(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/TP ${a.coin} ${TFS[a.tf].label}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); throw e; }
+  if (a.test) testStep(`Lệnh khớp @ ${px(a.lim)} · KL ${px(qty)}`);
+  try { await placeProtection(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/TP ${a.coin} ${TFS[a.tf].label}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); if (a.test) testStep(`Lỗi đặt SL/TP: ${e.message} (bot thử lại)`, false); throw e; }
+  if (a.test) testStep(`Đã đặt SL ${px(a.sl)} + TP ${px(a.tp)} trên sàn (${a.protKind === "algo" ? "lệnh Algo" : "lệnh điều kiện"})`);
   log(`✅ ${a.coin} ${a.tf} ${a.side === 1 ? "LONG" : "SHORT"} ${why} @ ${a.lim} · KL ${qty} · SL ${a.sl} · TP ${a.tp}`);
   journal({ ev: "open", ...a });
 }
@@ -213,7 +223,13 @@ async function closed(symbol, a, why = null) {
   log(`🏁 ${a.coin} ${a.tf} đóng${exit ? ` @ ${exit}` : ""}${reason ? ` (${reason})` : ""} · lãi/lỗ ${net.toFixed(2)} USDT${R != null ? ` (${R.toFixed(2)}R)` : ""}`);
   journal({ ev: "close", ...a, exit, pnl: net, R, reason, exitAt });
   addHist(histRow({ ...a, exit, pnl: net, R, reason }, exitAt));
-  note(`🏁 Đóng ${a.coin} ${TFS[a.tf].label} · ${sgn(net, 2)}$${R != null ? ` (${sgn(R, 1)}R)` : ""}`, `${dirStr(a.side)} @ ${px(a.lim)}${exit ? ` → ${px(exit)}` : ""}${reason ? ` · ${reason}` : ""} · ${modeLbl(a.mode)}`, `qws-bot-close-${a.id}`);
+  const cT = `🏁 Đóng ${a.coin} ${TFS[a.tf].label} · ${sgn(net, 2)}$${R != null ? ` (${sgn(R, 1)}R)` : ""}`, cB = `${dirStr(a.side)} @ ${px(a.lim)}${exit ? ` → ${px(exit)}` : ""}${reason ? ` · ${reason}` : ""} · ${modeLbl(a.mode)}`;
+  if (a.test) { // lệnh thử: gửi thông báo NGAY (kể cả khi tắt thông báo) và ghi kết quả gửi
+    testStep(`Vị thế đã đóng · lãi/lỗ ${sgn(net, 2)}$ (đã trừ phí)`);
+    const ok = DRY ? false : await notify(`🧪 ${cT}`, `Lệnh THỬ · ${cB}`, `qws-bot-test-${a.id}`);
+    testStep(ok ? "Gửi thông báo về điện thoại: OK" : `Gửi thông báo về điện thoại LỖI (${lastPush_?.status ?? "?"}) — kiểm tra SUPABASE_SERVICE_KEY / hàm qws-send-push`, ok);
+    if (S.test) S.test.closed = true;
+  } else note(cT, cB, `qws-bot-close-${a.id}`);
   delete S.active[symbol];
 }
 
@@ -253,11 +269,11 @@ async function place(p, symbol) {
   }
   const lim = ex.roundTo(p.lim * k, info.tick), sl = ex.roundTo(p.sl * k, info.tick);
   const risk = Math.abs(lim - sl), tp = ex.roundTo(lim + p.side * (p.rr || cfg.rr) * risk, info.tick);
-  const eq = await equityUsd(), riskUsd = (eq * RISK) / 100;
+  const eq = await equityUsd(), riskUsd = (eq * (p.riskPct ?? RISK)) / 100; // lệnh thử: rủi ro nhỏ riêng
   let qty = riskUsd / risk; const maxQty = (MAX_LEV * eq) / lim; if (qty > maxQty) qty = maxQty;
   qty = ex.roundTo(qty, info.step, "floor");
   if (!(qty > 0) || qty * lim < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p }); return; }
-  const a = { id: p.id, coin: p.coin, tf: p.tf, setup: p.setup, side: p.side, lim, sl, tp, qty, riskUsd: qty * risk, until: p.until, signalAt: p.signalAt, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE };
+  const a = { id: p.id, coin: p.coin, tf: p.tf, setup: p.setup, side: p.side, lim, sl, tp, qty, riskUsd: qty * risk, until: p.until, signalAt: p.signalAt, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE, ...(p.test ? { test: true } : {}) };
   if (!DRY) {
     await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
     await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
@@ -266,6 +282,39 @@ async function place(p, symbol) {
   S.active[symbol] = a;
   log(`📌 ${DRY ? "[thử] " : ""}Lệnh chờ ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"} @ ${lim} · SL ${sl} · TP ${tp} · KL ${qty} · rủi ro ${(qty * risk).toFixed(2)}$ · huỷ lúc ${stamp(p.until)}`);
   journal({ ev: "placed", ...a });
+}
+
+// ---------- Lệnh thử (chỉ Testnet) từ app (command.testTradeAt) ----------
+// Kiểm tra trọn quy trình mà không cần ngồi trước máy: đặt lệnh chờ LONG sát giá (khớp ngay) → SL/TP → giữ 1 phút → đóng thị trường
+// → ghi lịch sử → gửi thông báo về điện thoại. Rủi ro 0,1% vốn. Từng bước báo về app qua status.test.
+function testStep(msg, ok = true, done = false) {
+  if (!S.test) return;
+  S.test.steps = [...(S.test.steps || []), { t: now(), msg, ok }].slice(-20);
+  if (!ok) S.test.ok = false;
+  if (done) { S.test.doneAt = now(); if (S.test.ok !== false) S.test.ok = ok; }
+  log(`🧪 ${ok ? "" : "✖ "}${msg}`); save();
+}
+async function startTest(at, posMap, stop) {
+  S.testHandled = at; S.test = { at, steps: [], ok: null, doneAt: null };
+  const fail = (m) => testStep(m, false, true);
+  if (now() - at > 30 * 60000) return fail("Lệnh thử gửi từ hơn 30 phút trước — bỏ qua, bấm lại trong app");
+  if (MODE !== "testnet") return fail("Lệnh thử chỉ chạy ở Testnet");
+  if (stop) return fail("Bot đang DỪNG — bấm “Chạy lại” rồi thử lại");
+  if (Object.keys(S.active).length >= MAX_OPEN) return fail(`Đang đủ ${MAX_OPEN} lệnh — thử lại sau`);
+  const coin = ["BTC", "ETH"].find((c) => !S.active[SYMBOLS[c]] && !posMap[SYMBOLS[c]]);
+  if (!coin) return fail("BTC và ETH đều đang có lệnh — thử lại sau");
+  try {
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[coin]}`).then((r) => r.json());
+    const lim = Number(m.markPrice) * 1.001; // LONG cao hơn giá 0,1% → khớp ngay
+    if (!(lim > 0)) return fail("Không lấy được giá");
+    const p = { id: `test-${at}`, coin, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.996, rr: 1.5, riskPct: 0.1, test: true, signalAt: now(), until: now() + 10 * 60000 };
+    Object.assign(S.test, { id: p.id, coin });
+    testStep(`Bắt đầu: LONG ${coin} sát giá, rủi ro 0,1% vốn (Testnet)`);
+    await place(p, SYMBOLS[coin]);
+    const a = S.active[SYMBOLS[coin]];
+    if (a?.test) testStep(`Đã đặt lệnh chờ ${coin} @ ${px(a.lim)} · KL ${px(a.qty)} · SL ${px(a.sl)} · TP ${px(a.tp)}`);
+    else fail("Không đặt được lệnh (khối lượng dưới mức tối thiểu của sàn)");
+  } catch (e) { fail(`Lỗi đặt lệnh: ${e.message}`); }
 }
 
 // ---------- 3) "Đóng tất cả" từ app ----------
@@ -325,6 +374,7 @@ async function cycle(state) {
     save();
   }
   state.stopped = !!stop;
+  if (!DRY && Number(cmd?.testTradeAt) > (S.testHandled || 0)) await startTest(Number(cmd.testTradeAt), posMap, stop);
   await manage(posMap);
   const closedBar = Math.floor(now() / 300000); // mỗi nến M5 đóng (+8s cho sàn chốt nến) → quét tín hiệu
   let raw = null;
@@ -339,7 +389,7 @@ async function cycle(state) {
     raw = await scan(posMap, halted);
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
   }
-  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, positions: posMap, events: (S.events || []).slice(0, 40) }).catch(() => {});
+  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
   await syncHistory();
 }
 

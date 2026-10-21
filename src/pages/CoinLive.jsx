@@ -156,6 +156,8 @@ export default function CoinLive({ active }) {
 
       <RulesCard st={st} session={session} />
 
+      {st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
+
       <BotSettings st={st} cmd={cmd} onSaved={load} defaultOpen={!!st.waiting} />
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
@@ -229,8 +231,37 @@ function RulesCard({ st, session }) {
 
 // ---------- Kết quả lệnh thật: KPI, đường vốn, lịch sử lệnh (lọc + CSV), so sánh với Demo ----------
 const isoVN = (t) => (t ? new Date(t + 7 * 3600000).toISOString().slice(0, 16).replace("T", " ") : "");
+// Lệnh thử (chỉ Testnet): bot đặt 1 lệnh nhỏ sát giá → khớp → SL/TP → đóng sau 1 phút → lịch sử → thông báo; hiện từng bước từ status.test
+function TestTradeCard({ st, cmd, online, stopped, onSent }) {
+  const [busy, setBusy] = useState(false), [err, setErr] = useState("");
+  const sentAt = Number(cmd?.testTradeAt) || 0, t = st.test && st.test.at === sentAt ? st.test : null;
+  const running = !!sentAt && (!t || !t.doneAt) && Date.now() - sentAt < 20 * 60000;
+  const noReply = running && !t && Date.now() - sentAt > 3 * 60000;
+  const run = async () => {
+    if (!(await ask("Chạy lệnh thử trên Testnet?\nBot đặt 1 lệnh LONG BTC (hoặc ETH) sát giá bằng tiền ảo, rủi ro 0,1% vốn → khớp → đặt SL/TP → giữ 1 phút → đóng → ghi lịch sử → gửi thông báo về điện thoại. Mất ~2–3 phút.", { ok: "Chạy lệnh thử" }))) return;
+    setBusy(true); setErr("");
+    const { error } = await mergeCmd({ testTradeAt: Date.now() }, cmd);
+    setBusy(false); if (error) setErr(error.message); else onSent();
+  };
+  return (
+    <Card className="!p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[13.5px] font-extrabold text-slate-800">🧪 Lệnh thử (Testnet)</span>
+        {t?.doneAt ? <Badge tone={t.ok ? "emerald" : "rose"}>{t.ok ? "Đạt — mọi bước OK" : "Có bước lỗi"}</Badge> : running ? <Badge tone="amber">Đang chạy…</Badge> : null}
+        <button disabled={busy || running || !online || stopped} onClick={run} className="ml-auto flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40">{busy || running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Chạy lệnh thử</button>
+      </div>
+      <div className="mt-1 text-[11.5px] text-slate-500">Kiểm tra trọn quy trình khi không ngồi ở máy: đặt lệnh → khớp → SL/TP → đóng → lịch sử → thông báo điện thoại. Tiền ảo, rủi ro 0,1% vốn, không tính vào thống kê.{!online ? " · Bot đang mất liên lạc." : stopped ? " · Bot đang DỪNG — bấm Chạy lại trước." : ""}</div>
+      {noReply && <div className="mt-2 rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot chưa nhận lệnh thử sau 3 phút — có thể máy bot chưa cập nhật bản mới (tự cập nhật trong ~5 phút) hoặc đang chờ khoá API.</div>}
+      {t?.steps?.length > 0 && <ol className="mt-2 space-y-1">{t.steps.map((x, i) => (
+        <li key={i} className={`flex gap-2 text-[12px] leading-snug ${x.ok ? "text-slate-700" : "font-bold text-rose-700"}`}><span className="w-[42px] shrink-0 tabular-nums text-[11px] text-slate-400">{new Date(x.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span><span>{x.ok ? "✓" : "✖"} {x.msg}</span></li>
+      ))}</ol>}
+      {err && <div className="mt-2 rounded-lg bg-rose-50 p-2 text-[12px] text-rose-600">{err}</div>}
+    </Card>
+  );
+}
+
 function LiveResults({ hist, st, session }) {
-  const all = useMemo(() => (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.coin).map((t) => normLive(t, st.mode)), [hist, st.mode]);
+  const all = useMemo(() => (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.coin && t.setup !== "TEST").map((t) => normLive(t, st.mode)), [hist, st.mode]); // bỏ lệnh thử khỏi thống kê
   const modes = useMemo(() => [...new Set(all.map((t) => t.mode))], [all]);
   const [mode, setMode] = useState(null), [filter, setFilter] = useState("all"), [pair, setPair] = useState("all"), [showN, setShowN] = useState(30);
   const m = mode && modes.includes(mode) ? mode : modes.includes(st.mode) ? st.mode : modes[0];
@@ -434,7 +465,8 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
     if (!(v.maxLev >= 1 && v.maxLev <= 20)) return setMsg({ bad: true, t: "Đòn bẩy tối đa: 1–20x" });
     const hasNewKey = k.key.trim() && k.secret.trim();
     if ((k.key.trim() || k.secret.trim()) && !hasNewKey) return setMsg({ bad: true, t: "Cần điền đủ cả API Key và Secret Key" });
-    if (!hasNewKey && (!saved || stale)) return setMsg({ bad: true, t: `Chưa có khoá API ${live ? "THẬT" : "Testnet"} — dán API Key + Secret Key rồi lưu` });
+    const envKey = st.keySrc === ".env" && st.mode === f.mode; // bot đang chạy bằng khoá trong .env của máy bot
+    if (!hasNewKey && (!saved || stale) && !envKey) return setMsg({ bad: true, t: `Chưa có khoá API ${live ? "THẬT" : "Testnet"} — dán API Key + Secret Key rồi lưu` });
     if (!st.pubKey) return setMsg({ bad: true, t: st.at ? "Bot trên máy bàn là bản cũ — tải bản mới (Download ZIP, chép đè) rồi thử lại" : "Chưa nhận được tín hiệu từ máy chạy bot — bật bot trên máy bàn trước (khoá được mã hoá bằng khoá công khai của máy bot)" });
     if (live && cmd?.config?.mode !== "live") {
       if (confirm.trim().toUpperCase() !== "TIỀN THẬT" && confirm.trim().toUpperCase() !== "TIEN THAT") return setMsg({ bad: true, t: 'Gõ đúng chữ "TIỀN THẬT" vào ô xác nhận để bật chế độ tiền thật' });
@@ -461,7 +493,7 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
   };
   return (
     <Card className="!p-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800"><Settings2 size={16} className="shrink-0 text-indigo-500" /> Cài đặt bot<span className="ml-1 min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{(cmd?.config?.mode || st.mode) === "live" ? "Tiền thật" : "Testnet"} · rủi ro {fmtNum(c0.riskPct, 2, 0)}% · {cmd?.keys?.[c0.mode] ? `khoá …${cmd.keys[c0.mode].last4}` : "chưa có khoá"}{c0.notify === false ? " · tắt thông báo" : ""}</span><ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800"><Settings2 size={16} className="shrink-0 text-indigo-500" /> Cài đặt bot<span className="ml-1 min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{(cmd?.config?.mode || st.mode) === "live" ? "Tiền thật" : "Testnet"} · rủi ro {fmtNum(c0.riskPct, 2, 0)}% · {cmd?.keys?.[c0.mode] ? `khoá …${cmd.keys[c0.mode].last4}` : st.keySrc === ".env" && st.mode === c0.mode ? "đang dùng khoá trong máy bot (.env)" : "chưa có khoá"}{c0.notify === false ? " · tắt thông báo" : ""}</span><ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>
       {open && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
@@ -471,6 +503,7 @@ function BotSettings({ st, cmd, onSaved, defaultOpen }) {
             <div className="flex items-center gap-1.5 text-[12.5px] font-extrabold text-slate-700"><KeyRound size={14} /> Khoá API {live ? "Binance THẬT" : "Binance Testnet"}</div>
             <div className="mt-0.5 text-[11.5px] text-slate-500">{live ? "Tạo ở Binance → API Management: CHỈ bật Futures, TẮT rút tiền, khoá theo IP máy bàn." : "Tạo ở testnet.binancefuture.com → API Key."} Khoá được <b>mã hoá ngay trên máy này</b> bằng khoá công khai của máy bot — app và Supabase không đọc lại được. Chế độ vị thế trên sàn: <b>Một chiều</b>.</div>
             {saved && !stale && <div className="mt-2 flex items-center gap-2 rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[12px] text-emerald-800">Đã lưu khoá …{saved.last4} · {new Date(saved.savedAt).toLocaleDateString("vi-VN")}<button onClick={removeKey} className="ml-auto font-bold text-rose-600">Xoá khoá</button></div>}
+            {!saved && st.keySrc === ".env" && st.mode === f.mode && <div className="mt-2 rounded-lg bg-sky-50 px-2.5 py-1.5 text-[12px] text-sky-800">Bot đang chạy bằng khoá {live ? "THẬT" : "Testnet"} trong file <b>.env</b> trên máy bot — không cần nhập ở đây. Dán khoá mới bên dưới nếu muốn đổi (khoá trong app được ưu tiên).</div>}
             {stale && <div className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] font-bold text-amber-800">Khoá đã lưu được mã hoá cho máy bot cũ (máy đã cài lại) — dán lại khoá bên dưới.</div>}
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <input type="password" autoComplete="off" placeholder={saved && !stale ? "API Key mới (để trống = giữ khoá cũ)" : "API Key"} value={k.key} onChange={(e) => setK({ ...k, key: e.target.value })} className={inp} />
