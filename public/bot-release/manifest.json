@@ -1,7 +1,7 @@
 {
-  "sha": "4cf361f34048107acf4625c978e31665b04f6cfa",
-  "date": "2026-10-21T08:58:07+07:00",
-  "msg": "Bot: Lệnh thử từ app (chỉ Testnet) — LONG sát giá rủi ro 0,1% → khớp → SL/TP → đóng sau 1 phút → lịch sử → thông báo (ghi kết quả gửi), báo từng bước qua status.test",
+  "sha": "09b3aa1a9e550fe26e8a0f50743685c6dd0deee5",
+  "date": "2026-10-21T09:09:47+07:00",
+  "msg": "Bot: mọi lệnh gọi mạng có giới hạn thời gian chờ (Binance 20s, Supabase 20–30s) + canh treo: 1 vòng quá 10 phút thì tự khởi động lại; đồng bộ luật app",
   "files": [
     {
       "path": "README.md",
@@ -25,19 +25,19 @@
     },
     {
       "path": "lib/binance.js",
-      "sha": "a4e12f870cb24699f42cc22c50a313019d16e837"
+      "sha": "aa9e2900069248cb0b31b93e6eb87cb2ca05d2af"
     },
     {
       "path": "lib/main.js",
-      "sha": "682475017ca7ef1fb4e3e452141c3c0a95397af3"
+      "sha": "9e6d9db44e3ce932b26dfca49644b63067754986"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "e7b24682151135dc56d3875107893893254deb3c"
+      "sha": "20af85f717bb058a316f13a7e5b9cc65facf6ab7"
     },
     {
       "path": "lib/report.js",
-      "sha": "2fc01c38657485728469f184d273b7e2b06dfcfb"
+      "sha": "4470758b1d4e440d0a1c0f1a9ffeaecfb44f43eb"
     },
     {
       "path": "lib/updater.js",

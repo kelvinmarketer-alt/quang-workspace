@@ -17,7 +17,7 @@ export function makeClient({ mode = "testnet", key, secret }) {
     const url = `${base}${path}${method === "GET" || method === "DELETE" ? `?${p}` : ""}`;
     let r;
     try {
-      r = await fetch(url, { method, headers: { "X-MBX-APIKEY": key || "", ...(method === "POST" || method === "PUT" ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) }, body: method === "POST" || method === "PUT" ? p.toString() : undefined });
+      r = await fetch(url, { method, headers: { "X-MBX-APIKEY": key || "", ...(method === "POST" || method === "PUT" ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) }, body: method === "POST" || method === "PUT" ? p.toString() : undefined, signal: AbortSignal.timeout(20000) }); // treo quá 20 giây → thử lại
     } catch (e) {
       if (tries > 1) { await sleep(1500); return req(method, path, params, signed, tries - 1); }
       throw new Error(`Mạng lỗi khi gọi ${path}: ${e.message}`);
@@ -28,7 +28,7 @@ export function makeClient({ mode = "testnet", key, secret }) {
     if (!r.ok || (j && j.code && j.code < 0)) { const err = new Error(`Binance ${path}: ${j.msg || r.status} (${j.code ?? r.status})`); err.code = j.code; throw err; }
     return j;
   }
-  async function syncTime() { const t = await (await fetch(`${base}/fapi/v1/time`)).json(); offset = t.serverTime - Date.now(); }
+  async function syncTime() { const t = await (await fetch(`${base}/fapi/v1/time`, { signal: AbortSignal.timeout(15000) })).json(); offset = t.serverTime - Date.now(); }
 
   // Bộ lọc giá/khối lượng của từng cặp (làm tròn đúng bước giá, bước khối lượng, giá trị tối thiểu)
   let filters = null;

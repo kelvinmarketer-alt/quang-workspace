@@ -240,7 +240,7 @@ async function scan(posMap, halted) {
   // THỬ QUY TRÌNH (chỉ testnet/thử): FAKE_SIGNAL=BTC → 1 lệnh LONG giả sát giá hiện tại để kiểm tra đặt lệnh → khớp → SL/TP → đóng
   const fc = (process.env.FAKE_SIGNAL || "").trim().toUpperCase();
   if (fc && SYMBOLS[fc] && MODE !== "live" && !S.fakeDone) {
-    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[fc]}`).then((r) => r.json());
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[fc]}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
     const px = Number(m.markPrice), lim = px * 0.9995;
     fresh.push({ id: `fake-${now()}`, coin: fc, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.995, signalAt: now(), until: now() + 15 * 60000 });
     S.fakeDone = true;
@@ -264,7 +264,7 @@ async function place(p, symbol) {
   // Testnet giá lệch nhẹ với sàn thật → quy đổi theo tỉ lệ giá mark hiện tại (giữ đúng khoảng cách SL/TP)
   let k = 1;
   if (MODE === "testnet" && !DRY) {
-    const [t, m] = await Promise.all([ex.markPrice(symbol), fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`).then((r) => r.json())]);
+    const [t, m] = await Promise.all([ex.markPrice(symbol), fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json())]);
     k = Number(t.markPrice) / Number(m.markPrice); if (!(k > 0.9 && k < 1.1)) k = 1;
   }
   const lim = ex.roundTo(p.lim * k, info.tick), sl = ex.roundTo(p.sl * k, info.tick);
@@ -304,7 +304,7 @@ async function startTest(at, posMap, stop) {
   const coin = ["BTC", "ETH"].find((c) => !S.active[SYMBOLS[c]] && !posMap[SYMBOLS[c]]);
   if (!coin) return fail("BTC và ETH đều đang có lệnh — thử lại sau");
   try {
-    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[coin]}`).then((r) => r.json());
+    const m = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${SYMBOLS[coin]}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
     const lim = Number(m.markPrice) * 1.001; // LONG cao hơn giá 0,1% → khớp ngay
     if (!(lim > 0)) return fail("Không lấy được giá");
     const p = { id: `test-${at}`, coin, tf: "5m", setup: "TEST", side: 1, lim, sl: lim * 0.996, rr: 1.5, riskPct: 0.1, test: true, signalAt: now(), until: now() + 10 * 60000 };
@@ -416,8 +416,12 @@ async function main() {
   if (HIST.length) log(`Lịch sử: ${HIST.length} lệnh đã đóng (dựng lại từ ${LOG_F})`);
   if (prev?.at && now() - prev.at > 600000) note(`▶ Bot chạy lại sau ${dur(now() - prev.at)} im lặng`, `Máy chạy bot đã hoạt động trở lại · ${modeLbl()}${waiting && !DRY ? ` · ${waiting}` : ""}`, "qws-bot-start");
   const state = { lastBar: null };
+  // Canh treo: 1 vòng chạy quá 10 phút (mạng/sàn treo) → thoát để run-bot.cmd khởi động lại sạch (vị thế vẫn có SL/TP trên sàn)
+  let beat = now();
+  if (!ONCE) setInterval(() => { if (now() - beat > 600000) { log("⚠ Vòng chạy treo quá 10 phút → khởi động lại bot"); process.exit(1); } }, 60000).unref();
   for (;;) {
     try { await cycle(state); await maybeUpdate(lastCmd); } catch (e) { log("Lỗi vòng lặp:", e.message); }
+    beat = now();
     if (ONCE) { log("Xong 1 vòng (--once)."); break; }
     await sleep(15000);
   }

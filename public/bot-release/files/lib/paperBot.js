@@ -65,7 +65,7 @@ async function idbSet(k, v) { try { const d = await idb(); await new Promise((ok
 const MEM = new Map();
 async function getJson(url, tries = 4) {
   let r;
-  try { r = await fetch(url); } catch (e) { // mạng chập chờn → thử lại
+  try { r = await fetch(url, { signal: AbortSignal.timeout(30000) }); } catch (e) { // mạng chập chờn / treo quá 30 giây → thử lại
     if (tries <= 1) throw new Error("Không tải được dữ liệu Binance (mạng): " + (e.message || e));
     await new Promise((ok) => setTimeout(ok, 2000)); return getJson(url, tries - 1);
   }

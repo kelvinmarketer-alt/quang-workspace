@@ -6,7 +6,7 @@ let lastPush = 0, missing = false;
 export async function pushStatus(status, force = false) {
   if (!URL_ || !KEY || missing || (!force && Date.now() - lastPush < 30000) || (force && Date.now() - lastPush < 10000)) return;
   lastPush = Date.now();
-  const r = await fetch(`${URL_}/rest/v1/qws_live_bot`, { method: "POST", headers: { ...H(), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: "status", data: status, updated_at: new Date().toISOString() }) });
+  const r = await fetch(`${URL_}/rest/v1/qws_live_bot`, { method: "POST", headers: { ...H(), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: "status", data: status, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(20000) });
   if (r.status === 404) { missing = true; console.log("(Chưa có bảng qws_live_bot trên Supabase — chạy file supabase.sql để bot báo về app)"); }
 }
 // Trạng thái lần trước (đọc lúc khởi động → biết bot đã im lặng bao lâu)
@@ -36,7 +36,7 @@ export async function notify(title, body, tag) {
 }
 export async function readCommand() {
   if (!URL_ || !KEY || missing) return null;
-  const r = await fetch(`${URL_}/rest/v1/qws_live_bot?id=eq.command&select=data`, { headers: H() });
+  const r = await fetch(`${URL_}/rest/v1/qws_live_bot?id=eq.command&select=data`, { headers: H(), signal: AbortSignal.timeout(20000) });
   if (!r.ok) return null;
   const j = await r.json(); return j[0]?.data || null;
 }
@@ -44,7 +44,7 @@ export async function readCommand() {
 // Cấu hình phiên DEMO trong app (settings.paperBot) → bot thật dùng CÙNG luật (cặp, khung, setup, bộ lọc, tối ưu, bài học)
 export async function readDemoSession() {
   if (!URL_ || !KEY) return null;
-  const r = await fetch(`${URL_}/rest/v1/qws_workspaces?select=pb:data->settings->paperBot`, { headers: H() });
+  const r = await fetch(`${URL_}/rest/v1/qws_workspaces?select=pb:data->settings->paperBot`, { headers: H(), signal: AbortSignal.timeout(30000) });
   if (!r.ok) return null;
   const rows = await r.json();
   return rows.map((x) => x.pb).filter((x) => x && x.cfg).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))[0] || null;
