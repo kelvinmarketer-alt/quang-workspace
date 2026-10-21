@@ -3,6 +3,7 @@ import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, Ch
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import BotSignalBoard from "../components/BotSignalBoard.jsx";
+import PairReview from "../components/PairReview.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
@@ -313,6 +314,13 @@ export default function CoinBot({ active: visible = true }) {
     if (!(await ask(`Lưu danh sách cặp: ${editCoins.join(", ")}?${added.length ? `\nThêm: ${added.join(", ")}` : ""}${removed.length ? `\nXoá: ${removed.join(", ")}` : ""}\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại" }))) return;
     setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), coins: editCoins }, createdAt: Date.now() } });
     setEditCoins(null);
+  };
+  // Tắt 1 cặp từ bảng "nên giữ hay tắt" (cùng cơ chế Thêm/sửa cặp: Demo chạy lại, bot thật áp dụng ~5 phút)
+  const removeCoin = async (c) => {
+    const next = cfg.coins.filter((x) => x !== c);
+    if (!next.length) return;
+    if (!(await ask(`Tắt cặp ${c} khỏi bot?\nCòn lại: ${next.join(", ")}.\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút (lệnh ${c} đang mở trên sàn — nếu có — vẫn giữ SL/TP tới khi đóng). Bật lại được ở "Thêm/sửa cặp".`, { ok: `Tắt ${c}`, danger: true }))) return;
+    setSettings({ paperBot: { ...session, cfg: { ...(session.cfg || {}), coins: next }, createdAt: Date.now() } });
   };
   const [focus, setFocus] = useState(null);
   const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
@@ -717,6 +725,7 @@ export default function CoinBot({ active: visible = true }) {
         </>)}
 
         {tab === "stats" && (<>
+        <PairReview cfg={cfg} list={list} ptrades={P.trades} canEdit={isOwner && !session.stoppedAt} onRemoveCoin={removeCoin} />
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:hidden">
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} />
           <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} />

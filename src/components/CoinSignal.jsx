@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Gauge, ChevronDown, Layers, Info, FlaskConical, Loader2 } from "lucide-react";
 import { Card } from "./ui.jsx";
-import { analyze, fetchKlines } from "../lib/ta.js";
+import { analyze, fetchKlines, TF } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
@@ -91,6 +91,17 @@ async function verify(sym, tf, market) {
   const key = `${sym}|${tf}|${market}`, c = VERIFY.get(key);
   if (c && Date.now() - c.at < 1800000) return c;
   const K = await fetchKlines(sym, tf, 1000, { market });
+  // Đồng thuận đa khung: điểm của các khung LỚN hơn tại đúng lúc đó (chỉ nến khung lớn đã đóng), nhớ theo nến khung lớn
+  const higher = TFS_MTF.map(([k]) => k).filter((k) => TF[k] && TF[tf] && TF[k].ms > TF[tf].ms), HK = {}, memo = new Map();
+  await Promise.all(higher.map(async (k) => { try { HK[k] = await fetchKlines(sym, k, 1000, { market }); } catch { /* thiếu khung thì bỏ */ } }));
+  const htfDir = (k, closeMs) => {
+    const A = HK[k]; if (!A) return null;
+    let lo = 0, hi = A.length - 1, j = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (A[m].time * 1000 + TF[k].ms <= closeMs) { j = m; lo = m + 1; } else hi = m - 1; }
+    if (j < 299) return null;
+    const mk = k + j; if (!memo.has(mk)) memo.set(mk, biasOf(analyze(A.slice(j - 299, j + 1)).summary).dir);
+    return memo.get(mk);
+  };
   const H = 48, out = [];
   for (let i = 299; i < K.length - 2; i += 2) {
     if (i % 40 === 1) await new Promise((r) => setTimeout(r, 0)); // nhường giao diện
@@ -105,12 +116,15 @@ async function verify(sym, tf, market) {
     }
     const done = r != null || i + H <= K.length - 1;
     if (r == null) r = ((K[end].close - pl.entry) * b.dir) / risk;
-    out.push({ dir: b.dir, r, done });
+    const dirs = higher.map((k) => htfDir(k, K[i].time * 1000 + TF[tf].ms)).filter((x) => x != null);
+    out.push({ dir: b.dir, r, done, agree: dirs.length > 0 && dirs.every((x) => x === b.dir), nH: dirs.length });
     i += 4; // tín hiệu liền nhau gần như trùng → giãn ra (mỗi lần nghiêng rõ coi như 1 lệnh, cách ≥ 6 nến)
   }
   const fin = out.filter((x) => x.done), n = fin.length, win = fin.filter((x) => x.r > 0).length;
   const res = { at: Date.now(), n, win: n ? (win / n) * 100 : null, avgR: n ? fin.reduce((a, x) => a + x.r, 0) / n : null, bars: K.length, from: K[299]?.time,
-    long: fin.filter((x) => x.dir === 1).length, short: fin.filter((x) => x.dir === -1).length };
+    long: fin.filter((x) => x.dir === 1).length, short: fin.filter((x) => x.dir === -1).length, higher: higher.filter((k) => HK[k]) };
+  const grp = (L) => (L.length ? { n: L.length, win: (L.filter((x) => x.r > 0).length / L.length) * 100, avgR: L.reduce((a, x) => a + x.r, 0) / L.length } : null);
+  if (res.higher.length) { res.agree = grp(fin.filter((x) => x.agree)); res.notAgree = grp(fin.filter((x) => !x.agree && x.nH > 0)); }
   VERIFY.set(key, res);
   return res;
 }
@@ -250,6 +264,14 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
               <span className="text-slate-600">Kiểm chứng {tfLabel} · <b>{ver.n}</b> lần nghiêng rõ trên {ver.bars} nến gần nhất ({ver.long} mua · {ver.short} bán): thắng <b className={ver.win >= 34 ? "text-emerald-600" : "text-rose-600"}>{fmtNum(ver.win, 0, 0)}%</b> · TB <b className={ver.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{ver.avgR >= 0 ? "+" : ""}{fmtNum(ver.avgR, 2, 2)}R</b>/lần <span className="text-slate-400">(TP 2R / SL −1R / quá 48 nến thì đóng theo giá · hoà vốn ≈ 34% · chưa trừ phí)</span></span>
             ) : ver ? <span className="text-slate-500">Chưa có lần nào nghiêng rõ trong {ver.bars} nến gần nhất.</span>
               : <span className="text-slate-500">Điểm này đúng bao nhiêu? Chạy lại trên ~700 nến quá khứ của {sym} {tfLabel}.</span>}
+            {ver?.higher?.length > 0 && (
+              <div className="basis-full text-[11.5px] text-slate-600">
+                Đồng thuận với khung lớn hơn ({ver.higher.map((k) => (TFS_MTF.find(([x]) => x === k) || [, k])[1]).join(", ")}):{" "}
+                {[["cùng hướng hết", ver.agree], ["không cùng hướng", ver.notAgree]].map(([l, g]) => (
+                  <span key={l} className="mr-3">{l}: {g ? <><b>{g.n}</b> lần · thắng <b className={g.win >= 34 ? "text-emerald-600" : "text-rose-600"}>{fmtNum(g.win, 0, 0)}%</b> · TB <b className={g.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{g.avgR >= 0 ? "+" : ""}{fmtNum(g.avgR, 2, 2)}R</b></> : "—"}</span>
+                ))}
+              </div>
+            )}
             {vErr && <span className="text-rose-600">{vErr}</span>}
             <button onClick={runVerify} disabled={vBusy} className="ml-auto flex shrink-0 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11.5px] font-bold text-violet-700 disabled:opacity-60">{vBusy ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}{ver ? "Chạy lại" : "Kiểm chứng"}</button>
           </div>

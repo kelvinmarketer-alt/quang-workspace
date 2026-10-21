@@ -1,5 +1,6 @@
+import { useTheme } from "../lib/theme.js";
 import { useState } from "react";
-import { LineChart, Lock, Mail, Loader2 } from "lucide-react";
+import { LineChart, Lock, Mail, Loader2, Moon, Sun } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
 import { supabase } from "../lib/supabase.js";
 
@@ -15,6 +16,17 @@ function viErr(error) {
   if (/signups? not allowed|signup is disabled/i.test(m)) return "Đăng ký đang bị tắt — nhờ chủ workspace tạo tài khoản";
   if (/failed to fetch|network|load failed/i.test(m) || (typeof navigator !== "undefined" && navigator.onLine === false)) return "Không kết nối được máy chủ — kiểm tra mạng rồi thử lại";
   return m || "Có lỗi xảy ra, thử lại";
+}
+
+// Nút sáng / tối ở trang đăng nhập (cùng chế độ với nút trên thanh app — lib/theme.js)
+function ThemeFloat() {
+  const [t, setT] = useTheme();
+  return (
+    <button type="button" onClick={() => setT(t === "dark" ? "light" : "dark")} title={t === "dark" ? "Giao diện sáng" : "Giao diện tối"} aria-label="Đổi giao diện sáng / tối"
+      className="fixed right-4 top-4 grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:text-slate-900">
+      {t === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+    </button>
+  );
 }
 
 export default function Login() {
@@ -51,6 +63,7 @@ export default function Login() {
 
   return (
     <div className="grid min-h-screen place-items-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-sky-50 p-4">
+      <ThemeFloat />
       <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl shadow-indigo-500/10">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <img src="/logo.png" alt="2BKIN" className="h-20 w-20 object-contain" />

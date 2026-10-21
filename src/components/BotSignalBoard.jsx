@@ -103,7 +103,7 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                           <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{label}</span>
                           <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
                           <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums">
-                            <span>{t ? "vào" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b></span>
+                            <span>{t ? "vào" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
                             <span className="text-rose-600">SL <b>{fmtPx(plan.sl)}</b></span>
                             <span className="text-emerald-600">TP <b>{fmtPx(plan.tp)}</b></span>
                             {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">huỷ {dt(plan.until).slice(6)}</span> : null}
