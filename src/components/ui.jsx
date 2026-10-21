@@ -26,19 +26,24 @@ const TONES = {
 // Số tiền tự vừa ô: đủ chỗ thì hiện đầy đủ "886.003.879 đ", hẹp (điện thoại, iPad, laptop nhỏ) thì tự rút gọn "886 tr" —
 // KHÔNG BAO GIỜ ngắt dòng giữa con số. Rê chuột / giữ ngón tay để xem số đầy đủ.
 export function FitMoney({ value, className = "" }) {
-  const box = useRef(null), full = useRef(null);
-  const [short, setShort] = useState(false);
+  const box = useRef(null), full = useRef(null), sh = useRef(null);
+  const [lvl, setLvl] = useState(0); // 0 = đầy đủ · 1 = rút gọn · 2 = rút gọn + chữ nhỏ hơn
   useLayoutEffect(() => {
     const b = box.current, f = full.current; if (!b || !f) return undefined;
-    const check = () => setShort(f.offsetWidth > b.clientWidth + 1); // f là inline-block → đo được bề rộng thật của số đầy đủ
+    const check = () => {
+      const w = b.clientWidth + 1;
+      if (f.offsetWidth <= w) return setLvl(0); // f, sh là inline-block → đo được bề rộng thật
+      setLvl(sh.current && sh.current.offsetWidth > w ? 2 : 1);
+    };
     check();
     if (typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(check); ro.observe(b); return () => ro.disconnect();
   }, [value]);
+  const hide = "invisible absolute left-0 top-0";
   return (
     <span ref={box} className={`relative block min-w-0 overflow-hidden whitespace-nowrap ${className}`} title={formatVND(value)}>
-      <span ref={full} className={`inline-block ${short ? "invisible absolute left-0 top-0" : ""}`} aria-hidden={short}>{formatVND(value)}</span>
-      {short && <span>{formatShort(value)}</span>}
+      <span ref={full} className={`inline-block ${lvl ? hide : ""}`} aria-hidden={lvl > 0}>{formatVND(value)}</span>
+      <span ref={sh} className={`inline-block ${lvl ? "" : hide} ${lvl === 2 ? "text-[0.8em]" : ""}`} aria-hidden={lvl === 0}>{formatShort(value).replace(".", ",")}</span>
     </span>
   );
 }
