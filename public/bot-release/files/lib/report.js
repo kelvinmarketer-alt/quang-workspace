@@ -30,7 +30,8 @@ export async function notify(title, body, tag, url = "/coin?tab=live") {
   try {
     const r = await fetch(`${URL_}/functions/v1/qws-send-push`, { method: "POST", headers: H(), body: JSON.stringify({ title, body, url, tag }), signal: AbortSignal.timeout(15000) });
     if ((r.status === 401 || r.status === 403) && !pushWarned) { pushWarned = true; console.log(`(Không gửi được thông báo: qws-send-push trả ${r.status} — kiểm tra SUPABASE_SERVICE_KEY / cài đặt xác thực của hàm)`); }
-    lastPush_ = { ok: r.ok, status: r.status, at: Date.now() };
+    const j = r.ok ? await r.json().catch(() => null) : null; // 23/10: hàm trả từng thiết bị nhận / lỗi → app hiện "điện thoại đã nhận chưa"
+    lastPush_ = { ok: r.ok, status: r.status, at: Date.now(), title: String(title || "").slice(0, 80), sent: j?.sent ?? null, total: j?.total ?? null, results: Array.isArray(j?.results) ? j.results.map((x) => ({ host: x.host, ok: !!x.ok, code: x.code ?? null })) : null };
     return r.ok;
   } catch (e) { lastPush_ = { ok: false, status: e.message, at: Date.now() }; return false; }
 }

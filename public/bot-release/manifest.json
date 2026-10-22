@@ -1,7 +1,7 @@
 {
-  "sha": "048d37b7c12138c5d78ef8f3257d2f91123e8e94",
-  "date": "2026-10-22T00:06:42+07:00",
-  "msg": "Demo/bot tính lại nhanh hơn ~20 lần (dùng lại nến vừa tải, không gọi Binance lần 2 tuần tự) · báo điện thoại khi testnet đạt đủ 6/6 điều kiện tiền thật (chỉ báo, không tự chuyển)",
+  "sha": "cfc25720dc4a1bf9da10f8fb980fe28da767bfd5",
+  "date": "2026-10-22T15:26:22+07:00",
+  "msg": "Báo về app: số dư ví Futures (số dư, lãi/lỗ đang mở, khả dụng), lãi/lỗ từng vị thế đang mở, kết quả thông báo gần nhất theo từng thiết bị (iPhone / Chrome)",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "91a5c87ee9430b7b1b4133a2defdcf06a3d8eda9"
+      "sha": "a93fc4d23711d360be8d2c4485eaa562476a626f"
     },
     {
       "path": "lib/paperBot.js",
@@ -37,7 +37,7 @@
     },
     {
       "path": "lib/report.js",
-      "sha": "8032ee5e33fb4357c95dbfe6458faf03a4931fc4"
+      "sha": "a0dd0ea0bb5d087ed4fcf92bf7366daeccf94cfb"
     },
     {
       "path": "lib/updater.js",

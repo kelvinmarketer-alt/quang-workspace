@@ -22,7 +22,7 @@ function CustSelect({ value, onChange }) {
   const { customerList = [] } = useData();
   const list = [...customerList].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "vi"));
   return (
-    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} title="Dự án của tài khoản — nhân viên chỉ được giao dự án này mới thấy" className={`${inputCls} max-w-44 ${value ? "border-indigo-200 bg-indigo-50 font-bold text-indigo-700" : "text-slate-500"}`}>
+    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} title="Dự án của tài khoản — nhân viên chỉ được giao dự án này mới thấy" className={`${inputCls} min-w-0 flex-1 sm:max-w-44 sm:flex-none ${value ? "border-indigo-200 bg-indigo-50 font-bold text-indigo-700" : "text-slate-500"}`}>
       <option value="">Dự án: tự nhận theo tên</option>
       {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       {value && !list.some((c) => String(c.id) === String(value)) && <option value={value}>(khách đã xoá)</option>}
@@ -32,7 +32,7 @@ function CustSelect({ value, onChange }) {
 
 function GroupSelect({ value, onChange }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={`${inputCls} shrink-0`}>
       {GROUPS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
     </select>
   );
@@ -71,7 +71,7 @@ function GoogleSection() {
       <div className="space-y-2">
         {list.map((a) => (
           <div key={a.customer_id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 ${a.active ? "border-slate-100" : "border-dashed border-slate-200 opacity-60"}`}>
-            <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.customer_id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
+            <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.customer_id, { name: e.target.value })} className={`${inputCls} w-full font-bold sm:w-44`} />
             <GroupSelect value={a.grp} onChange={(v) => update(a.customer_id, { group: v })} />
             <CustSelect value={a.qws_customer_id} onChange={(v) => update(a.customer_id, { cust: v })} />
             <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.customer_id, { active: e.target.checked })} />Đang dùng</label>
@@ -160,7 +160,7 @@ export default function AdsAccounts() {
         {list.map((a) => (
           <div key={a.id} className={`rounded-xl border p-2.5 ${a.active ? "border-slate-100" : "border-dashed border-slate-200 opacity-60"}`}>
             <div className="flex flex-wrap items-center gap-2">
-              <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
+              <input defaultValue={a.name} onBlur={(e) => e.target.value !== a.name && update(a.id, { name: e.target.value })} className={`${inputCls} w-full font-bold sm:w-44`} />
               <GroupSelect value={a.group} onChange={(v) => update(a.id, { group: v })} />
               <CustSelect value={a.cust} onChange={(v) => update(a.id, { cust: v })} />
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => update(a.id, { services: e.target.checked })} />Gom theo dịch vụ TMV</label>
@@ -188,7 +188,7 @@ export default function AdsAccounts() {
             {found.map((a) => (
               <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white p-2 text-xs">
                 <input type="checkbox" checked={!!a.pick} onChange={(e) => setF(a.id, { pick: e.target.checked })} />
-                <input value={a.name} onChange={(e) => setF(a.id, { name: e.target.value })} className={`${inputCls} w-44 font-bold`} />
+                <input value={a.name} onChange={(e) => setF(a.id, { name: e.target.value })} className={`${inputCls} w-full font-bold sm:w-44`} />
                 <GroupSelect value={a.group} onChange={(v) => setF(a.id, { group: v })} />
                 <label className="flex items-center gap-1 text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => setF(a.id, { services: e.target.checked })} />Dịch vụ TMV</label>
                 <span className="text-[11px] text-slate-400">{a.metaName} · ID {a.id} · {a.currency}</span>

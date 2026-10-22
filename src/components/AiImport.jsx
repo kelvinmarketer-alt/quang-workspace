@@ -103,11 +103,11 @@ export function AiKeyBar() {
     <div className="rounded-xl bg-slate-50 p-3">
       <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase text-slate-500"><Key size={13} /> API Key OpenAI</div>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+        <div className="flex min-w-0 basis-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 sm:basis-auto sm:flex-1">
           <input type={showKey ? "text" : "password"} value={key} onChange={(e) => setK(e.target.value)} placeholder="sk-..." className="w-full text-sm outline-none" />
           <button onClick={() => setShowKey((s) => !s)} className="text-slate-400 hover:text-slate-600">{showKey ? <EyeOff size={15} /> : <Eye size={15} />}</button>
         </div>
-        <select value={model} onChange={(e) => setM(e.target.value)} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-semibold">
+        <select value={model} onChange={(e) => setM(e.target.value)} className="min-w-0 flex-1 sm:flex-none rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm font-semibold">
           <option value="gpt-4o-mini">gpt-4o-mini (rẻ)</option>
           <option value="gpt-4o">gpt-4o (mạnh)</option>
         </select>

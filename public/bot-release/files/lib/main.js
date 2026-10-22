@@ -53,7 +53,7 @@ function note(title, body, tag, url) {
   notify(title, body, tag, url).catch(() => {});
 }
 
-let ghToken = null, healthy = false, lastForce = 0;
+let ghToken = null, healthy = false, lastForce = 0, posPnl = {}, wallet = null;
 let ex = DRY ? makeClient({ mode: MODE }) : null, curKey = "", waiting = null, keySrc = null, appCfg = {}, lastCmd = null;
 // Đọc lệnh + cài đặt từ app → áp dụng; đổi chế độ testnet↔thật thì THOÁT để vòng chạy khởi động lại sạch
 async function resolveRun(first) {
@@ -463,8 +463,10 @@ async function cycle(state) {
   const base = { mode: MODE, dry: DRY, at: now(), pubKey: MK.pub, pubFp: PUB_FP, keys: { testnet: !!cmd?.keys?.testnet, live: !!cmd?.keys?.live }, keySrc, settings: { riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV, capitalCap: CAP }, version: updateInfo(), github: !!ghToken, cfgSummary: cfgSummary(), rulesHash: RULES_HASH, closeAllHandled: S.closeAllHandled || 0, notify: appCfg.notify !== false, histCount: HIST.length };
   if (!DRY && !ex) { await pushStatus({ ...base, waiting, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, events: (S.events || []).slice(0, 40) }, true).catch(() => {}); await syncHistory(); await maybeUpdate(cmd); return; } // chờ khoá / cài đặt từ app
   let posMap = {};
-  const readPos = async () => { posMap = {}; if (!DRY) for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0) posMap[p.symbol] = Number(p.positionAmt); };
+  const readPos = async () => { posMap = {}; posPnl = {}; if (!DRY) for (const p of await ex.positions()) if (Number(p.positionAmt) !== 0) { posMap[p.symbol] = Number(p.positionAmt); posPnl[p.symbol] = { uPnl: Number(p.unRealizedProfit) || 0, mark: Number(p.markPrice) || null, entry: Number(p.entryPrice) || null }; } };
   await readPos();
+  // 23/10: số dư ví Futures (USDT) cho app — số dư, lãi/lỗ đang mở, khả dụng (vốn tính lệnh có thể bị giới hạn bởi "Vốn tính lệnh tối đa")
+  if (!DRY) try { const u = (await ex.balance()).find((x) => x.asset === "USDT") || {}; wallet = { balance: Number(u.balance) || 0, uPnl: Number(u.crossUnPnl) || 0, avail: Number(u.availableBalance) || 0, at: now() }; } catch { /* giữ số cũ */ }
   if (Number(cmd?.closeAllAt) > (S.closeAllHandled || 0)) { await closeAll(Number(cmd.closeAllAt), posMap); await readPos(); }
   if (stop && !state.stopped) { // dừng khẩn: huỷ lệnh CHỜ vào, giữ SL/TP của vị thế đang mở
     log("🛑 Nhận lệnh DỪNG — huỷ các lệnh chờ, không mở lệnh mới");
@@ -488,7 +490,7 @@ async function cycle(state) {
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
     lastRaw = raw;
   }
-  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null }).catch(() => {});
+  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null, wallet, posPnl, push: lastPush_ }).catch(() => {});
   await syncHistory();
   try { weeklyReport(); } catch (e) { log("Lỗi báo cáo tuần:", e.message); }
   try { weakAlert(); } catch (e) { log("Lỗi cảnh báo cặp yếu:", e.message); }

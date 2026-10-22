@@ -146,6 +146,7 @@ export default function CoinLive({ active }) {
   const nPos = Object.keys(st.positions || {}).length, nLeft = Math.max(act.length, nPos);
   const closes = (st.events || []).filter((e) => e.ev === "close" && e.setup !== "TEST" && !String(e.id || "").startsWith("test-")), wins = closes.filter((e) => e.pnl > 0).length; // bỏ lệnh thử
   const realT = (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.setup !== "TEST" && (!t.mode || t.mode === st.mode));
+  const lastT = realT.filter((t) => t.exitAt).sort((a, b) => Number(b.exitAt) - Number(a.exitAt))[0];
   // Điều kiện trước khi cho bật TIỀN THẬT (phải đạt đủ)
   const tn = (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.setup !== "TEST" && t.mode === "testnet" && t.exitAt);
   const tnFirst = tn.length ? Math.min(...tn.map((t) => Number(t.exitAt))) : null, tnPnl = tn.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
@@ -212,7 +213,9 @@ export default function CoinLive({ active }) {
       {isOwner && <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} liveChecks={liveChecks} />}
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
-        <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} />
+        {st.wallet ? <Num label="Số dư ví Futures" v={fmtUsd(st.wallet.balance + st.wallet.uPnl)} t={st.wallet.uPnl ? tone(st.wallet.uPnl) : undefined}
+          sub={`${st.wallet.uPnl ? `đang mở ${fmtUsdSigned(st.wallet.uPnl)} · ` : ""}khả dụng ${fmtUsd(st.wallet.avail)}${st.lastScan?.eq != null && Math.abs(st.lastScan.eq - st.wallet.balance - st.wallet.uPnl) > 0.5 ? ` · tính lệnh ${fmtUsd(st.lastScan.eq)}` : ""}`} />
+          : <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} sub="số dư ví hiện sau khi bot cập nhật bản mới" />}
         <Num label="Lãi/lỗ hôm nay" v={todayPnl == null ? "—" : fmtUsdSigned(todayPnl)} t={tone(todayPnl)} />
         <Num label="Lệnh chờ / đang mở" v={`${act.filter((a) => a.stage === "entry").length} / ${act.filter((a) => a.stage === "open").length}`} />
         <Num label={`Lệnh ${monthLabel(monthOf(Date.now())).toLowerCase()}`} v={<span className={monthN >= MONTH_TARGET ? "text-emerald-600" : undefined}>{monthN}/{MONTH_TARGET}</span>} sub={closes.length ? `gần đây thắng ${fmtPct((wins / closes.length) * 100, 0)}` : "mục tiêu ≥ 10 lệnh/tháng"} />
@@ -222,10 +225,12 @@ export default function CoinLive({ active }) {
         <Title>Lệnh chờ & vị thế ({act.length})</Title>
         {act.length ? <div className="space-y-1.5">{act.map((a) => (
           <div key={a.sym} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
-            <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge><span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span></div>
+            <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge><span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span>{a.stage === "open" && st.posPnl?.[a.sym] && <b className={`tabular-nums ${tone(st.posPnl[a.sym].uPnl)}`}>{fmtUsdSigned(st.posPnl[a.sym].uPnl)}</b>}</div>
             <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">SL {fmtPx(a.sl)}</span><span className="text-emerald-600">TP {fmtPx(a.tp)}</span><span>KL {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400">huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
           </div>
-        ))}</div> : <div className="py-4 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần).</div>}
+        ))}</div> : <div className="py-3 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần). Lệnh chờ / đang chạy sẽ hiện ngay tại đây.
+          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "SHORT" : "LONG"} · {lastT.reason || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
+        </div>}
       </Card>
 
       <LiveResults hist={hist} st={st} session={session} />
@@ -633,6 +638,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
             {f.notify !== false && <label className="mt-1.5 flex items-center gap-2 text-[12px] font-semibold text-slate-600"><input type="checkbox" checked={f.notifyPending !== false} onChange={(e) => setF({ ...f, notifyPending: e.target.checked })} /> Báo cả lúc <b>đặt lệnh chờ</b> (bỏ tick nếu chỉ muốn báo khi khớp / đóng)</label>}
             {f.notify !== false && <label className="mt-1 flex items-center gap-2 text-[12px] font-semibold text-slate-600"><input type="checkbox" checked={f.notifyWeak !== false} onChange={(e) => setF({ ...f, notifyWeak: e.target.checked })} /> Báo khi 1 cặp × khung <b>âm 30 ngày</b> (≥ 10 lệnh, tối đa 1 lần/tuần — chỉ báo, không tự tắt)</label>}
             {f.notify !== false && <PushHint />}
+            {f.notify !== false && st.push?.at && <PushLast p={st.push} />}
           </div>
           {live && cmd?.config?.mode !== "live" && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] text-rose-800">
@@ -696,6 +702,21 @@ function UpdateBox({ st, cmd, onSaved }) {
 
 
 // Máy đang xem chưa bật thông báo đẩy → gợi ý + nút bật ngay (dùng chung đăng ký Web Push của app)
+// Lần gửi thông báo gần nhất của bot → từng thiết bị nhận hay lỗi (23/10)
+const PUSH_HOST = { "web.push.apple.com": "iPhone / iPad", "fcm.googleapis.com": "Chrome / Android", "updates.push.services.mozilla.com": "Firefox" };
+function PushLast({ p }) {
+  const res = Array.isArray(p.results) ? p.results : null;
+  return (
+    <div className="mt-1.5 rounded-lg bg-slate-50 px-2 py-1.5 text-[11.5px] leading-snug text-slate-600">
+      Thông báo gần nhất {dt(p.at)}{p.title ? <> · “{p.title}”</> : null}:{" "}
+      {!p.ok ? <b className="text-rose-600">gửi lỗi ({p.status})</b>
+        : res ? (res.length ? res.map((r, i) => <span key={i} className={`mr-2 font-bold ${r.ok ? "text-emerald-600" : "text-rose-600"}`}>{PUSH_HOST[r.host] || r.host} {r.ok ? "✓ đã giao" : `✗ lỗi ${r.code ?? ""}`}</span>) : <b className="text-amber-700">chưa có thiết bị nào bật thông báo</b>)
+        : <b className="text-emerald-600">đã gửi</b>}
+      {res?.some((r) => r.ok && r.host === "web.push.apple.com") && <div className="mt-0.5 text-[11px] text-slate-400">Apple đã nhận tin. Nếu iPhone không hiện: Cài đặt iPhone → Thông báo → Quang Workspace → bật Cho phép + Màn hình khoá; tắt Tập trung / Ngủ cho app này.</div>}
+    </div>
+  );
+}
+
 function PushHint() {
   const { user } = useAuth();
   const [s, setS] = useState("checking"), [busy, setBusy] = useState(false), [msg, setMsg] = useState("");

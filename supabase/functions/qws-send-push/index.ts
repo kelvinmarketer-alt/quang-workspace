@@ -33,12 +33,18 @@ Deno.serve(async (req) => {
 
   const payload = JSON.stringify({ title: title || "Quang Workspace", body: body || "", url: url || "/", tag });
   let sent = 0, removed = 0;
+  // 23/10: báo kết quả TỪNG thiết bị (Apple / Google) để biết vì sao điện thoại không nhận; urgency high = điện thoại tiết kiệm pin vẫn nhận ngay
+  const results: { host: string; ok: boolean; code?: number; msg?: string }[] = [];
   await Promise.all((subs || []).map(async (r) => {
-    try { await webpush.sendNotification(r.sub, payload); sent++; }
+    const host = String(r.endpoint || "").split("/")[2] || "?";
+    try { const res = await webpush.sendNotification(r.sub, payload, { TTL: 86400, urgency: "high" }); sent++; results.push({ host, ok: true, code: res?.statusCode }); }
     catch (e) {
       const code = (e as { statusCode?: number })?.statusCode;
+      const msg = String((e as { body?: string })?.body || (e as Error)?.message || e).slice(0, 200);
+      results.push({ host, ok: false, code, msg });
+      console.log(`push lỗi ${host} ${code}: ${msg}`);
       if (code === 404 || code === 410) { await supa.from("qws_push_subs").delete().eq("endpoint", r.endpoint); removed++; }
     }
   }));
-  return new Response(JSON.stringify({ sent, removed }), { headers: { ...cors, "content-type": "application/json" } });
+  return new Response(JSON.stringify({ sent, removed, total: (subs || []).length, results }), { headers: { ...cors, "content-type": "application/json" } });
 });
