@@ -151,7 +151,7 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
           className={({ isActive }) =>
             `group flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition ${mini ? "justify-center px-0" : "px-3 pr-9"} ${
               isActive
-                ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
+                ? "nav-active bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
                 : "text-slate-500 hover:bg-white hover:text-slate-900"
             }`
           }
