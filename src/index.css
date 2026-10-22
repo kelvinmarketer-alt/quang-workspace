@@ -296,3 +296,21 @@ html.theme-dark :is(.recharts-area-curve, .recharts-line-curve) { filter: drop-s
 html.theme-dark .recharts-bar-rectangle path { filter: drop-shadow(0 0 6px rgba(129,140,248,.45)); }
 @media (prefers-reduced-motion: reduce) { html.theme-dark .card { transition: none; } }
 
+/* Chữ 900/950 (vốn để đọc trên nền sáng) → sáng lên trên nền tối, vd khung cảnh báo cặp yếu */
+html.theme-dark :is(.text-emerald-900, .text-emerald-950) { color: #a7f3d0; }
+html.theme-dark :is(.text-green-900, .text-green-950) { color: #bbf7d0; }
+html.theme-dark :is(.text-teal-900, .text-teal-950) { color: #99f6e4; }
+html.theme-dark :is(.text-cyan-900, .text-cyan-950) { color: #a5f3fc; }
+html.theme-dark :is(.text-sky-900, .text-sky-950) { color: #bae6fd; }
+html.theme-dark :is(.text-blue-900, .text-blue-950) { color: #bfdbfe; }
+html.theme-dark :is(.text-indigo-900, .text-indigo-950) { color: #c7d2fe; }
+html.theme-dark :is(.text-violet-900, .text-violet-950) { color: #ddd6fe; }
+html.theme-dark :is(.text-purple-900, .text-purple-950) { color: #e9d5ff; }
+html.theme-dark :is(.text-fuchsia-900, .text-fuchsia-950) { color: #f5d0fe; }
+html.theme-dark :is(.text-pink-900, .text-pink-950) { color: #fbcfe8; }
+html.theme-dark :is(.text-rose-900, .text-rose-950) { color: #fecdd3; }
+html.theme-dark :is(.text-red-900, .text-red-950) { color: #fecaca; }
+html.theme-dark :is(.text-orange-900, .text-orange-950) { color: #fed7aa; }
+html.theme-dark :is(.text-amber-900, .text-amber-950) { color: #fde68a; }
+html.theme-dark :is(.text-yellow-900, .text-yellow-950) { color: #fef08a; }
+html.theme-dark :is(.text-lime-900, .text-lime-950) { color: #d9f99d; }
