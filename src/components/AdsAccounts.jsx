@@ -22,7 +22,7 @@ function CustSelect({ value, onChange }) {
   const { customerList = [] } = useData();
   const list = [...customerList].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "vi"));
   return (
-    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} title="Dự án của tài khoản — nhân viên chỉ được giao dự án này mới thấy" className={`${inputCls} min-w-0 flex-1 sm:max-w-44 sm:flex-none ${value ? "border-indigo-200 bg-indigo-50 font-bold text-indigo-700" : "text-slate-500"}`}>
+    <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} title="Dự án của tài khoản — nhân viên chỉ được giao dự án này mới thấy" className={`${inputCls} min-w-[11rem] flex-1 sm:min-w-0 sm:max-w-44 sm:flex-none ${value ? "border-indigo-200 bg-indigo-50 font-bold text-indigo-700" : "text-slate-500"}`}>
       <option value="">Dự án: tự nhận theo tên</option>
       {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
       {value && !list.some((c) => String(c.id) === String(value)) && <option value={value}>(khách đã xoá)</option>}
