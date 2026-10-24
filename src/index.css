@@ -314,3 +314,9 @@ html.theme-dark :is(.text-orange-900, .text-orange-950) { color: #fed7aa; }
 html.theme-dark :is(.text-amber-900, .text-amber-950) { color: #fde68a; }
 html.theme-dark :is(.text-yellow-900, .text-yellow-950) { color: #fef08a; }
 html.theme-dark :is(.text-lime-900, .text-lime-950) { color: #d9f99d; }
+
+/* 24/10: màn hình cảm ứng — nút / link nhỏ (icon 18–20px, chip "Xem") có vùng bấm rộng thêm ~6px mỗi phía mà KHÔNG đổi bố cục */
+@media (pointer: coarse) {
+  :where(button, a[href], [role="button"]):not(.absolute):not(.fixed):not(.sticky) { position: relative; }
+  :where(button, a[href], [role="button"]):not(.absolute):not(.fixed):not(.sticky)::after { content: ""; position: absolute; inset: -6px; }
+}

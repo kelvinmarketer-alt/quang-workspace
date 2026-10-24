@@ -291,6 +291,40 @@ function useLive(active, coins, tfs, onClose) {
 }
 
 // Nhật ký thay đổi luật: lúc đổi (số liệu khi đó) → sau khi đổi (lệnh vào từ lúc đổi, theo luật hiện tại)
+// Phễu tín hiệu (24/10): sếp thấy "rất nhiều tín hiệu mà ít vào lệnh" → hiện rõ từ tín hiệu thô tới lệnh, mỗi bộ lọc bỏ bao nhiêu.
+// Số liệu = cả phiên Demo (res.skipped đếm chính xác từ ngày bắt đầu, cùng luật bot thật).
+function SignalFunnel({ res, P }) {
+  const [open, setOpen] = useState(false);
+  const total = (res.streams || []).reduce((a, s) => a + (s.signals || 0), 0);
+  const taken = P.trades.filter((t) => t.status !== "skip").length;
+  if (!total) return null;
+  const days = Math.max(1, (res.until - res.startAt) / 86400000);
+  const port = {}; for (const t of P.trades) if (t.status === "skip") port[t.why || "giới hạn vốn"] = (port[t.why || "giới hạn vốn"] || 0) + 1;
+  const rows = [...Object.entries(res.skipped || {}), ...Object.entries(port).map(([k, v]) => [`${k} (quản lý vốn)`, v]), ...(res.rejected?.length ? [["bộ tối ưu / bài học loại", res.rejected.length]] : [])].sort((a, b) => b[1] - a[1]);
+  const pct = (v) => `${fmtNum((v / total) * 100, 1, 1)}%`;
+  return (
+    <Card className="!p-3">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full flex-wrap items-center gap-x-2 gap-y-0.5 text-left">
+        <Activity size={15} className="shrink-0 text-cyan-500" />
+        <span className="text-[13px] font-extrabold text-slate-800">Phễu tín hiệu</span>
+        <span className="text-[12px] text-slate-500"><b className="text-slate-700">{total.toLocaleString("vi-VN")}</b> tín hiệu thô → <b className="text-emerald-600">{taken}</b> lệnh ({pct(taken)}) · TB {fmtNum(total / days, 0, 0)} tín hiệu → {fmtNum(taken / days, 1, 1)} lệnh / ngày</span>
+        <ChevronDown size={15} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="mt-2 space-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k} className="grid grid-cols-[1fr_auto] items-center gap-x-2 text-[12px] sm:grid-cols-[minmax(0,260px)_1fr_auto]">
+            <span className="min-w-0 truncate text-slate-600" title={k}>Bỏ: {k}</span>
+            <div className="col-span-2 row-start-2 h-1.5 overflow-hidden rounded-full bg-slate-100 sm:col-span-1 sm:row-start-auto"><div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.max(1, (v / total) * 100)}%` }} /></div>
+            <span className="tabular-nums text-slate-500 sm:order-last">{v.toLocaleString("vi-VN")} · {pct(v)}</span>
+          </div>
+        ))}
+        <div className="grid grid-cols-[1fr_auto] items-center gap-x-2 text-[12px] font-bold sm:grid-cols-[minmax(0,260px)_1fr_auto]"><span className="text-emerald-700">Vào lệnh</span><div className="col-span-2 row-start-2 h-1.5 overflow-hidden rounded-full bg-slate-100 sm:col-span-1 sm:row-start-auto"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(1, (taken / total) * 100)}%` }} /></div><span className="tabular-nums text-emerald-700 sm:order-last">{taken} · {pct(taken)}</span></div>
+        <div className="pt-1 text-[11.5px] leading-snug text-slate-500">"Tín hiệu thô" = mẫu nến khớp 1 trong 4 setup trên mọi cặp × khung (rất nhiều, phần lớn là nhiễu). Bot chỉ vào khi qua <b>đủ mọi bộ lọc</b>. Kiểm thử 94 ngày (24/10): nới bất kỳ bộ lọc nào đều <b>thêm lệnh nhưng giảm lãi</b> — bỏ lọc D1: 161 lệnh, thắng 42%, vốn $1.256 · bỏ Key Volume: 181 lệnh, thắng 41%, vốn $1.063 · luật hiện tại: 103 lệnh, thắng 47%, vốn $1.597. Quá khứ không bảo đảm tương lai; không phải tư vấn đầu tư.</div>
+      </div>}
+    </Card>
+  );
+}
+
 function RulesLog({ log, list }) {
   const rows0 = Array.isArray(log) ? log : [];
   const [all, setAll] = useState(false);
@@ -635,6 +669,7 @@ export default function CoinBot({ active: visible = true }) {
         {tab === "chart" && (<>
         <BotSignalBoard cfg={cfg} trades={P.trades} pending={res.pending || []} live={live} ver={ver} active={active} stopped={!!session.stoppedAt} sel={sel}
           onPick={(c, t) => { setSel({ coin: c, tf: t }); setFocus(null); setTimeout(() => document.getElementById("bot-chart")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }} />
+        <SignalFunnel res={res} P={P} />
         {(() => { // Vì sao chưa có lệnh: 48 giờ không có lệnh mới → tổng hợp tín hiệu bị bỏ 7 ngày qua theo lý do
           const lastEntry = Math.max(0, ...P.trades.filter((t) => t.status !== "skip").map((t) => t.entryAt));
           if (Date.now() - lastEntry < 48 * 3600000 || !res.skipLog?.length) return null;
