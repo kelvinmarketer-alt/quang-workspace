@@ -19,7 +19,7 @@ export const SETUPS = {
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
-  cfgVer: 10,
+  cfgVer: 11,
   capital: 1000, riskPct: 2, maxOpen: 3, maxLev: 20, dailyStopPct: 6, // v7 (user chốt 20/10): rủi ro 2%/lệnh, dừng ngày -6% (= 3 lệnh thua)
   streakN: 0, streakRiskPct: 1, // v10 (user chốt 21/10 "mọi vấn đề đều là xác suất, cứ để risk 2%"): TẮT giảm rủi ro sau chuỗi thua — rủi ro cố định. (v9 từng bật: thua 3 liền → 1%.) 270 ngày: vốn cả 3 kỳ cao hơn (1207/1385/1491 → 1231/1410/1553$), sụt vốn tối đa 13–15% → 11%
   // Thử 21/10 (mặc định TẮT, bot thật chưa hỗ trợ): thả TP trailAtR/trailAtr/trailLockR và cắt khi đảo chiều revExit/revMinR — thắng nhiều hơn nhưng R & lợi nhuận GIẢM ở cả 3 kỳ.
@@ -28,7 +28,10 @@ export const DEFAULT_CFG = {
   rr: 2, beAtR: 0, timeStopBars: 96, feePct: 0.05, makerPct: 0.02, slipPct: 0.02, maxFeeR: 0.35, // bỏ lệnh khi phí 2 chiều > 0.35R (SL quá sát)
   sigVol: false, noEngulf: true, d1Bias: true, // v6: bỏ vào ngay sau engulfing lớn · chỉ thuận D1 · v8: TẮT lọc volume nến tín hiệu (Key Volume vẫn xét volume)
   keyVolume: 1, // v5: chỉ vào khi giá vào nằm trong vùng nến volume LỚN NHẤT 100 nến (Key Volume) — 90 ngày: thắng 39%→47%, R −0.05→+0.19; 0 = tắt, 3 = top 3
-  maxExtAtr: 1.5, minSlAtr: 2, limitAt: "close", fillBars: 3, // v8: không đuổi giá siết 2 → 1,5 ATR // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
+  // v11 (sếp chốt 24/10): không đuổi giá nới 1,5 → 2,5 ATR. 3 kỳ 90 ngày (270–180 / 180–90 / 90 gần): vốn 1287/1112/1593 → 1390/1149/1510$,
+  // sụt vốn lớn nhất 26/38/24% → 19/26/20,5%, lệnh 95/80/95 → 103/129/117. Cùng đợt thử (24/10, đều KHÔNG cải thiện → để tắt):
+  // lọc cấu trúc sóng structure "break"/"swing" (± chỉ setup thuận), setup FTR tại Key Volume (± lọc cấu trúc) — lãi TB/kỳ 73–288$ so với 350$ gốc.
+  maxExtAtr: 2.5, minSlAtr: 2, limitAt: "close", fillBars: 3, // v8: không đuổi giá siết 2 → 1,5 ATR // v3: không đuổi giá (≤2 ATR từ EMA50), SL ≥2 ATR (180 ngày: thắng 35%→44%, R −0.12→+0.13); lệnh chờ chờ 3 nến, không khớp → bỏ
   entryMode: "limit", // vào bằng LỆNH CHỜ ở giá đóng nến tín hiệu (phí maker, không trượt) — 180 ngày: R TB -0.23 → -0.11 so với vào giá thị trường
   partialAtR: 0, // chốt 50% ở +xR (0 = tắt)
   // Tự tối ưu: học thêm 90 ngày trước ngày bắt đầu; xét 60 lệnh gần nhất, cần ≥20 mẫu; điểm thận trọng = kỳ vọng − 1×sai số chuẩn ≥ 0 mới vào;
@@ -41,6 +44,7 @@ export const DEFAULT_CFG = {
   coins: ["BTC", "ETH", "XAU"], tfs: ["5m", "15m"], setups: ["TREND", "SFP", "BREAKOUT", "SMC"], // v4: bỏ H4 mặc định (ít lệnh, 90 ngày hơi âm; bỏ H4 tốt hơn nhẹ)
 };
 // Cấu hình thực của 1 phiên: phiên tạo từ bản cũ (chưa có cfgVer 2) được nâng bộ tối ưu + cách vào lệnh lên bản mới, giữ vốn/rủi ro/cặp/khung/setup
+const V11_KEYS = ["maxExtAtr"];
 const V10_KEYS = ["streakN"];
 const V9_KEYS = ["streakN", "streakRiskPct"];
 const V8_KEYS = ["htfFilter", "sigVol", "maxExtAtr"];
@@ -61,6 +65,7 @@ export function cfgOf(session) {
   if (ver < 8) for (const k of V8_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 9) for (const k of V9_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 10) for (const k of V10_KEYS) c[k] = DEFAULT_CFG[k];
+  if (ver < 11) for (const k of V11_KEYS) c[k] = DEFAULT_CFG[k];
   if (ver < 6) { for (const k of V6_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x === "5m" || x === "15m"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v6: chỉ vào lệnh M5/M15, khung lớn chỉ để xác định bias (user chốt 20/10)
   if (ver < 5) { for (const k of V5_KEYS) c[k] = DEFAULT_CFG[k]; c.tfs = c.tfs.filter((x) => x !== "4h"); if (!c.tfs.length) c.tfs = DEFAULT_CFG.tfs; } // v5: bỏ hẳn H4 (user chốt 20/10)
   c.coins = [...new Set((c.coins || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); if (!c.coins.length) c.coins = [...DEFAULT_CFG.coins]; // cặp do user chọn (thêm/sửa/xoá trong app)
@@ -176,13 +181,20 @@ function findSignals(K, setups) {
   const sig = [], on = (s) => setups.includes(s);
   const maxH = (a, b) => { let m = -Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.max(m, H[k]); return m; };
   const minL = (a, b) => { let m = Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.min(m, L[k]); return m; };
-  let pendTrend = null, smc = null; const swept = new Set();
+  let pendTrend = null, smc = null, ftr = null; const swept = new Set();
+  // Cấu trúc sóng (24/10): ms[i] = hướng lần PHÁ cấu trúc gần nhất (đóng vượt swing high → 1, thủng swing low → -1; BOS hoặc CHoCH)
+  // sw[i] = cấu trúc đỉnh/đáy: HH+HL → 1, LH+LL → -1, lẫn lộn → 0. Chỉ dùng swing ĐÃ xác nhận (không nhìn trước).
+  const ms = new Array(n).fill(0), sw = new Array(n).fill(0); let msNow = 0;
   const lastSwing = (arr, i, ok) => { for (let q = arr.length - 1; q >= 0 && i - arr[q] <= 60; q--) if (ok(arr[q])) return arr[q]; return null; }; // swing gần nhất (≤60 nến) thoả điều kiện
   for (let i = 210; i < n; i++) {
     const j = i - 2; // nến j vừa được xác nhận là swing?
     if (H[j] > H[j - 1] && H[j] > H[j - 2] && H[j] >= H[j + 1] && H[j] >= H[j + 2]) swHi.push(j);
     if (L[j] < L[j - 1] && L[j] < L[j - 2] && L[j] <= L[j + 1] && L[j] <= L[j + 2]) swLo.push(j);
     const a = atr[i], body = Math.abs(C[i] - O[i]), rng = H[i] - L[i] || 1e-9, bull = C[i] > O[i], bear = C[i] < O[i];
+    const hA = swHi[swHi.length - 1], hB = swHi[swHi.length - 2], lA = swLo[swLo.length - 1], lB = swLo[swLo.length - 2];
+    const bosUp = hA != null && C[i] > H[hA] && C[i - 1] <= H[hA], bosDn = lA != null && C[i] < L[lA] && C[i - 1] >= L[lA];
+    if (bosUp) msNow = 1; else if (bosDn) msNow = -1;
+    ms[i] = msNow; sw[i] = hB != null && lB != null ? (H[hA] > H[hB] && L[lA] > L[lB] ? 1 : H[hA] < H[hB] && L[lA] < L[lB] ? -1 : 0) : 0;
     const up = C[i] > e200[i] && e50[i] > e200[i], dn = C[i] < e200[i] && e50[i] < e200[i], trending = adx[i] >= 20;
 
     // 1) TREND_CONFIRM: nến xác nhận (i) đóng vượt nến tín hiệu (i-1)
@@ -233,8 +245,23 @@ function findSignals(K, setups) {
         else if (smc.side === -1 && H[i] >= smc.lo && bear && C[i] < smc.lo) { sig.push({ i, side: -1, sl: Math.max(smc.hi, H[i]) + 0.2 * a, setup: "SMC", note: "CHoCH giảm → hồi OB → từ chối" }); smc = null; }
       }
     }
+
+    // 5) FTR (Fail To Return, 24/10 — thử nghiệm): nến xung lực (thân ≥ 1 ATR, ≥ 60% biên) PHÁ cấu trúc (BOS) → vùng = nến ngược màu cuối cùng
+    //    trước xung lực (nền xuất phát). Giá quay lại vùng LẦN ĐẦU + nến từ chối đóng ra ngoài vùng → vào thuận hướng phá. Đóng xuyên qua vùng → huỷ.
+    if (on("FTR")) {
+      if ((bosUp || bosDn) && body >= a && body / rng >= 0.6 && (bosUp ? bull : bear)) {
+        const sd = bosUp ? 1 : -1; let b = null;
+        for (let k = i - 1; k >= i - 6; k--) if ((C[k] - O[k]) * sd < 0) { b = k; break; }
+        if (b != null) ftr = { side: sd, hi: H[b], lo: L[b], from: i, exp: i + 40 };
+      }
+      if (ftr && i > ftr.from) {
+        if (i > ftr.exp || (ftr.side === 1 && C[i] < ftr.lo) || (ftr.side === -1 && C[i] > ftr.hi)) ftr = null;
+        else if (ftr.side === 1 && L[i] <= ftr.hi && bull && C[i] > ftr.hi) { sig.push({ i, side: 1, sl: Math.min(ftr.lo, L[i]) - 0.2 * a, setup: "FTR", note: "BOS tăng → về vùng FTR lần đầu → từ chối" }); ftr = null; }
+        else if (ftr.side === -1 && H[i] >= ftr.lo && bear && C[i] < ftr.lo) { sig.push({ i, side: -1, sl: Math.max(ftr.hi, H[i]) + 0.2 * a, setup: "FTR", note: "BOS giảm → về vùng FTR lần đầu → từ chối" }); ftr = null; }
+      }
+    }
   }
-  return { sig, atr, e50, adx, vma, V, H, L, C, O };
+  return { sig, atr, e50, adx, vma, V, H, L, C, O, ms, sw };
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
@@ -440,7 +467,11 @@ export async function runSession(session, onProgress = () => {}) {
       // v6: tiêu chí bộ kiến thức trước đây bot bỏ qua (đã kiểm chứng 90 & 180 ngày, cả 2 nửa kỳ)
       const veto = cfg.sigVol && tags.includes("svol:lo") ? "nến tín hiệu volume thấp (VSA: thiếu xác nhận)"
         : cfg.noEngulf && tags.includes("pa:engulf") ? "vào ngay sau nến engulfing lớn (đuổi giá)"
-        : cfg.d1Bias && tags.includes("d1:against") ? "ngược xu hướng D1" : null;
+        : cfg.d1Bias && tags.includes("d1:against") ? "ngược xu hướng D1"
+        // Cấu trúc sóng (24/10): "break" = lần phá cấu trúc gần nhất (BOS/CHoCH) phải cùng hướng lệnh · "swing" = đỉnh/đáy HH-HL / LH-LL cùng hướng
+        // contOnly: chỉ áp cho setup thuận xu hướng (TREND, BREAKOUT, FTR) — SFP / SMC là đảo chiều nên không bắt theo cấu trúc cũ
+        : cfg.structure && (!cfg.structContOnly || !["SFP", "SMC"].includes(s.setup)) && (cfg.structure === "swing" ? found.sw[s.i] : found.ms[s.i]) !== s.side
+          ? (cfg.structure === "swing" ? "ngược cấu trúc đỉnh/đáy (HH-HL / LH-LL)" : "ngược hướng phá cấu trúc gần nhất (BOS/CHoCH)") : null;
       if (veto) { if (live0) { bump(veto); skipLog.push({ t: K[s.i][0], coin, tf, setup: s.setup, side: s.side, why: veto }); } continue; }
       const sims = V.map((v) => simTrade(K, s, { ...cfg, rr: v.rr, beAtR: v.beAtR }, atr, endIdx, found.e50, found));
       if (!sims[0]) continue;
