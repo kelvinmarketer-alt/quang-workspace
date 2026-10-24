@@ -679,7 +679,7 @@ export default function CoinBot({ active: visible = true }) {
           return (
             <Card className="!p-3">
               <Title icon={Info}>Vì sao chưa có lệnh?</Title>
-              <div className="text-[12.5px] text-slate-600">Lệnh gần nhất: <b>{lastEntry ? dt(lastEntry) : "chưa có"}</b>. 7 ngày qua có <b>{wk.length}</b> tín hiệu thô nhưng đều bị luật lọc bỏ — bình thường khi thị trường không có điểm vào đẹp (bot chỉ vào khi đủ mọi điều kiện).</div>
+              <div className="text-[12.5px] text-slate-600">Lệnh gần nhất: <b>{lastEntry ? dt(lastEntry) : "chưa có"}</b>. 7 ngày qua có <b>{res.skipLog.length >= 400 && wk.length === res.skipLog.length ? `hơn ${wk.length}` : wk.length}</b> tín hiệu thô nhưng đều bị luật lọc bỏ — bình thường khi thị trường không có điểm vào đẹp (bot chỉ vào khi đủ mọi điều kiện).</div>
               <div className="mt-1.5 flex flex-wrap gap-1.5">{Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] text-slate-600">{k}: <b>{v}</b></span>)}</div>
               {near.length > 0 && <div className="mt-2 space-y-0.5">{near.map((x, i) => <div key={i} className="text-[11.5px] text-slate-500"><span className="tabular-nums text-slate-400">{dt(x.t)}</span> {side(x.side)} <b>{x.coin} {TFS[x.tf].label}</b> {setupName(x.setup)} — bỏ vì {x.why}</div>)}</div>}
             </Card>
