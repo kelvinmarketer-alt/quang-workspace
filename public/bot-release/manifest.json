@@ -1,7 +1,7 @@
 {
-  "sha": "cfc25720dc4a1bf9da10f8fb980fe28da767bfd5",
-  "date": "2026-10-22T15:26:22+07:00",
-  "msg": "Báo về app: số dư ví Futures (số dư, lãi/lỗ đang mở, khả dụng), lãi/lỗ từng vị thế đang mở, kết quả thông báo gần nhất theo từng thiết bị (iPhone / Chrome)",
+  "sha": "54c495cd466dfe24fe180c25fdc73b73942c3199",
+  "date": "2026-10-24T23:39:58+07:00",
+  "msg": "Đồng bộ luật v11 từ app: không đuổi giá 2,5 ATR (+ tuỳ chọn thử nghiệm cấu trúc sóng / FTR, mặc định tắt)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "38a0d513ef71101506c61f915ba057ca8bd26d7c"
+      "sha": "991eb7c49dbda0611b7d099d98d3c95cc39c94af"
     },
     {
       "path": "lib/report.js",
