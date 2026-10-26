@@ -185,6 +185,8 @@ function CoinsEditor({ coins, onChange }) {
   );
 }
 
+// Khung giờ bot được chọn (27/10: thêm H1, H4 — bot thật quét mỗi nến M5 đóng nên khung lớn cũng bắt kịp)
+const EDIT_TFS = ["5m", "15m", "1h", "4h"];
 function SetupForm({ initial, onStart, onCancel }) {
   const [days, setDays] = useState(90);
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
@@ -202,7 +204,7 @@ function SetupForm({ initial, onStart, onCancel }) {
       <div className="space-y-3">
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{["5m", "15m"].map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{EDIT_TFS.map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Setup theo bộ kiến thức</div>
           <div className="space-y-1">{Object.entries(SETUPS).map(([k, s]) => (
             <button key={k} onClick={() => tog("setups", k)} className={`block w-full rounded-lg border px-3 py-2 text-left ${c.setups.includes(k) ? "border-indigo-300 bg-indigo-50/60" : "border-slate-200 opacity-60"}`}>
@@ -394,12 +396,16 @@ export default function CoinBot({ active: visible = true }) {
   const [view, setView] = useState("auto");
   const [optAll, setOptAll] = useState(false);
   const [tab, setTab] = useState("chart");
-  const [showRules, setShowRules] = useState(false), [editCoins, setEditCoins] = useState(null);
+  const [showRules, setShowRules] = useState(false), [editCoins, setEditCoins] = useState(null), [editTfs, setEditTfs] = useState([]);
+  const tfName = (l) => l.map((x) => TFS[x]?.label || x).join(", ");
   const saveCoins = async () => {
-    if (!editCoins?.length) return;
+    if (!editCoins?.length || !editTfs.length) return;
     const added = editCoins.filter((x) => !cfg.coins.includes(x)), removed = cfg.coins.filter((x) => !editCoins.includes(x));
-    const ans = await ask(`Lưu danh sách cặp: ${editCoins.join(", ")}?${added.length ? `\nThêm: ${added.join(", ")}` : ""}${removed.length ? `\nXoá: ${removed.join(", ")}` : ""}\nDemo chạy lại từ đầu phiên với danh sách mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do đổi (không bắt buộc)…" }); if (!ans) return;
-    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: editCoins }, createdAt: Date.now() }, `Sửa cặp: ${editCoins.join(", ")}${added.length ? ` (thêm ${added.join(", ")})` : ""}${removed.length ? ` (bỏ ${removed.join(", ")})` : ""}`, ans.text);
+    const tfAdd = editTfs.filter((x) => !cfg.tfs.includes(x)), tfDel = cfg.tfs.filter((x) => !editTfs.includes(x));
+    const tfs = EDIT_TFS.filter((x) => editTfs.includes(x));
+    const ans = await ask(`Lưu: cặp ${editCoins.join(", ")} · khung ${tfName(tfs)}?${added.length ? `\nThêm cặp: ${added.join(", ")}` : ""}${removed.length ? `\nXoá cặp: ${removed.join(", ")}` : ""}${tfAdd.length ? `\nThêm khung: ${tfName(tfAdd)}` : ""}${tfDel.length ? `\nBỏ khung: ${tfName(tfDel)}` : ""}\nDemo chạy lại từ đầu phiên với cấu hình mới; bot thật áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do đổi (không bắt buộc)…" }); if (!ans) return;
+    const what = [added.length || removed.length ? `Sửa cặp: ${editCoins.join(", ")}${added.length ? ` (thêm ${added.join(", ")})` : ""}${removed.length ? ` (bỏ ${removed.join(", ")})` : ""}` : "", tfAdd.length || tfDel.length ? `Khung: ${tfName(tfs)}${tfAdd.length ? ` (thêm ${tfName(tfAdd)})` : ""}${tfDel.length ? ` (bỏ ${tfName(tfDel)})` : ""}` : ""].filter(Boolean).join(" · ");
+    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), coins: editCoins, tfs, offStreams: (session.cfg?.offStreams || []).filter((k) => tfs.includes(k.split("|")[1])) }, createdAt: Date.now() }, what, ans.text);
     setEditCoins(null);
   };
   // Tắt 1 cặp từ bảng "nên giữ hay tắt" (cùng cơ chế Thêm/sửa cặp: Demo chạy lại, bot thật áp dụng ~5 phút)
@@ -575,14 +581,17 @@ export default function CoinBot({ active: visible = true }) {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => setEditCoins((v) => (v ? null : [...cfg.coins]))} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa cặp ▴" : "Thêm/sửa cặp ▾"}</button></>}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => { setEditTfs([...cfg.tfs]); setEditCoins((v) => (v ? null : [...cfg.coins])); }} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa ▴" : "Thêm/sửa cặp & khung ▾"}</button></>}
           {editCoins && (
             <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
               <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Cặp bot giao dịch (Demo + bot thật)</div>
               <CoinsEditor coins={editCoins} onChange={setEditCoins} />
+              <div className="mb-1.5 mt-3 text-[12.5px] font-extrabold text-slate-800">Khung giờ vào lệnh</div>
+              <div className="flex flex-wrap gap-1.5">{EDIT_TFS.map((k) => { const on = editTfs.includes(k); return <button key={k} onClick={() => setEditTfs((l) => (on ? l.filter((x) => x !== k) : [...l, k]))} className={`rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-slate-200"}`}>{TFS[k].label}</button>; })}</div>
+              <div className="mt-1 text-[11px] leading-snug text-slate-500">Khung lớn (H1, H4) ít tín hiệu hơn nhiều; bài kiểm thử gần nhất xem ở thẻ Phễu tín hiệu. Tắt riêng 1 khung của 1 cặp: Thống kê → "Tắt khung".</div>
               <div className="mt-2 flex gap-2">
                 <button onClick={() => setEditCoins(null)} className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-[12px] font-bold text-slate-600">Huỷ</button>
-                <button disabled={editCoins.join() === cfg.coins.join()} onClick={saveCoins} className="flex-1 rounded-lg bg-indigo-600 py-2 text-[12px] font-bold text-white disabled:opacity-40">Lưu & chạy lại</button>
+                <button disabled={!editTfs.length || (editCoins.join() === cfg.coins.join() && [...editTfs].sort().join() === [...cfg.tfs].sort().join())} onClick={saveCoins} className="flex-1 rounded-lg bg-indigo-600 py-2 text-[12px] font-bold text-white disabled:opacity-40">Lưu & chạy lại</button>
               </div>
               <div className="mt-1 text-[11px] leading-snug text-slate-500">Lưu xong Demo chạy lại từ {dt(session.startAt)} với danh sách cặp mới (cặp xoá → lệnh demo của cặp đó biến mất). Bot thật nhận trong ~5 phút; lệnh/vị thế đang mở của cặp vừa xoá vẫn được bot quản lý (SL/TP) tới khi đóng.</div>
             </div>
@@ -674,12 +683,17 @@ export default function CoinBot({ active: visible = true }) {
           const lastEntry = Math.max(0, ...P.trades.filter((t) => t.status !== "skip").map((t) => t.entryAt));
           if (Date.now() - lastEntry < 48 * 3600000 || !res.skipLog?.length) return null;
           const wk = res.skipLog.filter((x) => Date.now() - x.t < 7 * 86400000), by = {};
-          for (const x of wk) by[x.why] = (by[x.why] || 0) + 1;
+          const LES = "bị bài học từ lệnh thua chặn (tự bảo vệ sau chuỗi thua)";
+          for (const x of wk) { const k = /^bài học/.test(x.why) ? LES : x.why; by[k] = (by[k] || 0) + 1; }
+          // 27/10: tín hiệu bị bài học chặn vẫn được theo dõi "bóng" → cho sếp thấy nếu vào thì ra sao (chặn đúng hay chặn oan)
+          const blk = (res.rejected || []).filter((t) => Date.now() - t.signalAt < 7 * 86400000 && /^bài học/.test(t.why || "") && t.r != null);
+          const blkR = blk.reduce((a, t) => a + t.r, 0), blkLoss = blk.filter((t) => t.r < 0).length;
           const near = wk.filter((x) => x.why !== "ngược xu hướng khung lớn").slice(0, 5);
           return (
             <Card className="!p-3">
               <Title icon={Info}>Vì sao chưa có lệnh?</Title>
               <div className="text-[12.5px] text-slate-600">Lệnh gần nhất: <b>{lastEntry ? dt(lastEntry) : "chưa có"}</b>. 7 ngày qua có <b>{res.skipLog.length >= 400 && wk.length === res.skipLog.length ? `hơn ${wk.length}` : wk.length}</b> tín hiệu thô nhưng đều bị luật lọc bỏ — bình thường khi thị trường không có điểm vào đẹp (bot chỉ vào khi đủ mọi điều kiện).</div>
+              {blk.length > 0 && <div className={`mt-1.5 rounded-lg px-2.5 py-1.5 text-[12px] ${blkR < 0 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}><b>{blk.length}</b> tín hiệu đạt đủ luật nhưng bị <b>bài học từ lệnh thua</b> chặn. Nếu đã vào: {blkLoss} lệnh thua, {blk.length - blkLoss} lệnh thắng, tổng <b>{rr(blkR)}</b> → {blkR < 0 ? "chặn ĐÚNG, đã tránh được lỗ." : "chặn hơi oan — bài học sẽ tự gỡ khi các tín hiệu bị chặn thắng trở lại."} Không phải bot hỏng: kiểm thử 3 kỳ, tắt bài học thì lãi giảm (TB 279$ → 177$/kỳ) và sụt vốn tăng (24% → 31%).</div>}
               <div className="mt-1.5 flex flex-wrap gap-1.5">{Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => <span key={k} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] text-slate-600">{k}: <b>{v}</b></span>)}</div>
               {near.length > 0 && <div className="mt-2 space-y-0.5">{near.map((x, i) => <div key={i} className="text-[11.5px] text-slate-500"><span className="tabular-nums text-slate-400">{dt(x.t)}</span> {side(x.side)} <b>{x.coin} {TFS[x.tf].label}</b> {setupName(x.setup)} — bỏ vì {x.why}</div>)}</div>}
             </Card>
