@@ -1,7 +1,7 @@
 {
-  "sha": "76fca6b0057078d592a6cc35054de075aeb5eeeb",
-  "date": "2026-10-27T22:24:53+07:00",
-  "msg": "Đồng bộ luật từ app (thêm tuỳ chọn thử nghiệm cấu trúc khung lớn / Elliott / Wyckoff / PA, mặc định tắt — hành vi không đổi)",
+  "sha": "d49c4f530c8fdc5f804295f2f1572086b15f0b64",
+  "date": "2026-10-27T22:48:06+07:00",
+  "msg": "Đồng bộ luật (biasSetups, mặc định tắt)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "3367d7656abc11a2e926112c5125e74f5644c6fc"
+      "sha": "3c7790883cf903b0a0728faf02d40825c41a2180"
     },
     {
       "path": "lib/report.js",
