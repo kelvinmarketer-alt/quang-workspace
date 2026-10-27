@@ -6,7 +6,7 @@
 // lúc có tín hiệu mới, bộ tối ưu CHỈ xét các lệnh bóng ĐÃ ĐÓNG trước thời điểm đó → chọn cấu hình kỳ vọng cao nhất,
 // kỳ vọng âm thì bỏ tín hiệu. Chạy song song "Luật gốc" để so sánh bộ tối ưu giúp hay hại.
 
-export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 } };
+export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 }, "1w": { label: "W1", ms: 604800000 } };
 export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" }; // cặp mặc định; cặp do user thêm = <MÃ>USDT (Binance USDⓈ-M)
 export const symOf = (c) => SYMBOLS[c] || `${String(c || "").toUpperCase()}USDT`;
 export const MAX_COINS = 8;
@@ -174,14 +174,14 @@ function atrAdx(H, L, C, n = 14) {
 
 // ---------------- Tìm tín hiệu trên 1 luồng (coin × khung) ----------------
 // trả về danh sách tín hiệu {i: chỉ số nến tín hiệu đã đóng, side: 1|-1, sl, setup, note}; vào lệnh ở open[i+1]
-function findSignals(K, setups) {
+function findSignals(K, setups, opt = {}) {
   const n = K.length, O = K.map((k) => k[1]), H = K.map((k) => k[2]), L = K.map((k) => k[3]), C = K.map((k) => k[4]), V = K.map((k) => k[5]);
   const e200 = emaArr(C, 200), e50 = emaArr(C, 50), vma = smaArr(V, 20), { atr, adx } = atrAdx(H, L, C);
   const swHi = [], swLo = []; // swing (fractal 2-2) — xác nhận ở j+2
   const sig = [], on = (s) => setups.includes(s);
   const maxH = (a, b) => { let m = -Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.max(m, H[k]); return m; };
   const minL = (a, b) => { let m = Infinity; for (let k = Math.max(0, a); k <= b; k++) m = Math.min(m, L[k]); return m; };
-  let pendTrend = null, smc = null, ftr = null; const swept = new Set();
+  let pendTrend = null, smc = null, ftr = null, w3 = null; const swept = new Set();
   // Cấu trúc sóng (24/10): ms[i] = hướng lần PHÁ cấu trúc gần nhất (đóng vượt swing high → 1, thủng swing low → -1; BOS hoặc CHoCH)
   // sw[i] = cấu trúc đỉnh/đáy: HH+HL → 1, LH+LL → -1, lẫn lộn → 0. Chỉ dùng swing ĐÃ xác nhận (không nhìn trước).
   const ms = new Array(n).fill(0), sw = new Array(n).fill(0); let msNow = 0;
@@ -212,7 +212,9 @@ function findSignals(K, setups) {
     }
 
     // 2) SFP: quét đỉnh/đáy swing đáng kể (cực trị 20 nến) + đóng quay lại + volume cao
-    if (on("SFP") && V[i] >= 1.5 * vma[i]) {
+    // Wyckoff (28/10 thử nghiệm, opt.sfpRangeAtr): SFP chỉ tính là Spring / UTAD khi 40 nến trước là VÙNG TÍCH LUỸ hẹp (biên < x ATR)
+    const inRange = !opt.sfpRangeAtr || maxH(i - 40, i - 1) - minL(i - 40, i - 1) < opt.sfpRangeAtr * a;
+    if (on("SFP") && inRange && V[i] >= 1.5 * vma[i]) {
       const sh = lastSwing(swHi, i, (x) => !swept.has("h" + x) && H[x] >= maxH(x - 20, x - 1));
       if (sh != null && H[i] > H[sh] && C[i] < H[sh] && (H[i] - Math.max(O[i], C[i])) / rng >= 0.4 && maxH(sh + 1, i - 1) <= H[sh]) { swept.add("h" + sh); sig.push({ i, side: -1, sl: H[i] + 0.2 * a, setup: "SFP", note: "quét đỉnh swing + volume cao" }); }
       const sl0 = lastSwing(swLo, i, (x) => !swept.has("l" + x) && L[x] <= minL(x - 20, x - 1));
@@ -246,6 +248,24 @@ function findSignals(K, setups) {
       }
     }
 
+    // 6) W3 — Elliott sóng 3 (28/10 thử nghiệm): CHoCH (sóng 1 đảo cấu trúc) → sóng 2 hồi 50–78,6% sóng 1, KHÔNG thủng đáy sóng 1
+    //    → nến từ chối trong vùng hồi → vào đón sóng 3 thuận hướng mới. SL dưới đáy sóng 2.
+    if (on("W3")) {
+      const flipUp = bosUp && ms[i - 1] === -1, flipDn = bosDn && ms[i - 1] === 1;
+      if (flipUp && lA != null) w3 = { side: 1, st: L[lA], ext: H[i], from: i, exp: i + 60, frozen: false };
+      if (flipDn && hA != null) w3 = { side: -1, st: H[hA], ext: L[i], from: i, exp: i + 60, frozen: false };
+      if (w3 && i > w3.from) {
+        const sd = w3.side, len = Math.abs(w3.ext - w3.st) || 1e-9;
+        if (!w3.frozen) w3.ext = sd === 1 ? Math.max(w3.ext, H[i]) : Math.min(w3.ext, L[i]);
+        const rt = ((w3.ext - (sd === 1 ? L[i] : H[i])) * sd) / len;
+        if (rt >= 0.382) w3.frozen = true;
+        if (i > w3.exp || (sd === 1 ? L[i] < w3.st : H[i] > w3.st)) w3 = null;
+        else if (w3.frozen && rt >= 0.5 && rt <= 0.786 && (sd === 1 ? bull : bear) && ((w3.ext - C[i]) * sd) / len < 0.5) {
+          sig.push({ i, side: sd, sl: sd === 1 ? L[i] - 0.2 * a : H[i] + 0.2 * a, setup: "W3", note: `Elliott: CHoCH → sóng 2 hồi ${(rt * 100).toFixed(0)}% → đón sóng 3` }); w3 = null;
+        }
+      }
+    }
+
     // 5) FTR (Fail To Return, 24/10 — thử nghiệm): nến xung lực (thân ≥ 1 ATR, ≥ 60% biên) PHÁ cấu trúc (BOS) → vùng = nến ngược màu cuối cùng
     //    trước xung lực (nền xuất phát). Giá quay lại vùng LẦN ĐẦU + nến từ chối đóng ra ngoài vùng → vào thuận hướng phá. Đóng xuyên qua vùng → huỷ.
     if (on("FTR")) {
@@ -262,6 +282,20 @@ function findSignals(K, setups) {
     }
   }
   return { sig, atr, e50, adx, vma, V, H, L, C, O, ms, sw };
+}
+
+// Cấu trúc khung lớn (28/10): ms[i] = hướng lần phá cấu trúc gần nhất (BOS/CHoCH) tính bằng swing fractal 2-2 đã xác nhận
+function structOf(K) {
+  const n = K.length, H = K.map((k) => k[2]), L = K.map((k) => k[3]), C = K.map((k) => k[4]), ms = new Array(n).fill(0);
+  let hA = null, lA = null, st = 0;
+  for (let i = 4; i < n; i++) {
+    const j = i - 2;
+    if (H[j] > H[j - 1] && H[j] > H[j - 2] && H[j] >= H[j + 1] && H[j] >= H[j + 2]) hA = j;
+    if (L[j] < L[j - 1] && L[j] < L[j - 2] && L[j] <= L[j + 1] && L[j] <= L[j + 2]) lA = j;
+    if (hA != null && C[i] > H[hA] && C[i - 1] <= H[hA]) st = 1; else if (lA != null && C[i] < L[lA] && C[i - 1] >= L[lA]) st = -1;
+    ms[i] = st;
+  }
+  return ms;
 }
 
 // ---------------- Mô phỏng 1 lệnh (theo R) ----------------
@@ -422,6 +456,7 @@ export async function runSession(session, onProgress = () => {}) {
     if (off.has(`${coin}|${tf}`)) continue;
     need.set(`${coin}|${tf}`, [symOf(coin), tf, learnFrom - 260 * TFS[tf].ms]);
     for (const h of ["1h", "4h", "1d"]) need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]);
+    for (const h of cfg.biasTfs || []) need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - (h === "1w" ? 160 : 260) * TFS[h].ms)]);
     if (cfg.htfFilter) { const h = TFS[tf].htf; need.set(`${coin}|${h}`, [symOf(coin), h, Math.min(need.get(`${coin}|${h}`)?.[2] ?? Infinity, learnFrom - 260 * TFS[h].ms)]); }
   }
   onProgress(`Tải nến ${need.size} luồng…`);
@@ -441,7 +476,7 @@ export async function runSession(session, onProgress = () => {}) {
     const symbol = symOf(coin), step = TFS[tf].ms, key = `${coin}|${tf}`;
     const K = (got.get(key) || await loadKlines(symbol, tf, learnFrom - 260 * step)).filter((k) => k[0] + step <= until);
     if (K.length < 260) { streams.push({ coin, tf, bars: K.length, note: "thiếu dữ liệu" }); continue; }
-    const found = findSignals(K, cfg.setups);
+    const found = findSignals(K, cfg.setups, cfg);
     const atr = found.atr; let sig = found.sig.filter((x) => K[x.i][0] >= learnFrom);
     if (cfg.htfFilter) {
       const htf = TFS[tf].htf, hs = TFS[htf].ms;
@@ -460,6 +495,14 @@ export async function runSession(session, onProgress = () => {}) {
       const hs = TFS[h].ms, HK = (got.get(`${coin}|${h}`) || await loadKlines(symbol, h, learnFrom - 260 * hs)).filter((k) => k[0] + hs <= until), he = emaArr(HK.map((k) => k[4]), 200);
       biasFns[h] = (t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (HK[m][0] + hs <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r < 200 ? 0 : HK[r][4] > he[r] ? 1 : HK[r][4] < he[r] ? -1 : 0; };
     }
+    // Bias CẤU TRÚC khung lớn (28/10 thử nghiệm): cfg.biasTfs (vd H4, D1, W1) — hướng phá cấu trúc gần nhất của nến khung lớn ĐÃ ĐÓNG;
+    // cfg.biasNeed "all" = mọi khung cùng hướng lệnh · "major" = quá nửa · số = ít nhất N khung
+    const sBias = [];
+    for (const h of cfg.biasTfs || []) {
+      const hs = TFS[h].ms, HK = (got.get(`${coin}|${h}`) || await loadKlines(symbol, h, learnFrom - (h === "1w" ? 160 : 260) * hs)).filter((k) => k[0] + hs <= until), m = structOf(HK);
+      sBias.push((t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const md = (lo + hi) >> 1; if (HK[md][0] + hs <= t) { r = md; lo = md + 1; } else hi = md - 1; } return r < 0 ? 0 : m[r]; });
+    }
+    const biasOk = (s) => { if (!sBias.length) return true; const t = K[s.i][0] + step, v = sBias.map((f) => f(t)), agree = v.filter((x) => x === s.side).length, need = cfg.biasNeed === "all" ? v.length : cfg.biasNeed === "major" ? Math.floor(v.length / 2) + 1 : Number(cfg.biasNeed) || v.length; return agree >= need; };
     const htfTags = (s) => { const t = K[s.i][0] + step, b = ["1h", "4h", "1d"].map((h) => biasFns[h](t)); return [b.every((x) => x === s.side) ? "htf:all" : "htf:mixed", b[2] === s.side ? "d1:with" : "d1:against"]; };
     const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
@@ -468,6 +511,8 @@ export async function runSession(session, onProgress = () => {}) {
       const veto = cfg.sigVol && tags.includes("svol:lo") ? "nến tín hiệu volume thấp (VSA: thiếu xác nhận)"
         : cfg.noEngulf && tags.includes("pa:engulf") ? "vào ngay sau nến engulfing lớn (đuổi giá)"
         : cfg.d1Bias && tags.includes("d1:against") ? "ngược xu hướng D1"
+        : !biasOk(s) ? `ngược cấu trúc khung lớn (${(cfg.biasTfs || []).map((h) => TFS[h].label).join("/")})`
+        : cfg.paConfirm && !tags.includes("pa:pin") && !tags.includes("pa:engulf") ? "không có nến xác nhận Price Action (pin / engulfing)"
         // Cấu trúc sóng (24/10): "break" = lần phá cấu trúc gần nhất (BOS/CHoCH) phải cùng hướng lệnh · "swing" = đỉnh/đáy HH-HL / LH-LL cùng hướng
         // contOnly: chỉ áp cho setup thuận xu hướng (TREND, BREAKOUT, FTR) — SFP / SMC là đảo chiều nên không bắt theo cấu trúc cũ
         : cfg.structure && (!cfg.structContOnly || !["SFP", "SMC"].includes(s.setup)) && (cfg.structure === "swing" ? found.sw[s.i] : found.ms[s.i]) !== s.side
