@@ -1,7 +1,7 @@
 {
-  "sha": "54c495cd466dfe24fe180c25fdc73b73942c3199",
-  "date": "2026-10-24T23:39:58+07:00",
-  "msg": "Đồng bộ luật v11 từ app: không đuổi giá 2,5 ATR (+ tuỳ chọn thử nghiệm cấu trúc sóng / FTR, mặc định tắt)",
+  "sha": "76fca6b0057078d592a6cc35054de075aeb5eeeb",
+  "date": "2026-10-27T22:24:53+07:00",
+  "msg": "Đồng bộ luật từ app (thêm tuỳ chọn thử nghiệm cấu trúc khung lớn / Elliott / Wyckoff / PA, mặc định tắt — hành vi không đổi)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "991eb7c49dbda0611b7d099d98d3c95cc39c94af"
+      "sha": "3367d7656abc11a2e926112c5125e74f5644c6fc"
     },
     {
       "path": "lib/report.js",
