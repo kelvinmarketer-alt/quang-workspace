@@ -502,7 +502,8 @@ export async function runSession(session, onProgress = () => {}) {
       const hs = TFS[h].ms, HK = (got.get(`${coin}|${h}`) || await loadKlines(symbol, h, learnFrom - (h === "1w" ? 160 : 260) * hs)).filter((k) => k[0] + hs <= until), m = structOf(HK);
       sBias.push((t) => { let lo = 0, hi = HK.length - 1, r = -1; while (lo <= hi) { const md = (lo + hi) >> 1; if (HK[md][0] + hs <= t) { r = md; lo = md + 1; } else hi = md - 1; } return r < 0 ? 0 : m[r]; });
     }
-    const biasOk = (s) => { if (!sBias.length) return true; const t = K[s.i][0] + step, v = sBias.map((f) => f(t)), agree = v.filter((x) => x === s.side).length, need = cfg.biasNeed === "all" ? v.length : cfg.biasNeed === "major" ? Math.floor(v.length / 2) + 1 : Number(cfg.biasNeed) || v.length; return agree >= need; };
+    const biasOk = (s) => { if (!sBias.length || (cfg.biasSetups && !cfg.biasSetups.includes(s.setup))) return true; // biasSetups: chỉ áp cho các setup này (vd đảo chiều SMC/SFP)
+      const t = K[s.i][0] + step, v = sBias.map((f) => f(t)), agree = v.filter((x) => x === s.side).length, need = cfg.biasNeed === "all" ? v.length : cfg.biasNeed === "major" ? Math.floor(v.length / 2) + 1 : Number(cfg.biasNeed) || v.length; return agree >= need; };
     const htfTags = (s) => { const t = K[s.i][0] + step, b = ["1h", "4h", "1d"].map((h) => biasFns[h](t)); return [b.every((x) => x === s.side) ? "htf:all" : "htf:mixed", b[2] === s.side ? "d1:with" : "d1:against"]; };
     const endIdx = K.length - 1, last = K[endIdx][4], lastBarAt = K[endIdx][0];
     for (const s of sig) {
