@@ -1,7 +1,7 @@
 {
-  "sha": "d49c4f530c8fdc5f804295f2f1572086b15f0b64",
-  "date": "2026-10-27T22:48:06+07:00",
-  "msg": "Đồng bộ luật (biasSetups, mặc định tắt)",
+  "sha": "1301e97e80058b5faf03689c96f64b9eaaaddbd3",
+  "date": "2026-10-30T22:30:02+07:00",
+  "msg": "Đồng bộ luật (tuỳ chọn bài học, mặc định tắt)",
   "files": [
     {
       "path": "README.md",
@@ -33,7 +33,7 @@
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "3c7790883cf903b0a0728faf02d40825c41a2180"
+      "sha": "27082ae59c8726afa51bcdc7dc702c3dff3f8ee1"
     },
     {
       "path": "lib/report.js",
