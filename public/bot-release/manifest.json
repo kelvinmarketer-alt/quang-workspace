@@ -1,7 +1,7 @@
 {
-  "sha": "1301e97e80058b5faf03689c96f64b9eaaaddbd3",
-  "date": "2026-10-30T22:30:02+07:00",
-  "msg": "Đồng bộ luật (tuỳ chọn bài học, mặc định tắt)",
+  "sha": "2ca7673d1d4055a477e2b6c86cadb8575457590f",
+  "date": "2026-10-30T23:59:35+07:00",
+  "msg": "Luật v12: rủi ro riêng theo setup (BREAKOUT/SFP 1%) khi tính khối lượng lệnh",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "a93fc4d23711d360be8d2c4485eaa562476a626f"
+      "sha": "454316991397fdc0f093e3cb82b3e1d0270512d6"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "27082ae59c8726afa51bcdc7dc702c3dff3f8ee1"
+      "sha": "93c387f62bc1ae6edb613c38bd70173535ac94d0"
     },
     {
       "path": "lib/report.js",
