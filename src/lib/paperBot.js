@@ -580,12 +580,15 @@ export async function runSession(session, onProgress = () => {}) {
   for (const sh of shadows) { if (sh.r[baseVi] == null) continue; for (const k of lkeys(sh)) { let a = lessIdx.get(k); if (!a) lessIdx.set(k, (a = [])); a.push({ x: sh.x[baseVi], r: sh.r[baseVi] }); } }
   for (const a of lessIdx.values()) a.sort((p, q) => p.x - q.x);
   const lessonStat = (k, T) => {
-    const a = lessIdx.get(k) || [], c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lessonN), c), n = w.length;
+    const a = lessIdx.get(k) || [], c = upTo(a, T), w = a.slice(Math.max(0, c - cfg.lessonN), c).filter((y) => !cfg.lessonDays || y.x >= T - cfg.lessonDays * 864e5), n = w.length; // lessonDays: chỉ xét lệnh trong N ngày gần (bài học cũ tự hết hạn)
     if (n < cfg.lessonMin) return null;
     const m = w.reduce((x, y) => x + y.r, 0) / n, sd = Math.sqrt(w.reduce((x, y) => x + (y.r - m) ** 2, 0) / (n - 1));
-    return { n, exp: m, win: (w.filter((y) => y.r > 0.05).length / n) * 100, bad: m <= -0.2 && m + sd / Math.sqrt(n) < 0 };
+    return { n, exp: m, win: (w.filter((y) => y.r > 0.05).length / n) * 100, bad: m <= (cfg.lessonBad ?? -0.2) && m + sd / Math.sqrt(n) < 0 };
   };
-  const lessonsAt = (sh, T) => (cfg.learnLoss ? lkeys(sh).map((k) => ({ k, ...lessonStat(k, T) })).filter((x) => x.bad) : []);
+  const lessonsAt = (sh, T) => { // lessonNeed: chỉ chặn khi có ≥ N đặc điểm xấu khác nhau (mặc định 1)
+    const L = cfg.learnLoss ? lkeys(sh).map((k) => ({ k, ...lessonStat(k, T) })).filter((x) => x.bad) : [];
+    return (cfg.lessonNeed || 1) > 1 && new Set(L.map((x) => x.k.split("|")[1])).size < cfg.lessonNeed ? [] : L;
+  };
   const lessonLabel = (k) => { const [sc, g] = k.split("|"); return `${TAGS[g] || g}${sc === "*" ? "" : ` · ${SETUPS[sc]?.label.split(" (")[0] || sc}`}`; };
   const lessonOn = new Map(), lessons = [];
   // Tự kiểm chứng bài học: so kết quả (bóng) của tín hiệu BỊ bài học chặn với tín hiệu không bị chặn — chỉ ÁP DỤNG khi chặn thật sự giúp
