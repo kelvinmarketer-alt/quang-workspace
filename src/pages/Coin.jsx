@@ -91,7 +91,7 @@ function RiskRules() {
   const { settings = {} } = useData();
   const c = cfgOf(settings.paperBot || null);
   const rules = [
-    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh`], ["Dừng ngày", `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%`],
+    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh${Object.keys(c.riskBySetup || {}).length ? ` (${Object.entries(c.riskBySetup).map(([k, v]) => `${k} ${fmtNum(Math.min(v, c.riskPct), 1, 0)}%`).join(", ")})` : ""}`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh`], ["Dừng ngày", `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%`],
     ["Chốt lời", `R:R 1:${fmtNum(c.rr, 1, 0)}`], ["Cắt lỗ", `SL ≥ ${fmtNum(c.minSlAtr, 1, 0)} ATR, luôn đặt`], ["Không đuổi giá", `≤ ${fmtNum(c.maxExtAtr, 1, 0)} ATR từ EMA50`],
     ...(c.d1Bias ? [["Xu hướng", "chỉ thuận D1"]] : []), ["Ví", "chỉ Futures, không đụng Spot"],
   ];

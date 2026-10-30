@@ -100,9 +100,11 @@ const RULES = [
   ["rr", "R:R", (v) => (fin(v) ? `1:${fmtNum(v, 2, 0)}` : "—")],
   ["streakN", "Giảm rủi ro sau chuỗi thua", (v) => (Number(v) > 0 ? `thua ${v} lệnh liền` : "tắt")],
   ["streakRiskPct", "Rủi ro khi đang chuỗi thua", (v) => (fin(v) ? `${fmtNum(v, 2, 0)}%` : "—")],
+  ["riskBySetup", "Rủi ro riêng theo setup", (v) => (v && Object.keys(v).length ? Object.entries(v).map(([k, x]) => `${setupName(k)} ${fmtNum(x, 2, 0)}%`).join(", ") : "không"), "obj"],
   ["cfgVer", "Phiên bản luật", (v) => (v ? `v${v}` : "—")],
 ];
-const same = (a, b, kind) => (kind === "arr" ? [...(a || [])].sort().join() === [...(b || [])].sort().join() : kind === "bool" ? !!a === !!b : Number(a) === Number(b));
+const objKey = (o) => JSON.stringify(Object.entries(o || {}).sort(([p], [q]) => (p < q ? -1 : 1)).map(([k, v]) => [k, Number(v)]));
+const same = (a, b, kind) => (kind === "arr" ? [...(a || [])].sort().join() === [...(b || [])].sort().join() : kind === "bool" ? !!a === !!b : kind === "obj" ? objKey(a) === objKey(b) : Number(a) === Number(b));
 export function cfgDiff(sum, demo) {
   if (!sum || !demo) return [];
   return RULES.filter(([k, , , kind]) => sum[k] !== undefined && !same(sum[k], demo[k], kind)).map(([k, label, f]) => ({ key: k, label, demo: f(demo[k]), bot: f(sum[k]) }));
