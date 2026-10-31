@@ -328,6 +328,9 @@ html.theme-dark :is(.text-lime-900, .text-lime-950) { color: #d9f99d; }
 /* Thanh icon tối (menu thu gọn) + thanh dưới đáy điện thoại: giữ tối ở cả 2 giao diện, tối = viền neon */
 html.theme-dark aside.rail { background: #050912; box-shadow: 0 0 0 1px rgba(34,211,238,.18), 0 0 28px -10px rgba(34,211,238,.45); }
 html.theme-dark .rail-active { background: rgba(34,211,238,.14) !important; color: #67e8f9 !important; box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 0 16px -4px rgba(34,211,238,.55); }
+/* Nút / ô "đang chọn" màu đen trong màn ô → tối: nền ánh cyan cho nổi */
+html.theme-dark .bento .bg-slate-900 { background: rgba(34,211,238,.15) !important; color: #a5f3fc !important; box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 0 16px -6px rgba(34,211,238,.6); }
+html.theme-dark .bento .bg-slate-900 .text-white, html.theme-dark .bento .bg-slate-900.text-white { color: #a5f3fc !important; }
 @media print {
   .no-print { display: none !important; }
   .lg\:pl-64, .lg\:pl-\[92px\] { padding-left: 0 !important; }

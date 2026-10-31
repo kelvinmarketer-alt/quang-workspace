@@ -107,7 +107,7 @@ function ReportMatrix() {
                 <tr key={r.id} tabIndex={0} onClick={() => nav(`/bao-cao/${r.id}`)} onKeyDown={(e) => e.key === "Enter" && nav(`/bao-cao/${r.id}`)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/70">
                   <td className="px-3 py-2.5"><div className="flex items-center gap-2.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
-                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.type === "fulltime" ? "Full-time" : r.type === "le" ? "Khách lẻ" : "Remote"} · {r.jobs.length ? r.jobs.map((j) => j.category || j.name).join(", ") : "không job đang chạy"}</div></div>
+                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.type === "fulltime" ? "Full-time" : r.type === "le" ? "Khách lẻ" : "Remote"} · {r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</div></div>
                   </div></td>
                   <td className="whitespace-nowrap px-3 py-2.5 tabular-nums"><div className="font-bold text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}</div>{r.prevRevenue > 0 && <div className="text-[11px] text-slate-400">T trước {formatShort(r.prevRevenue)}</div>}{r.debt > 0 && <div className="text-[11px] font-bold text-rose-500">nợ {formatShort(r.debt)}</div>}</td>
                   <td className="px-3 py-2.5"><CellPill x={r.cells.ads} loading={loading} /></td>

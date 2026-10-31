@@ -162,7 +162,7 @@ export default function Dashboard() {
               <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
                 <span className="flex min-w-0 items-center gap-2"><BrandAvatar r={r} size={24} /><span className="truncate text-[13px] font-bold text-slate-800">{r.name}</span></span>
                 <span className="flex gap-1">{["ads", "web", "fp", "seo"].map((k) => <i key={k} className={`h-1.5 flex-1 rounded-full ${rep.loading && !rep.data?.at ? "animate-pulse bg-slate-200" : DOT[r.cells[k].t]}`} />)}</span>
-                <span className="truncate text-[11px] text-slate-400">{r.jobs.map((j) => j.category).filter(Boolean).join(" · ") || "—"}</span>
+                <span className="truncate text-[11px] text-slate-400">{[...new Set(r.jobs.map((j) => j.category).filter(Boolean))].join(" · ") || "—"}</span>
               </button>))}
               {!health.length && <div className="col-span-full text-[13px] text-slate-400">{rep.loading ? "Đang lấy số các kênh…" : "Chưa có thương hiệu đang chạy."}</div>}</div>
             <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400"><span>4 vạch = Quảng cáo · Website · Fanpage · SEO</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-emerald-500" />đạt</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-amber-400" />theo dõi</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-rose-500" />dưới chỉ tiêu</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-slate-200" />không chạy kênh này</span></div>
@@ -225,7 +225,7 @@ function MiniTile({ to, icon: Icon, label, value, sub, tone = "text-slate-900" }
 
 // Thông báo: Cảnh báo (quảng cáo 48 giờ + kênh đi xuống) · Thu tiền gần đây
 function Feed({ rows, recent, isOwner }) {
-  const [tab, setTab] = useState(isOwner ? "warn" : "money");
+  const [pick, setTab] = useState(null), tab = pick || (isOwner ? "warn" : "money");
   const [alerts, setAlerts] = useState(null);
   useEffect(() => {
     if (!isOwner) return;
