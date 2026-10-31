@@ -337,3 +337,62 @@ html.theme-dark .bento .bg-slate-900 .text-white, html.theme-dark .bento .bg-sla
   body, .aurora { background: #fff !important; }
   .qws-full .bento .card { box-shadow: none; border: 1px solid #e5e7eb; break-inside: avoid; }
 }
+
+/* ===== CHUYỂN ĐỘNG (01/11 sếp duyệt) — lib/motion.js gắn .rv vào mọi .card trong .bento; cuộn tới → .rv-in, cuộn đi → bỏ, quay lại chạy lại ===== */
+@keyframes rvIn { from { opacity: 0; transform: translateY(26px) scale(.975); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes rvWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes rvGrowX { from { transform: scaleX(0); } }
+@keyframes rvGrowY { from { transform: scaleY(0); } }
+@keyframes rvRow { from { opacity: 0; transform: translateX(-14px); } }
+@keyframes rvUp { from { opacity: 0; transform: translateY(10px); } }
+@keyframes rvPop { 0% { opacity: 0; transform: scale(.6); } 70% { transform: scale(1.08); } 100% { opacity: 1; transform: none; } }
+@keyframes rvPing { 0% { box-shadow: 0 0 0 0 rgb(244 63 94 / .55); } 100% { box-shadow: 0 0 0 8px rgb(244 63 94 / 0); } }
+@keyframes rvShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes rvTab { from { opacity: .4; transform: scale(.92); } }
+@keyframes rvPie { from { transform: rotate(-90deg) scale(.6); opacity: 0; } }
+
+.motion-on .rv { --rv-d: calc(var(--rv-i, 0) * 75ms); opacity: 0; }
+.motion-on .rv.rv-in { animation: rvIn .75s cubic-bezier(.16, 1, .3, 1) var(--rv-d) both; }
+/* biểu đồ & đường xu hướng: quét từ trái sang */
+.motion-on .rv-in svg:not(.lucide) { animation: rvWipe 1.15s cubic-bezier(.65, 0, .35, 1) calc(var(--rv-d) + .18s) both; }
+/* cột biểu đồ mọc từ đáy, lệch nhịp */
+.motion-on .rv-in .recharts-bar-rectangle { transform-box: fill-box; transform-origin: 50% 100%; animation: rvGrowY .8s cubic-bezier(.2, .9, .3, 1.15) calc(var(--rv-d) + .2s) both; }
+.motion-on .rv-in .recharts-surface:has(.recharts-bar-rectangle) { animation: none; }
+.motion-on .rv-in .recharts-pie { transform-box: fill-box; transform-origin: center; animation: rvPie .9s cubic-bezier(.2, .9, .3, 1) calc(var(--rv-d) + .15s) both; }
+/* thanh ngang (tỉ lệ, tiến độ, sức khoẻ) mọc từ trái */
+.motion-on .rv-in :is(.bar-x, :is(.h-1, .h-1\.5, .h-2, .h-2\.5, .h-3)[style*="width"], :is(.h-1, .h-1\.5, .h-2, .h-2\.5, .h-3) > [style*="width"]) { transform-origin: left; animation: rvGrowX .9s cubic-bezier(.2, .8, .2, 1) calc(var(--rv-d) + .25s) both; }
+/* hàng bảng + dòng danh sách trượt vào lần lượt */
+.motion-on .rv-in :is(tbody > tr, .divide-y > *, :is(.space-y-1, .space-y-1\.5, .space-y-2, .space-y-2\.5) > *) { animation: rvRow .55s cubic-bezier(.16, 1, .3, 1) calc(var(--rv-d) + .15s + var(--rv-n, 0) * 45ms) both; }
+/* ô con trong lưới của thẻ nổi lên lần lượt */
+.motion-on .rv-in :is(.grid) > :not(.rv) { animation: rvUp .55s cubic-bezier(.16, 1, .3, 1) calc(var(--rv-d) + .12s + var(--rv-n, 0) * 40ms) both; }
+/* nhãn trạng thái bật nảy */
+.motion-on .rv-in :is(.rounded-full.px-2, .rounded-full.px-2\.5, .rounded-full.px-3, .rounded-md.px-1\.5) { animation: rvPop .5s cubic-bezier(.2, .9, .3, 1.3) calc(var(--rv-d) + .35s) both; }
+/* chấm đỏ cảnh báo nhịp nhẹ */
+.motion-on .rv-in :is(.h-2, .h-1\.5).rounded-full.bg-rose-500 { animation: rvPing 1.8s ease-out 1s infinite; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(2) { --rv-n: 1; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(3) { --rv-n: 2; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(4) { --rv-n: 3; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(5) { --rv-n: 4; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(6) { --rv-n: 5; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(7) { --rv-n: 6; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(8) { --rv-n: 7; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(9) { --rv-n: 8; }
+.motion-on :is(tbody > tr, .divide-y > *, .space-y-1 > *, .space-y-1\.5 > *, .space-y-2 > *, .space-y-2\.5 > *, .grid > *):nth-child(n+10) { --rv-n: 9; }
+
+/* rê chuột: thẻ nhấc lên + quầng (dùng thuộc tính translate riêng để không đè hiệu ứng vào) */
+.bento .card { transition: translate .3s cubic-bezier(.2, .8, .2, 1), box-shadow .3s ease, border-color .3s ease; }
+.bento .card:hover { translate: 0 -3px; box-shadow: 0 18px 40px -24px rgb(79 70 229 / .45); }
+html.theme-dark .bento .card:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(34,211,238,.22), 0 0 34px -10px rgba(34,211,238,.6); }
+:is(button, a):active { scale: .97; transition: scale .1s; }
+.tab-active { animation: rvTab .35s cubic-bezier(.2, .9, .3, 1.2); }
+/* khung đang tải: ánh sáng chạy thay nhấp nháy */
+.animate-pulse { animation: none; position: relative; overflow: hidden; }
+.animate-pulse::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgb(99 102 241 / .14), transparent); animation: rvShimmer 1.2s ease-in-out infinite; pointer-events: none; }
+html.theme-dark .animate-pulse::after { background: linear-gradient(90deg, transparent, rgba(34,211,238,.16), transparent); }
+
+@media print { .motion-on .rv { opacity: 1 !important; animation: none !important; } .motion-on .rv-in * { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .motion-on .rv, .motion-on .rv.rv-in { opacity: 1; animation: none; }
+  .motion-on .rv-in *, .tab-active, .animate-pulse::after { animation: none !important; }
+  .bento .card:hover { translate: none; }
+}

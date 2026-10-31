@@ -8,6 +8,8 @@ import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
 import "./index.css";
 import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
+import { initMotion } from "./lib/motion.js";
+initMotion(); // hiệu ứng cuộn tới đâu chạy tới đó (thẻ, biểu đồ, thanh, bảng, số)
 
 function Gate() {
   const { loading, session } = useAuth();
