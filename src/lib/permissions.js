@@ -39,6 +39,7 @@ export const ALL_KEYS = [...ALL_FEATURES, ...COIN_SUB_KEYS]; // dùng cho perms 
 // map route path → feature key (để lọc menu + chặn route). Trang không có key = ai cũng vào (VD Cài đặt).
 export const ROUTE_FEATURE = {
   "/": "dashboard",
+  "/bao-cao": "dashboard",
   "/khach-hang": "customers",
   "/du-an": "customers",
   "/don-hang": "customers",

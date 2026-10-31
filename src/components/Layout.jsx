@@ -1,6 +1,6 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, ShoppingBag, CalendarDays, ListChecks,
+  LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
   LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Moon, Sun,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
@@ -50,6 +50,7 @@ function PushPrompt() {
 
 const NAV = [
   { to: "/", label: "Tổng quan", icon: LayoutDashboard, end: true, feat: "dashboard", group: "biz" },
+  { to: "/bao-cao", label: "Trung tâm báo cáo", icon: BarChart3, ownerOnly: true, group: "biz" },
   { to: "/khach-hang", label: "Khách & Dự án", icon: Users, feat: "customers", group: "biz" },
   { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan", group: "fin" },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
@@ -65,7 +66,7 @@ const NAV = [
 ];
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
-  { id: "biz", label: "Kinh doanh", order: ["/", "/khach-hang", "/tai-nguyen", "/quang-cao", "/website", "/fanpage"] },
+  { id: "biz", label: "Kinh doanh", order: ["/", "/bao-cao", "/khach-hang", "/tai-nguyen", "/quang-cao", "/website", "/fanpage"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
   { id: "me", label: "Cá nhân", order: ["/cong-viec", "/tai-khoan"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
@@ -104,7 +105,7 @@ function useNavPins() {
   return [pins, toggle];
 }
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
-const EXTRA_TITLES = { "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Quỹ & Dòng tiền", "/quy-thong-ke": "Quỹ & Dòng tiền" };
+const EXTRA_TITLES = { "/bao-cao": "Trung tâm báo cáo", "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Quỹ & Dòng tiền", "/quy-thong-ke": "Quỹ & Dòng tiền" };
 
 function Brand({ mini }) {
   return (
@@ -118,7 +119,8 @@ function Brand({ mini }) {
   );
 }
 
-function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
+function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini, onTip }) {
+  const tip = mini ? { onMouseEnter: (e) => onTip?.({ label: n.label, y: e.currentTarget.getBoundingClientRect().top + 20 }), onMouseLeave: () => onTip?.(null), onFocus: (e) => onTip?.({ label: n.label, y: e.currentTarget.getBoundingClientRect().top + 20 }), onBlur: () => onTip?.(null) } : {};
   const pinBtn = (
     <button
       type="button"
@@ -135,9 +137,8 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
   return (
     <div className="group/item relative">
       {n.href ? (
-        <a href={n.href} target="_blank" rel="noopener" onClick={onNavigate}
-          title={mini ? n.label : undefined}
-          className={`group flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold text-slate-500 transition hover:bg-white hover:text-slate-900 ${mini ? "justify-center px-0" : "px-3 pr-9"}`}>
+        <a href={n.href} target="_blank" rel="noopener" onClick={onNavigate} aria-label={mini ? n.label : undefined} {...tip}
+          className={`group flex items-center gap-3 py-2.5 text-sm font-semibold transition ${mini ? "mx-auto h-11 w-11 justify-center rounded-2xl px-0 text-slate-400 hover:bg-white/10 hover:text-white" : "rounded-xl px-3 pr-9 text-slate-500 hover:bg-white hover:text-slate-900"}`}>
           <n.icon size={18} className="shrink-0" />
           {!mini && n.label}
           {!mini && <ExternalLink size={13} className="ml-auto opacity-50" />}
@@ -147,9 +148,11 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
           to={n.to}
           end={n.end}
           onClick={onNavigate}
-          title={mini ? n.label : undefined}
-          className={({ isActive }) =>
-            `group flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition ${mini ? "justify-center px-0" : "px-3 pr-9"} ${
+          aria-label={mini ? n.label : undefined}
+          {...tip}
+          className={({ isActive }) => mini
+            ? `group mx-auto flex h-11 w-11 items-center justify-center rounded-2xl transition ${isActive ? "rail-active bg-indigo-400/25 text-white ring-1 ring-indigo-300/40" : "text-slate-400 hover:bg-white/10 hover:text-white"}`
+            : `group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold transition ${
               isActive
                 ? "nav-active bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
                 : "text-slate-500 hover:bg-white hover:text-slate-900"
@@ -165,7 +168,7 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini }) {
   );
 }
 
-function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini }) {
+function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini, onTip }) {
   const items = useNavItems();
   const sections = useMemo(() => {
     const pinnedItems = pins.map((k) => items.find((n) => navKey(n) === k)).filter(Boolean);
@@ -187,12 +190,12 @@ function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini }) {
     <nav className={`mt-5 flex min-h-0 flex-col gap-1 overflow-y-auto pb-2 ${mini ? "px-2.5 no-scrollbar" : "px-3"}`}>
       {sections.map((s, si) => (
         <div key={s.id} className={si ? "mt-3" : ""}>
-          {mini ? si > 0 && <div className="mx-2 mb-2 border-t border-slate-200" /> : <div className={`mb-1 flex items-center gap-1 px-3 text-[10px] font-bold uppercase tracking-wider ${s.id === "pin" ? "text-indigo-400" : "text-slate-400"}`}>
+          {mini ? si > 0 && <div className="mx-3 mb-2 border-t border-white/10" /> : <div className={`mb-1 flex items-center gap-1 px-3 text-[10px] font-bold uppercase tracking-wider ${s.id === "pin" ? "text-indigo-400" : "text-slate-400"}`}>
             {s.id === "pin" && <Pin size={10} />}{s.label}
           </div>}
           <div className="flex flex-col gap-1">
             {s.items.map((n) => (
-              <NavItem key={navKey(n)} n={n} onNavigate={onNavigate} pinned={s.id === "pin"} onTogglePin={onTogglePin} mobile={mobile} mini={mini} />
+              <NavItem key={navKey(n)} n={n} onNavigate={onNavigate} pinned={s.id === "pin"} onTogglePin={onTogglePin} mobile={mobile} mini={mini} onTip={onTip} />
             ))}
           </div>
         </div>
@@ -369,13 +372,32 @@ function useDemoWarm() {
   }, [ok, loc.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
+// Điện thoại / máy tính bảng: thanh 4 mục chính + "Thêm" (mở menu đầy đủ) dưới đáy
+const BAR = ["/", "/bao-cao", "/khach-hang", "/coin"];
+function BottomBar({ items, onMenu }) {
+  const list = BAR.map((k) => items.find((n) => n.to === k)).filter(Boolean).slice(0, 4);
+  const short = { "/": "Tổng quan", "/bao-cao": "Báo cáo", "/khach-hang": "Khách", "/coin": "Coin" };
+  return (
+    <nav aria-label="Menu nhanh" className="no-print fixed inset-x-0 bottom-0 z-30 flex justify-around rounded-t-3xl bg-slate-900 px-2 pt-1.5 lg:hidden" style={{ paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))" }}>
+      {list.map((n) => (
+        <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold ${isActive ? "rail-active bg-indigo-400/25 text-white" : "text-slate-400"}`}>
+          <n.icon size={20} />{short[n.to] || n.label}
+        </NavLink>
+      ))}
+      <button onClick={onMenu} className="flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold text-slate-400"><MoreHorizontal size={20} />Thêm</button>
+    </nav>
+  );
+}
+
 export default function Layout({ children }) {
   useDemoWarm();
   const [open, setOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [pins, togglePin] = useNavPins();
   // Thu gọn menu trái (máy tính): chỉ còn biểu tượng → nội dung (biểu đồ Coin…) rộng hơn; nhớ theo máy
-  const [mini, setMiniState] = useState(() => { try { return localStorage.getItem("qws_nav_mini") === "1"; } catch { return false; } });
+  // 31/10 (giao diện bento): mặc định thanh icon tối; ai đã chủ động mở rộng ("0") thì giữ
+  const [mini, setMiniState] = useState(() => { try { return localStorage.getItem("qws_nav_mini") !== "0"; } catch { return true; } });
+  const [tip, setTip] = useState(null);
   const setMini = (v) => { setMiniState(v); try { localStorage.setItem("qws_nav_mini", v ? "1" : "0"); } catch {} };
   const navItems = useNavItems();
   const loc = useLocation();
@@ -387,15 +409,16 @@ export default function Layout({ children }) {
   return (
     <div className="aurora min-h-screen">
       {/* Sidebar desktop */}
-      <aside className={`fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-white/60 bg-white/60 backdrop-blur-xl transition-[width] duration-200 lg:flex ${mini ? "w-[76px]" : "w-64"}`}>
-        <div className="relative pt-6">
+      <aside className={`no-print fixed z-30 hidden flex-col transition-[width] duration-200 lg:flex ${mini ? "rail inset-y-3 left-3 w-[68px] rounded-[28px] bg-slate-900 shadow-xl shadow-slate-900/20" : "inset-y-0 left-0 w-64 border-r border-white/60 bg-white/60 backdrop-blur-xl"}`}>
+        <div className={`relative ${mini ? "pt-4" : "pt-6"}`}>
           <Brand mini={mini} />
           <button type="button" onClick={() => setMini(!mini)} title={mini ? "Mở rộng menu" : "Thu gọn menu"} aria-label={mini ? "Mở rộng menu" : "Thu gọn menu"}
-            className={`absolute z-10 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:text-slate-800 ${mini ? "-right-3 top-[34px]" : "right-3 top-[34px]"}`}>
+            className={`absolute z-10 grid h-6 w-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:text-slate-800 ${mini ? "-right-3 top-[26px]" : "right-3 top-[34px]"}`}>
             {mini ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
           </button>
         </div>
-        <SideNav pins={pins} onTogglePin={togglePin} mini={mini} />
+        <SideNav pins={pins} onTogglePin={togglePin} mini={mini} onTip={setTip} />
+        {mini && tip && <div style={{ top: tip.y }} className="pointer-events-none fixed left-[88px] z-50 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-[12px] font-semibold text-white shadow-lg">{tip.label}</div>}
         <div className={`mt-auto p-4 ${mini ? "hidden" : ""}`}>
           <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white">
             <div className="text-[11px] font-medium uppercase tracking-wide text-indigo-200">Âm lịch hôm nay</div>
@@ -424,8 +447,8 @@ export default function Layout({ children }) {
       )}
 
       {/* Main */}
-      <div className={`transition-[padding] duration-200 ${mini ? "lg:pl-[76px]" : "lg:pl-64"}`}>
-        <header className="sticky top-0 z-20 border-b border-white/50 bg-white/55 backdrop-blur-xl">
+      <div className={`pb-20 transition-[padding] duration-200 lg:pb-0 ${mini ? "lg:pl-[92px]" : "lg:pl-64"}`}>
+        <header className="no-print sticky top-0 z-20 border-b border-white/50 bg-white/55 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button onClick={() => setOpen(true)} aria-label="Mở menu" className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">
               <Menu size={20} />
@@ -446,6 +469,7 @@ export default function Layout({ children }) {
 
         <main className="qws-full w-full"><PushPrompt />{children}</main>
       </div>
+      <BottomBar items={navItems} onMenu={() => setOpen(true)} />
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />
     </div>
   );

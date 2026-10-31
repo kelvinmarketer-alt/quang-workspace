@@ -92,8 +92,9 @@ function Row({ left, title, sub, right, subTone = "text-slate-400" }) {
 
 const EV_TONE = { family: "rose", birthday: "pink", anniversary: "violet", reminder: "slate", holiday: "sky", "lunar-holiday": "amber", "lunar-phase": "indigo" };
 
-export default function TodayPanel() {
-  const { tasks, family, projects, expenses, fundSchedules, funds, perms, canEdit, toggleTask } = useData();
+// Số liệu "Hôm nay" dùng chung (Tổng quan dạng ô 31/10 dùng lại, không tính 2 lần ở 2 nơi)
+export function useToday() {
+  const { tasks, family, projects, expenses, fundSchedules, funds, perms } = useData();
   const has = (f) => (perms || []).includes(f);
   const today = todayISO();
   const in7 = addDays(today, 7);
@@ -103,7 +104,6 @@ export default function TodayPanel() {
     .filter((t) => t.status !== "done" && t.date && t.date <= today)
     .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || "")), [tasks, today]);
   const overdueCount = dueTasks.filter((t) => t.date < today).length;
-  const canToggle = typeof toggleTask === "function" && canEdit && canEdit("tasks");
 
   // 2) SỰ KIỆN: lần xuất hiện kế tiếp trong 7 ngày (âm + dương lịch) — dùng upcomingEvents() của lib/events.js.
   //    Sự kiện người dùng (giỗ, sinh nhật…) lên trước, lễ hệ thống (Mùng 1/Rằm/lễ) sau.
@@ -136,7 +136,14 @@ export default function TodayPanel() {
     .filter((d) => d.occs.length > 0)
     .sort((a, b) => a.occs[0].localeCompare(b.occs[0])), [fundSchedules, today]);
   const fundName = (id) => (funds || []).find((f) => f.id === id)?.name || "—";
+  return { has, today, dueTasks, overdueCount, events, receivables, receivableTotal, renewals, fundDue, fundName };
+}
 
+export default function TodayPanel() {
+  const { canEdit, toggleTask } = useData();
+  const { has, today, dueTasks, overdueCount, events, receivables, receivableTotal, renewals, fundDue, fundName } = useToday();
+
+  const canToggle = typeof toggleTask === "function" && canEdit && canEdit("tasks");
   const showTasks = has("tasks") && dueTasks.length > 0;
   const showEvents = has("tasks") && events.length > 0;
   const showRecv = has("customers") && receivables.length > 0;

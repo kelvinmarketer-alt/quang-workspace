@@ -457,3 +457,26 @@ Viết tiếng Việt ngắn gọn, đúng thuật ngữ. CHỈ trả JSON:
   const arr = (v) => (Array.isArray(v) ? v.map(num).filter(Boolean) : []);
   return { ...p, confidence: Math.max(0, Math.min(100, Number(p.confidence) || 0)), key_levels: { support: arr(p.key_levels?.support), resistance: arr(p.key_levels?.resistance) }, setups, model: model || "gpt-4o", at: Date.now(), kb: true };
 }
+
+// Báo cáo tháng 1 THƯƠNG HIỆU (Trung tâm báo cáo, 31/10): số các kênh đã tính sẵn (lib/reports.js) → AI viết 2 bản:
+// bản nội bộ cho chủ (có tiền) + bản gửi khách (KHÔNG nhắc doanh thu / phí / lợi nhuận / công nợ nội bộ).
+export async function aiBrandReport({ data, apiKey }) {
+  const sys = `Bạn là trưởng nhóm marketing agency ở Việt Nam, viết báo cáo tháng cho 1 thương hiệu khách hàng từ JSON số liệu đã tính sẵn (quảng cáo, website Google, fanpage, job đang chạy). Tiếng Việt, ngắn, thẳng, có số.
+LUẬT:
+- Không tự tính lại %: dùng đúng số đã cho ("d_" = % so 30 ngày trước, dương = tăng). Vị trí TB giảm là tốt.
+- Kênh không có số thì bỏ qua, không bịa.
+- "gui_khach" là bản GỬI KHÁCH: TUYỆT ĐỐI không nhắc doanh thu, phí dịch vụ, lợi nhuận, công nợ, chiết khấu của agency. Chỉ nói kết quả kênh và việc tháng tới, giọng lịch sự, xưng "chúng tôi", gọi khách là "anh/chị".
+- Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
+Trả JSON:
+{ "tong_quan": "2-3 câu cho chủ agency: thương hiệu đang tốt hay xấu, vì sao",
+  "ket_qua": ["mỗi kênh 1 dòng có số"],
+  "viec_tiep": ["việc cụ thể tháng tới, tối đa 5"],
+  "gui_khach": "đoạn báo cáo gửi khách 120-200 chữ, xuống dòng bằng \\n" }`;
+  const res = await chat({ model: "gpt-4o", temperature: 0.3, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(data) }] }, (apiKey || "").trim(), "report");
+  if (!res.ok) { let msg = res.status + ""; try { const e = await res.json(); msg = e.error?.message || JSON.stringify(e); } catch { /* bỏ qua */ } throw new Error("OpenAI lỗi: " + msg); }
+  const out = await res.json();
+  let p; try { p = JSON.parse(out.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được JSON từ AI."); }
+  const clean = (v) => String(v ?? "").replace(/[*#]+/g, "").trim();
+  const arr = (v) => (Array.isArray(v) ? v.map(clean).filter(Boolean) : []);
+  return { overview: clean(p.tong_quan), results: arr(p.ket_qua), next: arr(p.viec_tiep), client: clean(p.gui_khach), at: Date.now() };
+}

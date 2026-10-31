@@ -320,3 +320,17 @@ html.theme-dark :is(.text-lime-900, .text-lime-950) { color: #d9f99d; }
   :where(button, a[href], [role="button"]):not(.absolute):not(.fixed):not(.sticky) { position: relative; }
   :where(button, a[href], [role="button"]):not(.absolute):not(.fixed):not(.sticky)::after { content: ""; position: absolute; inset: -6px; }
 }
+
+/* ===== GIAO DIỆN Ô (bento, 31/10 — sếp duyệt demo "QWS Bento"): Tổng quan, Trung tâm báo cáo, Thương hiệu 360 =====
+   Các màn này có lề + thẻ bo góc lớn (khác kiểu "sát mép" của module cũ). Tối vẫn ăn khối NEON vì dùng class .card chung. */
+.qws-full .bento .card { border-radius: 1.4rem; box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 30px -18px rgba(16,24,40,.18); }
+.bento button:focus-visible, .bento a:focus-visible, .bento [tabindex]:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+/* Thanh icon tối (menu thu gọn) + thanh dưới đáy điện thoại: giữ tối ở cả 2 giao diện, tối = viền neon */
+html.theme-dark aside.rail { background: #050912; box-shadow: 0 0 0 1px rgba(34,211,238,.18), 0 0 28px -10px rgba(34,211,238,.45); }
+html.theme-dark .rail-active { background: rgba(34,211,238,.14) !important; color: #67e8f9 !important; box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 0 16px -4px rgba(34,211,238,.55); }
+@media print {
+  .no-print { display: none !important; }
+  .lg\:pl-64, .lg\:pl-\[92px\] { padding-left: 0 !important; }
+  body, .aurora { background: #fff !important; }
+  .qws-full .bento .card { box-shadow: none; border: 1px solid #e5e7eb; break-inside: avoid; }
+}

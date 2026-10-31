@@ -17,6 +17,7 @@ const Resources = lazy(() => import("./pages/Resources.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Web = lazy(() => import("./pages/Web.jsx"));
 const Fanpage = lazy(() => import("./pages/Fanpage.jsx"));
+const Reports = lazy(() => import("./pages/Reports.jsx"));
 
 const PageLoading = () => (
   <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>
@@ -46,6 +47,8 @@ export default function App() {
       <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/" element={g("/", <Dashboard />)} />
+        <Route path="/bao-cao" element={g("/bao-cao", <Reports />)} />
+        <Route path="/bao-cao/:id" element={g("/bao-cao", <Reports />)} />
         <Route path="/khach-hang" element={g("/khach-hang", <Customers />)} />
         <Route path="/du-an" element={g("/du-an", <Customers />)} />
         <Route path="/don-hang" element={g("/don-hang", <Customers />)} />
