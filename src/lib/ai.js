@@ -467,6 +467,7 @@ LUẬT:
 - Kênh không có số thì bỏ qua, không bịa.
 - "gui_khach" là bản GỬI KHÁCH: TUYỆT ĐỐI không nhắc doanh thu, tiền, phí dịch vụ, lợi nhuận, công nợ của agency hay của khách (kể cả không có số). Chỉ nói kết quả từng kênh (số click, tin nhắn, kết quả quảng cáo, chi phí mỗi kết quả) và việc tháng tới, giọng lịch sự, xưng "chúng tôi", gọi khách là "anh/chị".
 - JSON KHÔNG có số tiền nội bộ; đừng suy đoán doanh thu.
+- Bản gửi khách ký cuối: "Trân trọng,\nĐội ngũ 2BKIN". Không để chỗ trống kiểu [Tên].
 - Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
 Trả JSON:
 { "tong_quan": "2-3 câu cho chủ agency: thương hiệu đang tốt hay xấu, vì sao",
