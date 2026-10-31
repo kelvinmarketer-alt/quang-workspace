@@ -401,6 +401,7 @@ export default function Layout({ children }) {
   const setMini = (v) => { setMiniState(v); try { localStorage.setItem("qws_nav_mini", v ? "1" : "0"); } catch {} };
   const navItems = useNavItems();
   const loc = useLocation();
+  useEffect(() => { setOpen(false); }, [loc.pathname]); // điện thoại: đổi trang (kể cả nút Back) thì đóng menu
   const li = lunarInfo(new Date());
   const title = NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
     || EXTRA_TITLES[loc.pathname]
@@ -453,7 +454,7 @@ export default function Layout({ children }) {
             <button onClick={() => setOpen(true)} aria-label="Mở menu" className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">
               <Menu size={20} />
             </button>
-            <h1 className="text-lg font-extrabold tracking-tight text-slate-900">{title}</h1>
+            <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight text-slate-900 sm:text-lg">{title}</h1>
             <div className="ml-auto flex items-center gap-2">
               <UpdatePill />
               <SyncBadge />

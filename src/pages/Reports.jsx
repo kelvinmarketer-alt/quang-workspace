@@ -117,7 +117,28 @@ function ReportMatrix() {
             {COLS.map(([k, l]) => { const on = !hide.includes(k); return <button key={k} onClick={() => flip(k)} aria-pressed={on} className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-bold ${on ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-400 line-through"}`}>{on && <Check size={12} />}{l}</button>; })}
           </div>}
         </div>
-        <div className="overflow-x-auto">
+        {/* Điện thoại: mỗi thương hiệu 1 thẻ (bảng ngang phải vuốt khó đọc) */}
+        <div className="divide-y divide-slate-100 sm:hidden">
+          {list.map((r) => (
+            <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid w-full gap-2 p-3 text-left active:bg-slate-50">
+              <span className="flex items-center gap-2.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
+                <span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-800">{r.name}</span><span className="block truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</span></span>
+                {cols.some(([k]) => k === "rep") && <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span>}
+              </span>
+              <span className="grid grid-cols-2 gap-x-3 gap-y-1.5 pl-4">
+                {cols.filter(([k]) => k !== "rep" && (k === "rev" ? r.revenue || r.debt : k === "late" ? r.late : r.cells[k]?.v != null || loading)).map(([k, h]) => (
+                  <span key={k} className="min-w-0"><span className="block text-[10px] font-bold uppercase tracking-wide text-slate-400">{h}</span>
+                    {k === "rev" ? <span className="text-[13px] font-bold tabular-nums text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}{r.debt > 0 && <span className="ml-1 text-[11px] text-rose-500">nợ {formatShort(r.debt)}</span>}</span>
+                      : k === "late" ? <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-bold text-amber-700">{r.late} việc</span>
+                      : <CellPill x={r.cells[k]} loading={loading} />}
+                  </span>))}
+              </span>
+            </button>
+          ))}
+          {!list.length && <div className="p-8 text-center text-slate-400">Chưa có thương hiệu nào đang chạy.</div>}
+        </div>
+        <div className="hidden overflow-x-auto sm:block">
           <table className="w-full text-[13px]" style={{ minWidth: 260 + cols.length * 110 }}>
             <thead><tr className="text-left text-[11px] font-bold uppercase tracking-wide text-slate-400">
               {["Thương hiệu · job", ...cols.map(([, h]) => h)].map((h) => <th key={h} className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{h}</th>)}
@@ -146,7 +167,7 @@ function Tile({ label, value, sub, tone = "text-slate-900" }) {
   return (
     <div className="card p-4">
       <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-2xl font-extrabold tabular-nums ${tone}`}>{value}</div>
+      <div className={`mt-1 text-xl font-extrabold tabular-nums sm:text-2xl ${tone}`}>{value}</div>
       {sub && <div className="text-[12px] text-slate-400">{sub}</div>}
     </div>
   );
@@ -172,9 +193,9 @@ function LinkEditor({ data }) {
     <div className="card no-print p-0">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-4 text-left">
         <Link2 size={16} className="text-indigo-500" /><span className="text-sm font-extrabold text-slate-800">Gắn website & fanpage với khách</span>
-        {unl > 0 && <Badge tone="amber">{unl} chưa gắn</Badge>}
-        <span className="ml-auto text-[12px] text-slate-400">tài khoản quảng cáo gắn ở <Link onClick={(e) => e.stopPropagation()} to="/cai-dat" className="font-bold text-indigo-600">Cài đặt</Link></span>
-        <ChevronDown size={16} className={`text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+        {unl > 0 && <span className="shrink-0 whitespace-nowrap"><Badge tone="amber">{unl} chưa gắn</Badge></span>}
+        <span className="ml-auto hidden text-[12px] text-slate-400 sm:inline">tài khoản quảng cáo gắn ở <Link onClick={(e) => e.stopPropagation()} to="/cai-dat" className="font-bold text-indigo-600">Cài đặt</Link></span>
+        <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition sm:ml-0 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="grid gap-4 border-t border-slate-100 p-4 md:grid-cols-2">
@@ -226,7 +247,7 @@ function Brand360({ id }) {
     <div className="card p-4">
       <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
       {loading && cell?.v == null ? <div className="mt-2 h-7 w-24 animate-pulse rounded-lg bg-slate-100" /> : <>
-        <div className={`mt-1 text-2xl font-extrabold tabular-nums ${cell && cell.v == null ? "text-slate-300" : "text-slate-900"}`}>{main}</div>
+        <div className={`mt-1 text-xl font-extrabold tabular-nums sm:text-2xl ${cell && cell.v == null ? "text-slate-300" : "text-slate-900"}`}>{main}</div>
         <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-400">{cell && cell.v != null && <span className={`h-2 w-2 rounded-full ${DOT[cell.t]}`} />}{sub}</div>
       </>}
     </div>
