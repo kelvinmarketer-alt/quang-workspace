@@ -191,58 +191,48 @@ function Modal({ title, onClose, children, wide }) {
   );
 }
 
+// 01/11 sếp duyệt: bỏ "loại khách" → lương tháng nằm ở dự án Lương, % phí nằm ở dự án ADS (nhớ % lần trước của khách)
+const autoName = (cat, cust) => (cust ? `${cat} ${cust.name}` : "");
 export function ProjectModal({ initial, customers, onClose, onSave }) {
-  const [f, setF] = useState(initial);
+  const { projects = [] } = useData();
+  const [f, setF] = useState(() => ({ ...initial, monthlySalary: initial.monthlySalary ?? "", feeRate: initial.feeRate ?? "" }));
   const [inst, setInst] = useState(blankInst());
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const cust = customers.find((c) => c.id === f.customerId);
   const isAds = f.category === "ADS";
   const isSalary = f.category === "Lương";
-  const salaryBase = num(cust?.monthlySalary);
   const editing = !!initial.id;
+  // Mặc định theo khách: lương = dự án Lương gần nhất (hoặc số cũ ghi ở khách), % phí = dự án ADS gần nhất (hoặc khách, hoặc 20)
+  const custDefaults = (cid) => {
+    const c = customers.find((x) => x.id === cid);
+    const mine = projects.filter((p) => p.customerId === cid && p.id !== initial.id);
+    const lastInst = (p) => [...(p.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
+    const sal = mine.filter((p) => p.category === "Lương").map((p) => num(p.monthlySalary) || num(lastInst(p)?.amount)).find(Boolean) || num(c?.monthlySalary);
+    const fee = mine.filter((p) => p.category === "ADS").map((p) => num(p.feeRate) || num(lastInst(p)?.feeRate)).find(Boolean) || num(c?.feeRate) || 20;
+    return { sal, fee };
+  };
+  const salaryBase = num(f.monthlySalary);
 
-  // Chọn khách (khi TẠO MỚI) → nếu full-time: gợi ý sang "Lương" + điền sẵn lương.
-  // Nhưng vẫn ĐỔI ĐƯỢC danh mục nếu đây là job ngoài của chính khách đó.
-  useEffect(() => {
-    if (editing) return;
-    const c = customers.find((x) => x.id === f.customerId);
-    if (!c) return;
-    if (c.type === "fulltime") {
-      setF((p) => ({ ...p, category: "Lương", name: p.name.trim() ? p.name : `Lương ${c.name}` }));
-      const sal = num(c.monthlySalary);
-      if (sal) setInst((p) => ({ ...p, amount: String(sal), collected: String(sal) }));
+  // Tạo mới: chọn khách / đổi danh mục → điền sẵn lương hoặc % phí (vẫn sửa được)
+  const applyDefaults = (cid, cat) => {
+    if (editing || !cid) return;
+    const d = custDefaults(cid);
+    if (cat === "Lương") {
+      setF((p) => ({ ...p, monthlySalary: d.sal ? String(d.sal) : "" }));
+      setInst({ ...blankInst(), amount: d.sal ? String(d.sal) : "", collected: d.sal ? String(d.sal) : "" });
     } else {
-      const r = num(c.feeRate) || 20;
-      setInst((p) => ({ ...p, feeRate: String(r), serviceFee: num(p.amount) ? String(Math.round(num(p.amount) * r / 100)) : p.serviceFee }));
-    }
-  }, [f.customerId]);
-
-  // Đổi Danh mục: chuyển mượt giữa "Lương" (full-time) và job thường — reset đợt cho đúng bộ field.
-  const onCategory = (e) => {
-    const cat = e.target.value;
-    const wasSalary = f.category === "Lương";
-    const nowSalary = cat === "Lương";
-    const autoName = cust ? `Lương ${cust.name}` : "";
-    setF((p) => {
-      let name = p.name;
-      if (nowSalary && !name.trim()) name = autoName;
-      else if (!nowSalary && name.trim() === autoName) name = ""; // rời lương → bỏ tên "Lương X" auto
-      return { ...p, category: cat, name };
-    });
-    if (wasSalary !== nowSalary) {
-      if (nowSalary) {
-        const sal = num(cust?.monthlySalary);
-        setInst({ ...blankInst(), amount: sal ? String(sal) : "", collected: sal ? String(sal) : "" });
-      } else {
-        setInst(blankInst(num(cust?.feeRate) || 20));
-      }
+      setF((p) => ({ ...p, feeRate: String(d.fee) }));
+      setInst(blankInst(d.fee));
     }
   };
+  useEffect(() => { applyDefaults(f.customerId, f.category); }, [f.customerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onCategory = (e) => { const cat = e.target.value; setF((p) => ({ ...p, category: cat })); if ((cat === "Lương") !== isSalary || cat === "ADS") applyDefaults(f.customerId, cat); };
+  const onSalary = (v) => { setF((p) => ({ ...p, monthlySalary: v })); if (!editing) setInst((p) => ({ ...p, amount: v, collected: v })); };
+  const onFee = (e) => { const v = e.target.value; setF((p) => ({ ...p, feeRate: v })); if (!editing) setInst((p) => ({ ...p, feeRate: v, serviceFee: num(p.amount) ? String(Math.round(num(p.amount) * (num(v) || 20) / 100)) : p.serviceFee })); };
 
   return (
     <Modal wide title={editing ? "Sửa dự án" : "Thêm dự án"} onClose={onClose}>
       <div className="space-y-3">
-        <Field label="Tên dự án *"><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Chạy ADS shop thời trang" /></Field>
         <Field label="Khách hàng *">
           <Combobox
             options={customers.map((c) => ({ value: c.id, label: c.name, sub: c.phone }))}
@@ -251,7 +241,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Danh mục" hint={cust?.type === "fulltime" ? '"Lương" = lương tháng · đổi danh mục nếu là job ngoài' : undefined}>
+          <Field label="Danh mục">
             <select value={f.category} onChange={onCategory} className={inputCls}>
               {PROJECT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
             </select>
@@ -263,6 +253,9 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
             </select>
           </Field>
         </div>
+        {isSalary && <Field label="Lương tháng" hint="Tự điền mỗi lần ghi lương"><MoneyInput value={f.monthlySalary} onChange={onSalary} className={inputCls} placeholder="15.000.000" /></Field>}
+        {isAds && <Field label="% phí dịch vụ" hint="Tự điền khi thêm đợt ADS"><input value={f.feeRate} onChange={onFee} inputMode="numeric" className={inputCls} placeholder="20" /></Field>}
+        <Field label="Tên dự án" hint="Bỏ trống = tự đặt theo danh mục + khách"><input value={f.name} onChange={set("name")} className={inputCls} placeholder={autoName(f.category, cust) || "VD: ADS Vua Đóng Gói"} /></Field>
         <Field label="Ghi chú"><input value={f.note} onChange={set("note")} className={inputCls} /></Field>
 
         {!editing && (
@@ -276,8 +269,9 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
       <div className="sticky bottom-0 z-10 -mx-4 -mb-4 mt-4 border-t border-slate-100 bg-white px-4 pb-4 pt-3 sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0">
       <button
         onClick={() => {
-          if (!f.name.trim() || !f.customerId) return;
-          const base = { name: f.name.trim(), customerId: f.customerId, customerName: cust?.name || "", category: f.category, status: f.status, note: f.note };
+          if (!f.customerId) return;
+          const base = { name: (f.name || "").trim() || autoName(f.category, cust), customerId: f.customerId, customerName: cust?.name || "", category: f.category, status: f.status, note: f.note,
+            ...(isSalary ? { monthlySalary: num(f.monthlySalary) } : {}), ...(isAds ? { feeRate: num(f.feeRate) || 20 } : {}) };
           if (editing) onSave(base);
           else {
             const firstAmt = num(inst.amount);
@@ -334,6 +328,8 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
   const [stone, slabel] = STATUS[project.status] || STATUS.doing;
   // Sắp xếp đợt MỚI NHẤT → CŨ NHẤT (theo ngày giảm dần)
   const insts = [...(project.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  const salDef = num(project.monthlySalary) || custSalary;
+  const feeDef = num(project.feeRate) || num(insts[0]?.feeRate) || custFeeRate;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onInputCapture={markDirty}>
@@ -423,7 +419,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
 
       {instModal && (
         <InstModal
-          isAds={isAds} isSalary={isSalary} salaryBase={custSalary} initial={instModal.edit || instModal.dup} dup={!!instModal.dup} defaultFeeRate={custFeeRate}
+          isAds={isAds} isSalary={isSalary} salaryBase={salDef} initial={instModal.edit || instModal.dup} dup={!!instModal.dup} defaultFeeRate={feeDef}
           onClose={() => setInstModal(null)}
           onSave={(data) => instModal.edit ? updateInstallment(project.id, instModal.edit.id, data) : addInstallment(project.id, data)}
         />

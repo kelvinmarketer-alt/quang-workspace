@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin } from "lucide-react";
-import { Card, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
+import { Card, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
 import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
@@ -9,12 +9,12 @@ import { AiImportModal } from "../components/AiImport.jsx";
 import { imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
+import CustomerChannels from "../components/CustomerChannels.jsx";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
 const STATUS_ORDER = { doing: 0, paused: 1, done: 2, cancel: 3 };
-const TYPES = { fulltime: ["indigo", "Full-time"], remote: ["sky", "Remote"], le: ["slate", "Khách lẻ"] };
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 // Bỏ dấu + lowercase để tìm không cần gõ dấu
@@ -28,6 +28,8 @@ function zaloLink(phone, zalo) {
 function CustomerModal({ initial, onClose, onSave }) {
   const [f, setF] = useState(initial);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const filled = [initial.phone, initial.email, initial.address, initial.note].filter(Boolean).length;
+  const [more, setMore] = useState(false);
   const logoRef = useRef(null);
   const handleLogo = async (files) => { const file = files && files[0]; if (!file || !file.type?.startsWith("image/")) return; try { const logo = await imageToDataUrl(file, 256, 0.85); setF((p) => ({ ...p, logo })); } catch {} };
   const pickLogo = async (e) => { await handleLogo(e.target.files); e.target.value = ""; };
@@ -54,32 +56,17 @@ function CustomerModal({ initial, onClose, onSave }) {
           <input ref={logoRef} type="file" accept="image/*" onChange={pickLogo} className="hidden" />
         </div>
 
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khách hàng *</span><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Anh Nam" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Số điện thoại</span><input value={f.phone} onChange={set("phone")} inputMode="tel" className={inputCls} placeholder="0901234567" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Email</span><input value={f.email || ""} onChange={set("email")} inputMode="email" className={inputCls} placeholder="email@congty.com" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Zalo</span><input value={f.zalo || ""} onChange={set("zalo")} inputMode="tel" className={inputCls} placeholder="SĐT Zalo (bỏ trống = dùng SĐT)" /></label>
-        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Địa chỉ</span><input value={f.address || ""} onChange={set("address")} className={inputCls} placeholder="Số nhà, đường, quận, tỉnh…" /></label>
+        <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khách / thương hiệu *</span><input value={f.name} onChange={set("name")} autoFocus className={inputCls} placeholder="VD: Vua Đóng Gói" /></label>
 
-        {/* Loại khách → dùng cho bộ lọc + gợi ý dự án "Lương" (Full-time) */}
-        <div className="mb-3 text-sm">
-          <span className="mb-1 block font-semibold text-slate-600">Loại khách</span>
-          <div className="flex gap-1.5">
-            {Object.entries(TYPES).map(([v, [, l]]) => (
-              <button key={v} type="button" onClick={() => setF((p) => ({ ...p, type: v }))} className={`flex-1 rounded-xl border py-2 text-sm font-bold ${(f.type || "remote") === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
-            ))}
-          </div>
-        </div>
-        <div className={`mb-3 grid gap-3 ${f.type === "fulltime" ? "grid-cols-2" : "grid-cols-1"}`}>
-          <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">% phí dịch vụ</span>
-            <input value={f.feeRate ?? ""} onChange={set("feeRate")} inputMode="numeric" className={inputCls} placeholder="20" />
-            <span className="mt-0.5 block text-[11px] text-slate-400">Tự điền khi thêm đợt ADS</span></label>
-          {f.type === "fulltime" && (
-            <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Lương tháng</span>
-              <MoneyInput value={f.monthlySalary || ""} onChange={(v) => setF((p) => ({ ...p, monthlySalary: v }))} className={inputCls} placeholder="15.000.000" />
-              <span className="mt-0.5 block text-[11px] text-slate-400">Tự điền khi ghi lương</span></label>
-          )}
-        </div>
-        <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><textarea value={f.note || ""} onChange={set("note")} rows={2} className={inputCls} placeholder="Ghi chú về khách (tuỳ chọn)" /></label>
+        {/* 01/11 sếp duyệt: chỉ cần tên; liên hệ + ghi chú thu gọn. Bỏ "loại khách" — lương / % phí nằm ở từng dự án */}
+        <button type="button" onClick={() => setMore((v) => !v)} className="mb-3 flex w-full items-center gap-1.5 text-sm font-bold text-indigo-600"><ChevronDown size={16} className={`transition ${more ? "" : "-rotate-90"}`} /> Thêm thông tin liên hệ{!more && filled ? <span className="font-medium text-slate-400">· đã có {filled}</span> : ""}</button>
+        {more && <div className="mb-3 space-y-3 rounded-xl bg-slate-50 p-3">
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">SĐT / Zalo</span><input value={f.phone || ""} onChange={set("phone")} inputMode="tel" className={inputCls} placeholder="0901234567" /></label>
+          {f.zalo && f.zalo !== f.phone && <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Zalo (số khác)</span><input value={f.zalo} onChange={set("zalo")} inputMode="tel" className={inputCls} /></label>}
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Email</span><input value={f.email || ""} onChange={set("email")} inputMode="email" className={inputCls} placeholder="email@congty.com" /></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Địa chỉ</span><input value={f.address || ""} onChange={set("address")} className={inputCls} placeholder="Số nhà, đường, quận, tỉnh…" /></label>
+          <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><textarea value={f.note || ""} onChange={set("note")} rows={2} className={inputCls} placeholder="Ghi chú về khách (tuỳ chọn)" /></label>
+        </div>}
 
         <button type="button" onClick={() => setF({ ...f, active: !(f.active ?? true) })} className={`mb-4 flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold ${(f.active ?? true) ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-rose-200 bg-rose-50 text-rose-600"}`}>
           <Power size={15} /> {(f.active ?? true) ? "Đang hợp tác (bấm để OFF)" : "Đã OFF (bấm để bật lại)"}
@@ -136,7 +123,7 @@ function ProjectRow({ p, onOpen }) {
 export default function Customers() {
   const {
     customerList, projects, addCustomer, addCustomers, updateCustomer, deleteCustomer, deleteCustomers,
-    addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment, canEdit,
+    addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment, canEdit, isOwner,
   } = useData();
   const canW = canEdit ? canEdit("customers") : true; // quyền Sửa module Khách & Dự án
   const [q, setQ] = useState("");
@@ -167,20 +154,18 @@ export default function Customers() {
       let debt = 0, revenue = 0;
       for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; }
       const lastIncome = customerLastIncome(projects, c.id);
-      return { ...c, type: c.type || "remote", active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome };
+      const jobs = [...new Set(cps.filter((p) => p.status === "doing").map((p) => p.category).filter(Boolean))];
+      return { ...c, active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome, jobs };
     }) // Tìm theo tên / SĐT / Zalo / email / ghi chú / TÊN DỰ ÁN (không cần dấu)
       .filter((c) => !lq || fold([c.name, c.phone, c.zalo, c.email, c.note, ...c.projects.map((p) => p.name)].filter(Boolean).join(" ")).includes(lq))
       // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off"
-      .filter((c) => (typeF === "off" ? !c.active : c.active && (typeF === "all" || typeF === c.type)))
+      .filter((c) => (typeF === "off" ? !c.active : c.active))
       .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
   }, [customerList, projByCust, projects, q, typeF]);
 
   const counts = useMemo(() => {
-    const r = { active: 0, fulltime: 0, remote: 0, le: 0, off: 0 };
-    for (const c of customerList) {
-      if (!(c.active ?? true)) { r.off++; continue; }
-      r.active++; r[c.type || "remote"]++;
-    }
+    const r = { active: 0, off: 0 };
+    for (const c of customerList) (c.active ?? true) ? r.active++ : r.off++;
     return r;
   }, [customerList]);
 
@@ -221,7 +206,7 @@ export default function Customers() {
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
           {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
-          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", type: "remote", feeRate: 20, monthlySalary: 0, active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
+          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
           {/* MOBILE: Chọn + Hàng loạt nằm cùng hàng nút */}
           {canW && rows.length > 0 && (
             <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
@@ -245,13 +230,13 @@ export default function Customers() {
         </div>
         {/* MOBILE: dropdown lọc */}
         <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
-          {[["all", "Tất cả", counts.active], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
+          {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
             <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
           ))}
         </select>
         {/* DESKTOP: chips lọc */}
         <div className="mt-3 hidden flex-wrap gap-1 sm:flex">
-          {[["all", "Tất cả", counts.active], ["fulltime", "Full-time", counts.fulltime], ["remote", "Remote", counts.remote], ["le", "Khách lẻ", counts.le], ["off", "Off", counts.off]].map(([v, l, n]) => (
+          {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
             <button key={v} onClick={() => setTypeF(v)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${typeF === v ? (v === "off" ? "bg-rose-500 text-white" : "bg-indigo-500 text-white") : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l} {n > 0 && <span className="opacity-70">{n}</span>}</button>
           ))}
         </div>
@@ -295,14 +280,14 @@ export default function Customers() {
                         <span className="truncate font-extrabold text-slate-800">{c.name}</span>
                         {/* DESKTOP: badge cạnh tên */}
                         <span className="hidden shrink-0 items-center gap-1.5 sm:inline-flex">
-                          <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
+                          {c.jobs.slice(0, 3).map((j) => <Badge key={j} tone={CAT_TONE[j] || "slate"}>{j}</Badge>)}
                           {!c.active && <Badge tone="rose">OFF</Badge>}
                         </span>
                       </div>
                       <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400 sm:mt-0">
                         {/* MOBILE: badge xuống dòng 2 để tên đủ chỗ */}
                         <span className="inline-flex shrink-0 items-center gap-1 sm:hidden">
-                          <Badge tone={(TYPES[c.type] || TYPES.remote)[0]}>{(TYPES[c.type] || TYPES.remote)[1]}</Badge>
+                          {c.jobs.slice(0, 2).map((j) => <Badge key={j} tone={CAT_TONE[j] || "slate"}>{j}</Badge>)}
                           {!c.active && <Badge tone="rose">OFF</Badge>}
                         </span>
                         <span className="truncate">{c.projectCount} dự án</span>
@@ -324,6 +309,7 @@ export default function Customers() {
                       {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
                       {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
+                    {isOwner && <CustomerChannels customer={c} />}
                     {c.projects.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>
                     ) : (

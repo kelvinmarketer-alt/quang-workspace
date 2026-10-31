@@ -66,12 +66,51 @@ const NAV = [
 ];
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
-  { id: "biz", label: "Kinh doanh", order: ["/", "/bao-cao", "/khach-hang", "/tai-nguyen", "/quang-cao", "/website", "/fanpage"] },
+  { id: "biz", label: "Kinh doanh", order: ["/", "/bao-cao", "/khach-hang"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
   { id: "me", label: "Cá nhân", order: ["/cong-viec", "/tai-khoan"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
 ];
-const navKey = (n) => n.to || n.href;
+const navKey = (n) => n.key || n.to || n.href;
+
+// 01/11 sếp duyệt gộp menu: trang cùng loại → 1 mục menu + thanh tab đầu trang (route cũ giữ nguyên, quyền theo từng tab).
+// key = tab đầu → ghim cũ của /bao-cao, /khach-hang vẫn dùng được.
+const HUBS = [
+  { id: "report", label: "Báo cáo", icon: BarChart3, group: "biz", tabs: [["/bao-cao", "Tổng hợp", BarChart3], ["/quang-cao", "Quảng cáo", Megaphone], ["/website", "Website", Globe], ["/fanpage", "Fanpage", ThumbsUp]] },
+  { id: "cust", label: "Khách & Dự án", icon: Users, group: "biz", tabs: [["/khach-hang", "Khách & dự án", Users], ["/tai-nguyen", "Tài nguyên", FolderOpen]], also: ["/du-an", "/don-hang"] },
+];
+const inPath = (path, t) => path === t || path.startsWith(t + "/");
+const hubOf = (path) => HUBS.find((h) => h.tabs.some(([t]) => inPath(path, t)) || (h.also || []).some((t) => inPath(path, t)));
+function mergeHubs(items) {
+  const out = [], seen = new Set();
+  for (const n of items) {
+    const h = n.to && n.to !== "/" && hubOf(n.to);
+    if (!h) { out.push(n); continue; }
+    if (seen.has(h.id)) continue;
+    seen.add(h.id);
+    const first = h.tabs.map(([t]) => t).find((t) => items.some((x) => x.to === t));
+    out.push({ key: h.tabs[0][0], to: first, label: h.label, icon: h.icon, group: h.group, match: [...h.tabs.map(([t]) => t), ...(h.also || [])] });
+  }
+  return out;
+}
+function HubTabs({ items }) {
+  const loc = useLocation();
+  const h = hubOf(loc.pathname);
+  if (!h || !h.tabs.some(([t]) => loc.pathname === t)) return null; // trang chi tiết (vd /bao-cao/:id) không hiện tab
+  const tabs = h.tabs.filter(([t]) => items.some((n) => n.to === t));
+  if (tabs.length < 2) return null;
+  return (
+    <div className="no-print px-3 pt-3 sm:px-5 sm:pt-5">
+      <div className="no-scrollbar flex w-full gap-1 overflow-x-auto rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:inline-flex sm:w-auto">
+        {tabs.map(([t, l, I]) => (
+          <NavLink key={t} to={t} end className={({ isActive }) => `flex shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-bold transition sm:grow-0 sm:px-4 ${isActive ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+            <I size={15} className="hidden shrink-0 sm:block" /> {l}
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // Mục menu được phép thấy (quyền thành viên / chỉ chủ / văn phòng AI) — dùng chung cho sidebar + ô tìm kiếm
 function useNavItems() {
@@ -120,6 +159,8 @@ function Brand({ mini }) {
 }
 
 function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini, onTip }) {
+  const loc = useLocation();
+  const hubOn = !!n.match?.some((t) => inPath(loc.pathname, t));
   const tip = mini ? { onMouseEnter: (e) => onTip?.({ label: n.label, y: e.currentTarget.getBoundingClientRect().top + 20 }), onMouseLeave: () => onTip?.(null), onFocus: (e) => onTip?.({ label: n.label, y: e.currentTarget.getBoundingClientRect().top + 20 }), onBlur: () => onTip?.(null) } : {};
   const pinBtn = (
     <button
@@ -150,13 +191,13 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini, onTip }) {
           onClick={onNavigate}
           aria-label={mini ? n.label : undefined}
           {...tip}
-          className={({ isActive }) => mini
+          className={({ isActive: a }) => { const isActive = a || hubOn; return mini
             ? `group mx-auto flex h-11 w-11 items-center justify-center rounded-2xl transition ${isActive ? "rail-active bg-indigo-400/25 text-white ring-1 ring-indigo-300/40" : "text-slate-400 hover:bg-white/10 hover:text-white"}`
             : `group flex items-center gap-3 rounded-xl px-3 py-2.5 pr-9 text-sm font-semibold transition ${
               isActive
                 ? "nav-active bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"
                 : "text-slate-500 hover:bg-white hover:text-slate-900"
-            }`
+            }`; }
           }
         >
           <n.icon size={18} className="shrink-0" />
@@ -169,7 +210,8 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini, onTip }) {
 }
 
 function SideNav({ onNavigate, pins = [], onTogglePin, mobile, mini, onTip }) {
-  const items = useNavItems();
+  const raw = useNavItems();
+  const items = useMemo(() => mergeHubs(raw), [raw]);
   const sections = useMemo(() => {
     const pinnedItems = pins.map((k) => items.find((n) => navKey(n) === k)).filter(Boolean);
     const pinnedSet = new Set(pinnedItems.map(navKey));
@@ -373,15 +415,17 @@ function useDemoWarm() {
 }
 
 // Điện thoại / máy tính bảng: thanh 4 mục chính + "Thêm" (mở menu đầy đủ) dưới đáy
-const BAR = ["/", "/bao-cao", "/khach-hang", "/coin"];
+const BAR = ["/", "/bao-cao", "/khach-hang", "/ke-toan"];
 function BottomBar({ items, onMenu }) {
-  const list = BAR.map((k) => items.find((n) => n.to === k)).filter(Boolean).slice(0, 4);
-  const short = { "/": "Tổng quan", "/bao-cao": "Báo cáo", "/khach-hang": "Khách", "/coin": "Coin" };
+  const merged = mergeHubs(items);
+  const list = BAR.map((k) => merged.find((n) => navKey(n) === k)).filter(Boolean).slice(0, 4);
+  const short = { "/": "Tổng quan", "/bao-cao": "Báo cáo", "/khach-hang": "Khách", "/ke-toan": "Kế toán" };
+  const loc = useLocation();
   return (
     <nav aria-label="Menu nhanh" className="no-print fixed inset-x-0 bottom-0 z-30 flex justify-around rounded-t-3xl bg-slate-900 px-2 pt-1.5 lg:hidden" style={{ paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))" }}>
       {list.map((n) => (
-        <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold ${isActive ? "rail-active bg-indigo-400/25 text-white" : "text-slate-400"}`}>
-          <n.icon size={20} />{short[n.to] || n.label}
+        <NavLink key={navKey(n)} to={n.to} end={n.end} className={({ isActive }) => `flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold ${isActive || n.match?.some((t) => inPath(loc.pathname, t)) ? "rail-active bg-indigo-400/25 text-white" : "text-slate-400"}`}>
+          <n.icon size={20} />{short[navKey(n)] || n.label}
         </NavLink>
       ))}
       <button onClick={onMenu} className="flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold text-slate-400"><MoreHorizontal size={20} />Thêm</button>
@@ -403,7 +447,7 @@ export default function Layout({ children }) {
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]); // điện thoại: đổi trang (kể cả nút Back) thì đóng menu
   const li = lunarInfo(new Date());
-  const title = NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
+  const title = hubOf(loc.pathname)?.label || NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
     || EXTRA_TITLES[loc.pathname]
     || (loc.pathname === "/" ? "Tổng quan" : "");
 
@@ -468,7 +512,7 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="qws-full w-full"><PushPrompt />{children}</main>
+        <main className="qws-full w-full"><PushPrompt /><HubTabs items={navItems} />{children}</main>
       </div>
       <BottomBar items={navItems} onMenu={() => setOpen(true)} />
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />

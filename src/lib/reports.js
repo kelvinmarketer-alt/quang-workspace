@@ -25,7 +25,7 @@ export function guessCustomer(name, customers) {
   const hit = customers.find((c) => { const b = squash(c.name); return b.length >= 3 && (a.includes(b) || b.includes(a)); });
   return hit?.id || null;
 }
-const siteKey = (domain) => String(domain || "").replace(/^www\./, "").split(".")[0];
+export const siteKey = (domain) => String(domain || "").replace(/^www\./, "").split(".")[0];
 
 // ---------- tải số liệu (nhớ 20 phút trong tab) ----------
 const TTL = 20 * 60000, CK = "qws-report-v1";
@@ -76,6 +76,24 @@ async function loadAll(P, settings, adsResults) {
   })().catch((e) => { errors.push("Fanpage: " + e.message); return []; });
   const [a, w, p] = await Promise.all([ads, web, pages]);
   return { ads: a, web: w, pages: p, errors };
+}
+
+export function dropReportCache() { MEM = null; try { sessionStorage.removeItem(CK); } catch { /* bỏ qua */ } }
+
+// Danh sách kênh KHÔNG kèm số (nhẹ) — để gắn kênh ↔ khách ngay ở Khách & Dự án (01/11). Chỉ chủ.
+const callAds = async (body) => { const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body }); if (error || data?.error) throw new Error(error?.message || data.error); return data; };
+export async function loadChannelLists(settings = {}) {
+  const [meta, gads, web, pages] = await Promise.all([
+    callAds({ mode: "config_list" }).then((d) => (d.accounts || []).map((a) => ({ kind: "meta", id: a.id, name: a.name, cust: a.cust || null }))).catch(() => []),
+    callAds({ mode: "gads_list" }).then((d) => (d.accounts || []).map((a) => ({ kind: "gads", id: a.customer_id, name: a.name, cust: a.qws_customer_id || null }))).catch(() => []),
+    listGoogleProps().then(({ props, conn }) => buildSites(props, conn, { hidden: settings.webHidden || [], gaOverride: settings.webGa || {} }).sites.map((s) => s.domain)).catch(() => []),
+    listPages().then(({ pages: l }) => (l || []).filter((p) => p.enabled !== false && !(settings.fbHidden || []).includes(p.page_id)).map((p) => ({ id: p.page_id, name: p.name }))).catch(() => []),
+  ]);
+  return { ads: [...meta, ...gads], web, pages };
+}
+export async function setAdsCustomer(a, cust) {
+  await callAds(a.kind === "gads" ? { mode: "gads_update", cid: a.id, patch: { cust } } : { mode: "config_update", id: a.id, patch: { cust } });
+  dropReportCache();
 }
 
 // Hook: số liệu thô các kênh (chỉ chủ). reload(true) = bỏ bộ nhớ, tải lại.
