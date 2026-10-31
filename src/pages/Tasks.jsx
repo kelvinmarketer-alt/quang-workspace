@@ -1,11 +1,56 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays } from "lucide-react";
+import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft } from "lucide-react";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
 import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
+import { parseQuickTask, dayLabel } from "../lib/quickTask.js";
+import { usePomo, startPomo, stopPomo, dayCount } from "../lib/pomodoro.js";
+
+// Ô thêm việc 1 dòng (01/11 sếp duyệt): gõ câu → Enter. Dán nhiều dòng = nhiều việc. Không ghi ngày → hôm nay.
+const QUICK = [[" hôm nay", "Hôm nay"], [" mai", "Mai"], [" thứ 2", "Thứ 2"], [" !cao", "Gấp"], [" ~1", "1 🍅"], [" ~2", "2 🍅"]];
+function QuickAdd({ onAdd, onDetail, focusKey }) {
+  const { customerList = [] } = useData();
+  const custs = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
+  const [v, setV] = useState("");
+  const ref = useRef(null);
+  useEffect(() => { if (focusKey) ref.current?.focus(); }, [focusKey]);
+  const p = parseQuickTask(v, custs);
+  const toTask = (x) => ({ title: x.title, date: x.date || todayISO(), time: x.time || "", priority: x.priority || "med", note: "", customerId: x.customerId || null, ...(x.est ? { est: x.est } : {}) });
+  const submit = () => {
+    const lines = v.split(/\n/).map((l) => l.trim()).filter(Boolean);
+    const items = lines.map((l) => parseQuickTask(l, custs)).filter((x) => x.title);
+    if (!items.length) return;
+    items.forEach((x) => onAdd(toTask(x)));
+    setV(""); ref.current?.focus();
+  };
+  const Chip = ({ c, children }) => <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${c}`}>{children}</span>;
+  return (
+    <div className="card !p-3 sm:!p-4">
+      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 py-1 pl-3.5 pr-1 transition focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-500/10">
+        <Plus size={18} className="shrink-0 text-slate-400" />
+        <textarea ref={ref} rows={1} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } if (e.key === "Escape") setV(""); }}
+          placeholder="Thêm việc… vd: Gửi báo cáo #VĐG mai 9h !cao ~2" aria-label="Thêm việc nhanh" className="min-w-0 flex-1 resize-none border-0 bg-transparent py-2 text-[15px] outline-none" style={{ background: "transparent" }} />
+        <kbd className="hidden items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 sm:inline-flex"><CornerDownLeft size={11} /> Enter</kbd>
+        <button type="button" onClick={() => onDetail(v ? toTask(p) : {})} title="Mở form chi tiết" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-white hover:text-slate-700"><SlidersHorizontal size={16} /></button>
+        <button type="button" onClick={submit} disabled={!p.title} className="shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40">Thêm</button>
+      </div>
+      <div className="mt-2 flex min-h-[24px] flex-wrap items-center gap-1.5">
+        {v.trim() ? <>
+          {p.title && <Chip c="bg-slate-100 text-slate-700">{p.title}</Chip>}
+          <Chip c="bg-indigo-50 text-indigo-700">📅 {p.date ? dayLabel(p.date) : "Hôm nay"}</Chip>
+          {p.time && <Chip c="bg-amber-50 text-amber-700">⏰ {p.time}</Chip>}
+          {p.priority && <Chip c={p.priority === "high" ? "bg-rose-50 text-rose-600" : "bg-sky-50 text-sky-700"}>⚑ {p.priority === "high" ? "Gấp" : "Thấp"}</Chip>}
+          {p.customerName && <Chip c="bg-violet-50 text-violet-700"># {p.customerName}</Chip>}
+          {p.est && <Chip c="bg-emerald-50 text-emerald-700">🍅 ×{p.est}</Chip>}
+        </> : <span className="text-[11.5px] text-slate-400">Gõ 1 câu: <b>mai</b>, <b>thứ 3</b>, <b>15/11</b> · <b>9h</b>, <b>3h chiều</b> · <b>!cao</b> · <b>#tên khách</b> · <b>~2</b> (2 phiên 25 phút). Phím <b>N</b> ở bất kỳ đâu để thêm việc.</span>}
+        <span className="ml-auto flex flex-wrap gap-1">{QUICK.map(([ins, l]) => <button key={l} type="button" onClick={() => { setV((x) => (x + ins).replace(/^\s+/, "")); ref.current?.focus(); }} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11.5px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600">{l}</button>)}</span>
+      </div>
+    </div>
+  );
+}
 
 const PRIO = { high: ["rose", "Cao"], med: ["amber", "TB"], low: ["sky", "Thấp"] };
 const PRIO_ORDER = { high: 0, med: 1, low: 2 };
@@ -15,7 +60,7 @@ function TaskModal({ initial, onClose, onSave }) {
   const editing = !!initial?.id;
   const { customerList = [] } = useData();
   const custs = [...customerList].filter((c) => c.active !== false || c.id === initial?.customerId).sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "" } : {}) }));
+  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "", ...(initial.est ? { est: initial.est } : {}) } : {}) }));
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
@@ -70,6 +115,11 @@ function TaskBoard() {
   const [filter, setFilter] = useState("all");
   const [hi, setHi] = useState(null); // việc đang được làm nổi (mở từ ô tìm kiếm)
   const [sp, setSp] = useSearchParams();
+  const pomo = usePomo();
+  const quickKey = sp.get("quick");
+  useEffect(() => { if (quickKey) { setFilter("all"); const n = new URLSearchParams(sp); n.delete("quick"); setSp(n, { replace: true }); } }, [quickKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [focusKey, setFocusKey] = useState(quickKey ? 1 : 0);
+  useEffect(() => { if (quickKey) setFocusKey((k) => k + 1); }, [quickKey]);
 
   const today = todayISO();
   const isDone = (t) => t.status === "done";
@@ -114,16 +164,18 @@ function TaskBoard() {
               <button key={v} onClick={() => setFilter(v)} className={`flex-1 whitespace-nowrap rounded-full px-2 py-1.5 text-[13px] font-bold sm:flex-none sm:px-3 sm:text-sm ${filter === v ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}{v === "today" && todayCount > 0 && <span className="ml-1 rounded-full bg-rose-500 px-1.5 text-[10px] text-white">{todayCount}</span>}</button>
             ))}
           </div>
-          <div className="text-sm font-semibold text-slate-400">{done}/{tasks.length} hoàn thành</div>
+          <div className="text-sm font-semibold text-slate-400">{done}/{tasks.length} hoàn thành · hôm nay <span className="text-rose-500">🍅 {dayCount()}</span> = {Math.floor(dayCount() * 25 / 60)}h{String(dayCount() * 25 % 60).padStart(2, "0")} tập trung</div>
           {canW ? (
-            <button onClick={() => setModal({})} className="ml-auto flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">
-              <Plus size={16} /> Thêm việc
+            <button onClick={() => setModal({})} className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+              <SlidersHorizontal size={15} /> Form chi tiết
             </button>
           ) : (
             <span className="ml-auto shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>
           )}
         </div>
       </Card>
+
+      {canW && <QuickAdd onAdd={addTask} onDetail={(x) => setModal(x)} focusKey={focusKey} />}
 
       <div className="space-y-2.5">
         {filtered.length === 0 && (
@@ -154,7 +206,10 @@ function TaskBoard() {
                   {t.note && <span className="min-w-0 truncate">· {t.note}</span>}
                 </div>
               </button>
+              {(t.est || t.pomos) ? <span className="hidden shrink-0 text-[12px] font-bold text-rose-500 sm:inline" title={`${t.pomos || 0}/${t.est || t.pomos} phiên 25 phút`}>🍅 {t.pomos || 0}{t.est ? `/${t.est}` : ""}</span> : null}
               <Badge tone={tone}><Flag size={10} className="mr-1 inline" />{pl}</Badge>
+              {canW && !done && <button type="button" onClick={() => (pomo?.taskId === t.id ? stopPomo() : startPomo(t))} title={pomo?.taskId === t.id ? "Dừng hẹn giờ" : "Bắt đầu 25 phút tập trung"} aria-label="Pomodoro"
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl transition ${pomo?.taskId === t.id ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500 hover:bg-rose-100"}`}>{pomo?.taskId === t.id ? <Pause size={15} /> : <Play size={15} />}</button>}
               {/* Xoá: điện thoại luôn hiện (màu nhạt); máy có chuột thì hiện khi rê */}
               {canW && <button onClick={() => deleteTask(t.id)} title="Xoá" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100 pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"><Trash2 size={16} /></button>}
             </div>
@@ -162,7 +217,7 @@ function TaskBoard() {
         })}
       </div>
 
-      {modal && <TaskModal initial={modal.id ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateTask(modal.id, data) : addTask(data))} />}
+      {modal && <TaskModal initial={modal.id || modal.title ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateTask(modal.id, data) : addTask(data))} />}
     </div>
   );
 }
@@ -175,7 +230,7 @@ export default function Tasks({ initialTab = "tasks" }) {
   useEffect(() => { setTab(initialTab); }, [initialTab]);
   // Mở 1 việc từ ô tìm kiếm (?id=) khi đang ở tab Lịch → chuyển về tab Công việc
   const [sp] = useSearchParams();
-  const hasId = !!sp.get("id");
+  const hasId = !!sp.get("id") || !!sp.get("quick");
   useEffect(() => { if (hasId) setTab("tasks"); }, [hasId]);
   return (
     <div className="bento space-y-4 p-3 sm:p-5">

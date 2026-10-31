@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
+import PomodoroPill from "./PomodoroPill.jsx";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
 import { useTheme, useSkin, SKINS } from "../lib/theme.js";
@@ -489,6 +490,18 @@ export default function Layout({ children }) {
   const navItems = useNavItems();
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]); // điện thoại: đổi trang (kể cả nút Back) thì đóng menu
+  // Phím N ở bất kỳ đâu → ô thêm việc nhanh (không bắt khi đang gõ chữ)
+  const navTo = useNavigate();
+  useEffect(() => {
+    const h = (e) => {
+      if (e.key !== "n" && e.key !== "N") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const el = document.activeElement; if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault(); navTo(`/cong-viec?quick=${Date.now()}`);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [navTo]);
   const li = lunarInfo(new Date());
   const title = hubOf(loc.pathname)?.label || NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
     || EXTRA_TITLES[loc.pathname]
@@ -558,6 +571,7 @@ export default function Layout({ children }) {
         <main className="qws-full w-full"><PushPrompt /><HubTabs items={navItems} />{children}</main>
       </div>
       <BottomBar items={navItems} onMenu={() => setOpen(true)} />
+      <PomodoroPill />
       <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />
     </div>
   );
