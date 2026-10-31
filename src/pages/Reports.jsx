@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { RefreshCw, Printer, Sparkles, Loader2, ChevronDown, ArrowLeft, Check, Copy, Link2, ExternalLink, AlertTriangle } from "lucide-react";
+import { RefreshCw, Printer, Sparkles, Loader2, ChevronDown, ArrowLeft, Check, Copy, Link2, ExternalLink, AlertTriangle, Columns3 } from "lucide-react";
 import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useReportData, buildBrandRows, linkChannels, monthKey, squash } from "../lib/reports.js";
@@ -57,19 +57,35 @@ export default function Reports() {
 }
 
 // ---------------- Bảng tổng ----------------
+// Cột bảng tổng — sếp bật/tắt được (lưu settings.reportHide = các cột đang ẩn, cột mới mặc định hiện)
+const COLS = [["rev", "Doanh thu tháng"], ["ads", "Quảng cáo"], ["web", "Website Google"], ["fp", "Fanpage"], ["seo", "SEO (hiển thị)"], ["late", "Việc trễ"], ["rep", "Báo cáo"]];
+
 function ReportMatrix() {
   const { rows, rep } = useRows();
+  const { settings = {}, setSettings } = useData();
   const nav = useNavigate();
   const [f, setF] = useState("att");
+  const [pick, setPick] = useState(false);
   const loading = rep.loading && !rep.data?.at;
+  const hide = settings.reportHide || [];
+  const cols = COLS.filter(([k]) => !hide.includes(k));
+  const flip = (k) => setSettings({ reportHide: hide.includes(k) ? hide.filter((x) => x !== k) : [...hide, k] });
   const list = useMemo(() => {
-    let L = rows.filter((r) => r.jobs.length || r.ads.length || r.webs.length || r.pages.length || r.revenue);
-    if (f === "fulltime" || f === "remote") L = L.filter((r) => r.type === f);
+    const L = rows.filter((r) => r.jobs.length || r.ads.length || r.webs.length || r.pages.length || r.revenue);
     return [...L].sort(f === "att" ? (a, b) => b.score - a.score || b.revenue - a.revenue : (a, b) => b.revenue - a.revenue);
   }, [rows, f]);
   const active = rows.filter((r) => r.jobs.length);
   const sent = rows.filter((r) => r.rep.t === "g").length;
-  const chips = [["att", "Cần chú ý trước"], ["all", "Theo doanh thu"], ["fulltime", "Full-time"], ["remote", "Remote"]];
+  const chips = [["att", "Cần chú ý trước"], ["all", "Theo doanh thu"]];
+  const cell = {
+    rev: (r) => <td key="rev" className="whitespace-nowrap px-3 py-2.5 tabular-nums"><div className="font-bold text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}</div>{r.prevRevenue > 0 && <div className="text-[11px] text-slate-400">T trước {formatShort(r.prevRevenue)}</div>}{r.debt > 0 && <div className="text-[11px] font-bold text-rose-500">nợ {formatShort(r.debt)}</div>}</td>,
+    ads: (r) => <td key="ads" className="px-3 py-2.5"><CellPill x={r.cells.ads} loading={loading} /></td>,
+    web: (r) => <td key="web" className="px-3 py-2.5"><CellPill x={r.cells.web} loading={loading} /></td>,
+    fp: (r) => <td key="fp" className="px-3 py-2.5"><CellPill x={r.cells.fp} loading={loading} /></td>,
+    seo: (r) => <td key="seo" className="px-3 py-2.5"><CellPill x={r.cells.seo} loading={loading} /></td>,
+    late: (r) => <td key="late" className="px-3 py-2.5 tabular-nums">{r.late ? <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-bold text-amber-700">{r.late}</span> : <span className="text-slate-300">0</span>}</td>,
+    rep: (r) => <td key="rep" className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span></td>,
+  };
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -95,30 +111,28 @@ function ReportMatrix() {
       <div className="card overflow-hidden p-0">
         <div className="no-print flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
           {chips.map(([k, l]) => <button key={k} onClick={() => setF(k)} aria-pressed={f === k} className={`rounded-full px-3 py-1.5 text-[12.5px] font-bold ${f === k ? "bg-indigo-50 text-indigo-700" : "text-slate-500 hover:bg-slate-50"}`}>{l}</button>)}
-          <span className="ml-auto text-[11.5px] text-slate-400">Màu: <i className="mx-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />đạt <i className="mx-1 inline-block h-2 w-2 rounded-full bg-amber-400" />theo dõi <i className="mx-1 inline-block h-2 w-2 rounded-full bg-rose-500" />dưới chỉ tiêu</span>
+          <button onClick={() => setPick((v) => !v)} aria-expanded={pick} className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[12.5px] font-bold ${pick ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}><Columns3 size={14} /> Cột {hide.length > 0 && <span className="opacity-70">{cols.length}/{COLS.length}</span>}</button>
+          <span className="ml-auto hidden text-[11.5px] text-slate-400 sm:inline">Màu: <i className="mx-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />đạt <i className="mx-1 inline-block h-2 w-2 rounded-full bg-amber-400" />theo dõi <i className="mx-1 inline-block h-2 w-2 rounded-full bg-rose-500" />dưới chỉ tiêu</span>
+          {pick && <div className="flex w-full flex-wrap gap-1.5 pt-1">
+            {COLS.map(([k, l]) => { const on = !hide.includes(k); return <button key={k} onClick={() => flip(k)} aria-pressed={on} className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[12px] font-bold ${on ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-400 line-through"}`}>{on && <Check size={12} />}{l}</button>; })}
+          </div>}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-[13px]">
+          <table className="w-full text-[13px]" style={{ minWidth: 260 + cols.length * 110 }}>
             <thead><tr className="text-left text-[11px] font-bold uppercase tracking-wide text-slate-400">
-              {["Thương hiệu · job", "Doanh thu tháng", "Quảng cáo", "Website Google", "Fanpage", "SEO (hiển thị)", "Việc trễ", "Báo cáo"].map((h) => <th key={h} className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{h}</th>)}
+              {["Thương hiệu · job", ...cols.map(([, h]) => h)].map((h) => <th key={h} className="whitespace-nowrap border-b border-slate-100 px-3 py-2.5">{h}</th>)}
             </tr></thead>
             <tbody>
               {list.map((r) => (
                 <tr key={r.id} tabIndex={0} onClick={() => nav(`/bao-cao/${r.id}`)} onKeyDown={(e) => e.key === "Enter" && nav(`/bao-cao/${r.id}`)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/70">
                   <td className="px-3 py-2.5"><div className="flex items-center gap-2.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
-                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.type === "fulltime" ? "Full-time" : r.type === "le" ? "Khách lẻ" : "Remote"} · {r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</div></div>
+                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</div></div>
                   </div></td>
-                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums"><div className="font-bold text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}</div>{r.prevRevenue > 0 && <div className="text-[11px] text-slate-400">T trước {formatShort(r.prevRevenue)}</div>}{r.debt > 0 && <div className="text-[11px] font-bold text-rose-500">nợ {formatShort(r.debt)}</div>}</td>
-                  <td className="px-3 py-2.5"><CellPill x={r.cells.ads} loading={loading} /></td>
-                  <td className="px-3 py-2.5"><CellPill x={r.cells.web} loading={loading} /></td>
-                  <td className="px-3 py-2.5"><CellPill x={r.cells.fp} loading={loading} /></td>
-                  <td className="px-3 py-2.5"><CellPill x={r.cells.seo} loading={loading} /></td>
-                  <td className="px-3 py-2.5 tabular-nums">{r.late ? <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-bold text-amber-700">{r.late}</span> : <span className="text-slate-300">0</span>}</td>
-                  <td className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span></td>
+                  {cols.map(([k]) => cell[k](r))}
                 </tr>
               ))}
-              {!list.length && <tr><td colSpan={8} className="p-8 text-center text-slate-400">Chưa có thương hiệu nào đang chạy.</td></tr>}
+              {!list.length && <tr><td colSpan={cols.length + 1} className="p-8 text-center text-slate-400">Chưa có thương hiệu nào đang chạy.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -226,7 +240,7 @@ function Brand360({ id }) {
           <div className="rounded-2xl bg-white p-1"><BrandAvatar r={r} size={68} /></div>
           <div className="min-w-0 flex-1">
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">{r.name}</h2>
-            <div className="text-[13px] text-slate-500">{r.type === "fulltime" ? "Full-time" : r.type === "le" ? "Khách lẻ" : "Remote"} · {r.jobs.length} job đang chạy · {r.ads.length} TK quảng cáo · {r.webs.length} website · {r.pages.length} fanpage</div>
+            <div className="text-[13px] text-slate-500">{r.jobs.length} job đang chạy · {r.ads.length} TK quảng cáo · {r.webs.length} website · {r.pages.length} fanpage</div>
           </div>
           <div className="no-print flex flex-wrap items-center gap-2">
             <Badge tone={stTone}>{stLabel}</Badge>
