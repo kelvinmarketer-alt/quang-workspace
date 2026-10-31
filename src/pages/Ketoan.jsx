@@ -113,9 +113,9 @@ function KetoanReport() {
             {PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {/* DESKTOP: chips kỳ */}
-          <div className="hidden flex-wrap gap-1 rounded-xl bg-slate-100 p-1 sm:flex">
+          <div className="hidden flex-wrap gap-1 rounded-full bg-slate-100 p-1 sm:flex">
             {PRESETS.map(([v, l]) => (
-              <button key={v} onClick={() => setPreset(v)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${preset === v ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}</button>
+              <button key={v} onClick={() => setPreset(v)} className={`rounded-full px-3 py-1.5 text-sm font-bold ${preset === v ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}</button>
             ))}
           </div>
           {preset === "custom" && (
@@ -184,9 +184,9 @@ function KetoanReport() {
       </Card>
 
       {/* Chỉ số phụ */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4 sm:p-5">
         {[["Số tiền nhận", cur.received], ["Chiết khấu nền tảng", cur.discount], ["Phí chạy (ADS)", cur.serviceFee], ["Tiền chạy thực tế", cur.spend]].map(([l, v]) => (
-          <div key={l} className="min-w-0 rounded-xl bg-white p-3 shadow-sm">
+          <div key={l} className="min-w-0">
             <div className="truncate text-[11px] font-semibold uppercase text-slate-400">{l}</div>
             <div className="break-words text-base font-extrabold text-slate-800">{formatVND(v)}</div>
           </div>
@@ -542,16 +542,16 @@ export default function Ketoan({ initialTab }) {
   // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
   useEffect(() => { setTab0(initialTab || ktTabLS()); }, [initialTab]);
   return (
-    <div className="space-y-4 sm:space-y-5">
-      <Card className="!p-2">
-        <div className="grid grid-cols-3 gap-1">
+    <div className="bento space-y-4 p-3 sm:p-5">
+      <div className="flex">
+        <div className="grid w-full grid-cols-3 gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:inline-flex sm:w-auto">
           {TABS.map(([v, l, Ic]) => (
-            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-[13px] font-bold transition sm:gap-2 sm:text-sm ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-bold transition sm:gap-2 sm:text-sm ${tab === v ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
               <Ic size={16} className="shrink-0" /> <span className="truncate">{l}</span>
             </button>
           ))}
         </div>
-      </Card>
+      </div>
       {tab === "report" ? <KetoanReport /> : tab === "debt" ? <DebtPanel /> : <Expenses />}
     </div>
   );

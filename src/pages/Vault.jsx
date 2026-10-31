@@ -432,7 +432,7 @@ export default function Vault() {
   const TABS = [["all", "Tất cả"], ["app", "Ứng dụng"], ["card", "Thẻ"], ["bank", "Thanh toán"]];
 
   return (
-    <div className="space-y-4">
+    <div className="bento space-y-4 p-3 sm:p-5">
       {/* Cảnh báo bảo mật */}
       <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-700">
         <ShieldAlert size={16} className="mt-0.5 shrink-0 text-amber-500" />

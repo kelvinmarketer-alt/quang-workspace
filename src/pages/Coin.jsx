@@ -131,7 +131,7 @@ export default function Coin() {
   const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
   const fb = <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Đang tải…</div>;
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="bento space-y-3 p-3 sm:space-y-4 sm:p-5">
       <div className="flex items-stretch gap-1 sm:gap-2">
       <div className={`flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
         {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (

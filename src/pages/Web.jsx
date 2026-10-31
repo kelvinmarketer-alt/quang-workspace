@@ -603,8 +603,10 @@ export default function Web() {
   // Bỏ cache riêng 1 web (đổi GA4) — các web khác giữ nguyên số
   const dropSite = (d) => { for (const key of [...CACHE.keys()]) if (key.startsWith(`s|${d}|`) || key.startsWith(`d|${d}|`)) CACHE.delete(key); };
 
+  // Web đã tải số mà không có click Google lẫn người dùng → gom xuống cuối (đỡ hàng loạt ô trống)
+  const isEmpty = (s) => { const x = sums[sk(s)]; return !!x && !(x.gsc?.cur.clicks > 0) && !(x.ga?.cur.activeUsers > 0); };
   return (
-    <div className="space-y-3">
+    <div className="bento space-y-4 p-3 sm:p-5">
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
           <RangePicker value={days} onChange={setDays} />
@@ -620,17 +622,25 @@ export default function Web() {
           onGa={(v) => { dropSite(site.domain); setSettings({ webGa: { ...gaOverride, [site.domain]: v } }); }}
           onHide={() => { setHidden([...hidden, site.domain]); closeSite(); }} onBack={closeSite} aiState={aiState} setAiState={setAiState} />
       ) : (<>
-        <div className="grid grid-cols-3 gap-px bg-slate-100">
+        <div className="grid grid-cols-3 gap-3">
           {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick], ["Người dùng", tot.users, tot.pUsers, Users], ["Chuyển đổi", tot.conv, tot.pConv, Target]].map(([l, c, p, I]) => (
-            <div key={l} className="bg-white px-3 py-2.5"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} /> {l} · tất cả web</div><div className="flex items-baseline gap-1.5"><span className="text-xl font-extrabold tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+            <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} /> {l} · tất cả web</div><div className="flex items-baseline gap-1.5"><span className="text-xl font-extrabold tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
           ))}
         </div>
         {!sites ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : sites.length === 0 ? (
           <Card><div className="py-8 text-center text-sm text-slate-500">Chưa có web nào. Vào <b>Văn phòng AI → Kết nối → Google</b>, thêm email robot vào Search Console / GA4 của web rồi bấm Làm mới.</div></Card>
         ) : (
-          <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
-            {sites.map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}
+          <>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {sites.filter((s) => !isEmpty(s)).sort((a, b) => (sums[sk(b)]?.gsc?.cur.clicks ?? -1) - (sums[sk(a)]?.gsc?.cur.clicks ?? -1)).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}
           </div>
+          {sites.some(isEmpty) && (
+            <details className="group px-3 sm:px-0">
+              <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {sites.filter(isEmpty).length} web chưa có số trong kỳ này (Google chưa ghi nhận click / người dùng)</summary>
+              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{sites.filter(isEmpty).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}</div>
+            </details>
+          )}
+          </>
         )}
         {meta.hiddenSites?.length > 0 && (
           <div className="px-3 text-[11px] text-slate-400">

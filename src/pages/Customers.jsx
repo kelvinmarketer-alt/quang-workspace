@@ -212,7 +212,7 @@ export default function Customers() {
   }, [qId, qProj, projects, customerList]);
 
   return (
-    <div className="space-y-4 sm:space-y-5">
+    <div className="bento space-y-4 p-3 sm:p-5">
       <Card>
         {/* MOBILE: dòng 1 = tiêu đề; dòng 2 = 1 hàng nút gọn; dòng 3 = ô tìm full width. DESKTOP giữ bố cục cũ. */}
         <div className="flex flex-wrap items-center gap-2">

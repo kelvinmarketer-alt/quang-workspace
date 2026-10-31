@@ -657,7 +657,7 @@ export default function Ads() {
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Quảng cáo.</div></Card>;
 
   return (
-    <div className="space-y-4">
+    <div className="bento space-y-4 p-3 sm:p-5">
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <RangePicker value={period} onChange={setPeriod} />

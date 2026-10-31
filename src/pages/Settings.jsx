@@ -122,7 +122,7 @@ export default function Settings() {
   ];
 
   return (
-    <div className="space-y-3">
+    <div className="bento space-y-4 p-3 sm:p-5">
       <div className={`grid gap-1 rounded-2xl bg-white/70 p-1 shadow-sm sm:flex ${SECS.length > 4 ? "grid-cols-3" : "grid-cols-2"}`}>{/* 23/10: điện thoại = lưới thấy đủ mọi mục (trước cuộn ngang, mục đang mở bị che) */}
         {SECS.map(([k, label, Icon]) => (
           <button key={k} onClick={() => setSec(k)} className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-center text-[11.5px] font-extrabold leading-tight transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2 sm:text-[13px] ${cur === k ? "nav-active bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "text-slate-500 hover:bg-white hover:text-slate-800"}`}>

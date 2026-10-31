@@ -262,7 +262,7 @@ export default function Fanpage() {
   const closePage = () => { if (loc.state?.qwsList) nav(-1); else { const n = new URLSearchParams(sp); n.delete("page"); setSp(n, { replace: true }); } };
 
   return (
-    <div className="space-y-3">
+    <div className="bento space-y-4 p-3 sm:p-5">
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
           <RangePicker value={days} onChange={setDays} />
@@ -277,22 +277,22 @@ export default function Fanpage() {
         <Detail owner={isOwner} p={page} sum={sums[page.page_id]} R={R} tick={tick} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
           onBack={closePage} onHide={() => { setHidden([...hidden, page.page_id]); closePage(); }} aiState={aiState} setAiState={setAiState} />
       ) : (<>
-        <div className="grid grid-cols-3 gap-px bg-slate-100">
+        <div className="grid grid-cols-3 gap-3">
           {[["Tiếp cận · tất cả page", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I]) => (
-            <div key={l} className="bg-white px-3 py-2.5"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} /> {l}</div><div className="flex items-baseline gap-1.5"><span className="text-xl font-extrabold tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+            <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} /> {l}</div><div className="flex items-baseline gap-1.5"><span className="text-xl font-extrabold tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
           ))}
         </div>
         {!pages ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : shown.length === 0 ? (
           <Card><div className="py-8 text-center text-sm text-slate-500">{meta.offCount ? <>Có {meta.offCount} page nhưng đang <b>tắt</b> bên Văn phòng AI. Vào <b>Văn phòng AI → Kết nối → Facebook</b> bật công tắc page cần theo dõi.</> : <>Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</>}</div></Card>
         ) : (
           <>
-          <div className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {shown.filter((p) => !isIdle(p)).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
           </div>
           {shown.some(isIdle) && (
             <details className="group px-3 sm:px-0">
               <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {shown.filter(isIdle).length} page không hoạt động trong kỳ này (không có tiếp cận / lượt xem)</summary>
-              <div className="mt-2 grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-3">{shown.filter(isIdle).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}</div>
+              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{shown.filter(isIdle).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}</div>
             </details>
           )}
           </>

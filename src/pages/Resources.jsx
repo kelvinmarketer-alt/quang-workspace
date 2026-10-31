@@ -400,9 +400,9 @@ export default function Resources() {
   const toggleGroup = (cid) => setOpenGroups((s) => { const n = new Set(s); n.has(cid) ? n.delete(cid) : n.add(cid); return n; });
 
   return (
-    <div className="space-y-4">
+    <div className="bento space-y-4 p-3 sm:p-5">
       {/* Hero */}
-      <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white shadow-xl sm:rounded-2xl sm:p-5">
+      <div className="overflow-hidden rounded-[1.4rem] bg-gradient-to-br from-slate-900 to-indigo-900 p-4 text-white shadow-xl sm:p-5">
         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-200"><FolderKanban size={14} /> Tài nguyên & Tài liệu</div>
         <div className="mt-1 text-3xl font-extrabold">{resources.length}</div>
         <div className="mt-0.5 text-xs text-indigo-100/80">link tài liệu online của mọi dự án · bấm để mở / copy</div>
