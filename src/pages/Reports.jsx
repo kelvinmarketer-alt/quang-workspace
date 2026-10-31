@@ -192,7 +192,7 @@ function TodoCard({ list, miss, loading }) {
   const TONE_I = { rose: "bg-rose-50 text-rose-600", amber: "bg-amber-50 text-amber-700", indigo: "bg-indigo-50 text-indigo-600" };
   return (
     <div className="card !p-4">
-      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="text-[11.5px] text-slate-400">rút từ ô đỏ, việc trễ, thiếu đo lường</span></div>
+      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="hidden text-[11.5px] text-slate-400 sm:inline">rút từ ô đỏ, việc trễ, thiếu đo lường</span></div>
       <div className="grid gap-2 md:grid-cols-3">
         {top.map((x, i) => (
           <button key={i} type="button" onClick={() => (x.id ? nav(`/bao-cao/${x.id}`) : document.getElementById("do-luong")?.scrollIntoView({ behavior: "smooth", block: "center" }))} className="flex gap-2.5 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100">

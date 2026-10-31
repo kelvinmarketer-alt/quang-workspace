@@ -294,7 +294,7 @@ function ThemeButton() {
         <Palette size={17} />
       </button>
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
+        <div className="fixed inset-x-3 top-16 z-50 rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-72">
           <div className="px-2.5 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Giao diện tối</div>
           {SKINS.map((x) => <Opt key={x.id} on={t === "dark" && skin === x.id} onClick={() => setSkin(x.id)} sw={x.sw} label={x.label} sub={x.sub} />)}
           <div className="mt-1 border-t border-slate-100 pt-1">
@@ -386,7 +386,7 @@ function Notifications() {
           : (items.length > 0 || miss.length > 0) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
       </button>
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
+        <div className="fixed inset-x-3 top-16 z-50 max-h-[80vh] overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-none sm:w-80 sm:overflow-hidden">
           {officeOk && (
             <div className="border-b border-slate-100">
               <div className="flex items-center gap-2 px-4 py-3">

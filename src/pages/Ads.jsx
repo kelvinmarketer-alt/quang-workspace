@@ -575,7 +575,7 @@ function AdsTodo({ diag, onPick }) {
   if (!top.length) return null;
   return (
     <Card className="!p-4">
-      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="text-[11.5px] text-slate-400">từ bảng chấm điểm</span></div>
+      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="hidden text-[11.5px] text-slate-400 sm:inline">từ bảng chấm điểm</span></div>
       <div className="grid gap-2 md:grid-cols-3">{top.map((x, i) => (
         <button key={i} type="button" onClick={() => onPick(x.id)} className="flex gap-2.5 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100">
           <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[12px] font-extrabold ${x.tone}`}>{i + 1}</span>
