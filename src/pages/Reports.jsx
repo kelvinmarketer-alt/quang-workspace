@@ -191,7 +191,7 @@ function LinkEditor({ data }) {
       {custs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
     </select>
   );
-  const unl = (data?.web || []).filter((s) => !L.web[s.domain]).length + (data?.pages || []).filter((p) => !L.page[p.id]).length;
+  const unl = (data?.web || []).filter((s) => !L.web[s.domain] && links.web?.[s.domain] !== "none").length + (data?.pages || []).filter((p) => !L.page[p.id] && links.page?.[p.id] !== "none").length; // "Không thuộc khách nào" = đã xử lý
   return (
     <div className="card no-print p-0">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-4 text-left">
