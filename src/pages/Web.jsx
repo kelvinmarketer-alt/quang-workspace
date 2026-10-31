@@ -10,6 +10,7 @@ import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 import { downloadCSV } from "../lib/format.js";
 import InfoTip from "../components/InfoTip.jsx";
+import { AnswerCard, Leaderboard, SideDrawer, ViewToggle, loadView, saveView } from "../components/ReportKit.jsx";
 
 // ---------- định dạng ----------
 export const int = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN"));
@@ -535,6 +536,19 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
   );
 }
 
+// Câu trả lời đầu trang: tổng click + web nào đang giảm / tăng mạnh nhất
+function WebAnswer({ sites, sums, sk, tot }) {
+  const L = sites.map((s) => ({ s, x: sums[sk(s)] })).filter((o) => o.x?.gsc);
+  if (!L.length) return <AnswerCard eyebrow="Website · Search Console + GA4" title="Đang lấy số các web…" />;
+  const d = (o) => pctChange(o.x.gsc.cur.clicks, o.x.gsc.prev.clicks);
+  const down = L.filter((o) => ["down", "warn"].includes(o.x.verdict?.key)).sort((a, b) => (d(a) ?? 0) - (d(b) ?? 0));
+  const best = L.filter((o) => o.x.gsc.cur.clicks >= 20 && d(o) > 10).sort((a, b) => d(b) - d(a))[0];
+  const dt = pctChange(tot.clicks, tot.pClicks);
+  const title = `${int(tot.clicks)} click Google${dt != null ? ` (${dt >= 0 ? "+" : "−"}${Math.abs(Math.round(dt))}%)` : ""}, ${down.length ? `${down.length} web đang giảm` : "không web nào đi xuống"}`;
+  const desc = [down.slice(0, 2).map((o) => `${o.s.domain} ${Math.round(d(o) ?? 0)}% click`).join(" · "), best && `Tăng tốt nhất: ${best.s.domain} +${Math.round(d(best))}%`].filter(Boolean).join(" — ");
+  return <AnswerCard eyebrow={`Website · ${L.length} web có số`} title={title} desc={desc || "Các web giữ ổn định so với kỳ trước."} live="Số Google trễ ~2 ngày" />;
+}
+
 export default function Web() {
   const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
   const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ khoá)
@@ -550,6 +564,7 @@ export default function Web() {
   const [tick, setTick] = useState(0);
   const [aiState, setAiState] = useState({});
   const [showHidden, setShowHidden] = useState(false);
+  const [view, setView] = useState(() => loadView("qws_web_view"));
   const hidden = settings.webHidden || [];
   const gaOverride = settings.webGa || {};
   const hidKey = JSON.stringify(hidden), gaKey = JSON.stringify(gaOverride);
@@ -581,7 +596,6 @@ export default function Web() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sites, R.key, tick]);
 
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [sel]);
 
   const tot = useMemo(() => {
     const t = { clicks: 0, pClicks: 0, users: 0, pUsers: 0, conv: 0, pConv: 0 };
@@ -617,11 +631,15 @@ export default function Web() {
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
-      {site ? (
+      {site && (
+        <SideDrawer onClose={closeSite} label={site.domain}>
         <Detail owner={isOwner} site={site} sum={sums[sk(site)]} R={R} tick={tick} gaProps={meta.gaProps} gaOverride={gaOverride} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
           onGa={(v) => { dropSite(site.domain); setSettings({ webGa: { ...gaOverride, [site.domain]: v } }); }}
           onHide={() => { setHidden([...hidden, site.domain]); closeSite(); }} onBack={closeSite} aiState={aiState} setAiState={setAiState} />
-      ) : (<>
+        </SideDrawer>
+      )}
+      {(<>
+        {sites?.length > 0 && <WebAnswer sites={sites} sums={sums} sk={sk} tot={tot} />}
         <div className="grid grid-cols-3 gap-3">
           {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick], ["Người dùng", tot.users, tot.pUsers, Users], ["Chuyển đổi", tot.conv, tot.pConv, Target]].map(([l, c, p, I]) => (
             <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} className="shrink-0" /> <span className="leading-tight">{l}<span className="hidden sm:inline"> · tất cả web</span></span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
@@ -631,9 +649,18 @@ export default function Web() {
           <Card><div className="py-8 text-center text-sm text-slate-500">Chưa có web nào. Vào <b>Văn phòng AI → Kết nối → Google</b>, thêm email robot vào Search Console / GA4 của web rồi bấm Làm mới.</div></Card>
         ) : (
           <>
+          <div className="flex justify-end"><ViewToggle value={view} onChange={(v) => { setView(v); saveView("qws_web_view", v); }} /></div>
+          {view === "rank" ? (
+            <Leaderboard title="Xếp hạng theo click Google" hint="bấm 1 web để xem chi tiết · màu = xu hướng" loading={sites.some((s) => !sums[sk(s)])}
+              rows={sites.filter((s) => sums[sk(s)] && !isEmpty(s)).map((s) => { const x = sums[sk(s)], g = x.gsc, a = x.ga, vk = x.verdict?.key;
+                return { key: s.domain, name: s.domain, sub: [g && `${k(g.cur.impressions)} hiển thị`, a && `${k(a.cur.activeUsers)} người dùng`, a?.cur.keyEvents ? `${k(a.cur.keyEvents)} chuyển đổi` : null].filter(Boolean).join(" · "),
+                  value: g?.cur.clicks || 0, text: g ? int(g.cur.clicks) : "—", tone: vk === "down" ? "b" : vk === "warn" ? "w" : vk === "up" ? "g" : "a", delta: g ? pctChange(g.cur.clicks, g.prev.clicks) : null,
+                  icon: <Globe size={15} className="shrink-0 text-indigo-500" /> }; }).sort((a, b) => b.value - a.value)}
+              onPick={(r) => openSite(r.key)} />
+          ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {sites.filter((s) => !isEmpty(s)).sort((a, b) => (sums[sk(b)]?.gsc?.cur.clicks ?? -1) - (sums[sk(a)]?.gsc?.cur.clicks ?? -1)).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}
-          </div>
+          </div>)}
           {sites.some(isEmpty) && (
             <details className="group px-3 sm:px-0">
               <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {sites.filter(isEmpty).length} web chưa có số trong kỳ này (Google chưa ghi nhận click / người dùng)</summary>

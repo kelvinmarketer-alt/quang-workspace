@@ -11,6 +11,7 @@ import { GOALS, withGoal, goalBaselines, judgeGoal } from "../lib/adsGoals.js";
 import { todayISO, fmtShort, fmtNum, fmtPct, downloadCSV } from "../lib/format.js";
 import { RangePicker, usePeriod, makePeriod, useSort, sortRows, SortTh, CsvButton } from "./Web.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
+import { AnswerCard, Leaderboard, SideDrawer, ViewToggle, loadView, saveView } from "../components/ReportKit.jsx";
 
 // ---------- định dạng (kiểu Việt: dấu phẩy thập phân, giống Website / Fanpage) ----------
 const vnd = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN") + "đ");
@@ -551,6 +552,50 @@ function AccountCard({ a, since, until, onChanged, goalBase, goalErr, onRetryGoa
   );
 }
 
+// ---------- tầng 1 + 2 (01/11): câu trả lời, xếp hạng giá/kết quả có vạch mốc, 3 việc nên làm ----------
+const V_TONE = { great: "g", good: "g", ok: "g", warn: "w", fatigue: "w", thin: "n", bad: "b", burn: "b", off: "n" };
+function AdsAnswer({ diag, tot, group, live }) {
+  const rows = (diag?.accounts || []).filter((x) => x.spend > 0);
+  if (!diag) return <AnswerCard eyebrow="Quảng cáo" title="Đang lấy số quảng cáo…" />;
+  const bad = rows.filter((x) => ["bad", "burn"].includes(x.verdict?.key)), good = rows.filter((x) => ["great", "good", "ok"].includes(x.verdict?.key));
+  const title = group === "conv"
+    ? `Chi ${fmtShort(tot.spend)} cho ${int(tot.results)} kết quả, ${bad.length ? `${bad.length} tài khoản vượt mốc giá` : "không tài khoản nào vượt mốc"}`
+    : `Chi ${fmtShort(tot.spend)}, tiếp cận ${fmtShort(tot.reach)} người`;
+  const desc = [bad.slice(0, 2).map((x) => `${x.name}${x.verdict.reason ? `: ${x.verdict.reason}` : ""}`).join(" · "), good.length ? `${good.length} tài khoản trong mốc` : null].filter(Boolean).join(" — ");
+  return <AnswerCard eyebrow={`Quảng cáo · nhóm ${group === "conv" ? "Chuyển đổi" : "Thương hiệu"}`} title={title} desc={desc} live={live ? "Tự làm mới 5 phút/lần" : null} />;
+}
+function AdsTodo({ diag, onPick }) {
+  const items = [];
+  for (const x of diag?.accounts || []) {
+    for (const c of x.cut || []) items.push({ w: (c.spend || 0) + 1e6, id: x.id, t: `${x.name}: giảm/tắt ${c.name}`, s: `${c.results ? vnd(c.cpr) + "/KQ" : "0 kết quả"} · đã tiêu ${vnd(c.spend)}`, tone: "bg-rose-50 text-rose-600" });
+    for (const c of x.scale || []) items.push({ w: c.spend || 0, id: x.id, t: `${x.name}: dồn ngân sách ${c.name}`, s: `${vnd(c.cpr)}/KQ · ${dec(c.results)} kết quả`, tone: "bg-emerald-50 text-emerald-700" });
+    if (["bad", "burn"].includes(x.verdict?.key) && !(x.cut || []).length) items.push({ w: x.spend, id: x.id, t: `${x.name}: xem lại`, s: x.verdict.reason || x.verdict.label, tone: "bg-amber-50 text-amber-700" });
+  }
+  const top = items.sort((a, b) => b.w - a.w).slice(0, 3);
+  if (!top.length) return null;
+  return (
+    <Card className="!p-4">
+      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="text-[11.5px] text-slate-400">từ bảng chấm điểm</span></div>
+      <div className="grid gap-2 md:grid-cols-3">{top.map((x, i) => (
+        <button key={i} type="button" onClick={() => onPick(x.id)} className="flex gap-2.5 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100">
+          <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[12px] font-extrabold ${x.tone}`}>{i + 1}</span>
+          <span className="min-w-0"><span className="block text-[13px] font-bold text-slate-800">{x.t}</span><span className="block truncate text-[11.5px] text-slate-400">{x.s}</span></span>
+        </button>))}</div>
+    </Card>
+  );
+}
+function AdsRank({ diag, group, onPick }) {
+  const rows = (diag?.accounts || []).filter((x) => x.spend > 0);
+  const conv = group === "conv";
+  const val = (x) => (conv ? x.cpr : x.brand?.costPer1kReach) || 0;
+  const max = Math.max(...rows.map((x) => Math.max(val(x), conv ? x.baseline?.value || 0 : 0)), 1) * 1.05;
+  const list = rows.map((x) => ({ key: x.id, name: x.name, sub: [x.platform === "google" ? "Google" : "Meta", x.verdict?.label, conv ? `${dec(x.results)} KQ · chi ${fmtShort(x.spend)}` : `${int(x.brand?.reach)} tiếp cận`].filter(Boolean).join(" · "),
+    value: val(x), text: val(x) ? fmtShort(val(x)) : "—", tone: V_TONE[x.verdict?.key] || "a", delta: conv ? x.deltas?.cpr : x.deltas?.cpm, deltaGood: (conv ? x.deltas?.cpr : x.deltas?.cpm) <= 0,
+    mark: conv && x.baseline?.value ? x.baseline.value / max : null, rank: V_RANK[x.verdict?.key] ?? 8 }))
+    .sort((a, b) => b.rank - a.rank || b.value - a.value);
+  return <Leaderboard title={conv ? "Giá / kết quả theo tài khoản" : "Giá / 1.000 người tiếp cận"} hint={conv ? "vạch dọc = mốc giá · xấu nhất lên đầu · bấm để xem chiến dịch" : "bấm để xem chiến dịch"} rows={list} max={max} onPick={(r) => onPick(r.key)} empty="Không tài khoản nào chạy trong kỳ" />;
+}
+
 function sumGroup(list) {
   const ok = list.filter((a) => !a.error && (!a.currency || a.currency === "VND"));
   const s = { spend: 0, results: 0, impressions: 0, reach: 0, msgs: 0, leads: 0, gconv: 0 };
@@ -584,6 +629,8 @@ export default function Ads() {
   const [syncing, setSyncing] = useState(false); // tải ngầm
   const [err, setErr] = useState("");
   const [aiState, setAiState] = useState({}); // kết quả AI theo "nhóm|từ|đến" → mỗi kỳ hiện đúng phân tích của nó
+  const [view, setView] = useState(() => loadView("qws_ads_view"));
+  const [openAcc, setOpenAcc] = useState(null); // tài khoản mở trong ngăn chi tiết
   const live = until >= todayISO();
   const stale = !!data && dataKey !== rKey; // số đang hiện là của kỳ khác (đang chờ kỳ mới)
   const reqRef = useRef(0);
@@ -673,13 +720,15 @@ export default function Ads() {
         {err && <div className="mt-2 rounded-xl bg-rose-50 p-2 text-xs text-rose-700">Lỗi tải số liệu: {err}</div>}
       </Card>
 
+      <AdsAnswer diag={diag} tot={tot} group={group} live={live} />
       <AlertsPanel tick={data?.updatedAt} />
 
       <div className="flex flex-wrap items-center gap-2 px-3 sm:px-0">
         {[["conv", "Chuyển đổi", Target], ["brand", "Thương hiệu", Megaphone]].map(([k, l, I]) => (
           <button key={k} onClick={() => setGroup(k)} className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold ${group === k ? "bg-white text-slate-900 shadow ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/60"}`}><I size={15} />{l}</button>
         ))}
-        {stale && <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">{loading ? <><Loader2 size={12} className="animate-spin" /> Đang tải…</> : "Đang hiện số của kỳ khác"}</span>}
+        <span className="ml-auto"><ViewToggle value={view} onChange={(v) => { setView(v); saveView("qws_ads_view", v); }} /></span>
+        {stale && <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">{loading ? <><Loader2 size={12} className="animate-spin" /> Đang tải…</> : "Đang hiện số của kỳ khác"}</span>}
       </div>
 
       {/* Đang tải kỳ mới → làm mờ số cũ để không nhầm là số của kỳ vừa chọn */}
@@ -711,12 +760,20 @@ export default function Ads() {
           <AiReport r={ai.text} />
         </Card>
 
-        <Scorecard diag={diag} onWeek={() => setPeriod(makePeriod("7d"))} />
+        <AdsTodo diag={diag} onPick={setOpenAcc} />
+        {view === "rank" ? <AdsRank diag={diag} group={group} onPick={setOpenAcc} /> : <Scorecard diag={diag} onWeek={() => setPeriod(makePeriod("7d"))} />}
 
         {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
         {data && !data.accounts?.length && <Card><div className="text-sm text-slate-500">Chưa có tài khoản quảng cáo nào. Vào <b>Cài đặt → Quảng cáo — tài khoản Meta & Google</b> để dán token và chọn tài khoản.</div></Card>}
-        {accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} goalBase={goalBase} goalErr={goalErr[a.id]} onRetryGoals={() => fetchGoals(a.id)} onChanged={() => load({ force: true, silent: true })} />)}
+        {view === "cards" && accounts.map((a) => <AccountCard key={a.id} a={a} since={since} until={until} goalBase={goalBase} goalErr={goalErr[a.id]} onRetryGoals={() => fetchGoals(a.id)} onChanged={() => load({ force: true, silent: true })} />)}
       </div>
+      {openAcc && (() => { const a = accounts.find((x) => x.id === openAcc); const sc = diag?.accounts?.find((x) => x.id === openAcc); if (!a) return null;
+        return (
+          <SideDrawer onClose={() => setOpenAcc(null)} label={a.name}>
+            {sc && <Scorecard diag={{ ...diag, accounts: [sc] }} onWeek={() => setPeriod(makePeriod("7d"))} />}
+            <AccountCard a={a} since={since} until={until} goalBase={goalBase} goalErr={goalErr[a.id]} onRetryGoals={() => fetchGoals(a.id)} onChanged={() => load({ force: true, silent: true })} />
+          </SideDrawer>
+        ); })()}
     </div>
   );
 }

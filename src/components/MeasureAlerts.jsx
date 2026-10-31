@@ -40,7 +40,7 @@ export function MeasurePanel({ items, projects = [] }) {
   const skipped = Object.keys(skip).map((id) => projects.find((p) => p.id === id)).filter(Boolean);
   if (!items.length && !skipped.length) return null;
   return (
-    <div className="card no-print p-4">
+    <div id="do-luong" className="card no-print p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Gauge size={16} className="text-amber-500" />
         <span className="text-sm font-extrabold text-slate-800">{items.length ? `${items.length} job chưa gắn đo lường` : "Mọi job đang chạy đã gắn đo lường"}</span>

@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
 import Expenses from "./Expenses.jsx";
+import { AnswerCard } from "../components/ReportKit.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -65,6 +66,31 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
         <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg sm:h-11 sm:w-11 ${TONES[tone]}`}><Icon size={16} className="sm:hidden" /><Icon size={20} className="hidden sm:block" /></div>
       </div>
     </div>
+  );
+}
+
+function Waterfall({ rev, gp, op, opN, net, prevNet }) {
+  const max = Math.max(rev, 1);
+  const rows = [
+    { l: "Doanh thu", v: rev, left: 0, w: rev, c: "from-indigo-400 to-indigo-600", t: "text-slate-800" },
+    { l: "− Chi phí job (tiền chạy QC, CTV…)", v: -(rev - gp), left: gp, w: rev - gp, c: "from-amber-300 to-amber-500", t: "text-amber-600" },
+    { l: "= Lợi nhuận gộp", v: gp, left: 0, w: gp, c: "from-emerald-300 to-emerald-500", t: "text-emerald-600" },
+    { l: `− Chi vận hành (${opN} khoản)`, v: -op, left: Math.max(0, net), w: op, c: "from-rose-300 to-rose-500", t: "text-rose-500" },
+    { l: "= Lợi nhuận ròng", v: net, left: 0, w: Math.max(0, net), c: "from-sky-400 to-indigo-500", t: "text-indigo-600", end: true },
+  ];
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Từ doanh thu đến lãi ròng</h3>{prevNet != null && <span className="text-[12px] text-slate-400">lãi ròng kỳ trước {formatShort(prevNet)}</span>}</div>
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.l} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_7.5rem]">
+            <span className={`truncate text-[13px] ${r.end ? "font-extrabold" : "font-semibold"} text-slate-700`}>{r.l}</span>
+            <span className="relative col-span-2 row-start-2 h-3.5 rounded-full bg-slate-100 sm:col-span-1 sm:row-start-1"><span className={`bar-x absolute inset-y-0 rounded-full bg-gradient-to-r ${r.c}`} style={{ left: `${(r.left / max) * 100}%`, width: `${Math.max(0.8, (r.w / max) * 100)}%` }} /></span>
+            <span className={`text-right text-[13.5px] font-extrabold tabular-nums ${r.t}`}>{r.v < 0 ? "−" + formatShort(-r.v) : formatShort(r.v)}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
@@ -137,6 +163,11 @@ function KetoanReport() {
         </div>
       </Card>
 
+      <AnswerCard eyebrow={`Kế toán · ${fmtDateVI(from)} → ${fmtDateVI(to)}`}
+        title={cur.revenue ? `Lãi ròng ${formatShort(netProfit)} trên ${formatShort(cur.revenue)} doanh thu` : "Chưa có phiếu thu trong kỳ này"}
+        desc={cur.revenue ? [`Mỗi 100 đồng doanh thu giữ lại ${Math.round((netProfit / cur.revenue) * 100)} đồng`, compare && prevNet ? `lãi ròng ${netProfit >= prevNet ? "tăng" : "giảm"} ${Math.abs(Math.round(((netProfit - prevNet) / Math.abs(prevNet)) * 100))}% so kỳ trước` : null, cur.debt > 0 ? `còn ${formatShort(cur.debt)} chưa thu` : "đã thu đủ"].filter(Boolean).join(" · ") : null}
+        live={`${list.length} đợt thu`} />
+
       {/* Thẻ chỉ số chính (có so sánh) */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <CompareCard icon={Wallet} label="Doanh thu" value={cur.revenue} prev={prevSum.revenue} tone="indigo" compare={compare} />
@@ -145,43 +176,8 @@ function KetoanReport() {
         <CompareCard icon={Receipt} label="Công nợ" value={cur.debt} prev={prevSum.debt} tone="rose" compare={compare} />
       </div>
 
-      {/* Lợi nhuận RÒNG = LN gộp − chi phí vận hành công ty */}
-      <Card className="!p-0 overflow-hidden">
-        {/* MOBILE: 3 dòng gọn */}
-        <div className="divide-y divide-slate-100 sm:hidden">
-          <div className="flex items-center justify-between px-4 py-2.5">
-            <span className="text-[11px] font-bold uppercase text-slate-400">Lợi nhuận gộp (job)</span>
-            <span className="font-extrabold text-emerald-600">{formatShort(cur.grossProfit)}</span>
-          </div>
-          <div className="flex items-center justify-between px-4 py-2.5">
-            <span className="text-[11px] font-bold uppercase text-slate-400">− Chi phí vận hành <span className="font-normal normal-case">({opCost.items.length})</span></span>
-            <span className="font-extrabold text-rose-500">{formatShort(opCost.total)}</span>
-          </div>
-          <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-sky-500 px-4 py-3 text-white">
-            <span className="text-[11px] font-bold uppercase text-indigo-100">= Lợi nhuận ròng</span>
-            <span className="flex items-center gap-2 text-lg font-extrabold">{compare && <Delta cur={netProfit} prev={prevNet} />}{formatShort(netProfit)}</span>
-          </div>
-        </div>
-        {/* DESKTOP: ngang */}
-        <div className="hidden items-stretch sm:grid sm:grid-cols-[1fr_auto_1fr_auto_1.2fr]">
-          <div className="p-5">
-            <div className="text-[11px] font-bold uppercase text-slate-400">Lợi nhuận gộp (từ job)</div>
-            <div className="mt-1 text-xl font-extrabold text-emerald-600">{formatVND(cur.grossProfit)}</div>
-          </div>
-          <div className="grid place-items-center px-2 text-2xl font-bold text-slate-300">−</div>
-          <div className="p-5">
-            <div className="text-[11px] font-bold uppercase text-slate-400">Chi phí vận hành</div>
-            <div className="mt-1 text-xl font-extrabold text-rose-500">{formatVND(opCost.total)}</div>
-            <div className="text-[11px] text-slate-400">{opCost.items.length} khoản trong kỳ</div>
-          </div>
-          <div className="grid place-items-center px-2 text-2xl font-bold text-slate-300">=</div>
-          <div className="bg-gradient-to-br from-indigo-600 to-sky-500 p-5 text-white">
-            <div className="text-[11px] font-bold uppercase text-indigo-100">Lợi nhuận ròng</div>
-            <div className="mt-1 text-2xl font-extrabold">{formatVND(netProfit)}</div>
-            {compare && <div className="mt-0.5"><Delta cur={netProfit} prev={prevNet} /></div>}
-          </div>
-        </div>
-      </Card>
+      {/* Thác lợi nhuận: Doanh thu → chi phí job → LN gộp → chi vận hành → LN ròng (thanh mọc theo thứ tự) */}
+      <Waterfall rev={cur.revenue} gp={cur.grossProfit} op={opCost.total} opN={opCost.items.length} net={netProfit} prevNet={compare ? prevNet : null} />
 
       {/* Chỉ số phụ */}
       <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4 sm:p-5">

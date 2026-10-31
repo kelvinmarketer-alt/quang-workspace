@@ -396,3 +396,10 @@ html.theme-dark .animate-pulse::after { background: linear-gradient(90deg, trans
   .motion-on .rv-in *, .tab-active, .animate-pulse::after { animation: none !important; }
   .bento .card:hover { translate: none; }
 }
+
+/* Ngăn chi tiết (ReportKit SideDrawer) trượt từ phải */
+@keyframes qwsDrawerIn { from { transform: translateX(100%); } }
+@keyframes qwsFade { from { opacity: 0; } }
+.qws-drawer { animation: qwsDrawerIn .45s cubic-bezier(.2, .8, .2, 1) both; }
+.qws-scrim { animation: qwsFade .3s ease both; }
+@media (prefers-reduced-motion: reduce) { .qws-drawer, .qws-scrim { animation: none; } }

@@ -8,6 +8,7 @@ import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure } from "../lib/reports.js";
 import { MeasurePanel } from "../components/MeasureAlerts.jsx";
+import { AnswerCard } from "../components/ReportKit.jsx";
 import { allInstallments } from "../lib/selectors.js";
 import { aiBrandReport } from "../lib/ai.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
@@ -101,6 +102,7 @@ function ReportMatrix() {
         </div>
       </div>
 
+      <MatrixAnswer list={list} loading={loading} miss={miss} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Thương hiệu · job đang chạy" value={`${active.length} · ${active.reduce((a, r) => a + r.jobs.length, 0)}`} sub={`${rows.length} khách đang hoạt động`} />
         <Tile label="Đạt chỉ tiêu" value={list.filter((r) => r.state === "g").length} sub="không kênh nào dưới chỉ tiêu" tone="text-emerald-600" />
@@ -108,6 +110,7 @@ function ReportMatrix() {
         <Tile label={`Báo cáo tháng ${Number(monthKey().slice(5))} đã gửi`} value={`${sent}/${active.length || rows.length}`} sub="bấm thương hiệu để soạn & đánh dấu" />
       </div>
 
+      <TodoCard list={list} miss={miss} loading={loading} />
       {rep.data?.errors?.length > 0 && <div className="flex items-start gap-2 rounded-2xl bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-800"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span>Một số kênh chưa lấy được số: {rep.data.errors.join(" · ")}</span></div>}
 
       <div className="card overflow-hidden p-0">
@@ -162,6 +165,42 @@ function ReportMatrix() {
       </div>
       <MeasurePanel items={miss} projects={projects} />
       <LinkEditor data={rep.data} />
+    </div>
+  );
+}
+
+// Câu trả lời đầu trang + "Việc nên làm hôm nay" (tự rút từ ô đỏ / việc trễ / thiếu đo lường — không gọi AI)
+const CH = { ads: "quảng cáo", web: "website", fp: "fanpage", seo: "SEO" };
+function MatrixAnswer({ list, loading, miss }) {
+  if (loading) return <AnswerCard eyebrow="Trung tâm báo cáo" title="Đang lấy số các kênh…" />;
+  const bad = list.filter((r) => r.state === "b"), good = list.filter((r) => r.state === "g");
+  const why = (r) => Object.entries(r.cells).filter(([, x]) => x.t === "b").map(([k]) => CH[k]).join(", ");
+  const desc = [bad.slice(0, 2).map((r) => `${r.name} tụt ${why(r) || "nhiều việc trễ"}`).join(" · "), miss.length ? `${miss.length} job chưa gắn đo lường` : null].filter(Boolean).join(" · ");
+  return <AnswerCard eyebrow="Trung tâm báo cáo · 30 ngày" title={bad.length ? `${bad.length} thương hiệu cần xử lý, ${good.length} đang đạt chỉ tiêu` : `Cả ${list.length} thương hiệu không có kênh nào dưới chỉ tiêu`} desc={desc} live="Số các kênh nhớ 20 phút" />;
+}
+function TodoCard({ list, miss, loading }) {
+  const nav = useNavigate();
+  if (loading) return null;
+  const items = [];
+  for (const r of list) {
+    for (const [k, x] of Object.entries(r.cells)) if (x.t === "b") items.push({ w: 3 + (x.d != null ? Math.min(3, Math.abs(x.d) / 20) : 0), id: r.id, t: `${r.name}: xem lại ${CH[k]}`, s: `${x.v || ""}${x.d != null ? ` · ${x.d >= 0 ? "+" : "−"}${Math.abs(Math.round(x.d))}% so kỳ trước` : ""}${x.sub ? ` · ${x.sub}` : ""}`, tone: "rose" });
+    if (r.late) items.push({ w: 2 + r.late, id: r.id, t: `${r.name}: ${r.late} việc trễ hạn`, s: "Mở thương hiệu để xem việc trễ", tone: "amber" });
+  }
+  if (miss.length) items.push({ w: 2.5, to: "#do-luong", t: `Gắn đo lường cho ${miss.length} job`, s: miss.slice(0, 3).map((x) => x.job).join(" · "), tone: "indigo" });
+  const top = items.sort((a, b) => b.w - a.w).slice(0, 3);
+  if (!top.length) return null;
+  const TONE_I = { rose: "bg-rose-50 text-rose-600", amber: "bg-amber-50 text-amber-700", indigo: "bg-indigo-50 text-indigo-600" };
+  return (
+    <div className="card !p-4">
+      <div className="mb-2 flex items-baseline justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Việc nên làm hôm nay</h3><span className="text-[11.5px] text-slate-400">rút từ ô đỏ, việc trễ, thiếu đo lường</span></div>
+      <div className="grid gap-2 md:grid-cols-3">
+        {top.map((x, i) => (
+          <button key={i} type="button" onClick={() => (x.id ? nav(`/bao-cao/${x.id}`) : document.getElementById("do-luong")?.scrollIntoView({ behavior: "smooth", block: "center" }))} className="flex gap-2.5 rounded-2xl bg-slate-50 p-3 text-left transition hover:bg-slate-100">
+            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[12px] font-extrabold ${TONE_I[x.tone]}`}>{i + 1}</span>
+            <span className="min-w-0"><span className="block text-[13px] font-bold text-slate-800">{x.t}</span><span className="block text-[11.5px] text-slate-400">{x.s}</span></span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

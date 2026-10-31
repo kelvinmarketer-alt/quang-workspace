@@ -8,6 +8,7 @@ import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy, pageVe
 import InfoTip from "../components/InfoTip.jsx";
 import { aiPageAnalysis } from "../lib/ai.js";
 import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod } from "./Web.jsx";
+import { AnswerCard, Leaderboard, SideDrawer, ViewToggle, loadView, saveView } from "../components/ReportKit.jsx";
 
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
 const CACHE = new Map();
@@ -209,6 +210,19 @@ function Detail({ owner, p, sum, R, tick, onBack, onHide, aiState, setAiState, a
   );
 }
 
+// Câu trả lời đầu trang: tin nhắn mới + page nào kéo tụt
+function PageAnswer({ shown, sums, tot }) {
+  const L = shown.map((p) => ({ p, x: sums[p.page_id] })).filter((o) => o.x?.cur);
+  if (!L.length) return <AnswerCard eyebrow="Fanpage" title="Đang lấy số các page…" />;
+  const dm_ = pctChange(tot.msg, tot.pMsg);
+  const down = L.filter((o) => ["down", "warn"].includes(pageVerdict(o.x).key)).sort((a, b) => (pctChange(a.x.cur.reach, a.x.prev?.reach) ?? 0) - (pctChange(b.x.cur.reach, b.x.prev?.reach) ?? 0));
+  const top = [...L].sort((a, b) => b.x.cur.messages - a.x.cur.messages).slice(0, 2);
+  const share = tot.msg ? Math.round((top.reduce((s, o) => s + o.x.cur.messages, 0) / tot.msg) * 100) : 0;
+  const title = `${int(tot.msg)} tin nhắn mới${dm_ != null ? ` (${dm_ >= 0 ? "+" : "−"}${Math.abs(Math.round(dm_))}%)` : ""}, ${down.length ? `${down.length} page đang giảm tiếp cận` : "các page giữ ổn định"}`;
+  const desc = [top.length && tot.msg ? `${top.map((o) => o.p.name).join(" và ")} chiếm ${share}% tin nhắn` : null, down.length ? `Giảm mạnh: ${down.slice(0, 2).map((o) => o.p.name).join(", ")}` : null].filter(Boolean).join(" · ");
+  return <AnswerCard eyebrow={`Fanpage · ${L.length} page`} title={title} desc={desc} live="Số hôm nay chốt sau nửa đêm" />;
+}
+
 export default function Fanpage() {
   const { isOwner, ownerId, perms = [], settings = {}, setSettings } = useData();
   const member = !!ownerId && !isOwner; // tài khoản phụ → dữ liệu đi qua máy chủ (không lộ token)
@@ -225,6 +239,7 @@ export default function Fanpage() {
   const [tick, setTick] = useState(0);
   const [aiState, setAiState] = useState({});
   const [showHidden, setShowHidden] = useState(false);
+  const [view, setView] = useState(() => loadView("qws_fb_view"));
   const hidden = settings.fbHidden || [];
   const R = useMemo(() => fbRanges(days), [days]);
 
@@ -247,7 +262,6 @@ export default function Fanpage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, R.key, tick, hidden.join(",")]);
 
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [sel]);
 
   const tot = useMemo(() => {
     const t = { reach: 0, pReach: 0, eng: 0, pEng: 0, msg: 0, pMsg: 0 };
@@ -273,10 +287,14 @@ export default function Fanpage() {
         {err && <div className="mt-2 flex items-center gap-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-600"><AlertTriangle size={14} /> {err}</div>}
       </Card>
 
-      {page ? (
+      {page && (
+        <SideDrawer onClose={closePage} label={page.name}>
         <Detail owner={isOwner} p={page} sum={sums[page.page_id]} R={R} tick={tick} apiKey={settings.openaiKey} aiReady={settings.aiReady ?? !!settings.openaiKey}
           onBack={closePage} onHide={() => { setHidden([...hidden, page.page_id]); closePage(); }} aiState={aiState} setAiState={setAiState} />
-      ) : (<>
+        </SideDrawer>
+      )}
+      {(<>
+        {shown.length > 0 && <PageAnswer shown={shown} sums={sums} tot={tot} />}
         <div className="grid grid-cols-3 gap-3">
           {[["Tiếp cận", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I]) => (
             <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} className="shrink-0" /> <span className="leading-tight">{l}{l === "Tiếp cận" && <span className="hidden sm:inline"> · tất cả page</span>}</span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
@@ -286,9 +304,17 @@ export default function Fanpage() {
           <Card><div className="py-8 text-center text-sm text-slate-500">{meta.offCount ? <>Có {meta.offCount} page nhưng đang <b>tắt</b> bên Văn phòng AI. Vào <b>Văn phòng AI → Kết nối → Facebook</b> bật công tắc page cần theo dõi.</> : <>Chưa có page nào. Vào <b>Văn phòng AI → Kết nối → Facebook</b> để thêm token Business Manager.</>}</div></Card>
         ) : (
           <>
+          <div className="flex justify-end"><ViewToggle value={view} onChange={(v) => { setView(v); saveView("qws_fb_view", v); }} /></div>
+          {view === "rank" ? (
+            <Leaderboard title="Xếp hạng theo tin nhắn mới" hint="bấm 1 page để xem chi tiết · màu = xu hướng tiếp cận" loading={shown.some((p) => !sums[p.page_id])}
+              rows={shown.filter((p) => sums[p.page_id]?.cur && !isIdle(p)).map((p) => { const x = sums[p.page_id], c = x.cur, vk = pageVerdict(x).key;
+                return { key: p.page_id, name: p.name, sub: `${k(c.reach)} tiếp cận · ${k(c.engagement)} tương tác`, value: c.messages || 0, text: int(c.messages), tone: vk === "down" ? "b" : vk === "warn" ? "w" : vk === "up" ? "g" : "a",
+                  delta: pctChange(c.messages, x.prev?.messages), icon: <img src={avatar(p.page_id)} alt="" className="h-7 w-7 shrink-0 rounded-full bg-slate-100" /> }; }).sort((a, b) => b.value - a.value)}
+              onPick={(r) => openPage(r.key)} />
+          ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {shown.filter((p) => !isIdle(p)).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
-          </div>
+          </div>)}
           {shown.some(isIdle) && (
             <details className="group px-3 sm:px-0">
               <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {shown.filter(isIdle).length} page không hoạt động trong kỳ này (không có tiếp cận / lượt xem)</summary>
