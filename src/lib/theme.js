@@ -1,5 +1,5 @@
 // Giao diện sáng / tối TOÀN APP (21/10): class html.theme-dark → index.css đổi biến màu Tailwind (bố cục giữ nguyên).
-// Nhớ theo máy (localStorage qws_theme). Bản cũ chỉ có "Pro" ở module Coin (qws_coin_pro) → tự chuyển sang.
+// Nhớ theo máy (localStorage qws_theme); máy chưa chọn → TỐI. Bản cũ chỉ có "Pro" ở module Coin (qws_coin_pro) → tự chuyển sang.
 import { useEffect, useState } from "react";
 
 const KEY = "qws_theme", subs = new Set();
@@ -7,8 +7,8 @@ const read = () => {
   try {
     const v = localStorage.getItem(KEY);
     if (v === "dark" || v === "light") return v;
-    return localStorage.getItem("qws_coin_pro") === "1" ? "dark" : "light";
-  } catch { return "light"; }
+    return "dark"; // 01/11 sếp chốt: chưa chọn bao giờ → mặc định giao diện tối
+  } catch { return "dark"; }
 };
 let cur = read();
 const apply = () => {

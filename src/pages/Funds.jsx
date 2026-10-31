@@ -921,7 +921,7 @@ function FundsMain() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
-                  <Tooltip formatter={(v, k) => [formatVND(v), k === "thu" ? "LN gộp" : "Đã phân bổ"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "#f8fafc" }} />
+                  <Tooltip formatter={(v, k) => [formatVND(v), k === "thu" ? "LN gộp" : "Đã phân bổ"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                   <Bar dataKey="thu" name="LN gộp" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                   <Bar dataKey="pb" name="Đã phân bổ" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                 </BarChart>
