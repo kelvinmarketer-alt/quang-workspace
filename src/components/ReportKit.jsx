@@ -10,8 +10,8 @@ export function AnswerCard({ eyebrow, title, desc, live, right }) {
   return (
     <div className="card relative overflow-hidden !p-4 sm:!p-5">
       <div className="pointer-events-none absolute -left-16 -top-24 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
-      <div className="relative flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="min-w-0 sm:flex-1">
           {eyebrow && <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{eyebrow}</div>}
           <h2 className="mt-0.5 text-[18px] font-extrabold leading-snug tracking-tight text-slate-900 sm:text-[21px]" style={{ textWrap: "balance" }}>{title}</h2>
           {desc && <p className="mt-1 max-w-3xl text-[13px] text-slate-500">{desc}</p>}
