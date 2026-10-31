@@ -465,7 +465,8 @@ export async function aiBrandReport({ data, apiKey }) {
 LUẬT:
 - Không tự tính lại %: dùng đúng số đã cho ("d_" = % so 30 ngày trước, dương = tăng). Vị trí TB giảm là tốt.
 - Kênh không có số thì bỏ qua, không bịa.
-- "gui_khach" là bản GỬI KHÁCH: TUYỆT ĐỐI không nhắc doanh thu, phí dịch vụ, lợi nhuận, công nợ, chiết khấu của agency. Chỉ nói kết quả kênh và việc tháng tới, giọng lịch sự, xưng "chúng tôi", gọi khách là "anh/chị".
+- "gui_khach" là bản GỬI KHÁCH: TUYỆT ĐỐI không nhắc doanh thu, tiền, phí dịch vụ, lợi nhuận, công nợ của agency hay của khách (kể cả không có số). Chỉ nói kết quả từng kênh (số click, tin nhắn, kết quả quảng cáo, chi phí mỗi kết quả) và việc tháng tới, giọng lịch sự, xưng "chúng tôi", gọi khách là "anh/chị".
+- JSON KHÔNG có số tiền nội bộ; đừng suy đoán doanh thu.
 - Không markdown, không ký tự * hay #. Số lớn viết 1,2k.
 Trả JSON:
 { "tong_quan": "2-3 câu cho chủ agency: thương hiệu đang tốt hay xấu, vì sao",

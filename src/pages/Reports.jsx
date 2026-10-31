@@ -200,7 +200,6 @@ function Brand360({ id }) {
     try {
       const data = { thuong_hieu: r.name, loai: r.type, ky_kenh: `${rep.period.since} → ${rep.period.until}`,
         job: r.jobs.map((j) => ({ ten: j.name, loai: j.category })),
-        noi_bo: { doanh_thu_thang: r.revenue, doanh_thu_thang_truoc: r.prevRevenue, cong_no: r.debt },
         quang_cao: r.ads.map((a) => ({ ten: a.name, nen_tang: a.platform, chi: Math.round(a.spend), ket_qua: a.results, gia_kq: a.results ? Math.round(a.spend / a.results) : null, chi_ky_truoc: a.prevSpend, kq_ky_truoc: a.prevResults, danh_gia: a.verdict?.label })),
         website: r.webs.map((s) => ({ ten: s.domain, click: s.clicks, d_click: s.prevClicks ? Math.round(((s.clicks - s.prevClicks) / s.prevClicks) * 100) : null, hien_thi: s.impressions, vi_tri_tb: s.position, nguoi_dung: s.users, chuyen_doi: s.conv })),
         fanpage: r.pages.map((p) => ({ ten: p.name, tiep_can: p.reach, tin_nhan: p.messages, tin_nhan_ky_truoc: p.prevMessages, tuong_tac: p.engagement })),
