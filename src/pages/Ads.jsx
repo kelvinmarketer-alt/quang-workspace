@@ -585,6 +585,7 @@ function AdsTodo({ diag, onPick }) {
   );
 }
 function AdsRank({ diag, group, onPick }) {
+  if (!diag) return <Leaderboard title="Giá / kết quả theo tài khoản" rows={[]} loading />;
   const rows = (diag?.accounts || []).filter((x) => x.spend > 0);
   const conv = group === "conv";
   const val = (x) => (conv ? x.cpr : x.brand?.costPer1kReach) || 0;
