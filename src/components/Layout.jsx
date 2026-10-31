@@ -1,13 +1,13 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Moon, Sun,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
-import { useTheme } from "../lib/theme.js";
+import { useTheme, useSkin, SKINS } from "../lib/theme.js";
 import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
@@ -265,14 +265,43 @@ function UpdatePill() {
   return <button onClick={() => location.reload()} title="App vừa được cập nhật — bấm để dùng bản mới" className="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-[11px] font-bold text-white shadow animate-pulse"><RefreshCw size={12} /> <span className="hidden sm:inline">Có bản mới · </span>Tải lại</button>;
 }
 
-// Sáng / tối toàn app (lib/theme.js) — nhớ theo máy
+// Giao diện: 4 bộ màu tối + sáng (lib/theme.js) — nhớ theo máy. 01/11 sếp chọn "Than chì & Băng" mặc định, cho đổi màu khi muốn đỡ nhàm
 function ThemeButton() {
   const [t, setT] = useTheme();
-  return (
-    <button type="button" onClick={() => setT(t === "dark" ? "light" : "dark")} title={t === "dark" ? "Giao diện sáng" : "Giao diện tối (Pro)"} aria-label="Đổi giao diện sáng / tối"
-      className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
-      {t === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+  const [skin, setSkin] = useSkin();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const k = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", h); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
+  }, [open]);
+  const Opt = ({ on, onClick, sw, label, sub }) => (
+    <button type="button" onClick={() => { onClick(); setOpen(false); }} aria-pressed={on}
+      className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition ${on ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
+      <span className="flex shrink-0 overflow-hidden rounded-lg ring-1 ring-slate-200">{sw.map((c) => <span key={c} className="h-7 w-3.5" style={{ background: c }} />)}</span>
+      <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-slate-800">{label}</span><span className="block truncate text-[11px] text-slate-400">{sub}</span></span>
+      {on && <Check size={15} className="shrink-0 text-indigo-600" />}
     </button>
+  );
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} title="Đổi giao diện" aria-label="Đổi giao diện" aria-expanded={open}
+        className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+        <Palette size={17} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
+          <div className="px-2.5 pb-1.5 pt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Giao diện tối</div>
+          {SKINS.map((x) => <Opt key={x.id} on={t === "dark" && skin === x.id} onClick={() => setSkin(x.id)} sw={x.sw} label={x.label} sub={x.sub} />)}
+          <div className="mt-1 border-t border-slate-100 pt-1">
+            <Opt on={t === "light"} onClick={() => setT("light")} sw={["#f5f7fb", "#ffffff", "#6366f1"]} label="Sáng" sub="Nền trắng, dùng ban ngày" />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

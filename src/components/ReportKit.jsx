@@ -8,7 +8,7 @@ const FILL = { g: "bg-gradient-to-r from-emerald-400/70 to-emerald-500", w: "bg-
 
 export function AnswerCard({ eyebrow, title, desc, live, right }) {
   return (
-    <div className="card relative overflow-hidden !p-4 sm:!p-5">
+    <div className="qws-answer card relative overflow-hidden !p-4 sm:!p-5">
       <div className="pointer-events-none absolute -left-16 -top-24 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
       <div className="relative flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         <div className="min-w-0 sm:flex-1">

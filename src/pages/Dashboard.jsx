@@ -103,7 +103,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Việc của hôm nay */}
-        <div className="card relative overflow-hidden p-4 sm:p-5 lg:col-span-8">
+        <div className="qws-answer card relative overflow-hidden p-4 sm:p-5 lg:col-span-8">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50 via-transparent to-transparent" />
           <div className="relative">
             <div className="flex flex-wrap items-center justify-between gap-2">
