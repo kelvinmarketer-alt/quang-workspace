@@ -145,13 +145,15 @@ export default function Dashboard() {
           <Feed rows={health} recent={recent} isOwner={isOwner} />
         </div>
 
-        {/* 4 số chính */}
+        {/* 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:contents">
         <Kpi label={`Doanh thu ${year === curY ? `T1–T${curM}` : year}`} value={tot.rev} delta={pctOf(tot.rev, prevTot.rev)} sub={`so ${year - 1}`} spark={shown.map((m) => m.revenue)} color="#6366f1" />
         <Kpi label="Lợi nhuận gộp" value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`${tot.rev ? Math.round((tot.gp / tot.rev) * 100) : 0}% biên`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
         <Kpi label="Công nợ" value={debt} sub={debt > 0 ? "chưa thu" : "không có nợ"} />
         {isOwner
           ? <Kpi label="Chi quảng cáo 30 ngày" value={adsSpend == null ? "…" : adsSpend} delta={adsSpend != null ? pctOf(adsSpend, adsPrev) : null} deltaGood={false} sub="so 30 ngày trước" />
           : <Kpi label="Khách hàng" value={String(customerList.length)} sub="đang quản lý" />}
+        </div>
 
         {/* Sức khoẻ dự án (chủ) / Top khách (tài khoản phụ) */}
         <div className="card p-4 lg:col-span-8">

@@ -279,7 +279,7 @@ export default function Fanpage() {
       ) : (<>
         <div className="grid grid-cols-3 gap-3">
           {[["Tiếp cận", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I]) => (
-            <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} className="shrink-0" /> <span className="truncate">{l}{l === "Tiếp cận" && <span className="hidden sm:inline"> · tất cả page</span>}</span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+            <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} className="shrink-0" /> <span className="leading-tight">{l}{l === "Tiếp cận" && <span className="hidden sm:inline"> · tất cả page</span>}</span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
           ))}
         </div>
         {!pages ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : shown.length === 0 ? (
