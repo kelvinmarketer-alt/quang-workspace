@@ -13,6 +13,8 @@ import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { OFFICE_URL, useOfficeNotifications, useOfficeAccess, officeAgo } from "../lib/office.js";
+import { peekReportData, buildBrandRows, missingMeasure } from "../lib/reports.js";
+import { MeasureList } from "./MeasureAlerts.jsx";
 
 function PushPrompt() {
   const { user } = useAuth();
@@ -318,7 +320,7 @@ function SyncBadge() {
 const OFFICE_TONE = { xong: "bg-emerald-500", can_duyet: "bg-violet-500", loi: "bg-rose-500", tin_nhan: "bg-sky-500", he_thong: "bg-slate-400" };
 
 function Notifications() {
-  const { tasks, family, isOwner } = useData();
+  const { tasks, family, isOwner, customerList = [], projects = [], settings = {} } = useData();
   const officeOk = useOfficeAccess(isOwner);
   const office = useOfficeNotifications(officeOk, !!isOwner);
   const [open, setOpen] = useState(false);
@@ -339,13 +341,19 @@ function Notifications() {
     const dueToday = tasks.filter((t) => t.date === today && t.status !== "done").map((t) => ({ date: t.date, title: t.title, type: "task" }));
     return [...overdue, ...dueToday, ...ev].slice(0, 8);
   }, [tasks, family, today]);
+  // Job chưa gắn đo lường — dùng số kênh đang nhớ (Tổng quan / Báo cáo đã tải), không tải thêm
+  const miss = useMemo(() => {
+    const data = isOwner ? peekReportData() : null;
+    if (!data?.at) return [];
+    return missingMeasure(buildBrandRows({ customers: customerList, projects, tasks, data, links: settings.reportLinks || {} }), data, settings.measureSkip || {});
+  }, [isOwner, open, customerList, projects, tasks, settings.reportLinks, settings.measureSkip]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)} aria-label="Thông báo" className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:text-indigo-600">
         <Bell size={18} />
         {office.unread > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white">{office.unread}</span>
-          : items.length > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
+          : (items.length > 0 || miss.length > 0) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
       </button>
       {open && (
         <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-2xl">
@@ -371,6 +379,12 @@ function Notifications() {
                   </a>
                 ))}
               </div>
+            </div>
+          )}
+          {miss.length > 0 && (
+            <div className="border-b border-slate-100 px-3 pb-3">
+              <div className="px-1 py-3 text-sm font-extrabold text-slate-800">Chưa gắn đo lường · {miss.length} job</div>
+              <MeasureList items={miss} max={3} onPick={() => setOpen(false)} />
             </div>
           )}
           <div className="border-b border-slate-50 px-4 py-3 text-sm font-extrabold text-slate-800">Nhắc nhở · 7 ngày tới</div>

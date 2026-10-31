@@ -8,10 +8,11 @@ import { loadChannelLists, setAdsCustomer, guessCustomer, siteKey, dropReportCac
 
 let CACHE = null; // 1 lần tải / phiên mở app (danh sách kênh ít đổi)
 
-export default function CustomerChannels({ customer }) {
+export default function CustomerChannels({ customer, startOpen = false }) {
   const { customerList = [], settings = {}, setSettings, setToast } = useData();
   const [lists, setLists] = useState(CACHE);
-  const [edit, setEdit] = useState(false);
+  const [edit, setEdit] = useState(startOpen);
+  useEffect(() => { if (startOpen) setEdit(true); }, [startOpen]);
   const [busy, setBusy] = useState(null);
   useEffect(() => {
     if (CACHE) return;

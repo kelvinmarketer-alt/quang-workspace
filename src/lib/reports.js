@@ -96,6 +96,12 @@ export async function setAdsCustomer(a, cust) {
   dropReportCache();
 }
 
+// Bản số liệu đang nhớ (không tải mới) — cho chuông thông báo
+export function peekReportData() {
+  if (MEM) return MEM;
+  try { return JSON.parse(sessionStorage.getItem(CK) || "null"); } catch { return null; }
+}
+
 // Hook: số liệu thô các kênh (chỉ chủ). reload(true) = bỏ bộ nhớ, tải lại.
 export function useReportData(days = 30) {
   const { isOwner, settings = {}, adsResults } = useData();
@@ -165,4 +171,22 @@ export function buildBrandRows({ customers = [], projects = [], tasks = [], data
     return { c, id: c.id, name: c.name, type: c.type || "remote", logo: c.logo, jobs, cps, revenue: cur.revenue, prevRevenue: prev.revenue, profit: cur.grossProfit, debt, late,
       ads, webs, pages, cells, rep: repCell, score, state, spend, results };
   });
+}
+
+// Job đang chạy chưa gắn kênh đo lường (01/11 sếp yêu cầu): ADS cần TK quảng cáo, Seo/Web/Landing cần website,
+// Lương cần ít nhất 1 kênh. App/Coaching/Khác không bắt buộc. Sếp bấm "Không cần đo" → settings.measureSkip[projectId] → không báo nữa.
+const NEED = { ADS: ["ads", "tài khoản quảng cáo"], Seo: ["web", "website (Search Console)"], Web: ["web", "website (Google)"], Landing: ["web", "website (Google)"], "Lương": ["any", "kênh đo nào (quảng cáo / website / fanpage)"] };
+export function missingMeasure(rows, data, skip = {}) {
+  if (!data?.at) return [];
+  const err = (data.errors || []).join(" ");
+  const ok = { ads: !/Quảng cáo/.test(err), web: !/Website/.test(err), any: !err };
+  const out = [];
+  for (const r of rows) for (const p of r.jobs) {
+    if ((p.status && p.status !== "doing") || skip[p.id]) continue;
+    const n = NEED[p.category];
+    if (!n || !ok[n[0]]) continue;
+    const has = n[0] === "ads" ? r.ads.length : n[0] === "web" ? r.webs.length : r.ads.length + r.webs.length + r.pages.length;
+    if (!has) out.push({ id: p.id, custId: r.id, brand: r.name, job: p.name, cat: p.category, need: n[1] });
+  }
+  return out;
 }

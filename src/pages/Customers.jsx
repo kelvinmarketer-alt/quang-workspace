@@ -135,7 +135,8 @@ export default function Customers() {
   const [projModal, setProjModal] = useState(null);   // project add/edit
   const [projDrawerId, setProjDrawerId] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
-  const [hi, setHi] = useState(null); // khách đang được làm nổi (mở từ link / ô tìm kiếm)
+  const [hi, setHi] = useState(null);
+  const [chanOpen, setChanOpen] = useState(null); // khách mở sẵn ô "Gắn kênh" (từ thông báo chưa gắn đo lường) // khách đang được làm nổi (mở từ link / ô tìm kiếm)
   const [sp, setSp] = useSearchParams();
 
   // Gom dự án theo khách (sort: đang làm trước → hoạt động gần nhất)
@@ -189,10 +190,11 @@ export default function Customers() {
       setQ(""); setTypeF((c.active ?? true) ? "all" : "off");
       setExpanded((s) => new Set(s).add(c.id));
       setHi(c.id);
+      if (sp.get("kenh")) setChanOpen(c.id);
       setTimeout(() => document.getElementById("cust-" + c.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80);
       setTimeout(() => setHi(null), 2500);
     }
-    const n = new URLSearchParams(sp); n.delete("id"); n.delete("project"); setSp(n, { replace: true });
+    const n = new URLSearchParams(sp); n.delete("id"); n.delete("project"); n.delete("kenh"); setSp(n, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qId, qProj, projects, customerList]);
 
@@ -309,7 +311,7 @@ export default function Customers() {
                       {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
                       {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
-                    {isOwner && <CustomerChannels customer={c} />}
+                    {isOwner && <CustomerChannels customer={c} startOpen={chanOpen === c.id} />}
                     {c.projects.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>
                     ) : (

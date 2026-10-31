@@ -6,7 +6,8 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { RefreshCw, Printer, Sparkles, Loader2, ChevronDown, ArrowLeft, Check, Copy, Link2, ExternalLink, AlertTriangle, Columns3 } from "lucide-react";
 import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { useReportData, buildBrandRows, linkChannels, monthKey, squash } from "../lib/reports.js";
+import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure } from "../lib/reports.js";
+import { MeasurePanel } from "../components/MeasureAlerts.jsx";
 import { allInstallments } from "../lib/selectors.js";
 import { aiBrandReport } from "../lib/ai.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
@@ -62,7 +63,8 @@ const COLS = [["rev", "Doanh thu tháng"], ["ads", "Quảng cáo"], ["web", "Web
 
 function ReportMatrix() {
   const { rows, rep } = useRows();
-  const { settings = {}, setSettings } = useData();
+  const { settings = {}, setSettings, projects = [] } = useData();
+  const miss = missingMeasure(rows, rep.data, settings.measureSkip || {});
   const nav = useNavigate();
   const [f, setF] = useState("att");
   const [pick, setPick] = useState(false);
@@ -158,6 +160,7 @@ function ReportMatrix() {
           </table>
         </div>
       </div>
+      <MeasurePanel items={miss} projects={projects} />
       <LinkEditor data={rep.data} />
     </div>
   );

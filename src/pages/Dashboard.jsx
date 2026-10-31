@@ -11,7 +11,8 @@ import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, allIn
 import { MONTHS_VI, fmtDateVI, todayISO } from "../lib/format.js";
 import { generateCalendarEvents } from "../lib/events.js";
 import { lunarInfo } from "../lib/lunar.js";
-import { useReportData, buildBrandRows } from "../lib/reports.js";
+import { useReportData, buildBrandRows, missingMeasure } from "../lib/reports.js";
+import { MeasureList } from "../components/MeasureAlerts.jsx";
 import TodayPanel, { useToday } from "../components/today/TodayPanel.jsx";
 import { BrandAvatar } from "./Reports.jsx";
 
@@ -142,7 +143,7 @@ export default function Dashboard() {
               {label && <Badge tone={tone}>{label}</Badge>}
             </div>); })}
             {!upcoming.length && <div className="text-[13px] text-slate-400">Không có sự kiện 30 ngày tới.</div>}</div>
-          <Feed rows={health} recent={recent} isOwner={isOwner} />
+          <Feed rows={health} recent={recent} isOwner={isOwner} miss={isOwner ? missingMeasure(rows, rep.data, settings.measureSkip || {}) : []} />
         </div>
 
         {/* 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột */}
@@ -225,7 +226,7 @@ function MiniTile({ to, icon: Icon, label, value, sub, tone = "text-slate-900" }
 }
 
 // Thông báo: Cảnh báo (quảng cáo 48 giờ + kênh đi xuống) · Thu tiền gần đây
-function Feed({ rows, recent, isOwner }) {
+function Feed({ rows, recent, isOwner, miss = [] }) {
   const [pick, setTab] = useState(null), tab = pick || (isOwner ? "warn" : "money");
   const [alerts, setAlerts] = useState(null);
   useEffect(() => {
@@ -239,10 +240,11 @@ function Feed({ rows, recent, isOwner }) {
       <div className="mb-2 flex gap-4 border-b border-slate-100">{tabs.map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 pb-1.5 text-[12.5px] font-bold ${tab === k ? "border-indigo-500 text-slate-900" : "border-transparent text-slate-400"}`}>{l}</button>)}</div>
       {tab === "warn" ? (
         <div className="space-y-1.5">
+          {miss.length > 0 && <MeasureList items={miss} max={2} />}
           {down.slice(0, 3).map((x) => <Link key={x.key} to={`/bao-cao/${x.id}`} className="flex gap-2 rounded-xl bg-rose-50/60 px-2.5 py-2 text-[12.5px] text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />{x.text}</Link>)}
           {alerts == null ? <div className="flex items-center gap-2 py-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tải cảnh báo…</div>
             : alerts.slice(0, 4).map((x) => <Link key={x.key} to="/quang-cao" className="flex gap-2 rounded-xl bg-slate-50 px-2.5 py-2 text-[12.5px] text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /><span className="min-w-0"><span className="line-clamp-2">{x.text}</span><span className="text-[11px] text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></span></Link>)}
-          {alerts && !alerts.length && !down.length && <div className="py-2 text-[12.5px] text-emerald-600">Không có cảnh báo 48 giờ qua.</div>}
+          {alerts && !alerts.length && !down.length && !miss.length && <div className="py-2 text-[12.5px] text-emerald-600">Không có cảnh báo 48 giờ qua.</div>}
         </div>
       ) : (
         <div className="space-y-1.5">{recent.slice(0, 4).map((x) => <div key={x.projectId + x.id} className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2 text-[12.5px]"><span className="min-w-0 flex-1 truncate text-slate-700">{x.customerName} · {x.projectName}</span><b className="tabular-nums">{formatShort(x.revenue)}</b></div>)}</div>
