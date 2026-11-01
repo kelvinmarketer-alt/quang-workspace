@@ -233,7 +233,7 @@ function Feed({ rows, recent, isOwner, miss = [] }) {
       <div className="mb-2 flex gap-4 border-b border-slate-100">{tabs.map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={`-mb-px border-b-2 pb-1.5 text-[12.5px] font-bold ${tab === k ? "border-indigo-500 text-slate-900" : "border-transparent text-slate-400"}`}>{l}</button>)}</div>
       {tab === "warn" ? (
         <div className="space-y-1.5">
-          {miss.length > 0 && <MeasureList items={miss} max={2} />}
+          {miss.length > 0 && <MeasureList items={miss} max={2} compact />}
           {down.slice(0, 3).map((x) => <Link key={x.key} to={`/bao-cao/${x.id}`} className="flex gap-2 rounded-xl bg-rose-50/60 px-2.5 py-2 text-[12.5px] text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />{x.text}</Link>)}
           {alerts == null ? <div className="flex items-center gap-2 py-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tải cảnh báo…</div>
             : alerts.slice(0, 4).map((x) => <Link key={x.key} to="/quang-cao" className="flex gap-2 rounded-xl bg-slate-50 px-2.5 py-2 text-[12.5px] text-slate-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" /><span className="min-w-0"><span className="line-clamp-2">{x.text}</span><span className="text-[11px] text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></span></Link>)}

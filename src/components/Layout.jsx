@@ -430,7 +430,7 @@ function Notifications() {
           {miss.length > 0 && (
             <div className="border-b border-slate-100 px-3 pb-3">
               <div className="px-1 py-3 text-sm font-extrabold text-slate-800">Chưa gắn đo lường · {miss.length} job</div>
-              <MeasureList items={miss} max={3} onPick={() => setOpen(false)} />
+              <MeasureList items={miss} max={3} compact onPick={() => setOpen(false)} />
             </div>
           )}
           <div className="border-b border-slate-50 px-4 py-3 text-sm font-extrabold text-slate-800">Nhắc nhở · 7 ngày tới</div>
