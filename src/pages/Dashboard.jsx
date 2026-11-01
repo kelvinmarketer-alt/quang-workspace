@@ -185,14 +185,14 @@ export default function Dashboard() {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
             <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
           <div className="h-56"><ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ left: -12, right: 6, top: 8 }}>
+            <AreaChart data={chartData} margin={{ left: 0, right: 6, top: 8 }}>
               <defs>
                 <linearGradient id="gThu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
                 <linearGradient id="gLn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={48} />
+              <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
               <Tooltip formatter={(v, n) => [formatVND(v), n === "thu" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} />
               <Area type="monotone" dataKey="thu" stroke="#6366f1" strokeWidth={2.5} fill="url(#gThu)" isAnimationActive={false} />
               <Area type="monotone" dataKey="ln" stroke="#10b981" strokeWidth={2.5} fill="url(#gLn)" isAnimationActive={false} />

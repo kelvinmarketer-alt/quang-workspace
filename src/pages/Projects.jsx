@@ -7,6 +7,7 @@ import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput
 import Combobox from "../components/Combobox.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { ProjectResources } from "./Resources.jsx";
+import JobConnections from "../components/JobConnections.jsx";
 import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
 import { projectMetrics, installmentMetrics, projectsMonthly, projectYears } from "../lib/selectors.js";
@@ -414,6 +415,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
         </div>
         {project.note && <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{project.note}</div>}
 
+        <div className="mt-4"><JobConnections project={project} /></div>
         <ProjectResources projectId={project.id} customerId={project.customerId} customerName={project.customerName} />
       </div>
 
@@ -524,10 +526,10 @@ export default function Projects() {
           <div className="overflow-x-auto">
            <div className="h-56 min-w-[620px] sm:min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ left: -8, right: 8, top: 8 }}>
+              <BarChart data={monthly} margin={{ left: 0, right: 8, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
+                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
                 <Tooltip formatter={(v, k) => [formatVND(v), k === "dt" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                 <Bar dataKey="dt" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                 <Bar dataKey="ln" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />

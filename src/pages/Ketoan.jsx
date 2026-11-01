@@ -85,7 +85,7 @@ function Waterfall({ rev, gp, op, opN, net, prevNet }) {
         {rows.map((r) => (
           <div key={r.l} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_7.5rem]">
             <span className={`truncate text-[13px] ${r.end ? "font-extrabold" : "font-semibold"} text-slate-700`}>{r.l}</span>
-            <span className="relative col-span-2 row-start-2 h-3.5 rounded-full bg-slate-100 sm:col-span-1 sm:row-start-1"><span className={`bar-x absolute inset-y-0 rounded-full bg-gradient-to-r ${r.c}`} style={{ left: `${(r.left / max) * 100}%`, width: `${Math.max(0.8, (r.w / max) * 100)}%` }} /></span>
+            <span className="relative col-span-2 row-start-2 h-3.5 rounded-full bg-slate-100 sm:col-span-1 sm:col-start-2 sm:row-start-1"><span className={`bar-x absolute inset-y-0 rounded-full bg-gradient-to-r ${r.c}`} style={{ left: `${(r.left / max) * 100}%`, width: `${Math.max(0.8, (r.w / max) * 100)}%` }} /></span>
             <span className={`text-right text-[13.5px] font-extrabold tabular-nums ${r.t}`}>{r.v < 0 ? "−" + formatShort(-r.v) : formatShort(r.v)}</span>
           </div>
         ))}
@@ -196,10 +196,10 @@ function KetoanReport() {
           <div className="overflow-x-auto">
            <div className="h-56 min-w-[560px] sm:min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ left: -8, right: 8, top: 8 }}>
+              <BarChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
+                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
                 <Tooltip formatter={(v, k) => [formatVND(v), k === "dt" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                 <Bar dataKey="dt" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                 <Bar dataKey="ln" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
