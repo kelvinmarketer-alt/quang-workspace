@@ -409,7 +409,8 @@ function CollectModal({ item, onClose, onSave, onDelete }) {
 }
 
 function DebtPanel() {
-  const { projects, updateInstallment } = useData();
+  const { projects, updateInstallment, canEdit } = useData();
+  const canW = canEdit ? canEdit("ketoan") : true; // chỉ xem → ẩn nút Thu
   const [collect, setCollect] = useState(null);
   const [q, setQ] = useState("");
   const [closed, setClosed] = useState(() => new Set());
@@ -500,10 +501,10 @@ function DebtPanel() {
                           </div>
                           <div className="shrink-0 text-right">
                             <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
-                            <div className="mt-1 flex justify-end gap-1.5">
+                            {canW && <div className="mt-1 flex justify-end gap-1.5">
                               <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
                               <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu…</button>
-                            </div>
+                            </div>}
                           </div>
                         </div>
                       ))}

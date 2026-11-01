@@ -40,9 +40,9 @@ function CredLine({ label, value, secret }) {
 }
 
 // Nút copy gộp tài khoản + mật khẩu (+ tên + link) để gửi nhanh
-function CopyAllCred({ r }) {
+function CopyAllCred({ r, withPass = true }) {
   const [done, setDone] = useState(false);
-  const text = [r.title, r.username ? `Tài khoản: ${r.username}` : "", r.password ? `Mật khẩu: ${r.password}` : "", r.url ? `Link: ${r.url}` : "", r.note ? `Ghi chú: ${r.note}` : ""].filter(Boolean).join("\n");
+  const text = [r.title, r.username ? `Tài khoản: ${r.username}` : "", r.password && withPass ? `Mật khẩu: ${r.password}` : "", r.url ? `Link: ${r.url}` : "", r.note ? `Ghi chú: ${r.note}` : ""].filter(Boolean).join("\n");
   const doCopy = async () => { if (await copy(text)) { setDone(true); setTimeout(() => setDone(false), 1600); } };
   return (
     <button onClick={doCopy} className={`mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-bold ${done ? "bg-emerald-500 text-white" : "bg-slate-800 text-white hover:bg-slate-700"}`}>
@@ -87,9 +87,10 @@ export function ResRow({ r, subLabel, canW, onEdit, onDelete, select, checked, o
       {open && hasCred && (
         <div className="border-t border-slate-100 bg-slate-50/60 px-3 py-2">
           {r.username && <CredLine label="Tài khoản" value={r.username} secret={false} />}
-          {r.password && <CredLine label="Mật khẩu" value={r.password} secret={true} />}
+          {/* 01/11: người chỉ có quyền XEM không thấy mật khẩu (máy chủ cũng không gửi) */}
+          {r.password && canW && <CredLine label="Mật khẩu" value={r.password} secret={true} />}
           {r.note && <CredLine label="Ghi chú" value={r.note} secret={false} />}
-          <CopyAllCred r={r} />
+          <CopyAllCred r={r} withPass={!!canW} />
         </div>
       )}
     </div>

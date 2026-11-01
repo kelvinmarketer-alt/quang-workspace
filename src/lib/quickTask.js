@@ -38,16 +38,26 @@ export function parseQuickTask(raw, customers = [], now = new Date()) {
   const base = new Date(now); base.setHours(0, 0, 0, 0);
   const add = (n) => { const d = new Date(base); d.setDate(d.getDate() + n); return d; };
   let m;
+  // "mai" = ngày mai, TRỪ khi là tên người: viết hoa giữa câu ("Gọi chị Mai") hoặc đứng sau chị/anh/gặp… — lấy chữ "mai" hợp lệ đầu tiên
+  const maiHit = () => {
+    const re = /\s(ngay mai|mai)(?=\s)/g; let x;
+    while ((x = re.exec(f))) {
+      const name = x[1] === "mai" && x.index > 0 && (s[x.index + 1] === "M" || /\s(chi|anh|em|co|bac|chu|ban|ong|ba|cho|voi|gap|goi|nhan|hoi)$/.test(f.slice(0, x.index)));
+      if (!name) return { i: x.index, j: x.index + x[0].length };
+    }
+    return null;
+  };
   if (cut(/\s(hom nay)\s/)) out.date = iso(base);
   else if (cut(/\s(ngay kia)\s/)) out.date = iso(add(2));
-  else if (cut(/\s(ngay mai|mai)\s/)) out.date = iso(add(1));
+  else if ((m = maiHit())) { s = s.slice(0, m.i) + " " + s.slice(m.j); f = f.slice(0, m.i) + " " + f.slice(m.j); out.date = iso(add(1)); }
   else if (cut(/\stuan sau\s/)) out.date = iso(add((8 - base.getDay()) % 7 || 7));
   else if ((m = cut(/\s(?:thu\s?|t)([2-7])\s/))) { const want = +m[1] - 1; out.date = iso(add(((want - base.getDay()) + 7) % 7 || 7)); }
   else if (cut(/\s(chu nhat|cn)\s/)) out.date = iso(add((7 - base.getDay()) % 7 || 7));
-  else if ((m = cut(/\s(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s/))) {
+  else if ((m = f.match(/\s(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s/))) {
     const y = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : base.getFullYear();
     const d = new Date(y, +m[2] - 1, +m[1]); if (!m[3] && d < base) d.setFullYear(d.getFullYear() + 1);
-    if (!isNaN(d)) out.date = iso(d);
+    // ngày không có thật (31/2, 0/5) → không hiểu là ngày, giữ nguyên trong tên việc
+    if (!isNaN(d) && d.getDate() === +m[1] && d.getMonth() === +m[2] - 1) { cut(/\s(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s/); out.date = iso(d); }
   }
   if ((m = cut(/\s(\d{1,2})(?:h|g|:)(\d{2})?\s?(sang|chieu|toi)?\s/))) {
     let h = +m[1]; if ((m[3] === "chieu" || m[3] === "toi") && h < 12) h += 12;

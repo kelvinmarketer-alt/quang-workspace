@@ -8,7 +8,8 @@ import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure } from "../lib/reports.js";
 import { MeasurePanel } from "../components/MeasureAlerts.jsx";
-import { AnswerCard } from "../components/ReportKit.jsx";
+import { AnswerCard, BrandAvatar } from "../components/ReportKit.jsx";
+export { BrandAvatar };
 import { allInstallments } from "../lib/selectors.js";
 import { aiBrandReport } from "../lib/ai.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
@@ -18,15 +19,8 @@ const DOT = { g: "bg-emerald-500", w: "bg-amber-400", b: "bg-rose-500", n: "bg-s
 const STATE = { g: ["emerald", "Đạt chỉ tiêu"], w: ["amber", "Cần theo dõi"], b: ["rose", "Cần chú ý"] };
 const CAT = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const PJ = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
-const AV = ["#4f46e5", "#0891b2", "#059669", "#d97706", "#e11d48", "#7c3aed", "#0d9488", "#db2777"];
 const pct = (d) => (d == null ? "" : `${d >= 0 ? "▲" : "▼"} ${Math.abs(Math.round(d))}%`);
 
-export function BrandAvatar({ r, size = 32 }) {
-  const col = AV[[...String(r.name)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % AV.length];
-  return r.logo
-    ? <img src={r.logo} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-slate-100" />
-    : <span style={{ width: size, height: size, background: col }} className="grid shrink-0 place-items-center rounded-xl text-[11px] font-extrabold text-white">{String(r.name).slice(0, 2).toUpperCase()}</span>;
-}
 
 function CellPill({ x, loading }) {
   if (loading && x.v == null) return <span className="inline-block h-5 w-16 animate-pulse rounded-full bg-slate-100" />;

@@ -131,7 +131,8 @@ function ExpenseBatchModal({ onClose, onSave }) {
 const monthEquiv = (e) => (e.recurring === "monthly" ? num(e.amount) : e.recurring === "yearly" ? num(e.amount) / 12 : 0);
 
 export default function Expenses() {
-  const { expenses, addExpense, addExpensesMany, updateExpense, changeExpensePlan, deleteExpense, deleteExpensesMany } = useData();
+  const { expenses, addExpense, addExpensesMany, updateExpense, changeExpensePlan, deleteExpense, deleteExpensesMany, canEdit } = useData();
+  const canW = canEdit ? canEdit("ketoan") : true; // 01/11: chỉ xem → ẩn nút ghi (trước điền xong form mới báo không lưu được)
   const [modal, setModal] = useState(null);
   const [batch, setBatch] = useState(false);
   const [catF, setCatF0] = useState(() => { try { return localStorage.getItem("qws_exp_cat") || "all"; } catch { return "all"; } });
@@ -181,8 +182,8 @@ export default function Expenses() {
           <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
           {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
           <div className="-mb-2 -mr-2 mt-0.5 flex justify-end">
-            <button onClick={() => setModal(e)} className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={16} /></button>
-            <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={16} /></button>
+            {canW && <button onClick={() => setModal(e)} className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={16} /></button>}
+            {canW && <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={16} /></button>}
           </div>
         </div>
       </div>
@@ -198,7 +199,7 @@ export default function Expenses() {
         <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
         <td className="px-2 py-2.5 text-right font-bold text-rose-600">{monthEquiv(e) ? formatShort(monthEquiv(e)) : "—"}</td>
         <td className="px-2 py-2.5 whitespace-nowrap text-[11px] text-slate-400">{fmtDateVI(e.date)}{e.endDate && <span className="text-rose-400"> → {fmtDateVI(e.endDate)}</span>}</td>
-        <td className="px-1 py-1 text-right"><span className="flex items-center justify-end">{/* luôn hiện (iPad không có hover), mờ nhẹ */}<button onClick={() => setModal(e)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button><button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button></span></td>
+        <td className="px-1 py-1 text-right">{canW && <span className="flex items-center justify-end">{/* luôn hiện (iPad không có hover), mờ nhẹ */}<button onClick={() => setModal(e)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button><button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button></span>}</td>
       </tr>
     );
   };
@@ -216,7 +217,7 @@ export default function Expenses() {
           <h2 className="text-base font-extrabold text-slate-900">Chi phí vận hành <span className="text-slate-400">({rows.length})</span></h2>
           <div className="flex items-center gap-2">
             {rows.length > 0 && <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />} Chọn</button>}
-            <button onClick={() => setBatch(true)} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm chi phí</button>
+            {canW && <button onClick={() => setBatch(true)} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm chi phí</button>}
           </div>
         </div>
 

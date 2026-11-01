@@ -354,6 +354,9 @@ function Notifications() {
   const officeOk = useOfficeAccess(isOwner);
   const office = useOfficeNotifications(officeOk, !!isOwner);
   const [open, setOpen] = useState(false);
+  // 01/11: tách 2 tab — "Của tôi" (nhắc việc + đo lường của QWS) và "Văn phòng AI" (tin của đội AI), trước trộn chung, số 15 toàn tin AI
+  const [tab, setTab] = useState("me");
+  const go = useNavigate();
   const ref = useRef(null);
   const today = todayISO();
 
@@ -367,9 +370,12 @@ function Notifications() {
     const from = new Date();
     const to = new Date(from.getTime() + 7 * 86400000);
     const ev = generateCalendarEvents(from, to, family).filter((e) => e.date >= today && e.type !== "lunar-phase");
-    const overdue = tasks.filter((t) => t.date && t.status !== "done" && t.date < today).map((t) => ({ date: t.date, title: "Quá hạn: " + t.title, type: "overdue" }));
-    const dueToday = tasks.filter((t) => t.date === today && t.status !== "done").map((t) => ({ date: t.date, title: t.title, type: "task" }));
-    return [...overdue, ...dueToday, ...ev].slice(0, 8);
+    const od = tasks.filter((t) => t.date && t.status !== "done" && t.date < today).sort((a, b) => a.date.localeCompare(b.date));
+    // Việc quá hạn gom 1 dòng (trước chiếm hết 8 chỗ, đẩy mất việc hôm nay + lịch)
+    const overdue = od.length > 1 ? [{ date: od[0].date, title: `${od.length} việc quá hạn`, sub: od.slice(0, 2).map((t) => t.title).join(" · "), type: "overdue", to: "/cong-viec" }]
+      : od.map((t) => ({ date: t.date, title: "Quá hạn: " + t.title, type: "overdue", to: `/cong-viec?id=${t.id}` }));
+    const dueToday = tasks.filter((t) => t.date === today && t.status !== "done").map((t) => ({ date: t.date, title: t.title, type: "task", to: `/cong-viec?id=${t.id}` }));
+    return [...overdue, ...dueToday, ...ev.map((e) => ({ ...e, to: "/lich" }))].slice(0, 8);
   }, [tasks, family, today]);
   // Job chưa gắn đo lường — dùng số kênh đang nhớ (Tổng quan / Báo cáo đã tải), không tải thêm
   const miss = useMemo(() => {
@@ -382,12 +388,21 @@ function Notifications() {
     <div ref={ref} className="relative">
       <button onClick={() => setOpen((o) => !o)} aria-label="Thông báo" className="relative rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:text-indigo-600">
         <Bell size={18} />
-        {office.unread > 0 ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white">{office.unread}</span>
-          : (items.length > 0 || miss.length > 0) && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" />}
+        {/* Số đỏ = việc của sếp (quá hạn + hôm nay + job chưa gắn đo); tin Văn phòng AI chỉ là chấm tím */}
+        {(() => { const n = items.filter((x) => x.type === "overdue" || x.type === "task").length + miss.length; return n > 0
+          ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{n}</span>
+          : office.unread > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-violet-500" />; })()}
       </button>
       {open && (
         <div className="fixed inset-x-3 top-16 z-50 max-h-[80vh] overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-2xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:max-h-none sm:w-80 sm:overflow-hidden">
           {officeOk && (
+            <div className="flex gap-1 border-b border-slate-100 p-1.5">
+              {[["me", "Của tôi"], ["office", `Văn phòng AI${office.unread ? ` · ${office.unread}` : ""}`]].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setTab(k)} className={`flex-1 rounded-lg px-2 py-1.5 text-[12px] font-bold ${tab === k ? "bg-slate-100 text-slate-800" : "text-slate-400 hover:text-slate-700"}`}>{l}</button>
+              ))}
+            </div>
+          )}
+          {officeOk && tab === "office" && (
             <div className="border-b border-slate-100">
               <div className="flex items-center gap-2 px-4 py-3">
                 <span className="text-sm font-extrabold text-slate-800">🏢 Văn phòng AI</span>
@@ -411,6 +426,7 @@ function Notifications() {
               </div>
             </div>
           )}
+          {(!officeOk || tab === "me") && <>
           {miss.length > 0 && (
             <div className="border-b border-slate-100 px-3 pb-3">
               <div className="px-1 py-3 text-sm font-extrabold text-slate-800">Chưa gắn đo lường · {miss.length} job</div>
@@ -423,16 +439,17 @@ function Notifications() {
             {items.map((e, i) => {
               const isOver = e.type === "overdue";
               return (
-                <div key={i} className="flex items-center gap-3 border-b border-slate-50 px-4 py-2.5">
-                  <span className={`h-8 w-1.5 rounded-full ${isOver ? "bg-rose-500" : e.type === "task" ? "bg-emerald-500" : e.type === "lunar-holiday" ? "bg-amber-500" : e.type === "family" ? "bg-rose-500" : "bg-sky-500"}`} />
+                <button key={i} type="button" onClick={() => { setOpen(false); go(e.to); }} className="flex w-full items-center gap-3 border-b border-slate-50 px-4 py-2.5 text-left hover:bg-slate-50">
+                  <span className={`h-8 w-1.5 shrink-0 rounded-full ${isOver ? "bg-rose-500" : e.type === "task" ? "bg-emerald-500" : e.type === "lunar-holiday" ? "bg-amber-500" : e.type === "family" ? "bg-rose-500" : "bg-sky-500"}`} />
                   <div className="min-w-0 flex-1">
                     <div className={`truncate text-sm font-semibold ${isOver ? "text-rose-600" : "text-slate-700"}`}>{e.title}</div>
-                    <div className="text-[11px] text-slate-400">{fmtDateVI(e.date)}{e.date === today ? " · Hôm nay" : ""}</div>
+                    <div className="truncate text-[11px] text-slate-400">{e.sub || `${fmtDateVI(e.date)}${e.date === today ? " · Hôm nay" : ""}`}</div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
+          </>}
         </div>
       )}
     </div>
@@ -497,6 +514,8 @@ export default function Layout({ children }) {
       if (e.key !== "n" && e.key !== "N") return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
       const el = document.activeElement; if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      // 01/11: đang mở form / hộp thoại / ngăn chi tiết (lớp phủ toàn màn) → không chuyển trang, tránh mất nội dung đang nhập
+      if (document.querySelector('[role="dialog"], [aria-modal="true"], .fixed.inset-0, [data-dirty="1"]')) return;
       e.preventDefault(); navTo(`/cong-viec?quick=${Date.now()}`);
     };
     window.addEventListener("keydown", h);

@@ -34,7 +34,7 @@ function QuickAdd({ onAdd, onDetail, focusKey }) {
         <textarea ref={ref} rows={1} value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } if (e.key === "Escape") setV(""); }}
           placeholder={typeof window !== "undefined" && window.innerWidth < 640 ? "Thêm việc nhanh…" : "Thêm việc… vd: Gửi báo cáo #VĐG mai 9h !cao ~2"} aria-label="Thêm việc nhanh" className="min-w-0 flex-1 resize-none overflow-hidden whitespace-nowrap border-0 bg-transparent py-2 text-[15px] outline-none sm:whitespace-normal" style={{ background: "transparent" }} />
         <kbd className="hidden items-center gap-1 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 sm:inline-flex"><CornerDownLeft size={11} /> Enter</kbd>
-        <button type="button" onClick={() => onDetail(v ? toTask(p) : {})} title="Mở form chi tiết" className="hidden h-9 w-9 shrink-0 place-items-center sm:grid rounded-xl text-slate-400 hover:bg-white hover:text-slate-700"><SlidersHorizontal size={16} /></button>
+        <button type="button" onClick={() => { onDetail(v ? toTask(p) : {}); setV(""); }} title="Mở form chi tiết" className="hidden h-9 w-9 shrink-0 place-items-center sm:grid rounded-xl text-slate-400 hover:bg-white hover:text-slate-700"><SlidersHorizontal size={16} /></button>
         <button type="button" onClick={submit} disabled={!p.title} className="shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40">Thêm</button>
       </div>
       <div className="mt-2 flex min-h-[24px] flex-wrap items-center gap-1.5">
@@ -46,7 +46,7 @@ function QuickAdd({ onAdd, onDetail, focusKey }) {
           {p.customerName && <Chip c="bg-violet-50 text-violet-700"># {p.customerName}</Chip>}
           {p.est && <Chip c="bg-emerald-50 text-emerald-700">🍅 ×{p.est}</Chip>}
         </> : <><span className="text-[11px] text-slate-400 sm:hidden">Hiểu: <b>mai</b> · <b>9h</b> · <b>!cao</b> · <b>#khách</b> · <b>~2</b> 🍅</span><span className="hidden text-[11.5px] text-slate-400 sm:inline">Gõ 1 câu: <b>mai</b>, <b>thứ 3</b>, <b>15/11</b> · <b>9h</b>, <b>3h chiều</b> · <b>!cao</b> · <b>#tên khách</b> · <b>~2</b> (2 phiên 25 phút). Phím <b>N</b> ở bất kỳ đâu để thêm việc.</span></>}
-        <span className="ml-auto flex flex-wrap gap-1">{QUICK.map(([ins, l]) => <button key={l} type="button" onClick={() => { setV((x) => (x + ins).replace(/^\s+/, "")); ref.current?.focus(); }} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11.5px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600">{l}</button>)}</span>
+        <span className="ml-auto flex flex-wrap gap-1">{QUICK.map(([ins, l]) => <button key={l} type="button" onClick={() => { setV((x) => (x + ins).replace(/^\s+/, "")); ref.current?.focus(); }} className="rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 sm:px-2.5 sm:py-0.5 sm:text-[11.5px]">{l}</button>)}</span>
       </div>
     </div>
   );

@@ -1,9 +1,10 @@
 // Tổng quan dạng ô (bento) — 31/10, sếp duyệt bản demo "QWS Bento": gọn 1 màn hình, việc hôm nay lên đầu,
-// cột phải = lịch tuần (âm lịch) + sắp tới + thông báo, lưới Sức khoẻ dự án (từ Trung tâm báo cáo).
-import { useEffect, useMemo, useState } from "react";
+// cột phải = lịch tuần (âm lịch) + sắp tới + thông báo, lưới Sức khoẻ thương hiệu (từ Trung tâm báo cáo).
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+// Biểu đồ doanh thu tải sau (thư viện biểu đồ ~100KB nén) — Tổng quan hiện số ngay, biểu đồ hiện tiếp (01/11)
+const RevenueChart = lazy(() => import("../components/RevenueChart.jsx"));
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, Repeat, Activity, Coins, Loader2 } from "lucide-react";
 import { Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -14,7 +15,7 @@ import { lunarInfo } from "../lib/lunar.js";
 import { useReportData, buildBrandRows, missingMeasure } from "../lib/reports.js";
 import { MeasureList } from "../components/MeasureAlerts.jsx";
 import TodayPanel, { useToday } from "../components/today/TodayPanel.jsx";
-import { BrandAvatar } from "./Reports.jsx";
+import { BrandAvatar } from "../components/ReportKit.jsx";
 
 const DOT = { g: "bg-emerald-500", w: "bg-amber-400", b: "bg-rose-500", n: "bg-slate-200" };
 const DOW = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
@@ -49,7 +50,8 @@ function Kpi({ label, value, delta, deltaGood = true, sub, spark, color }) {
 }
 
 export default function Dashboard() {
-  const { tasks, family, projects, customerList, isOwner, perms = [], settings = {} } = useData();
+  const { tasks, family, projects, customerList, isOwner, perms = [], settings = {}, members = [], myEmail = "" } = useData();
+  const myName = members.find((m) => (m.email || "").toLowerCase() === (myEmail || "").toLowerCase())?.name;
   const nav = useNavigate();
   const T = useToday();
   const [more, setMore] = useState(false);
@@ -89,7 +91,7 @@ export default function Dashboard() {
   const li = lunarInfo(now);
 
   const recvN = T.has("customers") ? T.receivables.length : 0, taskN = T.has("tasks") ? T.dueTasks.length : 0, renewN = T.has("ketoan") ? T.renewals.length : 0;
-  const headline = [isOwner && attention.length ? `${attention.length} dự án cần chú ý` : null, recvN ? `${recvN} khoản cần thu` : null, taskN ? `${taskN} việc ${T.overdueCount ? `(${T.overdueCount} quá hạn)` : "hôm nay"}` : null].filter(Boolean).join(", ") || "Hôm nay không có gì gấp";
+  const headline = [isOwner && attention.length ? `${attention.length} thương hiệu cần chú ý` : null, recvN ? `${recvN} khoản cần thu` : null, taskN ? `${taskN} việc ${T.overdueCount ? `(${T.overdueCount} quá hạn)` : "hôm nay"}` : null].filter(Boolean).join(", ") || "Hôm nay không có gì gấp";
   const urgent = [
     ...(T.has("tasks") ? T.dueTasks.slice(0, 2).map((t) => ({ k: "t" + t.id, to: "/cong-viec", tone: t.date < today ? "bg-rose-500" : "bg-emerald-500", title: t.title, sub: t.date < today ? `Quá hạn · ${fmtDateVI(t.date)}` : "Việc hôm nay" })) : []),
     ...(T.has("customers") ? T.receivables.slice(0, 2).map((x) => ({ k: "r" + x.projectId + x.id, to: "/khach-hang", tone: "bg-rose-500", title: `Thu ${x.customerName || "khách lẻ"} · ${formatShort(x.debt)}`, sub: `${x.projectName} · hạn ${fmtDateVI(x.date)}` })) : []),
@@ -100,7 +102,7 @@ export default function Dashboard() {
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Chào anh Quang</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{isOwner ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
         <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
       </div>
 
@@ -119,7 +121,7 @@ export default function Dashboard() {
               <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
               <MiniTile to="/chi-phi" icon={Repeat} label="Sắp gia hạn" value={renewN} sub="7 ngày tới" />
               {isOwner
-                ? <MiniTile to="/bao-cao" icon={Activity} label="Dự án cần chú ý" value={rep.loading && !rep.data?.at ? "…" : attention.length} sub={`${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
+                ? <MiniTile to="/bao-cao" icon={Activity} label="Thương hiệu cần chú ý" value={rep.loading && !rep.data?.at ? "…" : attention.length} sub={`${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
                 : <MiniTile to="/khach-hang" icon={Activity} label="Khách hàng" value={customerList.length} sub="đang quản lý" />}
             </div>
             {urgent.length > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (
@@ -159,10 +161,10 @@ export default function Dashboard() {
           : <Kpi label="Khách hàng" value={String(customerList.length)} sub="đang quản lý" />}
         </div>
 
-        {/* Sức khoẻ dự án (chủ) / Top khách (tài khoản phụ) */}
+        {/* Sức khoẻ thương hiệu (chủ) / Top khách (tài khoản phụ) */}
         <div className="card p-4 lg:col-span-8">
           {isOwner ? <>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ dự án</h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu</h3>
               <Link to="/bao-cao" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-slate-700 hover:bg-slate-200">Trung tâm báo cáo <ArrowUpRight size={14} /></Link></div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{health.slice(0, 10).map((r) => (
               <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
@@ -187,19 +189,7 @@ export default function Dashboard() {
         <div className={`card p-4 ${coinOk ? "lg:col-span-5" : "lg:col-span-8"}`}>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
             <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
-          <div className="h-56"><ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ left: 0, right: 6, top: 8 }}>
-              <defs>
-                <linearGradient id="gThu" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} /><stop offset="100%" stopColor="#6366f1" stopOpacity={0} /></linearGradient>
-                <linearGradient id="gLn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="100%" stopColor="#10b981" stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
-              <Tooltip formatter={(v, n) => [formatVND(v), n === "thu" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} />
-              <Area type="monotone" dataKey="thu" stroke="#6366f1" strokeWidth={2.5} fill="url(#gThu)" isAnimationActive={false} />
-              <Area type="monotone" dataKey="ln" stroke="#10b981" strokeWidth={2.5} fill="url(#gLn)" isAnimationActive={false} />
-            </AreaChart></ResponsiveContainer></div>
+          <div className="h-56"><Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-slate-50" />}><RevenueChart data={chartData} /></Suspense></div>
           {year === curY && curM < 12 && <div className="text-[11px] text-slate-400">Chỉ vẽ tới tháng {curM} (tháng chưa tới không tính là 0).</div>}
         </div>
         {coinOk && <CoinTile session={settings.paperBot} />}

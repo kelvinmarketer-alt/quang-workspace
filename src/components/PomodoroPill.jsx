@@ -31,14 +31,14 @@ export default function PomodoroPill() {
   const pct = 100 - (left / st.total) * 100;
   const work = st.phase === "work";
   return (
-    <div role="status" aria-live="polite" className="no-print qws-pomo fixed bottom-[88px] right-3 z-40 flex max-w-[calc(100vw-24px)] items-center gap-3 rounded-2xl border border-slate-200 bg-white py-2 pl-2 pr-2.5 shadow-2xl lg:bottom-5 lg:right-5">
+    <div className="no-print qws-pomo fixed bottom-[88px] right-3 z-40 flex max-w-[calc(100vw-24px)] items-center gap-3 rounded-2xl border border-slate-200 bg-white py-2 pl-2 pr-2.5 shadow-2xl lg:bottom-5 lg:right-5">
       <svg viewBox="0 0 44 44" className="h-11 w-11 shrink-0 -rotate-90" aria-hidden="true">
         <circle cx="22" cy="22" r="18" fill="none" strokeWidth="4" className="stroke-slate-100" />
         <circle cx="22" cy="22" r="18" fill="none" strokeWidth="4" strokeLinecap="round" pathLength="100" strokeDasharray="100" strokeDashoffset={100 - pct} className={work ? "stroke-rose-500" : "stroke-emerald-500"} style={{ transition: "stroke-dashoffset 1s linear" }} />
       </svg>
       <Link to="/cong-viec" className="min-w-0">
-        <span className="block font-mono text-[18px] font-bold leading-tight text-slate-900">{String(Math.floor(left / 60)).padStart(2, "0")}:{String(left % 60).padStart(2, "0")}</span>
-        <span className="block max-w-[180px] truncate text-[11px] text-slate-400">{work ? `🍅 ${st.title}` : "☕ Nghỉ 5 phút"}</span>
+        <span aria-hidden="true" className="block font-mono text-[18px] font-bold leading-tight text-slate-900">{String(Math.floor(left / 60)).padStart(2, "0")}:{String(left % 60).padStart(2, "0")}</span>
+        <span aria-live="polite" className="block max-w-[180px] truncate text-[11px] text-slate-400">{work ? `🍅 ${st.title}` : "☕ Nghỉ 5 phút"}</span>
       </Link>
       <button type="button" onClick={stopPomo} title="Dừng" aria-label="Dừng hẹn giờ" className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={16} /></button>
     </div>

@@ -88,3 +88,13 @@ export function SideDrawer({ onClose, children, label = "Chi tiết" }) {
 // Nhớ cách xem (xếp hạng / thẻ) theo máy
 export const loadView = (k) => { try { return localStorage.getItem(k) || "rank"; } catch { return "rank"; } };
 export const saveView = (k, v) => { try { localStorage.setItem(k, v); } catch { /* bỏ qua */ } };
+
+// Logo thương hiệu (hoặc 2 chữ cái trên nền màu theo tên) — dùng ở Trung tâm báo cáo + Tổng quan (để Tổng quan không phải tải cả trang Báo cáo)
+const AV = ["#4f46e5", "#0891b2", "#059669", "#d97706", "#e11d48", "#7c3aed", "#0d9488", "#db2777"];
+export function BrandAvatar({ r, size = 32 }) {
+  const col = AV[[...String(r.name)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % AV.length];
+  return r.logo
+    ? <img src={r.logo} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-xl bg-white object-contain ring-1 ring-slate-100" />
+    : <span style={{ width: size, height: size, background: col }} className="grid shrink-0 place-items-center rounded-xl text-[11px] font-extrabold text-white">{String(r.name).slice(0, 2).toUpperCase()}</span>;
+}
+

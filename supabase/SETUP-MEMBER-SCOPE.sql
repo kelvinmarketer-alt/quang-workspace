@@ -52,6 +52,8 @@ begin
     if r ? 'projects' then r := r || jsonb_build_object('projects', public.qws_scope_arr(d->'projects', ids, 'customerId', true)); end if;
     if r ? 'resources' then r := r || jsonb_build_object('resources', public.qws_scope_arr(d->'resources', ids, 'customerId', true)); end if;
   end if;
+  -- 01/11: quyền XEM tài nguyên → không gửi mật khẩu
+  if a->>'resources' = 'view' and r ? 'resources' then r := r || jsonb_build_object('resources', (select coalesce(jsonb_agg(x - 'password'), '[]'::jsonb) from jsonb_array_elements(r->'resources') x)); end if;
   return r || jsonb_build_object('members', jsonb_build_array(m), 'settings', s); -- chỉ thấy hồ sơ của chính mình
 end $$;
 

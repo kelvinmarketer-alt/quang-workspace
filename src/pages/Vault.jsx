@@ -51,16 +51,31 @@ const TYPE_KEYS = Object.keys(TYPES);
 const maskVal = (v) => (v ? "•".repeat(Math.min(String(v).length, 12)) : "");
 const tail = (v) => { const s = String(v || "").replace(/\s/g, ""); return s.length > 4 ? "•••• " + s.slice(-4) : s; };
 
-// Ghép văn bản để copy toàn bộ 1 mục
+// Ghép văn bản để copy 1 mục — 01/11: KHÔNG kèm trường bí mật (mật khẩu, 2FA, số thẻ, CVV); copy từng trường ở phần mở rộng
 function itemToText(item) {
   const t = TYPES[item.type] || TYPES.app;
   const lines = [`${t.emoji} ${item.title || t.label}`];
-  for (const [k, lbl] of t.fields) if (item[k]) lines.push(`${lbl}: ${item[k]}`);
+  for (const [k, lbl, secret] of t.fields) if (item[k]) lines.push(`${lbl}: ${secret ? (k === "number" ? tail(item[k]) : "(ẩn)") : item[k]}`);
   if (item.note) lines.push(`Ghi chú: ${item.note}`);
   return lines.join("\n");
 }
 
-async function copy(text) {
+// Ô nhập trường bí mật: ẩn như mật khẩu + nút 👁
+function SecretInput({ secret, className, ...p }) {
+  const [show, setShow] = useState(false);
+  if (!secret) return <input {...p} className={className} />;
+  return (
+    <span className="relative block">
+      <input {...p} type={show ? "text" : "password"} className={`${className} pr-9`} />
+      <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? "Ẩn" : "Hiện"} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:text-slate-700">{show ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+    </span>
+  );
+}
+
+// secret=true: 30 giây sau tự xoá khỏi bộ nhớ tạm (không để mật khẩu / CVV nằm mãi trong clipboard)
+let clearT = null;
+async function copy(text, secret = false) {
+  if (secret) { clearTimeout(clearT); clearT = setTimeout(() => { navigator.clipboard?.writeText?.("").catch(() => {}); }, 30000); }
   try {
     if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; }
   } catch {}
@@ -77,7 +92,7 @@ function FieldRow({ label, value, secret }) {
   const [show, setShow] = useState(false);
   const [done, setDone] = useState(false);
   const isUrl = /^https?:\/\//i.test(value || "");
-  const doCopy = async () => { if (await copy(value)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
+  const doCopy = async () => { if (await copy(value, secret)) { setDone(true); setTimeout(() => setDone(false), 1200); } };
   return (
     <div className="flex items-center gap-2 border-t border-slate-50 py-2">
       <div className="w-24 shrink-0 text-[11px] font-semibold text-slate-400 sm:w-28">{label}</div>
@@ -119,7 +134,7 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
           <div className="truncate font-extrabold text-slate-800">{item.title || t.label}</div>
           {sub && <div className="truncate text-[11px] text-slate-400">{sub}</div>}
         </div>
-        <button onClick={copyAll} className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${copied ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-700"}`} title="Copy tất cả để gửi">
+        <button onClick={copyAll} className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${copied ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-700"}`} title="Copy thông tin (không gồm mật khẩu, CVV, số thẻ đầy đủ) — copy từng trường ở phần mở rộng">
           <span className="inline-flex items-center gap-1">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? "Đã copy" : "Copy"}</span>
         </button>
       </button>
@@ -182,8 +197,8 @@ function VaultBatchModal({ startType = "app", onClose, onSave }) {
                 </div>
                 <input value={r.title} onChange={(e) => setRow(r._k, { title: e.target.value })} className={`${inputCls} mb-2 font-semibold`} placeholder={r.type === "app" ? "Tên gọi * (Facebook, Gmail…)" : r.type === "card" ? "Tên gọi * (Visa Techcombank…)" : "Tên gọi * (Vietcombank, Momo…)"} />
                 <div className="grid grid-cols-2 gap-2">
-                  {t.fields.map(([k, lbl]) => (
-                    <input key={k} value={r[k] || ""} onChange={(e) => setRow(r._k, { [k]: e.target.value })} className={inputCls} placeholder={lbl} autoComplete="off" />
+                  {t.fields.map(([k, lbl, secret]) => (
+                    <SecretInput key={k} secret={secret} value={r[k] || ""} onChange={(e) => setRow(r._k, { [k]: e.target.value })} className={inputCls} placeholder={lbl} autoComplete="off" />
                   ))}
                 </div>
                 <input value={r.note || ""} onChange={(e) => setRow(r._k, { note: e.target.value })} className={`${inputCls} mt-2`} placeholder="Ghi chú (tuỳ chọn)" />
@@ -215,6 +230,8 @@ function VaultAiModal({ onClose, onAdd }) {
   const pick = async (e) => { await handleFiles(e.target.files); e.target.value = ""; };
   usePasteImages(handleFiles);
   const analyze = async () => {
+    // 01/11: ảnh có thể chứa số thẻ / mật khẩu → báo rõ trước khi gửi cho AI bên ngoài
+    if (img && !(await ask("Gửi ảnh cho AI (OpenAI) đọc?\nẢnh có số thẻ, CVV hay mật khẩu sẽ đi qua máy chủ OpenAI. Nên che CVV / mật khẩu trước, hoặc nhập tay.", { ok: "Vẫn gửi" }))) return;
     setErr(""); setItems(null); setLoading(true);
     try {
       const r = await aiReadVault({ imageDataUrl: img, text: note, apiKey: settings.openaiKey, model: "gpt-4o" });
@@ -272,8 +289,8 @@ function VaultAiModal({ onClose, onAdd }) {
                     </div>
                     <input value={r.title || ""} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Tên gọi" className={`${cell} font-semibold`} />
                     <div className="grid grid-cols-2 gap-1.5">
-                      {t.fields.map(([k, lbl]) => (
-                        <input key={k} value={r[k] || ""} onChange={(e) => setItem(i, { [k]: e.target.value })} placeholder={lbl} className={cell} autoComplete="off" />
+                      {t.fields.map(([k, lbl, secret]) => (
+                        <SecretInput key={k} secret={secret} value={r[k] || ""} onChange={(e) => setItem(i, { [k]: e.target.value })} placeholder={lbl} className={cell} autoComplete="off" />
                       ))}
                     </div>
                     <input value={r.note || ""} onChange={(e) => setItem(i, { note: e.target.value })} placeholder="Ghi chú" className={cell} />
@@ -316,10 +333,10 @@ function VaultModal({ initial, onClose, onSave }) {
           })}
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên gọi *</span><input value={f.title} onChange={set("title")} autoFocus className={inputCls} placeholder={f.type === "app" ? "Facebook, Gmail…" : f.type === "card" ? "Visa Techcombank…" : "Vietcombank, Momo…"} /></label>
-        {t.fields.map(([k, lbl]) => (
+        {t.fields.map(([k, lbl, secret]) => (
           <label key={k} className="mb-3 block text-sm">
             <span className="mb-1 block font-semibold text-slate-600">{lbl}</span>
-            <input value={f[k] || ""} onChange={set(k)} className={inputCls} autoComplete="off" />
+            <SecretInput secret={secret} value={f[k] || ""} onChange={set(k)} className={inputCls} autoComplete={secret ? "new-password" : "off"} />
           </label>
         ))}
         <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><textarea value={f.note || ""} onChange={set("note")} rows={2} className={inputCls} /></label>
@@ -411,7 +428,9 @@ export default function Vault() {
 
   const list = useMemo(() => {
     const lq = q.trim().toLowerCase();
-    return vault.filter((v) => (tab === "all" || v.type === tab) && (!lq || JSON.stringify(v).toLowerCase().includes(lq)));
+    // Tìm theo tên / tài khoản / ngân hàng / ghi chú — không dò trong mật khẩu, CVV, số thẻ (01/11)
+    const text = (v) => [v.title, v.username, v.url, v.holder, v.bank, v.branch, v.note, v.type === "bank" ? v.number : ""].join(" ").toLowerCase();
+    return vault.filter((v) => (tab === "all" || v.type === tab) && (!lq || text(v).includes(lq)));
   }, [vault, tab, q]);
 
   // Chưa resolve chủ → chờ; đã resolve mà KHÔNG phải chủ → khoá (bảo mật)

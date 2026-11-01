@@ -159,8 +159,8 @@ export default function Customers() {
       return { ...c, active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome, jobs };
     }) // Tìm theo tên / SĐT / Zalo / email / ghi chú / TÊN DỰ ÁN (không cần dấu)
       .filter((c) => !lq || fold([c.name, c.phone, c.zalo, c.email, c.note, ...c.projects.map((p) => p.name)].filter(Boolean).join(" ")).includes(lq))
-      // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off"
-      .filter((c) => (typeF === "off" ? !c.active : c.active))
+      // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off". Đang TÌM thì tìm cả khách Off (01/11)
+      .filter((c) => (lq ? true : typeF === "off" ? !c.active : c.active))
       .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
   }, [customerList, projByCust, projects, q, typeF]);
 
@@ -255,7 +255,9 @@ export default function Customers() {
       </Card>
 
       {rows.length === 0 ? (
-        <Card><div className="py-12 text-center"><Users size={28} className="mx-auto text-slate-300" /><div className="mt-2 text-sm font-bold text-slate-600">Chưa có khách hàng</div><div className="mt-1 text-xs text-slate-400">Bấm "Thêm khách" hoặc "Hàng loạt" để nhập danh sách.</div></div></Card>
+        <Card><div className="py-12 text-center"><Users size={28} className="mx-auto text-slate-300" />{q.trim() || (typeF === "off" && customerList.length)
+          ? <><div className="mt-2 text-sm font-bold text-slate-600">{q.trim() ? `Không thấy khách nào khớp "${q.trim()}"` : "Không có khách Off"}</div>{q.trim() && <button onClick={() => setQ("")} className="mt-2 text-xs font-bold text-indigo-600">Xoá ô tìm</button>}</>
+          : <><div className="mt-2 text-sm font-bold text-slate-600">Chưa có khách hàng</div><div className="mt-1 text-xs text-slate-400">Bấm "Thêm khách" hoặc "Hàng loạt" để nhập danh sách.</div></>}</div></Card>
       ) : (
         <div className="space-y-2.5">
           {rows.map((c, i) => {

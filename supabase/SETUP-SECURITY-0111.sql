@@ -40,6 +40,17 @@ begin
   if position(' or (dash and ids is null)' in src) > 0 then execute replace(src, ' or (dash and ids is null)', ''); end if;
 end $$;
 
+-- 4) Thành viên chỉ có quyền XEM "Tài nguyên" không nhận mật khẩu của tài nguyên (trước bấm 👁 là thấy mật khẩu tài khoản khách)
+do $$
+declare src text := pg_get_functiondef('public.qws_member_view(jsonb,jsonb)'::regprocedure);
+  mark text := 'return r || jsonb_build_object(''members''';
+begin
+  if position('x - ''password''' in src) = 0 and position(mark in src) > 0 then
+    execute replace(src, mark, 'if a->>''resources'' = ''view'' and r ? ''resources'' then r := r || jsonb_build_object(''resources'', (select coalesce(jsonb_agg(x - ''password''), ''[]''::jsonb) from jsonb_array_elements(r->''resources'') x)); end if;
+  ' || mark);
+  end if;
+end $$;
+
 -- Kiểm tra sau khi chạy (phải ra 1 dòng, is_owner_fn = true khi chạy bằng tài khoản chủ trên app):
 -- select uid from public.qws_owner;
 -- select policyname, cmd from pg_policies where tablename = 'qws_live_bot';

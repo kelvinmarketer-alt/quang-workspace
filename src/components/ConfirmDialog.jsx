@@ -14,11 +14,13 @@ const DANGER = /^(xoá|xóa|gỡ|đặt lại|khôi phục|bỏ khoá|bỏ khóa
 
 export function ConfirmHost() {
   const [q, setQ] = useState(null), [text, setText] = useState("");
-  const okRef = useRef(null);
+  const okRef = useRef(null), cancelRef = useRef(null);
   useEffect(() => { push = (x) => { setText(""); setQ(x); }; return () => { push = null; }; }, []);
   useEffect(() => {
     if (!q) return;
-    if (!q.input) okRef.current?.focus();
+    // 01/11: hộp NGUY HIỂM (xoá, khôi phục…) đặt sẵn vào nút Huỷ — lỡ nhấn Enter không xoá mất
+    const isDanger = q.danger ?? DANGER.test(String(q.message || "").split("\n")[0].trim());
+    if (!q.input) (isDanger ? cancelRef : okRef).current?.focus();
     const onKey = (e) => { if (e.key === "Escape") done(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -46,7 +48,7 @@ export function ConfirmHost() {
         </div>
         {q.input && <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={200} placeholder={typeof q.input === "string" ? q.input : "Ghi chú (không bắt buộc)"} className="mt-3 w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-300" />}
         <div className="mt-4 flex gap-2">
-          <button onClick={() => done(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Huỷ</button>
+          <button ref={cancelRef} onClick={() => done(false)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Huỷ</button>
           <button ref={okRef} onClick={() => done(true)} className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white ${danger ? "bg-rose-600 hover:bg-rose-700" : "bg-gradient-to-r from-indigo-500 to-sky-500"}`}>{okText}</button>
         </div>
       </div>

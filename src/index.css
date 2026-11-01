@@ -539,3 +539,8 @@ html.theme-dark[data-skin="terminal"] .bento :is(.text-xl, .text-2xl, .text-3xl)
 html.theme-dark[data-skin="terminal"] .qws-answer { background: linear-gradient(90deg, rgba(255,178,36,.09), transparent 55%), #0b101c; }
 html.theme-dark[data-skin="terminal"] .animate-pulse::after { background: linear-gradient(90deg, transparent, rgba(255,178,36,.09), transparent); }
 @media (prefers-reduced-motion: reduce) { html.theme-dark[data-skin="aurora"] .aurora::before { animation: none; } }
+
+/* 01/11 rà soát: điện thoại — chữ phụ dưới 11px khó đọc (Lịch, Báo cáo, Tổng quan) → nâng tối thiểu 11px */
+@media (max-width: 639px) {
+  .bento .text-\[9px\], .bento .text-\[9\.5px\], .bento .text-\[10px\], .bento .text-\[10\.5px\] { font-size: 11px; }
+}

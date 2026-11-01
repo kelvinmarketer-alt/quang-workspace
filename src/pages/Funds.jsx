@@ -641,6 +641,8 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
 }
 
 function FundsMain() {
+  const { canEdit } = useData();
+  const canW = canEdit ? canEdit("ketoan") : true;
   const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFund, transferFundMany, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
   const now = new Date();
   const curY = now.getFullYear();
@@ -747,8 +749,9 @@ function FundsMain() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      {!canW && <div className="mx-3 rounded-xl bg-slate-100 px-3.5 py-2.5 text-[12px] font-semibold text-slate-600 sm:mx-0">Bạn chỉ có quyền <b>xem</b> Quỹ & dòng tiền — các nút nạp / chi / chuyển sẽ không lưu.</div>}
       {/* Banner: lịch chuyển đã đến hạn (chờ xác nhận) */}
-      {due.length > 0 && (
+      {canW && due.length > 0 && (
         <div className="rounded-none border-y border-amber-200 sm:rounded-2xl sm:border bg-gradient-to-r from-amber-50 to-orange-50 p-4">
           <div className="mb-2.5 flex items-center gap-2 text-sm font-extrabold text-amber-700"><BellRing size={16} /> Lịch chuyển đến hạn ({due.reduce((a, d) => a + d.occs.length, 0)})</div>
           <div className="space-y-2">

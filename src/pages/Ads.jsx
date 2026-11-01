@@ -170,12 +170,14 @@ function BalanceBox({ a, onChanged }) {
   const [rows, setRows] = useState(null);
   const [f, setF] = useState({ kind: "anchor", amount: "" });
   const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false); // 01/11: chặn bấm đôi "Lưu" (trước bấm 2 lần = nạp 2 lần)
   const load = async () => { try { setRows((await invoke({ mode: "balance_list", accountId: a.id })).rows || []); } catch (e) { setErr(e.message || String(e)); } };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [a.id]);
   const add = async () => {
-    if (!f.amount) return; setErr("");
+    if (!f.amount || saving) return; setErr(""); setSaving(true);
     try { await invoke({ mode: "balance_add", accountId: a.id, kind: f.kind, amount: Number(f.amount) }); setF({ ...f, amount: "" }); await load(); onChanged?.(); }
     catch (e) { setErr(e.message || String(e)); }
+    setSaving(false);
   };
   const del = async (id) => { try { await invoke({ mode: "balance_delete", id }); await load(); onChanged?.(); } catch (e) { setErr(e.message || String(e)); } };
   const b = a.bal;
@@ -197,7 +199,7 @@ function BalanceBox({ a, onChanged }) {
             <option value="anchor">Số dư hiện tại</option><option value="topup">Vừa nạp thêm</option>
           </select>
           <MoneyInput value={f.amount} onChange={(v) => setF({ ...f, amount: v })} placeholder="Số tiền" className="w-36 rounded-lg border border-slate-200 bg-white px-2 py-1.5" />
-          <button onClick={add} className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1.5 font-bold text-white"><Plus size={13} />Lưu</button>
+          <button onClick={add} disabled={saving} className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-3 py-1.5 font-bold text-white disabled:opacity-50"><Plus size={13} />{saving ? "Đang lưu…" : "Lưu"}</button>
         </div>
       )}
       {rows?.length > 0 && (
