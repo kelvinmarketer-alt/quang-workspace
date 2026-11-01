@@ -199,13 +199,14 @@ function KetoanReport() {
       {series.length > 0 && (
         <Card>
           <SectionTitle action={<span className="text-xs font-bold text-slate-400">Doanh thu / LN gộp theo tháng</span>}>Diễn biến trong kỳ</SectionTitle>
-          <div className="overflow-x-auto">
-           <div className="h-56 min-w-[560px] sm:min-w-0">
+          {/* 01/11: điện thoại — biểu đồ vừa khung (trước phải kéo ngang mới thấy hết tháng) */}
+          <div>
+           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ left: 0, right: 8, top: 8 }}>
+              <BarChart data={series} margin={{ left: 0, right: 4, top: 8 }} barCategoryGap="18%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
+                <XAxis dataKey="name" tickFormatter={(v) => String(v).replace(/^Th0?/, "T")} interval="preserveStartEnd" minTickGap={2} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => formatShort(v).replace(" tr", "tr")} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
                 <Tooltip formatter={(v, k) => [formatVND(v), k === "dt" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                 <Bar dataKey="dt" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                 <Bar dataKey="ln" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
@@ -231,9 +232,9 @@ function KetoanReport() {
               <div key={g.month} className="overflow-hidden rounded-xl border border-slate-100">
                 <button onClick={() => toggleMonth(g.month)} className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-slate-50 ${open ? "bg-slate-50/60" : ""}`}>
                   <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
-                  <span className="text-sm font-extrabold text-slate-700">{monthLbl(g.month)}</span>
+                  <span className="whitespace-nowrap text-sm font-extrabold text-slate-700">{monthLbl(g.month).replace("Tháng ", "Th ")}</span>
                   <Badge tone="slate">{g.count}</Badge>
-                  <span className="ml-auto text-xs font-bold"><span className="text-indigo-600">{formatShort(g.revenue)}</span> · <span className="text-emerald-600">LN {formatShort(g.grossProfit)}</span></span>
+                  <span className="ml-auto text-right text-xs font-bold leading-tight"><span className="block text-indigo-600">{formatShort(g.revenue)}</span><span className="block text-emerald-600">LN {formatShort(g.grossProfit)}</span></span>
                 </button>
                 {open && (
                   <div className="space-y-2 border-t border-slate-100 p-2">
@@ -461,13 +462,14 @@ function DebtPanel() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
-        <div className="min-w-0 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 p-3 sm:p-4 text-white shadow-lg shadow-rose-500/20">
-          <div className="truncate text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Công nợ tới hạn</div>
-          <div className="mt-1 text-lg font-extrabold sm:text-2xl"><span className="sm:hidden">{formatShort(totalDebt)}</span><span className="hidden sm:inline">{formatVND(totalDebt)}</span></div>
-          {notDue > 0 && <div className="mt-0.5 truncate text-[10.5px] font-semibold text-rose-100">+ {formatShort(notDue)} chưa tới hạn</div>}
+        {/* 01/11 điện thoại: nhãn xuống dòng thay vì bị cắt "CÔNG NỢ TỚI ..."; ô chính cùng kiểu thẻ (bỏ khối hồng chói) */}
+        <div className="card min-w-0 p-3 ring-1 ring-rose-200 sm:p-4">
+          <div className="text-[11px] font-bold uppercase leading-tight tracking-wide text-rose-600">Nợ tới hạn</div>
+          <div className="mt-1 text-lg font-extrabold text-rose-600 sm:text-2xl"><span className="sm:hidden">{formatShort(totalDebt)}</span><span className="hidden sm:inline">{formatVND(totalDebt)}</span></div>
+          {notDue > 0 && <div className="mt-0.5 text-[11px] font-semibold leading-tight text-slate-400">+ {formatShort(notDue)} chưa tới hạn</div>}
         </div>
-        <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Khách đang nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
-        <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>
+        <div className="card min-w-0 p-3 sm:p-4"><div className="text-[11px] font-bold uppercase leading-tight text-slate-400">Khách nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
+        <div className="card min-w-0 p-3 sm:p-4"><div className="text-[11px] font-bold uppercase leading-tight text-slate-400">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>
       </div>
 
       <div className="mx-3 rounded-xl bg-indigo-50 px-3.5 py-2.5 text-[12px] text-indigo-700 sm:mx-0">💡 Thu nợ chỉ cập nhật <b>Đã thu</b> / giảm <b>công nợ</b>. Quỹ công ty không đổi vì lợi nhuận đã được ghi nhận từ khi có job.</div>
@@ -494,16 +496,17 @@ function DebtPanel() {
                   {open && (
                     <div className="divide-y divide-slate-50 border-t border-slate-100">
                       {g.items.map((x) => (
-                        <div key={x.id} className="flex items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
+                        <div key={x.id} className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 sm:flex-nowrap sm:gap-3 sm:px-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
-                            <div className="truncate text-[11px] text-slate-400">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
+                            <div className="text-[11px] text-slate-400 sm:truncate">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
                           </div>
-                          <div className="shrink-0 text-right">
-                            <div className="text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
-                            {canW && <div className="mt-1 flex justify-end gap-1.5">
+                          <div className="contents sm:block sm:shrink-0 sm:text-right">
+                            <div className="shrink-0 text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
+                            {/* điện thoại: 2 nút xuống dòng riêng, chữ thông tin không bị cắt */}
+                            {canW && <div className="flex w-full justify-end gap-1.5 sm:mt-1 sm:w-auto">
                               <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
-                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-2.5 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu…</button>
+                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu một phần…</button>
                             </div>}
                           </div>
                         </div>
@@ -555,8 +558,8 @@ export default function Ketoan({ initialTab, fundsTab }) {
       <div className="flex">
         <div className="grid w-full grid-cols-4 gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:inline-flex sm:w-auto">
           {TABS.map(([v, l, Ic]) => (
-            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[13px] font-bold transition sm:gap-2 sm:text-sm ${tab === v ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
-              <Ic size={16} className="hidden shrink-0 sm:block" /> <span className="truncate">{l}</span>
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-full px-1 py-2 text-[12.5px] font-bold transition sm:gap-2 sm:px-3 sm:text-sm ${tab === v ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+              <Ic size={16} className="hidden shrink-0 sm:block" /> <span className="whitespace-nowrap">{l}</span>
             </button>
           ))}
         </div>

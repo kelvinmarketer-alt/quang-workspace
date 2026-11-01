@@ -12,10 +12,11 @@ export function formatVND(n) {
   return v.toLocaleString("vi-VN") + " đ";
 }
 
+// 01/11: số thập phân kiểu Việt (dấu phẩy) ở MỌI nơi — trước chỗ "891.9 tr", chỗ "891,9 tr"
 export function formatShort(n) {
   const v = Number(n) || 0;
-  if (Math.abs(v) >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + " tỷ";
-  if (Math.abs(v) >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, "") + " tr";
+  if (Math.abs(v) >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1).replace(/\.0$/, "").replace(".", ",") + " tỷ";
+  if (Math.abs(v) >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, "").replace(".", ",") + " tr";
   if (Math.abs(v) >= 1_000) return (v / 1_000).toFixed(0) + "k";
   return String(v);
 }

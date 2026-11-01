@@ -138,6 +138,7 @@ export default function Expenses() {
   const [catF, setCatF0] = useState(() => { try { return localStorage.getItem("qws_exp_cat") || "all"; } catch { return "all"; } });
   const setCatF = (v) => { setCatF0(v); try { localStorage.setItem("qws_exp_cat", v); } catch {} };
   const [picked, setPicked] = useState(() => new Set());
+  const [selMode, setSelMode] = useState(false); // điện thoại: chỉ hiện ô tick khi bấm "Chọn"
 
   const now = new Date();
   const mFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -145,7 +146,10 @@ export default function Expenses() {
 
   const burn = monthlyOperatingCost(expenses);
   const thisMonth = useMemo(() => expensesInRange(expenses, mFrom, mTo).total, [expenses, mFrom, mTo]);
-  const activeCount = (expenses || []).filter((e) => e.active !== false).length;
+  // 01/11: khoản ĐÃ HẾT HẠN (qua "gia hạn đến") không còn tính là đang chi — khớp ô "Chi phí cố định / tháng"
+  const todayK = todayISO();
+  const isLive = (e) => e.active !== false && (!e.endDate || e.endDate >= todayK);
+  const activeCount = (expenses || []).filter(isLive).length;
 
   const rows = useMemo(() => (expenses || [])
     .filter((e) => catF === "all" || e.category === catF)
@@ -162,30 +166,31 @@ export default function Expenses() {
   const byRec = useMemo(() => {
     const map = new Map();
     for (const e of rows) { const k = e.recurring || "monthly"; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
-    return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + monthEquiv(e), 0) }; });
+    return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + (isLive(e) ? monthEquiv(e) : 0), 0) }; });
   }, [rows]);
   // Mặc định MỞ nhóm "Hằng tháng" (không có thì nhóm đầu tiên) để danh sách không trông trống; bấm chu kỳ để đóng/mở
   const [openRec0, setOpenRec] = useState(null);
   const openRec = openRec0 || new Set([byRec.some((g) => g.rec === "monthly") ? "monthly" : byRec[0]?.rec]);
   const toggleRec = (k) => setOpenRec(() => { const n = new Set(openRec); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
+  // Điện thoại (01/11): 1 dòng gọn — bấm dòng để sửa, ô tick chỉ hiện ở chế độ "Chọn", khoản dừng / hết hạn mờ đi
   const renderCard = (e) => {
-    const off = e.active === false, isPicked = picked.has(e.id);
+    const off = !isLive(e), isPicked = picked.has(e.id);
+    const ended = e.active !== false && e.endDate && e.endDate < todayK;
     return (
-      <div key={e.id} className={`flex items-center gap-2.5 p-3 ${isPicked ? "bg-indigo-50/60" : ""} ${off ? "opacity-50" : ""}`}>
-        <button onClick={() => toggle(e.id)} className="shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-bold text-slate-800">{e.name}{off && <span className="ml-1 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>
-          <div className="mt-0.5 flex items-center gap-1.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge>{e.endDate && <span className="text-[10px] font-bold text-rose-400">đến {fmtDateVI(e.endDate)}</span>}</div>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</div>
-          {monthEquiv(e) > 0 && <div className="text-[10px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</div>}
-          <div className="-mb-2 -mr-2 mt-0.5 flex justify-end">
-            {canW && <button onClick={() => setModal(e)} className="rounded-lg p-2 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={16} /></button>}
-            {canW && <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={16} /></button>}
-          </div>
-        </div>
+      <div key={e.id} className={`flex items-center gap-2.5 px-3 py-2.5 ${isPicked ? "bg-indigo-50/60" : ""} ${off ? "opacity-50" : ""}`}>
+        {selMode && <button onClick={() => toggle(e.id)} aria-label="Chọn" className="shrink-0 text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>}
+        <button type="button" onClick={() => (selMode ? toggle(e.id) : canW && setModal(e))} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-bold text-slate-800">{e.name}</span>
+            <span className="mt-0.5 flex items-center gap-1.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge>{e.active === false ? <span className="text-[11px] font-bold text-slate-400">tạm dừng</span> : e.endDate && <span className={`text-[11px] font-bold ${ended ? "text-slate-400" : "text-rose-400"}`}>{ended ? "đã hết hạn" : "đến"} {fmtDateVI(e.endDate)}</span>}</span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="block text-sm font-extrabold text-slate-800">{formatShort(e.amount)}</span>
+            {!off && monthEquiv(e) > 0 && e.recurring !== "monthly" && <span className="block text-[11px] font-bold text-rose-600">~{formatShort(monthEquiv(e))}/th</span>}
+          </span>
+        </button>
+        {canW && !selMode && <button onClick={async () => { if (await ask("Xoá khoản chi này?")) deleteExpense(e.id); }} className="-mr-1 shrink-0 rounded-lg p-2 text-slate-300 hover:bg-rose-50 hover:text-rose-600" aria-label="Xoá"><Trash2 size={15} /></button>}
       </div>
     );
   };
@@ -206,7 +211,13 @@ export default function Expenses() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {/* Điện thoại (01/11): 3 số trên 1 hàng gọn (trước 3 ô xếp dọc chiếm hết màn đầu) */}
+      <div className="grid grid-cols-3 gap-2 sm:hidden">
+        {[["Cố định / tháng", formatShort(burn), "text-rose-600"], ["Chi tháng này", formatShort(thisMonth), "text-amber-600"], ["Đang chi", `${activeCount} khoản`, "text-slate-800"]].map(([l, v, t]) => (
+          <div key={l} className="card min-w-0 p-3"><div className="text-[11px] font-bold uppercase leading-tight text-slate-400">{l}</div><div className={`mt-1 text-base font-extrabold tabular-nums ${t}`}>{v}</div></div>
+        ))}
+      </div>
+      <div className="hidden gap-4 sm:grid sm:grid-cols-3">
         <StatCard icon={Repeat} label="Chi phí cố định / tháng" value={burn} sub="Quy ra mỗi tháng" tone="rose" />
         <StatCard icon={TrendingDown} label="Chi thực tháng này" value={thisMonth} sub={`${fmtDateVI(mFrom)} → nay`} tone="amber" />
         <StatCard icon={Layers} label="Khoản đang chi" value={activeCount} tone="indigo" money={false} />
@@ -216,7 +227,9 @@ export default function Expenses() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-extrabold text-slate-900">Chi phí vận hành <span className="text-slate-400">({rows.length})</span></h2>
           <div className="flex items-center gap-2">
-            {rows.length > 0 && <button onClick={toggleAll} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />} Chọn</button>}
+            {rows.length > 0 && <button onClick={toggleAll} className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex">{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />} Chọn</button>}
+            {/* điện thoại: "Chọn" bật chế độ chọn (ô tick chỉ hiện lúc này), bấm lại để thôi */}
+            {canW && rows.length > 0 && <button onClick={() => { setSelMode((v) => !v); setPicked(new Set()); }} className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold sm:hidden ${selMode ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-600"}`}>{selMode ? <CheckSquare size={15} /> : <Square size={15} />} {selMode ? "Xong" : "Chọn"}</button>}
             {canW && <button onClick={() => setBatch(true)} className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30"><Plus size={16} /> Thêm chi phí</button>}
           </div>
         </div>

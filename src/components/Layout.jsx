@@ -149,6 +149,8 @@ function useNavPins() {
   return [pins, toggle];
 }
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
+// Tên ngắn trên điện thoại (thanh trên chật: 4 nút bên phải) — 01/11
+const SHORT_TITLE = { "Kế toán & Chi phí": "Kế toán", "Công việc & Lịch": "Công việc", "Tài khoản & Thẻ": "Tài khoản", "Trung tâm báo cáo": "Báo cáo", "Khách & Dự án": "Khách & Dự án" };
 const EXTRA_TITLES = { "/bao-cao": "Trung tâm báo cáo", "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Kế toán & Chi phí", "/quy-thong-ke": "Kế toán & Chi phí" };
 
 function Brand({ mini }) {
@@ -575,7 +577,7 @@ export default function Layout({ children }) {
             <button onClick={() => setOpen(true)} aria-label="Mở menu" className="rounded-lg p-2 text-slate-600 hover:bg-white lg:hidden">
               <Menu size={20} />
             </button>
-            <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight text-slate-900 sm:text-lg">{title}</h1>
+            <h1 className="min-w-0 truncate text-base font-extrabold tracking-tight text-slate-900 sm:text-lg"><span className="sm:hidden">{SHORT_TITLE[title] || title}</span><span className="hidden sm:inline">{title}</span></h1>
             <div className="ml-auto flex items-center gap-2">
               <UpdatePill />
               <SyncBadge />

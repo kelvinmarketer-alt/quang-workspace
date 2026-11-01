@@ -786,7 +786,7 @@ function FundsMain() {
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-bold sm:py-2">
             {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
           </select>
-          <div className="min-w-0 text-xs font-semibold leading-relaxed text-slate-400 sm:text-sm">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Đã phân bổ <span className="text-slate-700">{formatShort(allocYear)}</span></div>
+          <div className="min-w-0 text-xs font-semibold leading-relaxed text-slate-400 sm:text-sm">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Vào quỹ cá nhân <span className="text-slate-700">{formatShort(allocYear)}</span></div>
         </div>
       </Card>
 
@@ -815,7 +815,7 @@ function FundsMain() {
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
                 <span className="text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
                 {opexTotal > 0 && <span className="text-indigo-200">− Chi phí vận hành: <b className="text-rose-200">{formatShort(opexTotal)}</b></span>}
-                <span className="text-indigo-200">Đã phân bổ/chi: <b className="text-white">{formatShort(distributed)}</b></span>
+                <span className="text-indigo-200">Đã chuyển / chi ra: <b className="text-white">{formatShort(distributed)}</b></span>
               </div>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -870,8 +870,8 @@ function FundsMain() {
         )}
       </div>
 
-      {/* Lịch chuyển định kỳ */}
-      <Card>
+      {/* Lịch chuyển định kỳ — 01/11: chưa có quỹ để chuyển (cần ≥ 2 quỹ) và chưa có lịch thì ẩn hẳn (trước là ô trống chiếm chỗ) */}
+      {(schedules.length > 0 || allWithBal.length >= 2) && <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900"><Repeat size={17} className="text-indigo-500" /> Lịch chuyển định kỳ <span className="text-slate-400">({schedules.length})</span></h2>
           {allWithBal.length >= 2 && <button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button>}
@@ -912,16 +912,17 @@ function FundsMain() {
             })}
           </div>
         )}
-      </Card>
+      </Card>}
 
       {/* Biểu đồ thu nhập vs phân bổ */}
       {chart.length > 0 && (
         <Card>
           <SectionTitle action={<span className="text-xs font-bold text-slate-400">LN gộp vs Phân bổ vào quỹ</span>}>Dòng tiền {year}</SectionTitle>
-          <div className="overflow-x-auto">
-            <div className="h-56 min-w-[560px] sm:min-w-0">
+          {/* 01/11: điện thoại — biểu đồ vừa khung, không phải kéo ngang */}
+          <div>
+            <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart} margin={{ left: -8, right: 8, top: 8 }}>
+                <BarChart data={chart} margin={{ left: -8, right: 4, top: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
