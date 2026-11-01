@@ -72,7 +72,7 @@ function CustomerModal({ initial, onClose, onSave }) {
           <Power size={15} /> {(f.active ?? true) ? "Đang hợp tác (bấm để OFF)" : "Đã OFF (bấm để bật lại)"}
         </button>
 
-        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, name: f.name.trim(), zalo: (f.zalo || "").trim(), note: (f.note || "").trim(), type: f.type || "remote", feeRate: num(f.feeRate) || 20, monthlySalary: num(f.monthlySalary), active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
+        <button onClick={() => { if (f.name.trim()) { onSave({ ...f, name: f.name.trim(), zalo: (f.zalo || "").trim(), note: (f.note || "").trim(), active: f.active ?? true }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">Lưu</button>
       </div>
     </div>
   );

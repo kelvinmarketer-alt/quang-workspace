@@ -6,7 +6,7 @@ import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import AiImport from "../components/AiImport.jsx";
-import CloudBackups from "../components/CloudBackups.jsx";
+import CloudBackups, { snapshotNow } from "../components/CloudBackups.jsx";
 import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
 import { ask } from "../components/ConfirmDialog.jsx";
@@ -97,9 +97,12 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
+      // 01/11: hỏi trước + tự sao lưu bản hiện tại (trước ghi đè ngay, không hỏi)
+      if (!await ask(`Khôi phục từ file "${file.name}"?\nToàn bộ dữ liệu hiện tại sẽ bị thay bằng nội dung file. Danh sách người dùng giữ nguyên.\nApp tự sao lưu bản hiện tại lên đám mây trước khi khôi phục.`, { danger: true, ok: "Khôi phục" })) return;
+      try { await snapshotNow(user.id); } catch (err) { if (!await ask(`Không tự sao lưu được (${err.message || err}). Vẫn khôi phục?`, { danger: true, ok: "Vẫn khôi phục" })) return; }
       const ok = importData(reader.result);
-      setMsg(ok ? "✓ Khôi phục dữ liệu thành công." : "✗ File không hợp lệ.");
+      setMsg(ok ? "✓ Khôi phục dữ liệu thành công (bản trước đó đã được tự sao lưu)." : "✗ File không đúng định dạng sao lưu của app — không thay đổi gì.");
     };
     reader.readAsText(file);
     e.target.value = "";

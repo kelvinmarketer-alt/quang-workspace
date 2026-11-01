@@ -108,8 +108,13 @@ function KetoanReport() {
   const setCt = (v) => { setCt0(v); persist({ ct: v }); };
   const [compare, setCompare] = useState(true);
 
-  const { from, to } = periodFor(preset, cf, ct);
-  const prev = prevPeriod(preset, from, to);
+  const { from, to: to0 } = periodFor(preset, cf, ct);
+  // 01/11: kỳ chứa hôm nay chỉ tính TỚI HÔM NAY (doanh thu khớp chi phí — đợt nhập trước ngày tương lai không làm lãi ảo);
+  // kỳ so sánh cắt cùng số ngày cho công bằng
+  const today = todayISO(), to = to0 > today && from <= today ? today : to0;
+  const prev0 = prevPeriod(preset, from, to0);
+  const prev = to === to0 ? prev0 : { from: prev0.from, to: (() => { const d = new Date(prev0.from + "T00:00:00"); d.setDate(d.getDate() + Math.round((Date.parse(to) - Date.parse(from)) / 86400000)); const x = iso(d); return x < prev0.to ? x : prev0.to; })() };
+  const future = useMemo(() => (to === to0 ? [] : installmentsInRange(projects, iso(new Date(Date.parse(today + "T00:00:00") + 86400000)), to0)), [projects, to, to0, today]);
 
   const list = useMemo(() => installmentsInRange(projects, from, to), [projects, from, to]);
   const cur = useMemo(() => sumInstallments(list), [list]);
@@ -160,6 +165,7 @@ function KetoanReport() {
         <div className="mt-2 flex flex-col gap-0.5 text-xs text-slate-400 sm:flex-row sm:items-center sm:gap-2">
           <span className="flex items-center gap-2 whitespace-nowrap"><Calendar size={13} className="shrink-0" /> {fmtDateVI(from)} → {fmtDateVI(to)}</span>
           {compare && <span className="whitespace-nowrap pl-[21px] sm:pl-0"><span className="hidden sm:inline">· </span>so với {fmtDateVI(prev.from)} → {fmtDateVI(prev.to)}</span>}
+          {future.length > 0 && <span className="pl-[21px] text-amber-600 sm:pl-0"><span className="hidden sm:inline">· </span>chưa tính {future.length} đợt ghi ngày sau hôm nay ({formatShort(sumInstallments(future).revenue)})</span>}
         </div>
       </Card>
 
@@ -426,7 +432,10 @@ function DebtPanel() {
     }
     return [...map.values()].sort((a, b) => b.debt - a.debt);
   }, [filtered]);
-  const totalDebt = outstanding.reduce((a, x) => a + num(x.debt), 0);
+  // 01/11: "Công nợ" toàn app = đợt TỚI HẠN (ngày ≤ hôm nay); đợt ghi ngày tương lai tách riêng "chưa tới hạn"
+  const todayK = todayISO();
+  const totalDebt = outstanding.filter((x) => !x.date || x.date <= todayK).reduce((a, x) => a + num(x.debt), 0);
+  const notDue = outstanding.filter((x) => x.date > todayK).reduce((a, x) => a + num(x.debt), 0);
   const toggle = (k) => setClosed((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   const allInst = useMemo(() => allInstallments(projects), [projects]);
@@ -452,8 +461,9 @@ function DebtPanel() {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <div className="min-w-0 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 p-3 sm:p-4 text-white shadow-lg shadow-rose-500/20">
-          <div className="truncate text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Tổng công nợ</div>
+          <div className="truncate text-[10px] font-bold uppercase tracking-wide text-rose-100 sm:text-[11px]">Công nợ tới hạn</div>
           <div className="mt-1 text-lg font-extrabold sm:text-2xl"><span className="sm:hidden">{formatShort(totalDebt)}</span><span className="hidden sm:inline">{formatVND(totalDebt)}</span></div>
+          {notDue > 0 && <div className="mt-0.5 truncate text-[10.5px] font-semibold text-rose-100">+ {formatShort(notDue)} chưa tới hạn</div>}
         </div>
         <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Khách đang nợ</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{groups.length}</div></div>
         <div className="min-w-0 rounded-2xl bg-white p-3 shadow-sm sm:p-4"><div className="truncate text-[10px] font-bold uppercase text-slate-400 sm:text-[11px]">Đợt chưa thu</div><div className="mt-1 text-lg font-extrabold text-slate-800 sm:text-2xl">{outstanding.length}</div></div>

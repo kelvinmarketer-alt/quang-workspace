@@ -9,6 +9,15 @@ import { ask } from "./ConfirmDialog.jsx";
 // Sao lưu TỰ ĐỘNG trên cloud (bảng qws_backups, cron 3h sáng mỗi ngày, giữ 30 ngày) — chỉ chủ.
 const fmtTime = (iso) => new Date(iso).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
 
+// Chụp 1 bản sao lưu từ dữ liệu ĐANG Ở CLOUD (dùng cho nút "Sao lưu ngay" + tự chạy trước mọi lần khôi phục)
+export async function snapshotNow(userId) {
+  const w = await supabase.from(WORKSPACE_TABLE).select("data").eq("user_id", userId).single();
+  if (w.error) throw w.error;
+  const p = await supabase.from("qws_private").select("data").eq("user_id", userId).maybeSingle();
+  const { error } = await supabase.from("qws_backups").insert({ user_id: userId, kind: "manual", data: w.data.data, private: p.data?.data || null });
+  if (error) throw error;
+}
+
 export default function CloudBackups() {
   const { user } = useAuth();
   const { importData } = useData();
@@ -33,11 +42,7 @@ export default function CloudBackups() {
   const backupNow = async () => {
     setBusy("now"); setMsg("");
     try {
-      const w = await supabase.from(WORKSPACE_TABLE).select("data").eq("user_id", user.id).single();
-      if (w.error) throw w.error;
-      const p = await supabase.from("qws_private").select("data").eq("user_id", user.id).maybeSingle();
-      const { error } = await supabase.from("qws_backups").insert({ user_id: user.id, kind: "manual", data: w.data.data, private: p.data?.data || null });
-      if (error) throw error;
+      await snapshotNow(user.id);
       setMsg("✓ Đã tạo bản sao lưu.");
       load();
     } catch (e) { setMsg("✗ " + (e.message || e)); }
@@ -59,12 +64,14 @@ export default function CloudBackups() {
   };
 
   const restore = async (b) => {
-    if (!await ask(`Khôi phục dữ liệu về bản ${fmtTime(b.created_at)}?\nToàn bộ dữ liệu hiện tại (khách, dự án, kế toán, công việc…) sẽ bị thay bằng bản này. Tài khoản & Thẻ không bị đổi.\nNên tạo "Sao lưu ngay" trước khi khôi phục.`)) return;
+    if (!await ask(`Khôi phục dữ liệu về bản ${fmtTime(b.created_at)}?\nToàn bộ dữ liệu hiện tại (khách, dự án, kế toán, công việc…) sẽ bị thay bằng bản này. Tài khoản & Thẻ và danh sách người dùng không bị đổi.\nApp tự sao lưu bản hiện tại trước khi khôi phục.`, { danger: true, ok: "Khôi phục" })) return;
     setBusy("rs" + b.id);
     try {
+      await snapshotNow(user.id); // 01/11: tự lưu bản hiện tại trước — lỡ khôi phục nhầm vẫn quay lại được
       const d = await fetchOne(b.id);
       const ok = importData(d.data);
-      setMsg(ok ? `✓ Đã khôi phục bản ${fmtTime(b.created_at)}.` : "✗ Bản sao lưu không hợp lệ.");
+      setMsg(ok ? `✓ Đã khôi phục bản ${fmtTime(b.created_at)} (bản trước đó đã được tự sao lưu).` : "✗ Bản sao lưu không hợp lệ.");
+      if (ok) load();
     } catch (e) { setMsg("✗ " + (e.message || e)); }
     setBusy("");
   };

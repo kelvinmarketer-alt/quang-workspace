@@ -30,6 +30,10 @@ const Ctx = createContext(null);
 
 // 01/11: bản nhớ trong máy TÁCH THEO TỪNG TÀI KHOẢN (trước dùng chung 1 khoá → nhân viên đăng nhập trên máy chủ thấy số của chủ)
 const cacheKey = (uid) => `qws-cache:${uid || "anon"}`;
+// Bản cloud máy này thấy gần nhất (làm "gốc" khi gộp bản sửa trước lúc tải xong cloud — 01/11: trước gốc rỗng → máy cũ đè số mới)
+const baseKey = (uid) => `qws-cache:base:${uid || "anon"}`;
+const readBase = (uid) => { try { return JSON.parse(localStorage.getItem(baseKey(uid)) || "null"); } catch { return null; } };
+const saveBase = (uid, b) => { try { if (uid && b) localStorage.setItem(baseKey(uid), JSON.stringify(b)); } catch { /* đầy bộ nhớ */ } };
 // (Đăng xuất xoá các khoá này — xem clearLocalData ở auth.jsx)
 
 function load(uid) {
@@ -174,13 +178,15 @@ export function DataProvider({ children }) {
     setSyncStatus("saving");
     try {
       const owner = ownerRef.current || user.id;
+      let saved = false, pushedState = null;
       for (let attempt = 0; attempt < 4; attempt++) {
+        pushedState = stateRef.current;
         const local = outgoing(stateRef.current);
         if (isMemberRef.current && memberRpc.current) { // máy chủ chỉ nhận phần được quyền Sửa
           const { data, error } = await supabase.rpc("qws_member_save", { p_owner: owner, p_data: local, p_expect: baseAtRef.current });
           if (error) throw error;
           const row = Array.isArray(data) ? data[0] : data;
-          if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; break; }
+          if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; saved = true; break; }
           const rem = await readRemote(owner);
           if (rem.error) throw rem.error;
           const merged = migrate(merge3(baseRef.current, local, rem.data.data || {}));
@@ -192,7 +198,7 @@ export function DataProvider({ children }) {
           const { data, error } = await supabase.from(WORKSPACE_TABLE).upsert({ user_id: owner, data: local }).select("updated_at").maybeSingle();
           if (error) throw error;
           baseRef.current = local; baseAtRef.current = data?.updated_at || null;
-          break;
+          saved = true; break;
         }
         const { data, error } = await supabase.rpc("qws_save", { p_owner: owner, p_data: local, p_expect: baseAtRef.current });
         if (error) {
@@ -201,7 +207,7 @@ export function DataProvider({ children }) {
           throw error;
         }
         const row = Array.isArray(data) ? data[0] : data;
-        if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; break; }
+        if (row?.ok) { baseRef.current = local; baseAtRef.current = row.updated_at; saved = true; break; }
         // XUNG ĐỘT: nơi khác đã lưu trước → gộp
         const rem = await readRemote(owner);
         if (rem.error) throw rem.error;
@@ -212,8 +218,11 @@ export function DataProvider({ children }) {
         setState(stateRef.current);
         setToast({ text: "Vừa có thay đổi từ thiết bị/người khác — đã gộp, không mất dữ liệu của ai", at: Date.now() });
       }
-      dirty.current = false;
-      clearPending();
+      // 01/11: 4 lần liền xung đột mà chưa lưu được → coi là LỖI (tự thử lại), không báo "đã lưu"
+      if (!saved) throw new Error("Xung đột liên tục với thiết bị khác — sẽ thử lại");
+      saveBase(user.id, baseRef.current);
+      // Có sửa mới trong lúc đang lưu → giữ cờ "chưa lưu" để lượt sau đẩy tiếp (không xoá cờ sớm)
+      if (stateRef.current === pushedState) { dirty.current = false; clearPending(); }
       setSyncStatus("idle");
     } catch (e) {
       console.warn("Lưu Supabase lỗi:", e?.message || e);
@@ -237,6 +246,7 @@ export function DataProvider({ children }) {
     const rem = await readRemote(owner);
     if (rem.error || dirty.current || pushing.current) return;
     baseRef.current = rem.data.data; baseAtRef.current = rem.data.updated_at;
+    saveBase(user.id, baseRef.current);
     const next = migrate(rem.data.data || {});
     if (deepEqual(outgoing(next), outgoing(stateRef.current))) return;
     skipSave.current = true;
@@ -363,7 +373,7 @@ export function DataProvider({ children }) {
       const pend = readPending(user.id);
       if (blob && Object.keys(blob).length > 0 && pend) {
         // Máy này còn bản sửa CHƯA lên cloud (lần trước mạng yếu / tắt app) → GỘP 3 chiều, không để cloud đè mất
-        const merged = migrate(merge3(pend.base ?? undefined, stateRef.current, blob));
+        const merged = migrate(merge3(pend.base ?? readBase(user.id) ?? undefined, stateRef.current, blob));
         skipSave.current = true;
         setState(owner === user.id ? merged : stripSecrets(merged));
         dirty.current = true;
@@ -381,6 +391,7 @@ export function DataProvider({ children }) {
         baseRef.current = stateRef.current; baseAtRef.current = ins.data?.updated_at || null;
       }
       if (owner === user.id && alive) await loadPrivate(blob);
+      saveBase(user.id, baseRef.current);
       setSynced(true);
       // Khối chung trên cloud còn sót vault/key (bản cũ) → đẩy ngay bản đã gỡ bí mật
       if (privAvailRef.current === true && (blob?.vault?.length || blob?.settings?.openaiKey)) {
@@ -491,9 +502,9 @@ export function DataProvider({ children }) {
       }),
       // CUSTOMERS (bản ghi thật)
       addCustomer: (c) =>
-        setState((s) => ({ ...s, customerList: [{ id: "c" + uid(), name: "", phone: "", zalo: "", note: "", feeRate: 20, type: "remote", monthlySalary: 0, active: true, ...c }, ...s.customerList] })),
+        setState((s) => ({ ...s, customerList: [{ id: "c" + uid(), name: "", phone: "", zalo: "", note: "", active: true, ...c }, ...s.customerList] })),
       addCustomers: (arr) =>
-        setState((s) => ({ ...s, customerList: [...arr.map((c) => ({ id: "c" + uid(), name: "", phone: "", zalo: "", note: "", feeRate: 20, type: "remote", monthlySalary: 0, active: true, ...c })), ...s.customerList] })),
+        setState((s) => ({ ...s, customerList: [...arr.map((c) => ({ id: "c" + uid(), name: "", phone: "", zalo: "", note: "", active: true, ...c })), ...s.customerList] })),
       updateCustomer: (id, patch) =>
         setState((s) => ({
           ...s,
@@ -762,8 +773,12 @@ export function DataProvider({ children }) {
       exportData: () => JSON.stringify(state, null, 2),
       importData: (json) => {
         try {
-          const parsed = typeof json === "string" ? JSON.parse(json) : json;
-          setState(migrate(parsed));
+          let parsed = typeof json === "string" ? JSON.parse(json) : json;
+          // File tải từ "Sao lưu tự động" có dạng { backupAt, data, private } → lấy phần data (01/11: trước ghi đè cả object sai)
+          if (parsed && parsed.data && typeof parsed.data === "object" && !parsed.customerList && !parsed.projects) parsed = parsed.data;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !["customerList", "projects", "tasks", "settings"].some((k) => k in parsed)) return false;
+          // Giữ danh sách thành viên HIỆN TẠI: khôi phục bản cũ không trả lại quyền cho người đã bị gỡ
+          setState((cur) => ({ ...migrate(parsed), members: cur.members || [] }));
           return true;
         } catch {
           return false;

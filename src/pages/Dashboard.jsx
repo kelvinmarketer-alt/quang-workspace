@@ -7,7 +7,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, Repeat, Activity, Coins, Loader2 } from "lucide-react";
 import { Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, allInstallments } from "../lib/selectors.js";
+import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, debtToDate, allInstallments } from "../lib/selectors.js";
 import { MONTHS_VI, fmtDateVI, todayISO } from "../lib/format.js";
 import { generateCalendarEvents } from "../lib/events.js";
 import { lunarInfo } from "../lib/lunar.js";
@@ -55,7 +55,9 @@ export default function Dashboard() {
   const [more, setMore] = useState(false);
   const today = todayISO(), now = new Date(), curY = now.getFullYear(), curM = now.getMonth() + 1;
   const years = useMemo(() => { const ys = projectYears(projects); return ys.length ? ys : [curY]; }, [projects, curY]);
-  const [year, setYear] = useState(years[0]);
+  // 01/11: mặc định NĂM NAY (trước lấy năm mới nhất có đợt → có đợt ghi trước sang năm sau là mở năm trống)
+  const [year, setYear] = useState(() => (years.includes(curY) ? curY : years[0]));
+  useEffect(() => { if (!years.includes(year)) setYear(years.includes(curY) ? curY : years[0]); }, [years]); // eslint-disable-line react-hooks/exhaustive-deps
   const monthly = useMemo(() => projectsMonthly(projects, year), [projects, year]);
   const lastYear = useMemo(() => projectsMonthly(projects, year - 1), [projects, year]);
   const upto = year === curY ? curM : 12; // không vẽ / không cộng tháng chưa tới
@@ -63,7 +65,8 @@ export default function Dashboard() {
   const tot = shown.reduce((a, m) => ({ rev: a.rev + m.revenue, gp: a.gp + m.grossProfit }), { rev: 0, gp: 0 });
   const prevTot = lastYear.filter((m) => m.month <= upto).reduce((a, m) => ({ rev: a.rev + m.revenue, gp: a.gp + m.grossProfit }), { rev: 0, gp: 0 });
   const chartData = shown.map((m) => ({ name: MONTHS_VI[m.month - 1], thu: m.revenue, ln: m.grossProfit }));
-  const debt = totalDebt(projects);
+  // Công nợ = đợt tới hạn (khớp ô "Cần thu" + Kế toán); đợt ghi ngày tương lai hiện riêng
+  const debt = debtToDate(projects, today), notDue = totalDebt(projects) - debt;
 
   // Trung tâm báo cáo (chỉ chủ): sức khoẻ từng thương hiệu + chi quảng cáo 30 ngày
   const rep = useReportData(30);
@@ -150,7 +153,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:contents">
         <Kpi label={`Doanh thu ${year === curY ? `T1–T${curM}` : year}`} value={tot.rev} delta={pctOf(tot.rev, prevTot.rev)} sub={`so ${year - 1}`} spark={shown.map((m) => m.revenue)} color="#6366f1" />
         <Kpi label="Lợi nhuận gộp" value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`${tot.rev ? Math.round((tot.gp / tot.rev) * 100) : 0}% biên`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
-        <Kpi label="Công nợ" value={debt} sub={debt > 0 ? "chưa thu" : "không có nợ"} />
+        <Kpi label="Công nợ tới hạn" value={debt} sub={notDue > 0 ? `+ ${formatShort(notDue)} chưa tới hạn` : debt > 0 ? "chưa thu" : "không có nợ"} />
         {isOwner
           ? <Kpi label="Chi quảng cáo 30 ngày" value={adsSpend == null ? "…" : adsSpend} delta={adsSpend != null ? pctOf(adsSpend, adsPrev) : null} deltaGood={false} sub="so 30 ngày trước" />
           : <Kpi label="Khách hàng" value={String(customerList.length)} sub="đang quản lý" />}

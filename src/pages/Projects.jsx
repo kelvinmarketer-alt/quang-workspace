@@ -18,6 +18,9 @@ const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Se
 const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
 const STATUS_ORDER = { doing: 0, paused: 1, done: 2, cancel: 3 }; // Đang làm lên đầu, Đã huỷ xuống cuối
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
+// % phí: cho số thập phân (12,5) và 0% — trống mới dùng mặc định (01/11: trước "12,5" thành 125%, không đặt được 0%)
+const pct = (v) => { const s = String(v ?? "").trim().replace(",", "."); if (!s) return null; const n = parseFloat(s); return Number.isFinite(n) && n >= 0 ? n : null; };
+const rateOf = (v, d = 20) => pct(v) ?? d;
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 
 function Field({ label, children, hint }) {
@@ -35,9 +38,11 @@ function blankInst(feeRate = 20) {
 }
 const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
 // + 1 tháng (cùng ngày) cho nhân bản đợt định kỳ
-const addMonthISO = (iso) => { const d = iso ? new Date(iso) : new Date(); d.setMonth(d.getMonth() + 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const addMonthISO = (iso) => { const [y, m, dd] = (iso || todayISO()).split("-").map(Number); const d = new Date(y, m, Math.min(dd, new Date(y, m + 1, 0).getDate())); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }; // 31/1 → 28/2 (không trôi sang 3/3)
 // đợt (số) -> form (chuỗi) để nạp vào InstallmentFields
-const instToForm = (x) => ({ ...x, amount: String(x.amount || ""), feeRate: String(x.feeRate || 20), serviceFee: String(x.serviceFee || ""), spend: String(x.spend || ""), refund: String(x.refund || ""), carry: String(x.carry || ""), ctv: String(x.ctv || ""), otherCost: String(x.otherCost || ""), collected: String(x.collected || "") });
+const instToForm = (x) => ({ ...x, amount: String(x.amount || ""), feeRate: String(x.feeRate ?? 20), serviceFee: String(x.serviceFee || ""), spend: String(x.spend || ""), refund: String(x.refund || ""), carry: String(x.carry || ""), ctv: String(x.ctv || ""), otherCost: String(x.otherCost || ""), collected: String(x.collected || ""),
+  // đợt cũ ghi chi phí ở otherCost (chưa có costs[]) → đưa vào danh sách chi phí để sửa đợt không làm mất chi phí (01/11)
+  costs: Array.isArray(x.costs) ? x.costs : num(x.otherCost) ? [{ label: "Chi phí khác", amount: String(x.otherCost) }] : [] });
 function instFromForm(f, isAds, isSalary) {
   if (isSalary) {
     // Lương: 1 đợt = lương thực nhận tháng đó, mặc định đã nhận đủ.
@@ -54,7 +59,7 @@ function instFromForm(f, isAds, isSalary) {
     .map((c) => ({ label: (c.label || "").trim() || "Chi phí", amount: num(c.amount) }));
   return {
     label: (f.label || "").trim() || "Đợt", date: f.date || todayISO(),
-    amount: num(f.amount), feeRate: num(f.feeRate) || 20, serviceFee: isAds ? num(f.serviceFee) : 0, spend: isAds ? num(f.spend) : 0,
+    amount: num(f.amount), feeRate: rateOf(f.feeRate), serviceFee: isAds ? num(f.serviceFee) : 0, spend: isAds ? num(f.spend) : 0,
     refund: isAds ? num(f.refund) : 0, carry: isAds ? num(f.carry) : 0, ctv: num(f.ctv), costs, collected: num(f.collected),
     ...(f.carried ? { carried: true } : {}),
   };
@@ -62,6 +67,9 @@ function instFromForm(f, isAds, isSalary) {
 
 /** Các ô nhập của 1 đợt + preview */
 function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
+  const rate = () => rateOf(f.feeRate);
+  // phí chạy đã bị sửa tay chưa (để ngừng tự tính theo %). Hook phải đứng TRƯỚC nhánh Lương (01/11: đổi danh mục Lương ↔ khác làm sập form)
+  const [feeTouched, setFeeTouched] = useState(() => num(f.serviceFee) > 0 && num(f.serviceFee) !== Math.round(num(f.amount) * rate() / 100));
   if (isSalary) {
     const amt = num(f.amount);
     // nhập lương → coi như đã nhận đủ (collected = amount)
@@ -81,22 +89,19 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
       </div>
     );
   }
-  const rate = () => num(f.feeRate) || 20;
-  // phí chạy đã bị sửa tay chưa (để ngừng tự tính theo %)
-  const [feeTouched, setFeeTouched] = useState(() => num(f.serviceFee) > 0 && num(f.serviceFee) !== Math.round(num(f.amount) * rate() / 100));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const setV = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const onAmount = (v) => {
-    setF((p) => ({ ...p, amount: v, serviceFee: isAds && !feeTouched ? String(Math.round(num(v) * (num(p.feeRate) || 20) / 100)) : p.serviceFee }));
+    setF((p) => ({ ...p, amount: v, serviceFee: isAds && !feeTouched ? String(Math.round(num(v) * rateOf(p.feeRate) / 100)) : p.serviceFee }));
   };
   const onRate = (e) => {
-    const r = num(e.target.value);
+    const r = rateOf(e.target.value, 0);
     setFeeTouched(false);
     setF((p) => ({ ...p, feeRate: e.target.value, serviceFee: String(Math.round(num(p.amount) * r / 100)) }));
   };
   const onServiceFee = (v) => {
     setFeeTouched(true);
-    setF((p) => ({ ...p, serviceFee: v, feeRate: num(p.amount) ? String(Math.round((num(v) / num(p.amount)) * 100)) : p.feeRate }));
+    setF((p) => ({ ...p, serviceFee: v, feeRate: num(p.amount) ? String(Math.round((num(v) / num(p.amount)) * 1000) / 10) : p.feeRate }));
   };
   // chi phí phát sinh (danh sách)
   const costs = f.costs || [];
@@ -116,7 +121,7 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
         <div className="rounded-xl bg-rose-50/60 p-3">
           <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
             <Field label="Số tiền nhận"><MoneyInput value={f.amount} onChange={onAmount} className={inputCls} placeholder="10.000.000" /></Field>
-            <Field label="% phí"><input value={f.feeRate} onChange={onRate} inputMode="numeric" className={inputCls} placeholder="20" /></Field>
+            <Field label="% phí"><input value={f.feeRate} onChange={onRate} inputMode="decimal" className={inputCls} placeholder="20" /></Field>
             <Field label="Phí chạy"><MoneyInput value={f.serviceFee} onChange={onServiceFee} className={inputCls} placeholder="2.000.000" /></Field>
             <Field label="Tiền chạy"><MoneyInput value={f.spend} onChange={setV("spend")} className={inputCls} placeholder="4.000.000" /></Field>
           </div>
@@ -209,7 +214,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
     const mine = projects.filter((p) => p.customerId === cid && p.id !== initial.id);
     const lastInst = (p) => [...(p.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0];
     const sal = mine.filter((p) => p.category === "Lương").map((p) => num(p.monthlySalary) || num(lastInst(p)?.amount)).find(Boolean) || num(c?.monthlySalary);
-    const fee = mine.filter((p) => p.category === "ADS").map((p) => num(p.feeRate) || num(lastInst(p)?.feeRate)).find(Boolean) || num(c?.feeRate) || 20;
+    const fee = mine.filter((p) => p.category === "ADS").map((p) => pct(p.feeRate) ?? pct(lastInst(p)?.feeRate)).find((v) => v != null) ?? pct(c?.feeRate) ?? 20;
     return { sal, fee };
   };
   const salaryBase = num(f.monthlySalary);
@@ -229,7 +234,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
   useEffect(() => { applyDefaults(f.customerId, f.category); }, [f.customerId]); // eslint-disable-line react-hooks/exhaustive-deps
   const onCategory = (e) => { const cat = e.target.value; setF((p) => ({ ...p, category: cat })); if ((cat === "Lương") !== isSalary || cat === "ADS") applyDefaults(f.customerId, cat); };
   const onSalary = (v) => { setF((p) => ({ ...p, monthlySalary: v })); if (!editing) setInst((p) => ({ ...p, amount: v, collected: v })); };
-  const onFee = (e) => { const v = e.target.value; setF((p) => ({ ...p, feeRate: v })); if (!editing) setInst((p) => ({ ...p, feeRate: v, serviceFee: num(p.amount) ? String(Math.round(num(p.amount) * (num(v) || 20) / 100)) : p.serviceFee })); };
+  const onFee = (e) => { const v = e.target.value; setF((p) => ({ ...p, feeRate: v })); if (!editing) setInst((p) => ({ ...p, feeRate: v, serviceFee: num(p.amount) ? String(Math.round(num(p.amount) * rateOf(v) / 100)) : p.serviceFee })); };
 
   return (
     <Modal wide title={editing ? "Sửa dự án" : "Thêm dự án"} onClose={onClose}>
@@ -255,7 +260,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
           </Field>
         </div>
         {isSalary && <Field label="Lương tháng" hint="Tự điền mỗi lần ghi lương"><MoneyInput value={f.monthlySalary} onChange={onSalary} className={inputCls} placeholder="15.000.000" /></Field>}
-        {isAds && <Field label="% phí dịch vụ" hint="Tự điền khi thêm đợt ADS"><input value={f.feeRate} onChange={onFee} inputMode="numeric" className={inputCls} placeholder="20" /></Field>}
+        {isAds && <Field label="% phí dịch vụ" hint="Tự điền khi thêm đợt ADS"><input value={f.feeRate} onChange={onFee} inputMode="decimal" className={inputCls} placeholder="20" /></Field>}
         <Field label="Tên dự án" hint="Bỏ trống = tự đặt theo danh mục + khách"><input value={f.name} onChange={set("name")} className={inputCls} placeholder={autoName(f.category, cust) || "VD: ADS Vua Đóng Gói"} /></Field>
         <Field label="Ghi chú"><input value={f.note} onChange={set("note")} className={inputCls} /></Field>
 
@@ -272,7 +277,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
         onClick={() => {
           if (!f.customerId) return;
           const base = { name: (f.name || "").trim() || autoName(f.category, cust), customerId: f.customerId, customerName: cust?.name || "", category: f.category, status: f.status, note: f.note,
-            ...(isSalary ? { monthlySalary: num(f.monthlySalary) } : {}), ...(isAds ? { feeRate: num(f.feeRate) || 20 } : {}) };
+            ...(isSalary ? { monthlySalary: num(f.monthlySalary) } : {}), ...(isAds ? { feeRate: rateOf(f.feeRate) } : {}) };
           if (editing) onSave(base);
           else {
             const firstAmt = num(inst.amount);
@@ -330,7 +335,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
   // Sắp xếp đợt MỚI NHẤT → CŨ NHẤT (theo ngày giảm dần)
   const insts = [...(project.installments || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   const salDef = num(project.monthlySalary) || custSalary;
-  const feeDef = num(project.feeRate) || num(insts[0]?.feeRate) || custFeeRate;
+  const feeDef = pct(project.feeRate) ?? pct(insts[0]?.feeRate) ?? custFeeRate;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onInputCapture={markDirty}>
@@ -405,7 +410,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                       <button onClick={() => addInstallment(project.id, { label: "Tiếp nối " + x.label, date: todayISO(), amount: im.carry, serviceFee: 0, spend: 0, refund: 0, carry: 0, ctv: 0, otherCost: 0, collected: im.carry, carried: true })} className="flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-600 hover:bg-amber-100"><ArrowRight size={12} /> Tạo đợt nối</button>
                     )}
                     {!full && (
-                      <button onClick={() => updateInstallment(project.id, x.id, { collected: im.contractValue })} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
+                      <button onClick={() => { const amt = im.contractValue - num(x.collected); updateInstallment(project.id, x.id, { collected: im.contractValue, payments: [...(Array.isArray(x.payments) ? x.payments : []), { id: "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: todayISO(), amount: amt, note: "Thu đủ" }] }); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
                     )}
                   </div>}
                 </div>

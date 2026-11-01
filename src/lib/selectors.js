@@ -195,13 +195,13 @@ function expenseCharges(ex, from, to) {
     if (ok(start)) out.push(start);
   } else if (rec === "yearly") {
     for (let y = from.getFullYear() - 1; y <= to.getFullYear() + 1; y++) {
-      const d = new Date(y, start.getMonth(), start.getDate());
+      const d = new Date(y, start.getMonth(), Math.min(start.getDate(), new Date(y, start.getMonth() + 1, 0).getDate())); // 29/2 → 28/2 năm thường
       if (ok(d)) out.push(d);
     }
-  } else { // monthly
-    let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-    while (d < from) d = new Date(d.getFullYear(), d.getMonth() + 1, start.getDate());
-    while (d <= to && (!end || d <= end)) { if (d >= start) out.push(new Date(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, start.getDate()); }
+  } else { // monthly — đếm theo SỐ THÁNG kể từ ngày bắt đầu, ngày 29–31 kẹp về cuối tháng (01/11: trước 31/1 → 3/3 → mất kỳ)
+    const at = (k) => { const y = start.getFullYear(), m = start.getMonth() + k; return new Date(y, m, Math.min(start.getDate(), new Date(y, m + 1, 0).getDate())); };
+    let k = Math.max(0, (from.getFullYear() - start.getFullYear()) * 12 + from.getMonth() - start.getMonth() - 1);
+    for (let d = at(k); d <= to && (!end || d <= end); d = at(++k)) if (d >= start && d >= from) out.push(d);
   }
   return out;
 }
