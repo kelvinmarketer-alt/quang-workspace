@@ -925,7 +925,7 @@ function FundsMain() {
                 <BarChart data={chart} margin={{ left: -8, right: 4, top: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
+                  <YAxis tickFormatter={(v) => formatShort(v).replace(" ", "")} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
                   <Tooltip formatter={(v, k) => [formatVND(v), k === "thu" ? "LN gộp" : "Đã phân bổ"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                   <Bar dataKey="thu" name="LN gộp" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                   <Bar dataKey="pb" name="Đã phân bổ" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
@@ -1073,7 +1073,7 @@ function FundsMain() {
                               <div className="flex items-center gap-1.5"><span className={`h-2 w-2 shrink-0 rounded-full ${TONE_BG[fundColor(t.fundId)] || "bg-slate-400"}`} /><span className="truncate text-sm font-bold text-slate-700">{fundName(t.fundId)}</span>{t.cat && <Badge tone={catTone(spendCats, t.cat)}>{t.cat}</Badge>}</div>
                               {t.note && <div className="truncate text-[11px] text-slate-400">{t.note}</div>}
                             </div>
-                            <div className={`shrink-0 text-right text-sm font-extrabold tabular-nums ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}{formatVND(t.amount)}</div>
+                            <div className={`shrink-0 text-right text-sm font-extrabold tabular-nums ${isIn ? "text-emerald-600" : "text-rose-600"}`}>{isIn ? "+" : "−"}<span className="sm:hidden">{formatShort(t.amount)}</span><span className="hidden sm:inline">{formatVND(t.amount)}</span></div>
                             <span className="-mr-2 flex shrink-0 items-center">{/* luôn hiện (iPad không có hover) */}
                               <button onClick={() => setEditTx(t)} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-indigo-50 hover:text-indigo-600" title="Sửa"><Pencil size={14} /></button>
                               <button onClick={async () => { if (await ask("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(t.id); }} className="rounded-lg p-2.5 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" title="Xoá"><Trash2 size={14} /></button>

@@ -61,7 +61,9 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
           <div className="mt-0.5 text-lg font-extrabold leading-tight tracking-tight text-slate-900 sm:mt-1 sm:text-2xl">
             <FitMoney value={value} />
           </div>
-          {compare && <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5"><Delta cur={value} prev={prev} /><span className="text-[11px] text-slate-400">kỳ trước {formatShort(prev)}</span></div>}
+          {/* 01/11: kỳ trước chưa có số (app bắt đầu ghi từ 2026) → ghi rõ, không hiện "mới · kỳ trước 0" */}
+          {compare && (prev ? <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5"><Delta cur={value} prev={prev} /><span className="text-[11px] text-slate-400">kỳ trước {formatShort(prev)}</span></div>
+            : <div className="mt-1 text-[11px] text-slate-400">kỳ trước chưa có số</div>)}
         </div>
         <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br text-white shadow-lg sm:h-11 sm:w-11 ${TONES[tone]}`}><Icon size={16} className="sm:hidden" /><Icon size={20} className="hidden sm:block" /></div>
       </div>
@@ -80,7 +82,7 @@ function Waterfall({ rev, gp, op, opN, net, prevNet }) {
   ];
   return (
     <Card>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Từ doanh thu đến lãi ròng</h3>{prevNet != null && <span className="text-[12px] text-slate-400">lãi ròng kỳ trước {formatShort(prevNet)}</span>}</div>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Từ doanh thu đến lãi ròng</h3>{prevNet ? <span className="text-[12px] text-slate-400">lãi ròng kỳ trước {formatShort(prevNet)}</span> : null}</div>
       <div className="space-y-2">
         {rows.map((r) => (
           <div key={r.l} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_7.5rem]">

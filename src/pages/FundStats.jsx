@@ -246,7 +246,7 @@ export default function FundStats() {
       <Card>
         <div className="flex flex-wrap items-center gap-1.5">
           {PRESETS.map(([v, l]) => (
-            <button key={v} onClick={() => setPreset(v)} className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${preset === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}</button>
+            <button key={v} onClick={() => setPreset(v)} className={`rounded-full px-3 py-1.5 text-[13px] font-bold transition ${preset === v ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}</button>
           ))}
           <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-500"><input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} className="accent-indigo-500" /> So kỳ trước</label>
         </div>
@@ -364,7 +364,7 @@ export default function FundStats() {
                         <BarChart data={trend.months} margin={{ left: -8, right: 8, top: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                           <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                          <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
+                          <YAxis tickFormatter={(v) => formatShort(v).replace(" ", "")} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
                           <Tooltip formatter={(v, k) => [formatVND(v), k]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                           <Legend wrapperStyle={{ fontSize: 11 }} />
                           {trend.keys.map((k) => <Bar key={k} dataKey={k} stackId="s" fill={HEX[catColor(k)] || HEX.slate} maxBarSize={26} isAnimationActive={false} radius={[0, 0, 0, 0]} />)}
