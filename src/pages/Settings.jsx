@@ -67,7 +67,7 @@ function PushCard({ userId }) {
 }
 
 export default function Settings() {
-  const { tasks, family, customerList, projects, exportData, importData, reset, isOwner } = useData();
+  const { tasks, family, customerList, projects, exportData, importData, reset, isOwner, syncStatus } = useData();
   const { user, signOut, changePassword } = useAuth();
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState(null);
@@ -141,7 +141,8 @@ export default function Settings() {
             <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white"><UserCircle size={22} /></div>
             <div>
               <div className="text-sm font-bold text-slate-800">{user?.email || "—"}</div>
-              <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600"><Cloud size={12} /> Đã đồng bộ đám mây (Supabase)</div>
+              {/* 01/11: theo trạng thái lưu thật (trước luôn ghi "Đã đồng bộ" kể cả khi lỗi) */}
+              <div className={`flex items-center gap-1 text-[11px] font-semibold ${syncStatus === "error" ? "text-rose-600" : syncStatus === "saving" ? "text-amber-600" : "text-emerald-600"}`}><Cloud size={12} /> {syncStatus === "error" ? "Chưa lưu được lên đám mây — app đang tự thử lại" : syncStatus === "saving" ? "Đang lưu lên đám mây…" : "Đã đồng bộ đám mây (Supabase)"}</div>
             </div>
           </div>
           <button onClick={async () => { if (await ask("Đăng xuất khỏi máy này?")) signOut(); }} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600"><LogOut size={15} /> Đăng xuất</button>
