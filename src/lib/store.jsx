@@ -28,9 +28,15 @@ const DELETE_LABELS = {
 };
 const Ctx = createContext(null);
 
-function load() {
+// 01/11: bản nhớ trong máy TÁCH THEO TỪNG TÀI KHOẢN (trước dùng chung 1 khoá → nhân viên đăng nhập trên máy chủ thấy số của chủ)
+const cacheKey = (uid) => `qws-cache:${uid || "anon"}`;
+// (Đăng xuất xoá các khoá này — xem clearLocalData ở auth.jsx)
+
+function load(uid) {
   try {
-    const raw = localStorage.getItem(KEY);
+    let raw = localStorage.getItem(cacheKey(uid));
+    // Bản cũ (khoá chung) chỉ nhận khi có bản sửa chưa lưu CỦA CHÍNH tài khoản này; còn lại bỏ đi
+    if (!raw && localStorage.getItem(KEY)) { if (readPending(uid)) raw = localStorage.getItem(KEY); localStorage.removeItem(KEY); }
     if (raw) return migrate(JSON.parse(raw));
   } catch {}
   const today = new Date();
@@ -106,7 +112,7 @@ function migrate(s) {
 
 export function DataProvider({ children }) {
   const { user } = useAuth();
-  const [state, setState] = useState(load);
+  const [state, setState] = useState(() => load(user?.id));
   const [synced, setSynced] = useState(false);
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | saving | error
   const [reloadTick, setReloadTick] = useState(0);
@@ -120,6 +126,7 @@ export function DataProvider({ children }) {
   // Thông báo nổi dùng chung (Hoàn tác sau khi xoá, "chỉ có quyền xem"…)
   const [toast, setToast] = useState(null);
   const undoRef = useRef(null);
+  const lsWarned = useRef(false);
   // Chủ workspace: mặc định = chính mình; nếu là THÀNH VIÊN (được chia sẻ) thì = user_id của chủ.
   const [ownerId, setOwnerId] = useState(null);
   const ownerRef = useRef(null);
@@ -387,8 +394,10 @@ export function DataProvider({ children }) {
 
   // Cache localStorage ngay mỗi lần state đổi
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
-  }, [state]);
+    if (!user?.id) return;
+    try { localStorage.setItem(cacheKey(user.id), JSON.stringify(state)); }
+    catch { if (!lsWarned.current) { lsWarned.current = true; setToast({ text: "Bộ nhớ trình duyệt đầy — dữ liệu vẫn lưu lên đám mây nhưng mở lại khi mất mạng sẽ không có bản mới nhất", at: Date.now() }); } }
+  }, [state, user?.id]);
 
   // Đẩy Supabase (debounce) — chỉ khi đã đọc xong cloud lần đầu (synced)
   useEffect(() => {
@@ -762,8 +771,8 @@ export function DataProvider({ children }) {
       },
       // RESET
       reset: () => {
-        localStorage.removeItem(KEY);
-        setState(load());
+        localStorage.removeItem(cacheKey(user?.id));
+        setState(load(user?.id));
       },
     };
     // XOÁ CÓ HOÀN TÁC: chụp bản trước khi xoá → thông báo "Đã xoá … · Hoàn tác" 10 giây (gộp 3 chiều nên không mất sửa khác trong lúc đó)

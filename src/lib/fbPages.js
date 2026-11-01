@@ -3,7 +3,6 @@
 // Thêm page mới: gán page vào System User trong Business Manager → Văn phòng AI → Kết nối → Facebook → Làm mới.
 import { supabase } from "./supabase.js";
 
-const G = "https://graph.facebook.com/v23.0/";
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return iso(d); };
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
@@ -17,63 +16,31 @@ export function fbRanges(period) {
   return { days: n, key: `${since}_${until}`, cur: [since, until], prev: [addDays(since, -n), addDays(since, -1)], hasToday: until === t, partial: since === t };
 }
 
-let sysTokens = null;
-// Tài khoản phụ (được cấp quyền "Hiệu quả Fanpage"): không đọc được token → gọi qua edge fn qws-proxy
-let viaProxy = false;
-export const setFbProxy = (v) => { viaProxy = !!v; };
+// 01/11: MỌI tài khoản (kể cả chủ) gọi qua edge fn qws-proxy — token BM / token page chỉ nằm ở máy chủ
 async function proxy(body) {
   const { data, error } = await supabase.functions.invoke("qws-proxy", { body });
   if (error) { let m = error.message; try { m = (await error.context?.json?.())?.error || m; } catch { /* bỏ qua */ } throw new Error(/Failed to send|not found|404/i.test(m) ? "Máy chủ chưa bật hàm qws-proxy (chủ cần deploy)" : m); }
   if (data?.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "Facebook lỗi");
   return data;
 }
-// GET 1 edge của page (chủ: token page trực tiếp · tài khoản phụ: qua máy chủ)
-async function pageGet(p, path, params) {
-  if (viaProxy) return proxy({ action: "fb", page_id: p.page_id, path, params });
-  return fbGet(path, params, await pageToken(p));
-}
-const pageNext = (p, next) => (viaProxy ? proxy({ action: "fb", page_id: p.page_id, next }) : fbGet(next));
-const pageTokens = new Map();
-
-async function fbGet(path, params, token, tries = 3) {
-  const u = new URL(path.startsWith("http") ? path : G + path);
-  for (const [k, v] of Object.entries(params || {})) u.searchParams.set(k, v);
-  if (token) u.searchParams.set("access_token", token);
-  const r = await fetch(u);
-  const j = await r.json().catch(() => ({}));
-  if (j.error) {
-    // Lỗi tạm thời của Facebook (code 1/2, "unexpected error", quá tải) → đợi rồi thử lại
-    if (tries > 1 && (j.error.is_transient || [1, 2, 4, 17, 32, 613].includes(j.error.code))) {
-      await new Promise((ok) => setTimeout(ok, 1200 * (4 - tries)));
-      return fbGet(path, params, token, tries - 1);
-    }
-    throw new Error(j.error.message || "Facebook lỗi");
+// GET 1 nhánh số liệu của page qua máy chủ; lỗi tạm thời của Facebook (quá tải, "unexpected error") → đợi rồi thử lại
+async function pageGet(p, path, params, tries = 3) {
+  try { return await proxy({ action: "fb", page_id: p.page_id, path, params }); }
+  catch (e) {
+    if (tries > 1 && /unexpected|temporar|try again|limit|quá tải/i.test(e.message || "")) { await new Promise((ok) => setTimeout(ok, 1200 * (4 - tries))); return pageGet(p, path, params, tries - 1); }
+    throw e;
   }
-  return j;
 }
+const pageNext = (p, next) => proxy({ action: "fb", page_id: p.page_id, next });
 
-export async function listPages() {
-  if (viaProxy) { const d = await proxy({ action: "fb_pages" }); return { pages: d.pages || [], lastSync: null, conns: 0, offCount: 0 }; }
-  const [{ data: pages, error }, { data: conns, error: e2 }] = await Promise.all([
-    supabase.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").order("fans", { ascending: false, nullsFirst: false }),
-    supabase.from("office_fb").select("id,token,name,updated_at"),
-  ]);
-  if (error || e2) throw new Error((error || e2).message);
-  sysTokens = new Map((conns || []).map((c) => [c.id, c.token]));
-  const lastSync = (conns || []).map((c) => c.updated_at).sort().pop() || null;
-  // Chỉ page đang BẬT bên Văn phòng AI (tắt ở đó = app cũng không hiện)
-  return { pages: (pages || []).filter((p) => p.enabled), lastSync, conns: (conns || []).length, offCount: (pages || []).filter((p) => !p.enabled).length };
-}
-
-async function pageToken(p) {
-  if (pageTokens.has(p.page_id)) return pageTokens.get(p.page_id);
-  if (!sysTokens) await listPages();
-  const sys = sysTokens.get(p.fb_id) || [...sysTokens.values()][0];
-  if (!sys) throw new Error("Chưa kết nối Facebook bên Văn phòng AI");
-  const j = await fbGet(p.page_id, { fields: "access_token" }, sys);
-  if (!j.access_token) throw new Error("Token BM không có quyền với page này");
-  pageTokens.set(p.page_id, j.access_token);
-  return j.access_token;
+// Chỉ page đang BẬT bên Văn phòng AI (tắt ở đó = app cũng không hiện). Nhớ 1 lần tải / 5 phút.
+let PAGES = null;
+export async function listPages(force = false) {
+  if (!force && PAGES && PAGES.at > Date.now() - 300000) return PAGES.p;
+  const p = proxy({ action: "fb_pages" }).then((d) => ({ pages: d.pages || [], lastSync: d.lastSync || null, conns: d.conns ?? 1, offCount: d.offCount || 0 }));
+  PAGES = { at: Date.now(), p };
+  p.catch(() => { PAGES = null; });
+  return p;
 }
 
 // Chỉ số page còn dùng được (FB đã khai tử page_impressions*, page_fans… từ 2024-2025) — đã test thật 05/10/2026

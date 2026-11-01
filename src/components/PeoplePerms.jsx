@@ -260,7 +260,7 @@ export default function PeoplePerms() {
       <SectionTitle action={<Users2 size={18} className="text-indigo-500" />}>Người dùng & phân quyền</SectionTitle>
       <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs text-indigo-700">
         <ShieldCheck size={15} className="mt-0.5 shrink-0" />
-        <span>Mỗi người <b>1 hồ sơ quyền</b>: <b>A</b> module được dùng · <b>B</b> phạm vi dự án (tất cả / chỉ khách được giao) · <b>C</b> vai trò ở Văn phòng AI. <b>Chỉ chủ</b>: Tài khoản &amp; Thẻ, kết nối/token, sao lưu, quản lý người dùng, điều khiển bot. Người được thêm tự <b>đăng ký đúng email</b> rồi đăng nhập.</span>
+        <span>Mỗi người <b>1 hồ sơ quyền</b>: <b>A</b> module được dùng · <b>B</b> phạm vi dự án (tất cả / chỉ khách được giao) · <b>C</b> vai trò ở Văn phòng AI. <b>Chỉ chủ</b>: Tài khoản &amp; Thẻ, kết nối/token, sao lưu, quản lý người dùng, điều khiển bot. Tự đăng ký đã tắt: tạo tài khoản cho người được thêm ở Supabase → Authentication → <b>Add user</b> (đúng email, tick Auto confirm) rồi gửi mật khẩu cho họ.</span>
       </div>
       <div className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row">
         <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" placeholder="Email người mới *" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" />

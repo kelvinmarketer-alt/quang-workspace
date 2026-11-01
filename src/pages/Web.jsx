@@ -5,7 +5,7 @@ import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, C
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { buildSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
-import { setGoogleProxy, listGoogleProps } from "../lib/google.js";
+import { listGoogleProps } from "../lib/google.js";
 import { Star, Bot } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 import { downloadCSV } from "../lib/format.js";
@@ -577,9 +577,9 @@ export default function Web() {
 
   useEffect(() => {
     if (!canView || !ownerId) return;
-    setGoogleProxy(member); CACHE.clear();
+    CACHE.clear();
     let alive = true; setErr("");
-    listGoogleProps().then((r) => alive && setRaw(r)).catch((e) => alive && setErr(e.message));
+    listGoogleProps(tick > 0).then((r) => alive && setRaw(r)).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
   }, [canView, member, ownerId, tick]);
 

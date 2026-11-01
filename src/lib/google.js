@@ -3,11 +3,7 @@
 // Muốn theo dõi web mới: thêm email robot vào GSC/GA4 của web đó → Văn phòng AI → Kết nối → Google → Làm mới.
 import { supabase } from "./supabase.js";
 
-const SCOPES = "https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/analytics.readonly";
-let cached = null; // { token, exp }
-// Tài khoản phụ (được cấp quyền "Hiệu quả Website") không đọc được khoá → gọi qua edge fn qws-proxy (khoá ở máy chủ)
-let viaProxy = false;
-export const setGoogleProxy = (v) => { viaProxy = !!v; };
+// 01/11: MỌI tài khoản (kể cả chủ) gọi qua edge fn qws-proxy — khoá service account chỉ nằm ở máy chủ, không tải về trình duyệt.
 async function proxy(body) {
   const { data, error } = await supabase.functions.invoke("qws-proxy", { body });
   if (error) { let m = error.message; try { m = (await error.context?.json?.())?.error || m; } catch { /* bỏ qua */ } throw new Error(/Failed to send|not found|404/i.test(m) ? "Máy chủ chưa bật hàm qws-proxy (chủ cần deploy)" : m); }
@@ -15,55 +11,16 @@ async function proxy(body) {
   return data;
 }
 
-const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const b64urlJson = (o) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+const gapi = (url, body) => proxy({ action: "google", url, body });
 
-async function signJwt(key) {
-  const pem = key.private_key.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
-  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
-  const pk = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
-  const now = Math.floor(Date.now() / 1000);
-  const unsigned = `${b64urlJson({ alg: "RS256", typ: "JWT" })}.${b64urlJson({ iss: key.client_email, scope: SCOPES, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })}`;
-  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", pk, new TextEncoder().encode(unsigned));
-  return `${unsigned}.${b64url(sig)}`;
-}
-
-export async function googleToken() {
-  if (cached && cached.exp > Date.now() + 60000) return cached.token;
-  const { data, error } = await supabase.from("office_google").select("key_json").maybeSingle();
-  if (error) throw new Error("Không đọc được kết nối Google: " + error.message);
-  if (!data?.key_json) throw new Error("Chưa kết nối Google — vào Văn phòng AI → Kết nối → Google để dán khoá.");
-  const key = JSON.parse(data.key_json);
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: await signJwt(key) }),
-  });
-  const j = await r.json();
-  if (!j.access_token) throw new Error("Google từ chối khoá: " + (j.error_description || j.error || r.status));
-  cached = { token: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
-  return cached.token;
-}
-
-async function gapi(url, body) {
-  if (viaProxy) return proxy({ action: "google", url, body });
-  const tok = await googleToken();
-  const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify(body) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error?.message || `Google lỗi ${r.status}`);
-  return j;
-}
-
-// Danh sách web/property đã đồng bộ bên Văn phòng AI
-export async function listGoogleProps() {
-  if (viaProxy) { const d = await proxy({ action: "google_props" }); return { props: d.props || [], conn: d.conn || null }; }
-  const [{ data: props, error }, { data: conn }] = await Promise.all([
-    supabase.from("office_google_props").select("kind,prop_id,name,extra,enabled,updated_at").order("name"),
-    supabase.from("office_google").select("sa_email,last_sync_at,last_error").maybeSingle(),
-  ]);
-  if (error) throw new Error(error.message);
-  // Chỉ lấy web/property đang BẬT bên Văn phòng AI (tắt công tắc ở đó = app cũng không hiện)
-  return { props: (props || []).filter((p) => p.enabled), conn: conn || null };
+// Danh sách web/property đang BẬT bên Văn phòng AI (tắt công tắc ở đó = app cũng không hiện). Nhớ 1 lần tải / 5 phút.
+let PROPS = null;
+export async function listGoogleProps(force = false) {
+  if (!force && PROPS && PROPS.at > Date.now() - 300000) return PROPS.p;
+  const p = proxy({ action: "google_props" }).then((d) => ({ props: d.props || [], conn: d.conn || null }));
+  PROPS = { at: Date.now(), p };
+  p.catch(() => { PROPS = null; });
+  return p;
 }
 
 // ---- Search Console ----

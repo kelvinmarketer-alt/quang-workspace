@@ -94,8 +94,9 @@ export default function Login() {
         </form>
 
         <div className="mt-4 text-center text-xs text-slate-400">
+          {/* 01/11: tắt tự đăng ký (lỗ hổng: người lạ tự tạo tài khoản) — chủ tạo tài khoản cho thành viên */}
           {mode === "in" ? (
-            <>Chưa có tài khoản? <button onClick={() => { setMode("up"); setMsg(null); }} className="font-bold text-indigo-600">Đăng ký</button></>
+            <>Chưa có tài khoản? Nhờ chủ workspace tạo tài khoản cho bạn.</>
           ) : (
             <>Đã có tài khoản? <button onClick={() => { setMode("in"); setMsg(null); }} className="font-bold text-indigo-600">Đăng nhập</button></>
           )}

@@ -6,7 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { aiAdsAnalysis } from "../lib/ai.js";
 import { diagnose, judge, baselineOf } from "../lib/adsDiagnose.js";
-import { loadAccountAds, statusOf, setAdsProxy, loadCampaignGoals } from "../lib/fbAds.js";
+import { loadAccountAds, statusOf, loadCampaignGoals } from "../lib/fbAds.js";
 import { GOALS, withGoal, goalBaselines, judgeGoal } from "../lib/adsGoals.js";
 import { todayISO, fmtShort, fmtNum, fmtPct, downloadCSV } from "../lib/format.js";
 import { RangePicker, usePeriod, makePeriod, useSort, sortRows, SortTh, CsvButton } from "./Web.jsx";
@@ -617,7 +617,6 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* bỏ qu
 export default function Ads() {
   const { isOwner, ownerId, perms = [], settings = {}, adsResults = [] } = useData();
   const canView = isOwner || (!!ownerId && perms.includes("ads")); // tài khoản phụ có quyền Quảng cáo: xem số liệu (máy chủ chỉ cho chế độ đọc)
-  setAdsProxy(!!ownerId && !isOwner);
   const [period, setPeriod] = usePeriod("today"); // nhớ chung với Website / Fanpage; chưa chọn bao giờ → Hôm nay
   const [compare, setCompare] = useState(true);
   const [group, setGroupS] = useState(() => (lsGet("qws-ads-group") === "brand" ? "brand" : "conv"));

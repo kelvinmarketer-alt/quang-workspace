@@ -4,12 +4,8 @@
 import { supabase } from "./supabase.js";
 import { goalOf, withGoal } from "./adsGoals.js";
 
-const G = "https://graph.facebook.com/v23.0/";
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
-let viaProxy = false;
-export const setAdsProxy = (v) => { viaProxy = !!v; };
-let tokenOf = null; // account_id → token
-
+// 01/11: MỌI tài khoản (kể cả chủ) gọi qua edge fn qws-proxy — token BM chỉ nằm ở máy chủ
 async function proxy(body) {
   const { data, error } = await supabase.functions.invoke("qws-proxy", { body });
   if (error) { let m = error.message; try { m = (await error.context?.json?.())?.error || m; } catch { /* bỏ qua */ } throw new Error(/Failed to send|not found|404/i.test(m) ? "Máy chủ chưa bật hàm qws-proxy (chủ cần deploy)" : m); }
@@ -17,33 +13,13 @@ async function proxy(body) {
   return data;
 }
 
-async function accToken(accountId) {
-  if (!tokenOf) {
-    const [{ data: accs, error }, { data: conns }] = await Promise.all([
-      supabase.from("office_fb_ads").select("account_id,fb_id"),
-      supabase.from("office_fb").select("id,token"),
-    ]);
-    if (error) throw new Error(error.message);
-    const t = new Map((conns || []).map((c) => [c.id, c.token]));
-    tokenOf = new Map((accs || []).map((a) => [String(a.account_id), t.get(a.fb_id)]));
-  }
-  const tok = tokenOf.get(String(accountId));
-  if (!tok) throw new Error("Tài khoản này chưa được kết nối bên Văn phòng AI (Kết nối → Facebook → tài khoản quảng cáo)");
-  return tok;
-}
-
-// GET act_<id>/<edge> (chủ: token trực tiếp · tài khoản phụ: qua máy chủ); tự thử lại lỗi tạm thời của Facebook
+// GET act_<id>/<edge> qua máy chủ; tự thử lại lỗi tạm thời của Facebook
 async function actGet(accountId, edge, params, tries = 3) {
-  if (viaProxy) return proxy({ action: "fbads", account_id: String(accountId), path: `act_${accountId}/${edge}`, params });
-  const u = new URL(`${G}act_${accountId}/${edge}`);
-  for (const [k, v] of Object.entries(params || {})) u.searchParams.set(k, typeof v === "string" ? v : JSON.stringify(v));
-  u.searchParams.set("access_token", await accToken(accountId));
-  const j = await (await fetch(u)).json().catch(() => ({}));
-  if (j.error) {
-    if (tries > 1 && (j.error.is_transient || [1, 2, 4, 17, 32, 613].includes(j.error.code))) { await new Promise((r) => setTimeout(r, 1200)); return actGet(accountId, edge, params, tries - 1); }
-    throw new Error(j.error.message || "Facebook lỗi");
+  try { return await proxy({ action: "fbads", account_id: String(accountId), path: `act_${accountId}/${edge}`, params }); }
+  catch (e) {
+    if (tries > 1 && /unexpected|temporar|try again|limit/i.test(e.message || "")) { await new Promise((r) => setTimeout(r, 1200)); return actGet(accountId, edge, params, tries - 1); }
+    throw e;
   }
-  return j;
 }
 
 const num = (v) => Number(v) || 0;

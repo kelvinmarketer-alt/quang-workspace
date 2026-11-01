@@ -4,7 +4,7 @@ import { RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, EyeOff, Eye, Ex
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { listPages, loadPageSummary, loadPagePosts, fbRanges, setFbProxy, pageVerdict } from "../lib/fbPages.js";
+import { listPages, loadPageSummary, loadPagePosts, fbRanges, pageVerdict } from "../lib/fbPages.js";
 import InfoTip from "../components/InfoTip.jsx";
 import { aiPageAnalysis } from "../lib/ai.js";
 import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod } from "./Web.jsx";
@@ -245,9 +245,9 @@ export default function Fanpage() {
 
   useEffect(() => {
     if (!canView || !ownerId) return;
-    setFbProxy(member); CACHE.clear();
+    CACHE.clear();
     let alive = true; setErr("");
-    listPages().then((r) => { if (!alive) return; setPages(r.pages); setMeta(r); }).catch((e) => alive && setErr(e.message));
+    listPages(tick > 0).then((r) => { if (!alive) return; setPages(r.pages); setMeta(r); }).catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
   }, [canView, member, ownerId, tick]);
   const shown = (pages || []).filter((p) => !hidden.includes(p.page_id));
