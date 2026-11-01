@@ -26,9 +26,9 @@ create policy "members update workspace" on public.qws_workspaces
 
 ## Thành viên vào app thế nào
 1. Chủ vào **Cài đặt → Người dùng & phân quyền** → thêm email thành viên + tick mục được phép.
-2. Thành viên mở app (`boss.2bkin.io.vn`) → **Đăng ký** bằng ĐÚNG email đó (tự đặt mật khẩu).
-3. Nếu bật xác nhận email mà chưa nhận được mail: chủ xác nhận nhanh bằng SQL
-   `update auth.users set email_confirmed_at = now() where email = 'email_thanh_vien';`
+2. ⚠️ 01/11/2026: TỰ ĐĂNG KÝ ĐÃ TẮT (Authentication → Sign In / Providers → Allow new users to sign up = OFF) vì người lạ tự tạo tài khoản được.
+   Chủ tạo tài khoản: Supabase → Authentication → Users → **Add user** → đúng email đó, tick Auto confirm, đặt mật khẩu → gửi cho thành viên.
+3. Thành viên đổi mật khẩu trong app (Cài đặt) sau lần đăng nhập đầu.
 4. Thành viên đăng nhập → chỉ thấy các mục được cấp; dữ liệu chung với chủ.
 
 ## Gỡ quyền

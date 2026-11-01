@@ -624,10 +624,12 @@ Deno.serve(async (req) => {
   let scope: Scope = null; // thành viên bị giới hạn dự án → chỉ thấy TK quảng cáo của khách được giao
   if (!OWNER || email !== OWNER) {
     // Thành viên được chủ cấp quyền "Quảng cáo" (Xem/Sửa trong Cài đặt → Người dùng) → CHỈ các chế độ ĐỌC số liệu
+    // 01/11: CHỈ xét thành viên trong dòng workspace CỦA CHỦ (trước quét mọi dòng → người lạ tự thêm mình vào dòng riêng là xem được)
     const READ_MODES = ["report", "alerts_list", "balance_list"];
-    const { data: rows } = await admin().from("qws_workspaces").select("user_id, members:data->members");
-    let mem: any = null, ownerUid = "";
-    for (const r of rows || []) { const m = (Array.isArray(r.members) ? r.members : []).find((x: any) => String(x?.email || "").toLowerCase() === email); if (m) { mem = m; ownerUid = r.user_id; break; } }
+    const { data: us } = OWNER ? await admin().auth.admin.listUsers({ page: 1, perPage: 200 }) : { data: null };
+    const ownerUid = us?.users?.find((x: any) => (x.email || "").toLowerCase() === OWNER)?.id || "";
+    const { data: row } = ownerUid ? await admin().from("qws_workspaces").select("members:data->members").eq("user_id", ownerUid).maybeSingle() : { data: null };
+    const mem: any = (Array.isArray(row?.members) ? row.members : []).find((x: any) => String(x?.email || "").toLowerCase() === email) || null;
     const acc = mem ? (mem.access?.ads ?? ((mem.perms || []).includes("ads") ? "edit" : "none")) : "none";
     if (acc === "none" || !READ_MODES.includes(mode)) return json({ error: "Chỉ chủ workspace (hoặc thành viên được cấp quyền Quảng cáo — chỉ xem số liệu) dùng được" }, 403);
     scope = await memberScopeOf(admin(), ownerUid, mem);

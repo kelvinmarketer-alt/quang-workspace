@@ -22,9 +22,36 @@ const supa = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+// 01/11: kiểm người gọi. Khoá máy chủ (bot, hàm khác) hoặc CHỦ (OWNER_EMAIL) → gửi cho ai cũng được;
+// người đăng nhập khác → chỉ gửi cho CHÍNH MÌNH (nút "Gửi thử"). Link chỉ trong app (/…) hoặc Văn phòng AI.
+const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "content-type": "application/json" } });
+const OK_HOSTS = ["boss.2bkin.io.vn", "office.2bkin.io.vn"];
+const safeUrl = (u: unknown) => {
+  const s = String(u || "/");
+  if (s.startsWith("/") && !s.startsWith("//")) return s;
+  try { const x = new URL(s); return x.protocol === "https:" && OK_HOSTS.includes(x.host) ? x.href : "/"; } catch { return "/"; }
+};
+async function callerOf(req: Request): Promise<{ all: boolean; uid?: string } | null> {
+  const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!bearer) return null;
+  if (bearer === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return { all: true };
+  const { data: u } = await createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: "Bearer " + bearer } } }).auth.getUser();
+  if (u?.user) {
+    const owner = (Deno.env.get("OWNER_EMAIL") || "").toLowerCase();
+    return owner && (u.user.email || "").toLowerCase() === owner ? { all: true } : { all: false, uid: u.user.id };
+  }
+  // Khoá bí mật dạng mới (sb_secret_…) của bot: thử 1 lệnh chỉ khoá máy chủ làm được
+  try { const { error } = await createClient(Deno.env.get("SUPABASE_URL")!, bearer).auth.admin.listUsers({ page: 1, perPage: 1 }); if (!error) return { all: true }; } catch { /* không phải khoá máy chủ */ }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const { title, body, url, tag, user_id } = await req.json().catch(() => ({}));
+  const who = await callerOf(req);
+  if (!who) return json({ error: "Không có quyền gửi thông báo" }, 401);
+  const { title, body, url: rawUrl, tag, user_id: want } = await req.json().catch(() => ({}));
+  const url = safeUrl(rawUrl);
+  const user_id = who.all ? want : who.uid;
 
   let q = supa.from("qws_push_subs").select("endpoint, sub");
   if (user_id) q = q.eq("user_id", user_id);

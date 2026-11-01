@@ -39,7 +39,8 @@ declare a jsonb := public.qws_member_acc(m); ids jsonb := a->'_scope'; ds jsonb 
 begin
   if a->>'customers' <> 'none' or dash then keys := keys || array['customerList', 'projects']; end if;
   if a->>'resources' <> 'none' then keys := keys || array['resources']; end if;
-  if a->>'ketoan' <> 'none' or (dash and ids is null) then keys := keys || array['expenses', 'funds', 'fundTx', 'fundSchedules', 'spendCats', 'transactions']; end if;
+  if a->>'ketoan' <> 'none' then -- 01/11: bỏ 'or (dash and ids is null)' (quyền Tổng quan không cần sổ chi/quỹ)
+    keys := keys || array['expenses', 'funds', 'fundTx', 'fundSchedules', 'spendCats', 'transactions']; end if;
   if a->>'tasks' <> 'none' or dash then keys := keys || array['tasks', 'family']; end if;
   if a->>'coinInvest' <> 'none' then keys := keys || array['coins']; skeys := skeys || array['coinDeposits']; end if;
   if a->>'coinDemo' <> 'none' or a->>'coinLive' <> 'none' then skeys := skeys || array['paperBot', 'paperBotLog']; end if;

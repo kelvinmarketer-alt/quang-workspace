@@ -1,7 +1,7 @@
 // Edge Function: qws-proxy — cho TÀI KHOẢN PHỤ (được chủ cấp quyền "Hiệu quả Website" / "Hiệu quả Fanpage") xem số liệu
 // Google Search Console / GA4 / Facebook Page mà KHÔNG lộ khoá: khoá service account (office_google) + token BM (office_fb)
 // chỉ đọc ở đây bằng service role. CHỈ ĐỌC: GSC searchAnalytics/query, GA4 runReport, Graph GET của page đang bật.
-// Chủ dùng thẳng từ trình duyệt (không qua đây). Không cần secret thêm.
+// 01/11: CHỦ CŨNG đi qua đây — khoá Google / token BM không còn tải về trình duyệt. Chủ = OWNER_EMAIL (secret chung).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -14,6 +14,26 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 const G = "https://graph.facebook.com/v23.0/";
 
 const b64url = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+// 01/11: chủ cũng đi qua đây (khoá Google / token BM không còn về trình duyệt) → nhớ token trong phiên máy chủ
+const TOK = new Map<string, { t: string; exp: number }>();
+async function cachedToken(key: string, mk: () => Promise<string>, ttl: number) {
+  const c = TOK.get(key);
+  if (c && c.exp > Date.now()) return c.t;
+  const t = await mk();
+  TOK.set(key, { t, exp: Date.now() + ttl });
+  return t;
+}
+// Không bao giờ trả token về trình duyệt (kể cả khi Graph trả lồng trong dữ liệu)
+const scrub = (x: any): any => (Array.isArray(x) ? x.map(scrub) : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).filter(([k]) => k !== "access_token").map(([k, v]) => [k, scrub(v)])) : x);
+let OWNER_UID: string | null = null;
+async function ownerUid(admin: any) {
+  if (OWNER_UID) return OWNER_UID;
+  const owner = (Deno.env.get("OWNER_EMAIL") || "").toLowerCase();
+  if (!owner) return null;
+  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  OWNER_UID = data?.users?.find((x: any) => (x.email || "").toLowerCase() === owner)?.id || null;
+  return OWNER_UID;
+}
 async function googleToken(keyJson: string) {
   const key = JSON.parse(keyJson);
   const pem = key.private_key.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
@@ -66,25 +86,22 @@ Deno.serve(async (req) => {
     const { action, ...p } = await req.json();
     const feature = String(action || "").startsWith("google") ? "web" : action === "fbads" ? "ads" : "fanpage";
 
-    // Chủ workspace của người gọi + quyền của họ với tính năng này
+    // Chủ (email = OWNER_EMAIL) hoặc thành viên trong dòng workspace CỦA CHỦ (01/11: không còn coi "có dòng workspace" là chủ)
     let ownerId: string | null = null, scope: Scope = null;
-    const own = await admin.from("qws_workspaces").select("user_id").eq("user_id", u.user.id).maybeSingle();
-    if (own.data) ownerId = u.user.id;
+    const oid = await ownerUid(admin);
+    if (!oid) return json({ error: "Máy chủ chưa cấu hình OWNER_EMAIL" }, 500);
+    if (u.user.id === oid) ownerId = oid;
     else {
-      const { data: rows } = await admin.from("qws_workspaces").select("user_id, members:data->members");
-      for (const r of rows || []) {
-        const m = (Array.isArray(r.members) ? r.members : []).find((x: { email?: string }) => (x.email || "").toLowerCase() === email);
-        if (!m) continue;
-        const acc = m.access?.[feature] ?? "none";
-        if (acc !== "none") { ownerId = r.user_id; scope = await memberScopeOf(admin, r.user_id, m); } // giới hạn dự án → chỉ web/page/TK của khách được giao
-        break;
-      }
+      const { data: row } = await admin.from("qws_workspaces").select("members:data->members").eq("user_id", oid).maybeSingle();
+      const m = (Array.isArray(row?.members) ? row.members : []).find((x: { email?: string }) => (x.email || "").toLowerCase() === email);
+      const acc = m?.access?.[feature] ?? "none";
+      if (m && acc !== "none") { ownerId = oid; scope = await memberScopeOf(admin, oid, m); } // giới hạn dự án → chỉ web/page/TK của khách được giao
     }
     if (!ownerId) return json({ error: "Bạn chưa được cấp quyền xem mục này" }, 403);
 
     if (action === "google_props") {
       const [{ data: props }, { data: conn }] = await Promise.all([
-        admin.from("office_google_props").select("kind,prop_id,name,extra,enabled,updated_at").eq("owner_id", ownerId).eq("enabled", true),
+        admin.from("office_google_props").select("kind,prop_id,name,extra,enabled,updated_at").eq("owner_id", ownerId).eq("enabled", true).order("name"),
         admin.from("office_google").select("sa_email,last_sync_at,last_error").eq("owner_id", ownerId).maybeSingle(),
       ]);
       return json({ props: (props || []).filter((x: any) => inScope(scope, `${x.name || ""} ${x.prop_id || ""}`, x.prop_id)), conn });
@@ -98,35 +115,53 @@ Deno.serve(async (req) => {
       const { data: ok } = await admin.from("office_google_props").select("prop_id").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).eq("enabled", true).maybeSingle();
       if (!ok) return json({ error: "Web/property này đang tắt bên Văn phòng AI" }, 403);
       if (scope) { const { data: pr } = await admin.from("office_google_props").select("name").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).maybeSingle(); if (!inScope(scope, `${pr?.name || ""} ${id}`, id)) return json({ error: "Web này ngoài dự án được giao" }, 403); }
-      const { data: g } = await admin.from("office_google").select("key_json").eq("owner_id", ownerId).maybeSingle();
-      if (!g?.key_json) return json({ error: "Chưa kết nối Google" }, 400);
-      const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${await googleToken(g.key_json)}`, "content-type": "application/json" }, body: JSON.stringify(p.body || {}) });
+      const tok = await cachedToken("g:" + ownerId, async () => {
+        const { data: g } = await admin.from("office_google").select("key_json").eq("owner_id", ownerId).maybeSingle();
+        if (!g?.key_json) throw new Error("Chưa kết nối Google — vào Văn phòng AI → Kết nối → Google để dán khoá.");
+        return googleToken(g.key_json);
+      }, 50 * 60000);
+      const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify(p.body || {}) });
       return json(await r.json(), r.ok ? 200 : r.status);
     }
     if (action === "fb_pages") {
-      const { data } = await admin.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").eq("owner_id", ownerId).eq("enabled", true).order("fans", { ascending: false });
-      return json({ pages: (data || []).filter((x: any) => inScope(scope, x.name, x.page_id)) });
+      const [{ data }, { data: conns }] = await Promise.all([
+        admin.from("office_fb_pages").select("page_id,name,category,fans,fb_id,enabled,updated_at").eq("owner_id", ownerId).order("fans", { ascending: false, nullsFirst: false }),
+        admin.from("office_fb").select("updated_at").eq("owner_id", ownerId),
+      ]);
+      const on = (data || []).filter((x: any) => x.enabled);
+      return json({
+        pages: on.filter((x: any) => inScope(scope, x.name, x.page_id)),
+        lastSync: (conns || []).map((c: any) => c.updated_at).sort().pop() || null,
+        conns: (conns || []).length, offCount: scope ? 0 : (data || []).length - on.length,
+      });
     }
     if (action === "fb") {
       const pageId = String(p.page_id || "");
       const { data: pg } = await admin.from("office_fb_pages").select("page_id,fb_id,name").eq("owner_id", ownerId).eq("page_id", pageId).eq("enabled", true).maybeSingle();
       if (!pg) return json({ error: "Page này đang tắt bên Văn phòng AI" }, 403);
       if (!inScope(scope, pg.name, pg.page_id)) return json({ error: "Page này ngoài dự án được giao" }, 403);
-      const { data: c } = await admin.from("office_fb").select("token").eq("id", pg.fb_id).maybeSingle();
-      if (!c?.token) return json({ error: "Chưa kết nối Facebook" }, 400);
-      const pt = await (await fetch(`${G}${pageId}?fields=access_token&access_token=${encodeURIComponent(c.token)}`)).json();
-      if (!pt.access_token) return json({ error: pt.error?.message || "Token BM không có quyền với page" }, 400);
-      // path: "<page_id>/insights" | "<page_id>/published_posts" | next (URL phân trang của chính page đó) — CHỈ GET
+      let pageTok: string;
+      try {
+        pageTok = await cachedToken("p:" + pageId, async () => {
+          const { data: c } = await admin.from("office_fb").select("token").eq("id", pg.fb_id).maybeSingle();
+          if (!c?.token) throw new Error("Chưa kết nối Facebook");
+          const pt = await (await fetch(`${G}${pageId}?fields=access_token&access_token=${encodeURIComponent(c.token)}`)).json();
+          if (!pt.access_token) throw new Error(pt.error?.message || "Token BM không có quyền với page");
+          return pt.access_token;
+        }, 30 * 60000);
+      } catch (e) { return json({ error: String((e as Error).message || e) }, 400); }
+      // CHỈ GET 2 nhánh số liệu: "<page_id>/insights" | "<page_id>/published_posts" (+ next = URL phân trang của chính nhánh đó)
       let u2: URL;
       if (p.next) { u2 = new URL(String(p.next)); if (u2.host !== "graph.facebook.com") return json({ error: "Không cho phép" }, 400); }
       else u2 = new URL(G + String(p.path || ""));
-      const path = u2.pathname.replace(/^\/v\d+\.\d+\//, "");
-      if (!(path === pageId || path.startsWith(pageId + "/"))) return json({ error: "Không cho phép" }, 400);
-      for (const [k, v] of Object.entries(p.params || {})) u2.searchParams.set(k, String(v));
-      u2.searchParams.set("access_token", pt.access_token);
+      const path = u2.pathname.replace(/^\/v\d+\.\d+\//, "").replace(/\/$/, "");
+      if (![`${pageId}/insights`, `${pageId}/published_posts`].includes(path)) return json({ error: "Không cho phép" }, 400);
+      for (const [k, v] of Object.entries(p.params || {})) if (!/token/i.test(k)) u2.searchParams.set(k, String(v));
+      if (/access_token/i.test(u2.searchParams.get("fields") || "")) return json({ error: "Không cho phép" }, 400);
+      u2.searchParams.set("access_token", pageTok);
       const j = await (await fetch(u2)).json();
       if (j?.paging?.next) j.paging.next = j.paging.next.replace(/access_token=[^&]+&?/, ""); // không trả token về trình duyệt
-      return json(j);
+      return json(scrub(j));
     }
     if (action === "fbads") {
       // Quảng cáo trong 1 TK Meta: chỉ GET act_<id>/ads | act_<id>/insights, TK phải có trong office_fb_ads của chủ
@@ -135,15 +170,16 @@ Deno.serve(async (req) => {
       if (!ad) return json({ error: "Tài khoản quảng cáo chưa kết nối bên Văn phòng AI" }, 403);
       if (!inScope(scope, ad.name, acc)) return json({ error: "Tài khoản này ngoài dự án được giao" }, 403);
       const path = String(p.path || "");
-      if (path !== `act_${acc}/ads` && path !== `act_${acc}/insights`) return json({ error: "Không cho phép" }, 400);
+      if (![`act_${acc}/ads`, `act_${acc}/insights`, `act_${acc}/campaigns`].includes(path)) return json({ error: "Không cho phép" }, 400);
       const { data: c } = await admin.from("office_fb").select("token").eq("id", ad.fb_id).maybeSingle();
       if (!c?.token) return json({ error: "Chưa kết nối Facebook" }, 400);
       const u2 = new URL(G + path);
-      for (const [k, v] of Object.entries(p.params || {})) u2.searchParams.set(k, typeof v === "string" ? v : JSON.stringify(v));
+      for (const [k, v] of Object.entries(p.params || {})) if (!/token/i.test(k)) u2.searchParams.set(k, typeof v === "string" ? v : JSON.stringify(v));
+      if (/access_token/i.test(u2.searchParams.get("fields") || "")) return json({ error: "Không cho phép" }, 400);
       u2.searchParams.set("access_token", c.token);
       const j = await (await fetch(u2)).json();
       if (j?.paging?.next) delete j.paging.next;
-      return json(j);
+      return json(scrub(j));
     }
     return json({ error: "Hành động không hợp lệ" }, 400);
   } catch (e) {

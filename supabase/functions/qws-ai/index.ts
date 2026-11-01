@@ -48,7 +48,9 @@ Deno.serve(async (req) => {
     const { feature = "khac", body } = await req.json();
     if (!body || !Array.isArray(body.messages)) return json({ error: "Thiếu nội dung gửi AI" }, 400);
     const model = ALLOWED.includes(body.model) ? body.model : "gpt-4o-mini";
-    const payload = { ...body, model, max_tokens: Math.min(Number(body.max_tokens) || 4000, 8000) };
+    // 01/11: chỉ cho qua các tham số app dùng (không cho n / tham số tốn tiền khác)
+    const payload: Record<string, unknown> = { messages: body.messages, model, max_tokens: Math.min(Number(body.max_tokens) || 4000, 8000) };
+    for (const k of ["temperature", "response_format"]) if (body[k] !== undefined) payload[k] = body[k];
 
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
