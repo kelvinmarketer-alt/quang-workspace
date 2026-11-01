@@ -13,6 +13,25 @@ import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symO
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
 
+// Bot thật có đang theo phiên Demo không (dòng command, chỉ chủ đọc được) → null = không biết / không theo
+function useLiveFollow() {
+  const [v, setV] = useState(null);
+  useEffect(() => {
+    let off = false;
+    supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle().then(({ data }) => { const c = data?.data?.config; if (!off) setV(c && c.followDemo !== false ? (c.mode === "live" ? "live" : "testnet") : null); });
+    return () => { off = true; };
+  }, []);
+  return v;
+}
+// 01/11: nhãn rõ ràng — sửa Demo khi bot thật đang theo = sửa luôn bot thật
+function FollowNote({ mode, compact }) {
+  if (!mode) return null;
+  const money = mode === "live";
+  return compact
+    ? <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${money ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"}`}><Radio size={11} /> Dùng chung với bot {money ? "TIỀN THẬT" : "thật (testnet)"}</span>
+    : <div className={`mb-3 rounded-xl px-3 py-2 text-[12px] font-semibold ${money ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200" : "bg-amber-50 text-amber-800 ring-1 ring-amber-200"}`}>Bot {money ? "TIỀN THẬT" : "thật (testnet)"} đang theo phiên Demo: cặp, khung, rủi ro, số lệnh mở, dừng ngày, đòn bẩy đặt ở đây sẽ áp dụng cho bot sau khoảng 5 phút. Muốn bot giữ cấu hình riêng: tab Bot thật → bỏ chọn "theo phiên Demo".</div>;
+}
+
 // Bot thật đang "theo Demo" → đổi cấu hình phiên Demo là đổi luôn bot (sau ~5 phút). 01/11: liệt kê thay đổi + hỏi trước.
 async function confirmLiveFollow(oldCfg = {}, newCfg = {}) {
   const r = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
@@ -203,7 +222,7 @@ function CoinsEditor({ coins, onChange }) {
 
 // Khung giờ bot được chọn (27/10: thêm H1, H4 — bot thật quét mỗi nến M5 đóng nên khung lớn cũng bắt kịp)
 const EDIT_TFS = ["5m", "15m", "1h", "4h"];
-function SetupForm({ initial, onStart, onCancel }) {
+function SetupForm({ initial, onStart, onCancel, follow }) {
   const [days, setDays] = useState(90);
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
   const tog = (k, v) => setC((o) => ({ ...o, [k]: o[k].includes(v) ? o[k].filter((x) => x !== v) : [...o[k], v] }));
@@ -217,6 +236,7 @@ function SetupForm({ initial, onStart, onCancel }) {
   return (
     <Card className="!p-4">
       <div className="mb-3 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Cấu hình phiên demo</div>
+      <FollowNote mode={follow} />
       <div className="space-y-3">
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
@@ -389,6 +409,7 @@ function RulesLog({ log, list }) {
 
 export default function CoinBot({ active: visible = true }) {
   const { settings = {}, setSettings, isOwner, perms = [], myEmail } = useData();
+  const follow = useLiveFollow();
   // Nhật ký thay đổi luật (21/10): mỗi lần tắt/bật cặp, khung, sửa cặp, phiên mới, dừng → ghi ai đổi, lúc nào, kèm số liệu LÚC ĐỔI
   // để sau đối chiếu "sau khi đổi" tốt lên hay xấu đi. Giữ 100 dòng gần nhất (settings.paperBotLog).
   const saveWithLog = (paperBot, what, reason = "") => {
@@ -570,7 +591,7 @@ export default function CoinBot({ active: visible = true }) {
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Demo tự động.</div></Card>;
   if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
-  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
+  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} follow={follow} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
 
   const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.\nBot thật KHÔNG dừng theo — muốn dừng bot thật vào tab Bot thật.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
   const eqNow = P ? P.equity + P.unrealized : null, pnl = eqNow != null ? eqNow - cfg.capital : null;
@@ -588,7 +609,8 @@ export default function CoinBot({ active: visible = true }) {
         <div className="flex flex-wrap items-center gap-2">
           <Bot size={18} className="text-emerald-500" />
           <span className="text-[14px] font-extrabold text-slate-800">Bot demo · Futures</span>
-          {session.stoppedAt ? <Badge tone="slate">Đã dừng</Badge> : <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Đang chạy</span>}
+          {isOwner && <FollowNote mode={follow} compact />}
+          {session.stoppedAt ? <Badge tone="slate">Đã dừng</Badge> : <span className="flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" /> Đang chạy</span>}
           {cfg.adaptive && <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"><Brain size={11} /> Tự tối ưu</span>}
           <div className="ml-auto flex gap-1.5">
             <button onClick={run} disabled={!!busy} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-50"><RefreshCw size={13} className={busy ? "animate-spin" : ""} /> Cập nhật</button>

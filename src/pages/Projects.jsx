@@ -1,17 +1,14 @@
-import { useMemo, useState, useEffect } from "react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import {
-  Plus, X, Trash2, Pencil, Search, TrendingUp, Wallet, Gift, Receipt, Check, Repeat, CalendarClock, ArrowRight, Sparkles, Copy,
-} from "lucide-react";
-import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
+import { useState, useEffect } from "react";
+import { Plus, X, Trash2, Pencil, Wallet, Check, CalendarClock, ArrowRight, Sparkles, Copy } from "lucide-react";
+import { Badge, formatVND, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { ProjectResources } from "./Resources.jsx";
 import { JobMeasure } from "../components/BrandConnections.jsx";
 import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
-import { projectMetrics, installmentMetrics, projectsMonthly, projectYears } from "../lib/selectors.js";
-import { todayISO, fmtDateVI, MONTHS_VI } from "../lib/format.js";
+import { projectMetrics, installmentMetrics } from "../lib/selectors.js";
+import { todayISO, fmtDateVI } from "../lib/format.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -432,170 +429,6 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
         />
       )}
       {aiInst && <AiImportModal mode="installment" projectId={project.id} onClose={() => setAiInst(false)} />}
-    </div>
-  );
-}
-
-export default function Projects() {
-  const { projects, customerList, addProject, updateProject, deleteProject, addInstallment, updateInstallment, deleteInstallment, canEdit } = useData();
-  const canW = canEdit ? canEdit("customers") : true;
-  const [modal, setModal] = useState(null);
-  const [aiModal, setAiModal] = useState(false);
-  const [drawer, setDrawer] = useState(null);
-  const [q, setQ] = useState("");
-  const [catF, setCatF] = useState("all");
-  const [statusF, setStatusF] = useState("all");
-  const years = useMemo(() => { const ys = projectYears(projects); return ys.length ? ys : [new Date().getFullYear()]; }, [projects]);
-  const [year, setYear] = useState(years[0]);
-
-  // tổng hợp năm (theo đợt trong năm)
-  const sum = useMemo(() => {
-    const acc = { revenue: 0, discount: 0, grossProfit: 0, debt: 0 };
-    for (const p of projects) {
-      const isAds = p.category === "ADS";
-      for (const inst of p.installments || []) {
-        if (!inst.date || new Date(inst.date).getFullYear() !== year) continue;
-        const im = installmentMetrics(inst, isAds);
-        acc.revenue += im.revenue; acc.discount += im.platformDiscount; acc.grossProfit += im.grossProfit; acc.debt += im.debt;
-      }
-    }
-    return acc;
-  }, [projects, year]);
-
-  const monthly = useMemo(() => projectsMonthly(projects, year).map((m) => ({ name: MONTHS_VI[m.month - 1], dt: m.revenue, ln: m.grossProfit })), [projects, year]);
-  const statusCounts = useMemo(() => {
-    const r = { doing: 0, done: 0, paused: 0, cancel: 0 };
-    for (const p of projects) r[p.status] = (r[p.status] || 0) + 1;
-    return r;
-  }, [projects]);
-  const list = useMemo(() => {
-    const lastDate = (p) => (p.installments || []).reduce((mx, i) => (i.date && i.date > mx ? i.date : mx), "");
-    return projects
-      .filter((p) => (catF === "all" || p.category === catF)
-        && (statusF === "all" || p.status === statusF)
-        && (q === "" || (p.name + (p.customerName || "")).toLowerCase().includes(q.toLowerCase())))
-      // Đang làm lên đầu → Tạm dừng → Hoàn thành → Đã huỷ; cùng trạng thái thì hoạt động gần nhất lên trên
-      .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || lastDate(b).localeCompare(lastDate(a)));
-  }, [projects, catF, statusF, q]);
-  const drawerProject = drawer ? projects.find((p) => p.id === drawer) : null;
-
-  const emptyProject = { name: "", customerId: "", category: "Web", status: "doing", note: "" };
-
-  return (
-    <div className="space-y-4 sm:space-y-5">
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard icon={Wallet} label="Doanh thu" value={sum.revenue} sub={`Năm ${year}`} tone="indigo" />
-        <StatCard icon={Gift} label="Chiết khấu nền tảng" value={sum.discount} sub="Từ ADS" tone="sky" />
-        <StatCard icon={TrendingUp} label="Lợi nhuận gộp" value={sum.grossProfit} tone="emerald" />
-        <StatCard icon={Receipt} label="Công nợ" value={sum.debt} sub="Chưa thu" tone="rose" />
-      </div>
-
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-            {years.map((y) => (
-              <button key={y} onClick={() => setYear(y)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${y === year ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{y}</button>
-            ))}
-          </div>
-          <select value={catF} onChange={(e) => setCatF(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
-            <option value="all">Tất cả danh mục</option>
-            {PROJECT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <div className="flex min-w-[150px] flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-            <Search size={16} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm dự án / khách…" className="w-full text-sm outline-none" />
-          </div>
-          {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600 sm:ml-auto">Chỉ xem</span>}
-          {canW && <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-            <button onClick={() => setAiModal(true)} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-600 hover:bg-indigo-100 sm:flex-none"><Sparkles size={16} /> AI</button>
-            <button onClick={() => setModal(emptyProject)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 sm:flex-none"><Plus size={16} /> Thêm dự án</button>
-          </div>}
-        </div>
-        {/* MOBILE: dropdown trạng thái */}
-        <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
-          {[["all", "Tất cả", projects.length], ["doing", "Đang làm", statusCounts.doing], ["done", "Hoàn thành", statusCounts.done], ["paused", "Tạm dừng", statusCounts.paused], ["cancel", "Đã huỷ", statusCounts.cancel]].map(([v, l, n]) => (
-            <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
-          ))}
-        </select>
-        {/* DESKTOP: chips trạng thái */}
-        <div className="mt-3 hidden flex-wrap gap-1 sm:flex">
-          {[["all", "Tất cả", projects.length], ["doing", "Đang làm", statusCounts.doing], ["done", "Hoàn thành", statusCounts.done], ["paused", "Tạm dừng", statusCounts.paused], ["cancel", "Đã huỷ", statusCounts.cancel]].map(([v, l, n]) => (
-            <button key={v} onClick={() => setStatusF(v)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${statusF === v ? (v === "cancel" ? "bg-rose-500 text-white" : "bg-indigo-500 text-white") : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l}{n > 0 && <span className="opacity-70"> {n}</span>}</button>
-          ))}
-        </div>
-      </Card>
-
-      {projects.length > 0 && (
-        <Card>
-          <SectionTitle action={<span className="text-xs font-bold text-slate-400">Doanh thu / LN gộp theo tháng</span>}>Báo cáo {year}</SectionTitle>
-          <div className="overflow-x-auto">
-           <div className="h-56 min-w-[620px] sm:min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ left: 0, right: 8, top: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={formatShort} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={54} />
-                <Tooltip formatter={(v, k) => [formatVND(v), k === "dt" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
-                <Bar dataKey="dt" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
-                <Bar dataKey="ln" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-           </div>
-          </div>
-        </Card>
-      )}
-
-      {list.length === 0 ? (
-        <Card><div className="py-12 text-center"><div className="text-sm font-bold text-slate-600">Chưa có dự án</div><div className="mt-1 text-xs text-slate-400">Bấm "Thêm dự án" để bắt đầu. Mỗi dự án có thể thu nhiều đợt (tháng/tuần/cọc…).</div></div></Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {list.map((p) => {
-            const m = projectMetrics(p);
-            const [stone, slabel] = STATUS[p.status] || STATUS.doing;
-            const cnt = (p.installments || []).length;
-            return (
-              <button key={p.id} onClick={() => setDrawer(p.id)} className="card group p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-extrabold text-slate-800">{p.name}</div>
-                    <div className="text-xs text-slate-400">{p.customerName}</div>
-                  </div>
-                  <Badge tone={CAT_TONE[p.category] || "slate"}>{p.category}</Badge>
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div><div className="text-[10px] font-bold uppercase text-slate-400">Doanh thu</div><div className="text-sm font-extrabold text-slate-800">{formatShort(m.revenue)}</div></div>
-                  <div><div className="text-[10px] font-bold uppercase text-slate-400">LN gộp</div><div className="text-sm font-extrabold text-emerald-600">{formatShort(m.grossProfit)}</div></div>
-                  <div><div className="text-[10px] font-bold uppercase text-slate-400">Còn nợ</div><div className={`text-sm font-extrabold ${m.debt > 0 ? "text-rose-600" : "text-slate-400"}`}>{m.debt > 0 ? formatShort(m.debt) : "0"}</div></div>
-                </div>
-                <div className="mt-3 flex items-center justify-between border-t border-slate-50 pt-3">
-                  <Badge tone={stone}>{slabel}</Badge>
-                  <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400"><Repeat size={11} /> {cnt} đợt</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {aiModal && <AiImportModal mode="project" onClose={() => setAiModal(false)} />}
-      {modal && (
-        <ProjectModal
-          initial={modal} customers={customerList}
-          onClose={() => setModal(null)}
-          onSave={(data) => (modal.id ? updateProject(modal.id, data) : addProject(data))}
-        />
-      )}
-      {drawerProject && (
-        <ProjectDrawer
-          project={drawerProject}
-          custFeeRate={num(customerList.find((c) => c.id === drawerProject.customerId)?.feeRate) || 20}
-          custSalary={num(customerList.find((c) => c.id === drawerProject.customerId)?.monthlySalary)}
-          onClose={() => setDrawer(null)}
-          onEdit={() => { setModal(drawerProject); setDrawer(null); }}
-          onDelete={() => deleteProject(drawerProject.id)}
-          addInstallment={addInstallment} updateInstallment={updateInstallment} deleteInstallment={deleteInstallment}
-        />
-      )}
     </div>
   );
 }

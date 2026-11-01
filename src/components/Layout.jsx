@@ -3,9 +3,11 @@ import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
   LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette,
 } from "lucide-react";
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import CommandPalette, { KBD_HINT } from "./CommandPalette.jsx";
-import PomodoroPill from "./PomodoroPill.jsx";
+import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
+// 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
+const CommandPalette = lazy(() => import("./CommandPalette.jsx"));
+const PomodoroPill = lazy(() => import("./PomodoroPill.jsx"));
+const KBD_HINT = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl K";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
 import { useTheme, useSkin, SKINS } from "../lib/theme.js";
@@ -147,7 +149,7 @@ function useNavPins() {
   return [pins, toggle];
 }
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
-const EXTRA_TITLES = { "/bao-cao": "Trung tâm báo cáo", "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Quỹ & Dòng tiền", "/quy-thong-ke": "Quỹ & Dòng tiền" };
+const EXTRA_TITLES = { "/bao-cao": "Trung tâm báo cáo", "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Kế toán & Chi phí", "/quy-thong-ke": "Kế toán & Chi phí" };
 
 function Brand({ mini }) {
   return (
@@ -590,8 +592,7 @@ export default function Layout({ children }) {
         <main className="qws-full w-full"><PushPrompt /><HubTabs items={navItems} />{children}</main>
       </div>
       <BottomBar items={navItems} onMenu={() => setOpen(true)} />
-      <PomodoroPill />
-      <CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} />
+      <Suspense fallback={null}><PomodoroPill /><CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} /></Suspense>
     </div>
   );
 }

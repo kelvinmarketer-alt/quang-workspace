@@ -38,6 +38,7 @@ export function MeasureList({ items, max = 99, onPick, compact = false }) {
 export function MeasurePanel({ items, projects = [] }) {
   const { skip, unhide } = useMeasureSkip();
   const [showSkip, setShowSkip] = useState(false);
+  const [open, setOpen] = useState(false); // điện thoại: danh sách thu gọn, bấm mới mở
   const skipped = Object.keys(skip).map((id) => projects.find((p) => p.id === id)).filter(Boolean);
   if (!items.length && !skipped.length) return null;
   return (
@@ -47,7 +48,8 @@ export function MeasurePanel({ items, projects = [] }) {
         <span className="text-sm font-extrabold text-slate-800">{items.length ? `${items.length} job chưa gắn đo lường` : "Mọi job đang chạy đã gắn đo lường"}</span>
         {skipped.length > 0 && <button type="button" onClick={() => setShowSkip((v) => !v)} className="ml-auto text-[12px] font-bold text-slate-400 hover:text-indigo-600">{showSkip ? "Ẩn" : `Đã bỏ qua ${skipped.length} job`}</button>}
       </div>
-      {items.length > 0 && <MeasureList items={items} />}
+      {items.length > 0 && <button type="button" onClick={() => setOpen((v) => !v)} className="mb-1 w-full rounded-xl bg-amber-50/70 py-2 text-[12.5px] font-bold text-amber-700 sm:hidden">{open ? "Thu gọn" : `Xem ${items.length} job để gắn kênh hoặc bỏ qua`}</button>}
+      {items.length > 0 && <div className={open ? "" : "hidden sm:block"}><MeasureList items={items} /></div>}
       {showSkip && (
         <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
           {skipped.map((p) => <button key={p.id} type="button" onClick={() => unhide(p.id)} className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2.5 py-1 text-[11.5px] font-bold text-slate-500 hover:border-indigo-200 hover:text-indigo-600"><Undo2 size={11} /> {p.customerName ? `${p.customerName} · ` : ""}{p.name} — báo lại</button>)}

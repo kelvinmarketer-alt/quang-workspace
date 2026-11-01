@@ -11,4 +11,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: { __RULES_HASH__: JSON.stringify(RULES_HASH) },
   server: { port: 5190, host: true },
+  // 01/11: tách thư viện ít đổi (React, router, Supabase) ra file riêng → mỗi lần cập nhật app, máy chỉ tải lại phần code app
+  build: { rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom', 'react-router-dom'], supabase: ['@supabase/supabase-js'] } } } },
 })

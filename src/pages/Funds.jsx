@@ -649,6 +649,7 @@ function FundsMain() {
   const today = todayISO();
   // Năm đang xem — nhớ localStorage, mặc định năm hiện tại
   const [yearSel, setYearSel] = useState(() => { try { return Number(localStorage.getItem("qws_funds_year")) || curY; } catch { return curY; } });
+  const [showMonths, setShowMonths] = useState(false);
   const setYear = (y) => { setYearSel(y); try { localStorage.setItem("qws_funds_year", String(y)); } catch {} };
   const [fundModal, setFundModal] = useState(null); // null | {} | fund
   const [txModal, setTxModal] = useState(null);      // { fund, type }
@@ -937,10 +938,12 @@ function FundsMain() {
       {/* Bảng dòng tiền theo tháng */}
       {monthRows.length > 0 && (
         <Card className="!p-0 overflow-hidden">
-          <div className="flex items-center justify-between p-4 pb-3 sm:p-5">
+          {/* 01/11: bảng 12 tháng thu gọn mặc định (trang dài ~4 màn) — bấm để xem */}
+          <button type="button" onClick={() => setShowMonths((v) => !v)} className="flex w-full items-center justify-between p-4 text-left sm:p-5">
             <h2 className="text-base font-extrabold text-slate-900">Phân bổ theo tháng · {year}</h2>
-            <Badge tone="slate">{monthRows.length} tháng</Badge>
-          </div>
+            <span className="flex items-center gap-2"><Badge tone="slate">{monthRows.length} tháng</Badge><ChevronDown size={16} className={`text-slate-400 transition ${showMonths ? "rotate-180" : ""}`} /></span>
+          </button>
+          {showMonths && <>
           {/* MOBILE: thẻ từng tháng (gọn, không kéo ngang) */}
           <div className="space-y-2 px-4 pb-4 sm:hidden">
             {monthRows.map((r) => {
@@ -1008,6 +1011,7 @@ function FundsMain() {
               </tfoot>
             </table>
           </div>
+          </>}
         </Card>
       )}
 
@@ -1102,6 +1106,7 @@ function FundsMain() {
 const FUND_TABS = [["funds", "Quỹ & Dòng tiền", PiggyBank], ["stats", "Thống kê chi tiêu", BarChart3]];
 
 const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
+// 01/11: Quỹ gộp thành tab "Dòng tiền" trong Kế toán — thanh chuyển Quỹ / Thống kê chi tiêu dạng viên nhỏ cùng kiểu app
 export default function Funds({ initialTab }) {
   const { fundSchedules } = useData();
   // Có lịch chuyển quỹ đến hạn → mở tab Quỹ (banner xác nhận nằm ở đó, link từ "Hôm nay" trỏ về /quy)
@@ -1114,15 +1119,13 @@ export default function Funds({ initialTab }) {
   useEffect(() => { setTab0(startTab()); /* eslint-disable-next-line */ }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
-      <Card className="!p-2">
-        <div className="grid grid-cols-2 gap-1">
-          {FUND_TABS.map(([v, l, Ic]) => (
-            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${tab === v ? "bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-slate-50"}`}>
-              <Ic size={16} /> <span className="truncate">{l}</span>
-            </button>
-          ))}
-        </div>
-      </Card>
+      <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">
+        {FUND_TABS.map(([v, l, Ic]) => (
+          <button key={v} onClick={() => setTab(v)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold transition ${tab === v ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
+            <Ic size={14} /> {l}
+          </button>
+        ))}
+      </div>
       {tab === "funds" ? <FundsMain /> : <FundStats />}
     </div>
   );

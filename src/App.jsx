@@ -8,7 +8,6 @@ import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
 const Customers = lazy(() => import("./pages/Customers.jsx"));
 const Ketoan = lazy(() => import("./pages/Ketoan.jsx"));
-const Funds = lazy(() => import("./pages/Funds.jsx"));
 const Tasks = lazy(() => import("./pages/Tasks.jsx"));
 const Coin = lazy(() => import("./pages/Coin.jsx"));
 const Ads = lazy(() => import("./pages/Ads.jsx"));
@@ -54,8 +53,9 @@ export default function App() {
         <Route path="/don-hang" element={g("/don-hang", <Customers />)} />
         <Route path="/ke-toan" element={g("/ke-toan", <Ketoan />)} />
         <Route path="/chi-phi" element={g("/chi-phi", <Ketoan initialTab="expenses" />)} />
-        <Route path="/quy" element={g("/quy", <Funds />)} />
-        <Route path="/quy-thong-ke" element={g("/quy-thong-ke", <Funds initialTab="stats" />)} />
+        {/* 01/11: Quỹ gộp vào Kế toán (tab Dòng tiền) — link cũ vẫn mở đúng chỗ */}
+        <Route path="/quy" element={g("/quy", <Ketoan initialTab="cash" />)} />
+        <Route path="/quy-thong-ke" element={g("/quy-thong-ke", <Ketoan initialTab="cash" fundsTab="stats" />)} />
         <Route path="/cong-viec" element={g("/cong-viec", <Tasks />)} />
         <Route path="/lich" element={g("/lich", <Tasks initialTab="calendar" />)} />
         <Route path="/coin" element={g("/coin", <Coin />)} />
