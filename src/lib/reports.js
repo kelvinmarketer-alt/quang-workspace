@@ -80,21 +80,6 @@ async function loadAll(P, settings, adsResults) {
 
 export function dropReportCache() { MEM = null; try { sessionStorage.removeItem(CK); } catch { /* bỏ qua */ } }
 
-// Danh sách kênh KHÔNG kèm số (nhẹ) — để gắn kênh ↔ khách ngay ở Khách & Dự án (01/11). Chỉ chủ.
-const callAds = async (body) => { const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body }); if (error || data?.error) throw new Error(error?.message || data.error); return data; };
-export async function loadChannelLists(settings = {}) {
-  const [meta, gads, web, pages] = await Promise.all([
-    callAds({ mode: "config_list" }).then((d) => (d.accounts || []).map((a) => ({ kind: "meta", id: a.id, name: a.name, cust: a.cust || null }))).catch(() => []),
-    callAds({ mode: "gads_list" }).then((d) => (d.accounts || []).map((a) => ({ kind: "gads", id: a.customer_id, name: a.name, cust: a.qws_customer_id || null }))).catch(() => []),
-    listGoogleProps().then(({ props, conn }) => buildSites(props, conn, { hidden: settings.webHidden || [], gaOverride: settings.webGa || {} }).sites.map((s) => s.domain)).catch(() => []),
-    listPages().then(({ pages: l }) => (l || []).filter((p) => p.enabled !== false && !(settings.fbHidden || []).includes(p.page_id)).map((p) => ({ id: p.page_id, name: p.name }))).catch(() => []),
-  ]);
-  return { ads: [...meta, ...gads], web, pages };
-}
-export async function setAdsCustomer(a, cust) {
-  await callAds(a.kind === "gads" ? { mode: "gads_update", cid: a.id, patch: { cust } } : { mode: "config_update", id: a.id, patch: { cust } });
-  dropReportCache();
-}
 
 // Bản số liệu đang nhớ (không tải mới) — cho chuông thông báo
 export function peekReportData() {

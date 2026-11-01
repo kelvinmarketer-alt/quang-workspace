@@ -163,11 +163,11 @@ export default function Settings() {
       {cur === "connect" && isOwner && <>
         <AiImport />
         <AiUsage />
-        {/* 01/11: kết nối quản trị NGAY TRONG TỪNG JOB (Khách & Dự án → mở job → Kết nối đo lường). Ở đây chỉ còn danh sách tổng (nâng cao) + script Google Ads */}
+        {/* 01/11: kết nối quản trị THEO THƯƠNG HIỆU (Khách & Dự án → thẻ khách → Kết nối đo lường). Ở đây chỉ còn danh sách tổng (nâng cao) + script Google Ads */}
         <details className="card group !p-0">
           <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-extrabold text-slate-800">
             <Plug size={16} className="text-indigo-500" /> Tất cả tài khoản quảng cáo (nâng cao)
-            <span className="ml-auto text-[11.5px] font-medium text-slate-400 group-open:hidden">Gắn / thêm kết nối cho từng job: Khách & Dự án → mở job → Kết nối đo lường</span>
+            <span className="ml-auto text-[11.5px] font-medium text-slate-400 group-open:hidden">Gắn / thêm kết nối theo thương hiệu: Khách & Dự án → thẻ khách → Kết nối đo lường</span>
           </summary>
           <div className="border-t border-slate-100 p-1"><AdsAccounts /></div>
         </details>

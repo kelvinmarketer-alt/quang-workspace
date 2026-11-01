@@ -9,7 +9,7 @@ import { AiImportModal } from "../components/AiImport.jsx";
 import { imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
-import CustomerChannels from "../components/CustomerChannels.jsx";
+import BrandConnections from "../components/BrandConnections.jsx";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -136,7 +136,7 @@ export default function Customers() {
   const [projDrawerId, setProjDrawerId] = useState(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [hi, setHi] = useState(null);
-  const [chanOpen, setChanOpen] = useState(null); // khách mở sẵn ô "Gắn kênh" (từ thông báo chưa gắn đo lường) // khách đang được làm nổi (mở từ link / ô tìm kiếm)
+  const [chanOpen, setChanOpen] = useState(null); // {id, t}: khách mở sẵn "Kết nối đo lường" (từ thông báo / nút trong job)
   const [sp, setSp] = useSearchParams();
 
   // Gom dự án theo khách (sort: đang làm trước → hoạt động gần nhất)
@@ -184,13 +184,14 @@ export default function Customers() {
     if (!qId && !qProj) return;
     let custId = qId;
     if (qProj) { const p = projects.find((x) => x.id === qProj); if (!p) return; setProjDrawerId(p.id); custId = p.customerId; }
+    else setProjDrawerId(null); // bấm "Quản lý kết nối" trong job → đóng job, mở thẻ thương hiệu
     const c = customerList.find((x) => x.id === custId);
     if (!c && !qProj) return; // dữ liệu chưa tải xong → chờ
     if (c) {
       setQ(""); setTypeF((c.active ?? true) ? "all" : "off");
       setExpanded((s) => new Set(s).add(c.id));
       setHi(c.id);
-      if (sp.get("kenh")) setChanOpen(c.id);
+      if (sp.get("kenh")) setChanOpen({ id: c.id, t: Date.now() });
       setTimeout(() => document.getElementById("cust-" + c.id)?.scrollIntoView({ block: "center", behavior: "smooth" }), 80);
       setTimeout(() => setHi(null), 2500);
     }
@@ -311,7 +312,7 @@ export default function Customers() {
                       {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
                       {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
-                    {isOwner && <CustomerChannels customer={c} startOpen={chanOpen === c.id} />}
+                    {isOwner && <BrandConnections customer={c} startOpen={chanOpen?.id === c.id ? chanOpen.t : 0} />}
                     {c.projects.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-slate-200 bg-white py-4 text-center text-xs text-slate-400">Chưa có dự án. Bấm "Thêm dự án".</div>
                     ) : (

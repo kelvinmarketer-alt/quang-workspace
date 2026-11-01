@@ -7,7 +7,7 @@ import { Card, StatCard, SectionTitle, Badge, formatVND, formatShort, MoneyInput
 import Combobox from "../components/Combobox.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { ProjectResources } from "./Resources.jsx";
-import JobConnections from "../components/JobConnections.jsx";
+import { JobMeasure } from "../components/BrandConnections.jsx";
 import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
 import { projectMetrics, installmentMetrics, projectsMonthly, projectYears } from "../lib/selectors.js";
@@ -415,7 +415,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
         </div>
         {project.note && <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{project.note}</div>}
 
-        <div className="mt-4"><JobConnections project={project} /></div>
+        <div className="mt-4"><JobMeasure project={project} /></div>
         <ProjectResources projectId={project.id} customerId={project.customerId} customerName={project.customerName} />
       </div>
 
