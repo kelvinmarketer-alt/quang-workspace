@@ -127,3 +127,25 @@ export async function demoCacheSet(session, raw) {
     db.transaction("raw", "readwrite").objectStore("raw").put({ key, raw, at: Date.now() }, "last");
   } catch { /* chế độ riêng tư / hết chỗ → bỏ qua */ }
 }
+
+// Ghi dòng 'command' của bot thật (Dừng / Đóng hết / cấu hình / cảnh báo giá): đọc bản MỚI NHẤT → gộp → ghi CÓ KIỂM TRA updated_at.
+// 01/11: trước đọc-gộp-ghi không kiểm tra → điện thoại thêm cảnh báo giá đúng lúc máy tính bấm "Dừng bot" là mất lệnh Dừng.
+// patch = object hoặc hàm (dữ liệu hiện tại) → object. stamp=false: không đóng dấu "at" (cảnh báo giá).
+export async function mergeCmd(patch, fallback, { stamp = true } = {}) {
+  for (let i = 0; i < 4; i++) {
+    const cur = await supabase.from("qws_live_bot").select("data,updated_at").eq("id", "command").maybeSingle();
+    if (cur.error) return { error: cur.error };
+    const base = cur.data?.data || fallback || {};
+    const p = typeof patch === "function" ? patch(base) : patch;
+    const row = { data: { ...base, ...p, ...(stamp ? { at: Date.now() } : {}) }, updated_at: new Date().toISOString() };
+    if (!cur.data) {
+      const r = await supabase.from("qws_live_bot").insert({ id: "command", ...row });
+      if (!r.error || !/duplicate|conflict/i.test(r.error.message || "")) return r;
+      continue; // máy khác vừa tạo dòng → đọc lại gộp lại
+    }
+    const r = await supabase.from("qws_live_bot").update(row).eq("id", "command").eq("updated_at", cur.data.updated_at).select("id");
+    if (r.error || r.data?.length) return r;
+  }
+  return { error: new Error("Máy khác đang ghi lệnh cho bot cùng lúc — bấm lại sau vài giây") };
+}
+

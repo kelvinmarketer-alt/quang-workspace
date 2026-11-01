@@ -11,6 +11,22 @@ import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
+import { supabase } from "../lib/supabase.js";
+
+// Bot thật đang "theo Demo" → đổi cấu hình phiên Demo là đổi luôn bot (sau ~5 phút). 01/11: liệt kê thay đổi + hỏi trước.
+async function confirmLiveFollow(oldCfg = {}, newCfg = {}) {
+  const r = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
+  const c = r.data?.data?.config;
+  if (r.error || !c || c.followDemo === false) return true;
+  const L = [];
+  const num = (k, lb, u) => { if (oldCfg[k] != null && Number(oldCfg[k]) !== Number(newCfg[k])) L.push(`${lb}: ${oldCfg[k]}${u} → ${newCfg[k]}${u}`); };
+  num("riskPct", "Rủi ro / lệnh", "%"); num("maxOpen", "Tối đa lệnh mở", ""); num("dailyStopPct", "Dừng ngày khi lỗ", "%"); num("maxLev", "Đòn bẩy tối đa", "x");
+  const set = (k, lb) => { const a = (oldCfg[k] || []).join("/"), b = (newCfg[k] || []).join("/"); if (a && a !== b) L.push(`${lb}: ${a} → ${b}`); };
+  set("coins", "Cặp"); set("tfs", "Khung");
+  if (!L.length) return true;
+  const live = c.mode === "live";
+  return ask(`Áp dụng cho cả bot ${live ? "TIỀN THẬT" : "thật (testnet)"}?\nBot đang bật "Rủi ro & giới hạn theo phiên Demo" nên khoảng 5 phút sau sẽ chạy theo:\n${L.map((x) => "• " + x).join("\n")}\nMuốn bot giữ cấu hình riêng: tab Bot thật → bỏ chọn "theo phiên Demo".`, { danger: live, ok: live ? "Áp dụng cho tiền thật" : "Áp dụng" });
+}
 import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Demo tự động": bot giao dịch GIẢ LẬP Futures theo bộ kiến thức — chạy từ ngày bắt đầu tới nay và tiếp tục theo
@@ -554,9 +570,9 @@ export default function CoinBot({ active: visible = true }) {
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Demo tự động.</div></Card>;
   if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
-  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} onStart={(s) => { saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
+  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
 
-  const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
+  const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.\nBot thật KHÔNG dừng theo — muốn dừng bot thật vào tab Bot thật.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
   const eqNow = P ? P.equity + P.unrealized : null, pnl = eqNow != null ? eqNow - cfg.capital : null;
   const open = P ? P.trades.filter((t) => t.status === "open") : [];
   const done = P ? P.trades.filter((t) => t.status === "done") : [];

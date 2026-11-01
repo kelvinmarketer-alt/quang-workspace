@@ -11,7 +11,7 @@ import { pushSupported, permission, isSubscribed, enablePush } from "../lib/push
 import { runSessionAsync } from "../lib/botRunner.js";
 import { finalize, cfgOf } from "../lib/paperBot.js";
 import { normLive, liveSummary, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
-import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet, mergeCmd } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 
 // Tab "Bot thật": theo dõi bot giao dịch chạy nền trên máy bàn ở nhà (repo qws-live-bot) qua bảng Supabase qws_live_bot
@@ -28,15 +28,6 @@ const MODE_L = { testnet: "Testnet", live: "Tiền thật" };
 const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/\s+/g, " ").trim();
 const Title = ({ icon: I, children, right }) => <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{I && <I size={13} className="text-indigo-500" />}{children}{right && <span className="ml-auto normal-case tracking-normal">{right}</span>}</div>;
 const Num = ({ label, v, sub, t = "text-slate-900" }) => <div className="min-w-0 bg-white px-3 py-2.5"><div className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`break-words text-lg font-extrabold leading-snug tabular-nums ${t}`}>{v}</div>{sub && <div className="break-words text-[11px] leading-snug text-slate-400">{sub}</div>}</div>;
-
-// Ghi dòng 'command': đọc bản MỚI NHẤT trên server rồi gộp (không đè config/keys do máy khác vừa lưu).
-// patch = object hoặc hàm (dữ liệu hiện tại) → object
-async function mergeCmd(patch, fallback) {
-  const cur = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
-  const base = (!cur.error && cur.data?.data) || fallback || {};
-  const p = typeof patch === "function" ? patch(base) : patch;
-  return supabase.from("qws_live_bot").upsert({ id: "command", data: { ...base, ...p, at: Date.now() }, updated_at: new Date().toISOString() });
-}
 
 // Bản bot đang chạy so với bản mới nhất đã phát hành trên web app (/bot-release/manifest.json) — thấy ngay ở đầu trang
 let REL = null;

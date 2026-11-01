@@ -5,6 +5,7 @@ import { Card } from "../components/ui.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
+import { mergeCmd } from "../lib/coinShared.js";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { TF, MARKETS, fetchKlines, fetchTicker24, symbolExists, analyze, htfContext, compactCandles } from "../lib/ta.js";
 import { aiMarketAnalysis } from "../lib/ai.js";
@@ -320,9 +321,8 @@ function PriceAlerts({ active, pair, market, price }) {
   const write = async (fn) => {
     setBusy(true); setErr("");
     try {
-      const cur = await readCmd();
-      const priceAlerts = fn(Array.isArray(cur.priceAlerts) ? cur.priceAlerts : []);
-      const { error } = await supabase.from("qws_live_bot").upsert({ id: "command", data: { ...cur, priceAlerts }, updated_at: new Date().toISOString() });
+      let priceAlerts = [];
+      const { error } = await mergeCmd((cur) => { priceAlerts = fn(Array.isArray(cur.priceAlerts) ? cur.priceAlerts : []); return { priceAlerts }; }, null, { stamp: false });
       if (error) throw error;
       setAlerts(priceAlerts);
       return true;

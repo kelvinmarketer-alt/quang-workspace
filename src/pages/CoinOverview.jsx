@@ -64,16 +64,16 @@ export default function CoinOverview({ active, go }) {
   // Tài sản
   const assetSum = useMemo(() => {
     if (!bn) return null;
-    let val = 0, d24 = 0, missing = 0;
+    let val = 0, d24 = 0, missing = 0; const priced = Object.keys(px).length > 0, noPx = [];
     for (const b of bn.balances || []) {
       const a = String(b.asset || "").toUpperCase(), qty = b.totalQty != null ? Number(b.totalQty) || 0 : (Number(b.qty) || 0) + (Number(b.earnQty) || 0);
       const p = STABLES.has(a) ? 1 : px[a]?.price;
-      if (p == null) { missing++; continue; }
+      if (p == null) { if (priced) noPx.push(a); else missing++; continue; } // đã có giá mà coin này vẫn không có → bỏ qua, không kẹt "Đang tải"
       const v = qty * p; val += v;
       if (!STABLES.has(a) && px[a]?.chg != null) d24 += v - v / (1 + px[a].chg / 100);
     }
     const fut = bn.futures ? (Number(bn.futures.wallet) || 0) + (Number(bn.futures.unrealized) || 0) : 0;
-    return { total: val + fut, d24, missing, fut };
+    return { total: val + fut, d24, missing, noPx, fut };
   }, [bn, px]);
   const vnd = useUsdVnd();
   const dep = depositInfo(settings, bn);
@@ -114,7 +114,7 @@ export default function CoinOverview({ active, go }) {
             ) : (
               <>
                 <div className="mt-1 text-3xl font-extrabold tabular-nums sm:text-4xl">{fmtUsd(assetSum.total)}</div>
-                <div className="mt-0.5 text-xs text-amber-100/80">≈ {formatVND(assetSum.total * vnd)}</div>
+                <div className="mt-0.5 text-xs text-amber-100/80">≈ {formatVND(assetSum.total * vnd)}{assetSum.noPx.length > 0 ? ` · chưa tính ${assetSum.noPx.join(", ")} (không có giá)` : ""}</div>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-bold tabular-nums">
                   {vsDep != null && <span className={`flex items-center gap-1 ${vsDep >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{vsDep >= 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}{fmtUsdSigned(vsDep)} ({sPct((vsDep * vnd / dep.depVnd) * 100)}) <span className="font-semibold text-amber-100/60">so với đã nạp</span></span>}
                   <span className={assetSum.d24 >= 0 ? "text-emerald-300" : "text-rose-300"}>{fmtUsdSigned(assetSum.d24)} <span className="font-semibold text-amber-100/60">24h</span></span>

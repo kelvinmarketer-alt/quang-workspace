@@ -417,10 +417,12 @@ function CoinInvest({ active = true }) {
 
   const tot = useMemo(() => {
     let spot = 0, earn = 0, upnl = 0, upnlCost = 0, realized = 0, fees = 0, missing = 0, d24 = 0;
+    // 01/11: đã có lượt giá đầu mà coin vẫn không có giá (đã gỡ khỏi sàn / không có cặp USDT) → bỏ qua + ghi chú, không kẹt "Đang tải" mãi
+    const priced = Object.keys(prices).length > 0, noPx = [];
     for (const r of binRows) {
       if (r.realized != null) realized += r.realized;
       fees += r.fees || 0;
-      if (r.price == null) { missing++; continue; }
+      if (r.price == null) { if (priced) noPx.push(r.symbol || r.asset); else missing++; continue; }
       if (!r.stable && r.chg != null && r.value) d24 += r.value - r.value / (1 + r.chg / 100); // lãi/lỗ 24h của lượng coin đang giữ
       spot += r.spotQty * r.price; earn += r.earnQty * r.price;
       if (!r.stable && r.pnl != null) { upnl += r.pnl; upnlCost += r.invested || 0; }
@@ -428,8 +430,8 @@ function CoinInvest({ active = true }) {
     const futV = fut ? (Number(fut.wallet) || 0) + (Number(fut.unrealized) || 0) : 0;
     let manVal = 0, manPnl = 0, manInv = 0;
     for (const r of manRows) { manVal += r.value || 0; if (r.pnl != null) { manPnl += r.pnl; manInv += r.invested || 0; } }
-    return { spot, earn, d24, fut: futV, binance: spot + earn + futV, upnl, upnlPct: upnlCost > 0 ? (upnl / upnlCost) * 100 : null, realized, fees, missing, manVal, manPnl, manPct: manInv > 0 ? (manPnl / manInv) * 100 : null };
-  }, [binRows, manRows, fut]);
+    return { spot, earn, d24, fut: futV, binance: spot + earn + futV, upnl, upnlPct: upnlCost > 0 ? (upnl / upnlCost) * 100 : null, realized, fees, missing, noPx, manVal, manPnl, manPct: manInv > 0 ? (manPnl / manInv) * 100 : null };
+  }, [binRows, manRows, fut, prices]);
 
   // So với tiền VND đã nạp (P2P + fiat) — CHỈ tài sản Binance, không gồm coin nhập tay
   const hasDep = depVnd > 0 && tot.missing === 0;
@@ -469,7 +471,7 @@ function CoinInvest({ active = true }) {
               <div className="mt-2 space-y-2" aria-label="Đang tải ví Binance"><div className="h-8 w-44 animate-pulse rounded-lg bg-white/15" /><div className="h-3 w-56 animate-pulse rounded bg-white/10" /><div className="text-[11px] text-amber-100/60">{wErr && !bn ? wErr : "Đang tải ví Binance…"}</div></div>
             ) : <>
             <div className="mt-1 text-3xl font-extrabold tabular-nums sm:text-4xl">{fmtUsd(isOwner ? tot.binance : tot.manVal)}</div>
-            <div className="mt-0.5 text-xs text-amber-100/80">≈ {formatVND((isOwner ? tot.binance : tot.manVal) * vnd)}{isOwner && bn && !isV2 ? " · chưa gồm Earn/Futures" : ""}</div>
+            <div className="mt-0.5 text-xs text-amber-100/80">≈ {formatVND((isOwner ? tot.binance : tot.manVal) * vnd)}{isOwner && bn && !isV2 ? " · chưa gồm Earn/Futures" : ""}{isOwner && tot.noPx.length > 0 ? ` · chưa tính ${tot.noPx.join(", ")} (không có giá)` : ""}</div>
             {headPnl != null && (
               <div className="mt-2">
                 <div className={`flex items-center gap-1.5 text-sm font-bold tabular-nums ${headPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
