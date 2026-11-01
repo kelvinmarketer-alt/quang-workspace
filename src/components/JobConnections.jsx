@@ -76,14 +76,14 @@ export default function JobConnections({ project }) {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <Gauge size={15} className="text-indigo-500" />
         <span className="text-sm font-extrabold text-slate-800">Kết nối đo lường của job</span>
-        <span className="text-[11px] text-slate-400">dùng chung cho mọi job của {cust.name}</span>
+        <span className="order-last w-full text-[11px] text-slate-400 sm:order-none sm:w-auto">dùng chung cho mọi job của {cust.name}</span>
         <button type="button" onClick={() => setShowAll((v) => !v)} className="ml-auto text-[11.5px] font-bold text-indigo-600">{showAll ? "Chỉ kênh job cần" : "Mọi loại kênh"}</button>
       </div>
       {!lists ? <div className="flex items-center gap-1.5 py-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tải kênh…</div> : (
         <div className="space-y-3">
           {missing.length > 0 && (skip[project.id]
             ? <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-500">Đã đánh dấu job này không cần đo — app không nhắc nữa.<button type="button" onClick={() => unhide(project.id)} className="font-bold text-indigo-600">Nhắc lại</button></div>
-            : <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-700"><span className="min-w-0 flex-1">Job này chưa có {missing.map((k) => KINDS[k][0].toLowerCase()).join(", ")} để đo. Gắn bên dưới nếu cần theo dõi.</span>
+            : <div className="flex flex-col items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-700 sm:flex-row sm:items-center"><span className="min-w-0 sm:flex-1">Job này chưa có {missing.map((k) => KINDS[k][0].toLowerCase()).join(", ")} để đo. Gắn bên dưới nếu cần theo dõi.</span>
                 <button type="button" onClick={() => hide({ id: project.id, job: project.name })} className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11.5px] font-bold text-slate-600 ring-1 ring-amber-200 hover:text-slate-900">Không cần đo</button></div>)}
           {kinds.map((kind) => {
             const [lb, I] = KINDS[kind], m = mine(kind), others = of(kind).filter((x) => owner[kind](x) !== cust.id);
@@ -93,20 +93,20 @@ export default function JobConnections({ project }) {
                 <div className="space-y-1.5">
                   {m.map((x) => kind === "ads" ? <AdsRow key={x.id} a={x} busy={busy === x.id} onPatch={(p) => adsUpdate(x, p)} onUnlink={() => link(kind, x, false)} />
                     : <div key={keyOf(kind, x)} className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px]"><I size={14} className="shrink-0 text-slate-400" /><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{label(kind, x)}</span>
-                        <button type="button" onClick={() => link(kind, x, false)} title="Bỏ gắn khỏi khách này" className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-rose-500"><X size={14} /></button></div>)}
+                        <button type="button" onClick={() => link(kind, x, false)} title="Bỏ gắn khỏi khách này" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-500"><X size={14} /></button></div>)}
                   {adding === kind ? (
                     <div className="rounded-xl border border-dashed border-slate-200 p-2">
                       <div className="flex flex-wrap gap-1.5">
                         {others.map((x) => { const o = owner[kind](x); return <button key={keyOf(kind, x)} type="button" disabled={busy === x.id} onClick={async () => { if (o && !(await ask(`"${label(kind, x)}" đang thuộc ${nameOf(o)}. Chuyển sang ${cust.name}?`))) return; link(kind, x, true); }}
-                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600"><Plus size={11} /><span className="truncate">{label(kind, x)}</span>{o && <span className="shrink-0 font-medium text-slate-400">· {nameOf(o)}</span>}</button>; })}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-bold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 sm:px-2.5 sm:py-1 sm:text-[11.5px]"><Plus size={11} /><span className="truncate">{label(kind, x)}</span>{o && <span className="shrink-0 font-medium text-slate-400">· {nameOf(o)}</span>}</button>; })}
                         {!others.length && <span className="text-[11.5px] text-slate-400">Không còn kênh nào khác.</span>}
                       </div>
                       {kind === "ads" ? <NewMetaAccount custId={cust.id} onDone={() => reload(true)} /> : (
                         <div className="mt-2 text-[11px] text-slate-400">Chưa có trong danh sách? {kind === "web" ? "Thêm email robot vào Search Console / GA4 của web" : "Gán page cho System User trong Business Manager"}, rồi bật ở <a href={OFFICE_URL} target="_blank" rel="noopener" className="font-bold text-indigo-600">Văn phòng AI → Kết nối <ExternalLink size={10} className="inline" /></a>.</div>
                       )}
-                      <button type="button" onClick={() => setAdding(null)} className="mt-2 text-[11.5px] font-bold text-slate-400 hover:text-slate-600">Xong</button>
+                      <button type="button" onClick={() => setAdding(null)} className="mt-2 rounded-lg px-3 py-1.5 text-[12px] font-bold text-slate-500 ring-1 ring-slate-200 hover:text-slate-800">Xong</button>
                     </div>
-                  ) : <button type="button" onClick={() => setAdding(kind)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-bold text-indigo-600 hover:bg-indigo-50"><Plus size={13} /> Gắn {lb.toLowerCase()}</button>}
+                  ) : <button type="button" onClick={() => setAdding(kind)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[12.5px] font-bold text-indigo-600 hover:bg-indigo-50"><Plus size={14} /> Gắn {lb.toLowerCase()}</button>}
                 </div>
               </div>
             );
@@ -130,8 +130,8 @@ function AdsRow({ a, busy, onPatch, onUnlink }) {
         <Badge tone={google ? "emerald" : "sky"}>{google ? "Google" : "Meta"}</Badge>
         {!a.active && <Badge tone="slate">Tắt</Badge>}
         {busy && <Loader2 size={13} className="animate-spin text-slate-400" />}
-        <button type="button" onClick={() => setOpen((v) => !v)} title="Tuỳ chỉnh" className="rounded-lg p-1 text-slate-400 hover:bg-white"><ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} /></button>
-        <button type="button" onClick={onUnlink} title="Bỏ gắn khỏi khách này" className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-rose-500"><X size={14} /></button>
+        <button type="button" onClick={() => setOpen((v) => !v)} title="Tuỳ chỉnh" className="rounded-lg p-1.5 text-slate-400 hover:bg-white"><ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} /></button>
+        <button type="button" onClick={onUnlink} title="Bỏ gắn khỏi khách này" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-500"><X size={14} /></button>
       </div>
       {open && (
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2 text-[12px]">
@@ -171,9 +171,9 @@ function NewMetaAccount({ custId, onDone }) {
   return (
     <div className="mt-2 rounded-lg bg-slate-50 p-2">
       <div className="mb-1 text-[11.5px] font-bold text-slate-600">Kết nối tài khoản Meta mới cho job</div>
-      <div className="flex gap-1.5">
-        <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Dán token System User của BM (quyền ads_read)" className={`${inputCls} min-w-0 flex-1 bg-white`} />
-        <button type="button" onClick={discover} disabled={busy || !token.trim()} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-bold text-white disabled:opacity-50">{busy ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}Tìm TKQC</button>
+      <div className="flex flex-wrap gap-1.5">
+        <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Dán token System User của BM (quyền ads_read)" className={`${inputCls} w-full min-w-0 bg-white sm:w-auto sm:flex-1`} />
+        <button type="button" onClick={discover} disabled={busy || !token.trim()} className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50 max-sm:w-full sm:py-1.5">{busy ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}Tìm TKQC</button>
       </div>
       {found?.length > 0 && (
         <div className="mt-2 space-y-1">
