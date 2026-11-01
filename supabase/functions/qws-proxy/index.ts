@@ -106,22 +106,34 @@ Deno.serve(async (req) => {
       ]);
       return json({ props: (props || []).filter((x: any) => inScope(scope, `${x.name || ""} ${x.prop_id || ""}`, x.prop_id)), conn });
     }
-    if (action === "google") {
-      const url = String(p.url || "");
+    // 1 lệnh Google (GSC searchAnalytics / GA4 runReport) — kiểm web đang bật + trong phạm vi, rồi gọi bằng token đã nhớ
+    let props: any[] | null = null;
+    const googleCall = async (url: string, body: unknown): Promise<{ status: number; data: any }> => {
       const m1 = url.match(/^https:\/\/searchconsole\.googleapis\.com\/webmasters\/v3\/sites\/([^/]+)\/searchAnalytics\/query$/);
       const m2 = url.match(/^https:\/\/analyticsdata\.googleapis\.com\/v1beta\/properties\/(\d+):runReport$/);
-      if (!m1 && !m2) return json({ error: "Không cho phép" }, 400);
+      if (!m1 && !m2) return { status: 400, data: { error: "Không cho phép" } };
       const kind = m1 ? "gsc" : "ga4", id = m1 ? decodeURIComponent(m1[1]) : m2![1];
-      const { data: ok } = await admin.from("office_google_props").select("prop_id").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).eq("enabled", true).maybeSingle();
-      if (!ok) return json({ error: "Web/property này đang tắt bên Văn phòng AI" }, 403);
-      if (scope) { const { data: pr } = await admin.from("office_google_props").select("name").eq("owner_id", ownerId).eq("kind", kind).eq("prop_id", id).maybeSingle(); if (!inScope(scope, `${pr?.name || ""} ${id}`, id)) return json({ error: "Web này ngoài dự án được giao" }, 403); }
+      if (!props) props = (await admin.from("office_google_props").select("kind,prop_id,name").eq("owner_id", ownerId).eq("enabled", true)).data || [];
+      const pr = props.find((x: any) => x.kind === kind && x.prop_id === id);
+      if (!pr) return { status: 403, data: { error: "Web/property này đang tắt bên Văn phòng AI" } };
+      if (scope && !inScope(scope, `${pr.name || ""} ${id}`, id)) return { status: 403, data: { error: "Web này ngoài dự án được giao" } };
       const tok = await cachedToken("g:" + ownerId, async () => {
         const { data: g } = await admin.from("office_google").select("key_json").eq("owner_id", ownerId).maybeSingle();
         if (!g?.key_json) throw new Error("Chưa kết nối Google — vào Văn phòng AI → Kết nối → Google để dán khoá.");
         return googleToken(g.key_json);
       }, 50 * 60000);
-      const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify(p.body || {}) });
-      return json(await r.json(), r.ok ? 200 : r.status);
+      const r = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${tok}`, "content-type": "application/json" }, body: JSON.stringify(body || {}) });
+      return { status: r.ok ? 200 : r.status, data: await r.json().catch(() => ({})) };
+    };
+    if (action === "google") {
+      const r = await googleCall(String(p.url || ""), p.body);
+      return json(r.data, r.status);
+    }
+    // 01/11: GOM nhiều lệnh Google trong 1 lần gọi (Trung tâm báo cáo trước ~40 lần gọi máy chủ / lần mở)
+    if (action === "google_batch") {
+      const calls = Array.isArray(p.calls) ? p.calls.slice(0, 60) : [];
+      const out = await Promise.all(calls.map((c: any) => googleCall(String(c?.url || ""), c?.body).catch((e) => ({ status: 500, data: { error: String((e as Error)?.message || e) } }))));
+      return json({ results: out });
     }
     if (action === "fb_pages") {
       const [{ data }, { data: conns }] = await Promise.all([

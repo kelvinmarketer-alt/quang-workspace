@@ -42,7 +42,7 @@ begin
   if a->>'ketoan' <> 'none' then -- 01/11: bỏ 'or (dash and ids is null)' (quyền Tổng quan không cần sổ chi/quỹ)
     keys := keys || array['expenses', 'funds', 'fundTx', 'fundSchedules', 'spendCats', 'transactions']; end if;
   if a->>'tasks' <> 'none' or dash then keys := keys || array['tasks', 'family']; end if;
-  if a->>'coinInvest' <> 'none' then keys := keys || array['coins']; skeys := skeys || array['coinDeposits']; end if;
+  -- 01/11: coin (tiền thật: coins, coinDeposits) chỉ chủ — thành viên không nhận
   if a->>'coinDemo' <> 'none' or a->>'coinLive' <> 'none' then skeys := skeys || array['paperBot', 'paperBotLog']; end if;
   if a->>'ads' <> 'none' then keys := keys || array['adsResults']; end if;
   select coalesce(jsonb_object_agg(k, d->k), '{}'::jsonb) into r from unnest(keys) k where d ? k;
