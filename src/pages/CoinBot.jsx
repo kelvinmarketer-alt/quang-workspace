@@ -18,7 +18,15 @@ function useLiveFollow() {
   const [v, setV] = useState(null);
   useEffect(() => {
     let off = false;
-    supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle().then(({ data }) => { const c = data?.data?.config; if (!off) setV(c && c.followDemo !== false ? (c.mode === "live" ? "live" : "testnet") : null); });
+    // Bot mặc định "theo Demo" khi chưa lưu cấu hình riêng → chỉ coi là không theo khi followDemo === false. Chế độ lấy từ trạng thái bot báo về.
+    Promise.all([
+      supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle(),
+      supabase.from("qws_live_bot").select("data").eq("id", "status").maybeSingle(),
+    ]).then(([cmd, st]) => {
+      if (off || cmd.error || !st.data?.data) return;
+      const c = cmd.data?.data?.config || {}, mode = c.mode || st.data.data.mode;
+      setV(c.followDemo === false ? null : mode === "live" ? "live" : "testnet");
+    });
     return () => { off = true; };
   }, []);
   return v;
@@ -35,15 +43,17 @@ function FollowNote({ mode, compact }) {
 // Bot thật đang "theo Demo" → đổi cấu hình phiên Demo là đổi luôn bot (sau ~5 phút). 01/11: liệt kê thay đổi + hỏi trước.
 async function confirmLiveFollow(oldCfg = {}, newCfg = {}) {
   const r = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
-  const c = r.data?.data?.config;
-  if (r.error || !c || c.followDemo === false) return true;
+  if (r.error) return true;
+  const c = r.data?.data?.config || {}; // chưa lưu cấu hình riêng = bot đang theo Demo (mặc định)
+  if (c.followDemo === false) return true;
   const L = [];
   const num = (k, lb, u) => { if (oldCfg[k] != null && Number(oldCfg[k]) !== Number(newCfg[k])) L.push(`${lb}: ${oldCfg[k]}${u} → ${newCfg[k]}${u}`); };
   num("riskPct", "Rủi ro / lệnh", "%"); num("maxOpen", "Tối đa lệnh mở", ""); num("dailyStopPct", "Dừng ngày khi lỗ", "%"); num("maxLev", "Đòn bẩy tối đa", "x");
   const set = (k, lb) => { const a = (oldCfg[k] || []).join("/"), b = (newCfg[k] || []).join("/"); if (a && a !== b) L.push(`${lb}: ${a} → ${b}`); };
   set("coins", "Cặp"); set("tfs", "Khung");
   if (!L.length) return true;
-  const live = c.mode === "live";
+  const st = c.mode ? null : await supabase.from("qws_live_bot").select("data").eq("id", "status").maybeSingle();
+  const live = (c.mode || st?.data?.data?.mode) === "live";
   return ask(`Áp dụng cho cả bot ${live ? "TIỀN THẬT" : "thật (testnet)"}?\nBot đang bật "Rủi ro & giới hạn theo phiên Demo" nên khoảng 5 phút sau sẽ chạy theo:\n${L.map((x) => "• " + x).join("\n")}\nMuốn bot giữ cấu hình riêng: tab Bot thật → bỏ chọn "theo phiên Demo".`, { danger: live, ok: live ? "Áp dụng cho tiền thật" : "Áp dụng" });
 }
 import InfoTip from "../components/InfoTip.jsx";
