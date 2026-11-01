@@ -511,6 +511,19 @@ export default function Layout({ children }) {
   const navItems = useNavItems();
   const loc = useLocation();
   useEffect(() => { setOpen(false); }, [loc.pathname]); // điện thoại: đổi trang (kể cả nút Back) thì đóng menu
+  // 01/11: Esc đóng cửa sổ nổi / ngăn chi tiết trên cùng (trước 12/16 cửa sổ không đóng bằng Esc) — đi qua đúng đường "bấm ra ngoài"
+  // của từng cửa sổ nên form đang nhập dở vẫn được hỏi lại. Hộp xác nhận (role=dialog) tự xử lý Esc riêng.
+  useEffect(() => {
+    const h = (e) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const layers = [...document.querySelectorAll(".fixed.inset-0")].filter((el) => { const cs = getComputedStyle(el); return cs.display !== "none" && cs.visibility !== "hidden" && cs.pointerEvents !== "none"; });
+      const top = layers[layers.length - 1];
+      if (!top || top.getAttribute("role") === "dialog" || top.closest('[role="dialog"]')) return;
+      (top.querySelector(":scope > .absolute.inset-0") || top).dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   // Phím N ở bất kỳ đâu → ô thêm việc nhanh (không bắt khi đang gõ chữ)
   const navTo = useNavigate();
   useEffect(() => {

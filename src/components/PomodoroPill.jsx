@@ -15,6 +15,8 @@ export default function PomodoroPill() {
       const cur = pomoState();
       if (cur && Date.now() >= cur.endsAt) {
         if (cur.phase === "work") {
+          // 01/11: mở app ở 2 tab → chỉ tab đầu tiên ghi 🍅 (đánh dấu theo mốc kết thúc của phiên)
+          try { if (localStorage.getItem("qws_pomo_done") === String(cur.endsAt)) { tick((n) => n + 1); return; } localStorage.setItem("qws_pomo_done", String(cur.endsAt)); } catch { /* bỏ qua */ }
           const task = tasks.find((x) => x.id === cur.taskId);
           if (task) updateTask(task.id, { pomos: (task.pomos || 0) + 1 });
           bumpDay(); chime(); startBreak();

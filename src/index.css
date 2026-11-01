@@ -550,3 +550,9 @@ html.theme-dark[data-skin="terminal"] .animate-pulse::after { background: linear
 @media (pointer: coarse) {
   .bento button:not(.no-tap), .bento select { min-height: 32px; }
 }
+
+/* 01/11: iPhone / iPad (Safari) tự PHÓNG TO cả trang khi bấm vào ô nhập chữ < 16px → ô nhập trên iOS luôn 16px.
+   Chỉ áp cho Safari iOS (-webkit-touch-callout), máy tính / Android giữ cỡ chữ gọn như cũ. */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px !important; }
+}

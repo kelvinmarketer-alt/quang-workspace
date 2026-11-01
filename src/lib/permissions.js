@@ -25,13 +25,13 @@ export const FEATURE_HINT = {
 };
 // Quyền TỪNG TAB của Đầu tư Coin (21/10): chủ chọn ai được xem danh mục & vốn, ai chỉ xem Demo / Bot thật.
 // [key, nhãn, mô tả, các mức cho phép]. Demo + Bot thật CHỈ XEM (điều khiển bot luôn chỉ chủ).
+// 01/11 sếp chốt: THÀNH VIÊN KHÔNG XEM TIỀN COIN — "Đầu tư (ví, tiền nạp, lãi/lỗ)" + "Bot thật" chỉ chủ, không cấp được.
 export const COIN_SUBS = [
-  ["coinInvest", "Đầu tư — danh mục & vốn", "Ví Binance (Spot/Earn/Futures), tiền đã nạp, lãi/lỗ, coin nhập tay. Sửa = thêm/sửa coin nhập tay", ["none", "view", "edit"]],
   ["coinMarket", "Thị trường & AI", "Biểu đồ, chỉ báo, phân tích AI", ["none", "view"]],
-  ["coinDemo", "Demo tự động", "Kết quả, lịch sử lệnh demo (chỉ xem — không dừng/sửa được)", ["none", "view"]],
-  ["coinLive", "Bot thật", "Trạng thái, lệnh, lịch sử bot thật (chỉ xem — không dừng/đóng lệnh/sửa cài đặt)", ["none", "view"]],
+  ["coinDemo", "Demo tự động", "Kết quả, lịch sử lệnh demo bằng vốn ảo (chỉ xem — không dừng/sửa được)", ["none", "view"]],
 ];
-export const COIN_SUB_KEYS = COIN_SUBS.map(([k]) => k);
+export const COIN_OWNER_KEYS = ["coinInvest", "coinLive"]; // có tiền thật → chỉ chủ
+export const COIN_SUB_KEYS = [...COIN_OWNER_KEYS, ...COIN_SUBS.map(([k]) => k)];
 // Chỉ CHỦ, không cấp được: Tài khoản & Thẻ (dữ liệu nhạy cảm), Cài đặt dữ liệu/bảo mật, tab Tổng quan Coin.
 export const ALL_FEATURES = FEATURES.map(([k]) => k);
 export const ALL_KEYS = [...ALL_FEATURES, ...COIN_SUB_KEYS]; // dùng cho perms (chủ = có hết)
@@ -81,12 +81,11 @@ export function memberAccess(member) {
   if (a.resources == null) a.resources = a.customers || "none";
   for (const [k] of FEATURES) if (a[k] == null) a[k] = "none";
   // Tab Coin chưa đặt riêng → kế thừa quyền cũ: Thị trường + Demo theo "coin"; danh mục & vốn, Bot thật mặc định KHÔNG (trước đây chỉ chủ)
-  if (a.coinInvest == null) a.coinInvest = "none";
   if (a.coinMarket == null) a.coinMarket = a.coin !== "none" ? "view" : "none";
   if (a.coinDemo == null) a.coinDemo = a.coin !== "none" ? "view" : "none";
-  if (a.coinLive == null) a.coinLive = "none";
-  // Module Coin hiện khi có ít nhất 1 tab; Sửa (coin nhập tay) khi "danh mục & vốn" = Sửa
-  a.coin = a.coinInvest === "edit" ? "edit" : COIN_SUB_KEYS.some((k) => a[k] !== "none") ? "view" : "none";
+  for (const k of COIN_OWNER_KEYS) a[k] = "none"; // kể cả hồ sơ cũ đã lỡ cấp — tiền thật chỉ chủ xem (01/11)
+  // Module Coin hiện khi có ít nhất 1 tab (thành viên chỉ xem)
+  a.coin = COIN_SUB_KEYS.some((k) => a[k] !== "none") ? "view" : "none";
   return a;
 }
 

@@ -37,7 +37,7 @@ export function AccessGrid({ access, onSet, scoped }) {
       {FEATURES.map(([k, l]) => k === "coin" ? (
         <div key={k} className="px-3 py-2">
           <div className="text-[13px] font-bold text-slate-700">{l}</div>
-          <div className="text-[11px] leading-snug text-slate-400">Chọn riêng từng tab · tab Tổng quan Coin và mọi nút điều khiển bot chỉ chủ dùng</div>
+          <div className="text-[11px] leading-snug text-slate-400">Chọn riêng từng tab · Tổng quan, Đầu tư (ví, tiền nạp, lãi/lỗ) và Bot thật chỉ chủ xem — thành viên không thấy tiền thật</div>
           <div className="mt-1.5 space-y-1 border-l-2 border-amber-200 pl-2.5">
             {COIN_SUBS.map(([sk, sl, sh, allow]) => (
               <div key={sk} className="flex items-center gap-2">

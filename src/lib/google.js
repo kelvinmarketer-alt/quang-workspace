@@ -11,7 +11,27 @@ async function proxy(body) {
   return data;
 }
 
-const gapi = (url, body) => proxy({ action: "google", url, body });
+// 01/11: GOM các lệnh Google gọi gần nhau (trong 30ms) thành 1 lần gọi máy chủ — Trung tâm báo cáo trước ~40 lần gọi / lần mở
+let queue = [], timer = null;
+const flush = async () => {
+  const batch = queue; queue = []; timer = null;
+  if (batch.length === 1) { const [q] = batch; proxy({ action: "google", url: q.url, body: q.body }).then(q.ok, q.fail); return; }
+  try {
+    for (let i = 0; i < batch.length; i += 50) {
+      const part = batch.slice(i, i + 50);
+      const { results = [] } = await proxy({ action: "google_batch", calls: part.map(({ url, body }) => ({ url, body })) });
+      part.forEach((q, k) => {
+        const r = results[k];
+        if (r && r.status === 200) q.ok(r.data);
+        else q.fail(new Error(typeof r?.data?.error === "string" ? r.data.error : r?.data?.error?.message || `Google lỗi ${r?.status ?? "?"}`));
+      });
+    }
+  } catch (e) { batch.forEach((q) => q.fail(e)); }
+};
+const gapi = (url, body) => new Promise((ok, fail) => {
+  queue.push({ url, body, ok, fail });
+  if (!timer) timer = setTimeout(flush, 30);
+});
 
 // Danh sách web/property đang BẬT bên Văn phòng AI (tắt công tắc ở đó = app cũng không hiện). Nhớ 1 lần tải / 5 phút.
 let PROPS = null;

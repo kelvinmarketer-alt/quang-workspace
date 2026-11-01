@@ -12,6 +12,8 @@ jobs:
         with:
           node-version: "20"
       - run: npm ci
+      # 01/11: kiểm thử tự động (tính toán + mở từng trang + thao tác dễ sập) — trượt là DỪNG, không lên app
+      - run: npm test
       - run: npm run build
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

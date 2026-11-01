@@ -373,8 +373,8 @@ function PinUnlock({ onUnlock }) {
   );
 }
 
-function PinBar({ hasPin, setVaultPin, removeVaultPin, lockVault }) {
-  const [mode, setMode] = useState(null); // "set" | null
+function PinBar({ hasPin, setVaultPin, lockVault }) {
+  const [mode, setMode] = useState(hasPin ? null : "set"); // "set" | null — chưa có PIN thì mở sẵn ô đặt PIN
   const [p1, setP1] = useState("");
   const [p2, setP2] = useState("");
   const [msg, setMsg] = useState("");
@@ -386,14 +386,14 @@ function PinBar({ hasPin, setVaultPin, removeVaultPin, lockVault }) {
     if (ok) { setMode(null); setP1(""); setP2(""); }
   };
   return (
-    <div className={`rounded-2xl border p-3 text-[12px] ${hasPin ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-indigo-200 bg-indigo-50 text-indigo-700"}`}>
+    <div className={`rounded-2xl border p-3 text-[12px] ${hasPin ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <LockKeyhole size={16} className="shrink-0" />
-        <span className="flex-1 font-semibold">{hasPin ? "Đã mã hoá bằng PIN — kể cả máy chủ cũng không đọc được." : "Nên khoá bằng PIN: dữ liệu được mã hoá ngay trên máy, sai PIN không mở được."}</span>
+        <span className="flex-1 font-semibold">{hasPin ? "Đã mã hoá bằng PIN — kể cả máy chủ cũng không đọc được." : "BẮT BUỘC đặt PIN trước khi dùng kho (01/11): số thẻ, CVV, mật khẩu sẽ được mã hoá ngay trên máy, máy chủ và bản sao lưu không đọc được."}</span>
         {hasPin ? (<>
           <button onClick={lockVault} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Khoá ngay</button>
           <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-600 shadow-sm hover:text-indigo-600">Đổi PIN</button>
-          <button onClick={async () => { if (await ask("Bỏ khoá PIN? Dữ liệu sẽ không còn được mã hoá.")) setMsg((await removeVaultPin()) ? "Đã bỏ khoá PIN" : "Không bỏ được"); }} className="rounded-lg bg-white px-2.5 py-1 font-bold text-slate-400 shadow-sm hover:text-rose-600">Bỏ PIN</button>
+          {/* 01/11: PIN bắt buộc — không còn nút bỏ khoá */}
         </>) : (
           <button onClick={() => setMode(mode ? null : "set")} className="rounded-lg bg-indigo-600 px-3 py-1 font-bold text-white hover:bg-indigo-700">Đặt PIN</button>
         )}
@@ -458,7 +458,9 @@ export default function Vault() {
         <span>Dữ liệu nhạy cảm — <b>chỉ tài khoản của bạn</b> thấy được. Bấm 👁 để hiện mục ẩn, <b>Copy</b> để gửi cho người khác. Tránh chia sẻ quyền chủ cho người lạ.</span>
       </div>
 
-      {vaultPrivate && <PinBar hasPin={vaultHasPin} setVaultPin={setVaultPin} removeVaultPin={removeVaultPin} lockVault={lockVault} />}
+      {vaultPrivate && <PinBar hasPin={vaultHasPin} setVaultPin={setVaultPin} lockVault={lockVault} />}
+      {/* 01/11: chưa đặt PIN → khoá cả kho (không xem / thêm được) cho tới khi đặt xong */}
+      {vaultPrivate && !vaultHasPin ? <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Đặt PIN ở trên để mở kho. Các mục đang có sẽ được mã hoá ngay khi lưu PIN.</div> : <>
 
       {/* Nút THÊM đặt trên đầu (giống các mục khác) */}
       {canW && (
@@ -507,6 +509,7 @@ export default function Vault() {
           ))}
         </div>
       )}
+      </>}
 
       {modal && <VaultModal initial={modal} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateVaultItem(modal.id, data) : addVaultItem(data))} />}
       {batch && <VaultBatchModal startType={tab === "all" ? "app" : tab} onClose={() => setBatch(false)} onSave={addVaultItems} />}

@@ -59,7 +59,7 @@ async function loadAll(P, settings, adsResults) {
     const { props, conn } = await listGoogleProps();
     const { sites } = buildSites(props, conn, { hidden: settings.webHidden || [], gaOverride: settings.webGa || {} });
     const R = rangesOf({ since: P.since, until: P.until });
-    const sums = await pool(sites, 4, (s) => loadSiteSummary(s, R));
+    const sums = await pool(sites, 20, (s) => loadSiteSummary(s, R)); // lệnh Google được gom 1 lần gọi máy chủ → chạy song song nhiều web
     return sites.map((s, i) => { const x = sums[i] || {}; return { domain: s.domain,
       clicks: x.gsc?.cur.clicks ?? null, prevClicks: x.gsc?.prev.clicks ?? null, impressions: x.gsc?.cur.impressions ?? null, prevImpressions: x.gsc?.prev.impressions ?? null,
       position: x.gsc?.cur.position ?? null, users: x.ga?.cur.activeUsers ?? null, prevUsers: x.ga?.prev.activeUsers ?? null, conv: x.ga?.cur.keyEvents ?? null,
@@ -69,7 +69,7 @@ async function loadAll(P, settings, adsResults) {
     const { pages: list } = await listPages();
     const shown = list.filter((p) => p.enabled !== false && !(settings.fbHidden || []).includes(p.page_id));
     const R = fbRanges({ since: P.since, until: P.until });
-    const sums = await pool(shown, 3, (p) => loadPageSummary(p, R));
+    const sums = await pool(shown, 5, (p) => loadPageSummary(p, R));
     return shown.map((p, i) => { const x = sums[i] || {}; return { id: p.page_id, name: p.name,
       reach: x.cur?.reach ?? null, prevReach: x.prev?.reach ?? null, messages: x.cur?.messages ?? null, prevMessages: x.prev?.messages ?? null,
       engagement: x.cur?.engagement ?? null, verdict: x.verdict?.key || "na" }; });

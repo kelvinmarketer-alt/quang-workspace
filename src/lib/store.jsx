@@ -852,6 +852,8 @@ export function DataProvider({ children }) {
       privRef.current = { ...privRef.current, lock: { salt, iter: PIN_ITER } };
       await savePrivate();
       setVaultHasPin(true);
+      // 01/11: xoá bản RÕ của kho khỏi các bản sao lưu tự động cũ (hàm máy chủ SETUP-VAULT-PIN-0111.sql)
+      try { await supabase.rpc("qws_backups_scrub_vault"); } catch { /* hàm chưa có → bản cũ tự hết sau 30 ngày */ }
       return true;
     },
     removeVaultPin: async () => {
