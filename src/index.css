@@ -540,7 +540,13 @@ html.theme-dark[data-skin="terminal"] .qws-answer { background: linear-gradient(
 html.theme-dark[data-skin="terminal"] .animate-pulse::after { background: linear-gradient(90deg, transparent, rgba(255,178,36,.09), transparent); }
 @media (prefers-reduced-motion: reduce) { html.theme-dark[data-skin="aurora"] .aurora::before { animation: none; } }
 
-/* 01/11 rà soát: điện thoại — chữ phụ dưới 11px khó đọc (Lịch, Báo cáo, Tổng quan) → nâng tối thiểu 11px */
-@media (max-width: 639px) {
+/* 01/11 rà soát: điện thoại + máy tính bảng — chữ phụ dưới 11px khó đọc (Lịch, Báo cáo, Tổng quan, Fanpage) → tối thiểu 11px */
+@media (max-width: 1023px) {
   .bento .text-\[9px\], .bento .text-\[9\.5px\], .bento .text-\[10px\], .bento .text-\[10\.5px\] { font-size: 11px; }
+}
+
+/* 01/11 rà soát đa thiết bị: màn CẢM ỨNG (điện thoại, máy tính bảng) — nút / ô chọn cao tối thiểu 32px cho dễ bấm.
+   Chuột (máy tính) giữ nguyên độ gọn. Nút tự canh giữa chữ theo chiều dọc nên không lệch bố cục. */
+@media (pointer: coarse) {
+  .bento button:not(.no-tap), .bento select { min-height: 32px; }
 }

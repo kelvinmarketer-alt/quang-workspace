@@ -24,7 +24,7 @@ export function MeasureList({ items, max = 99, onPick, compact = false }) {
           <span className="min-w-0 flex-1"><b>{x.brand}</b> · {x.job}: chưa gắn {x.need}</span>
           {/* compact (ô chuông hẹp): nút luôn xuống dòng riêng, chữ không bị bóp thành cột */}
           <span className={`flex w-full shrink-0 justify-end gap-1 ${compact ? "" : "sm:ml-auto sm:w-auto"}`}>
-            <Link to={`/khach-hang?id=${encodeURIComponent(x.custId)}&kenh=1`} onClick={onPick} className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100 hover:bg-indigo-50"><Link2 size={12} /> Gắn kênh</Link>
+            <Link to={`/khach-hang?id=${encodeURIComponent(x.custId)}&kenh=1`} onClick={onPick} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100 hover:bg-indigo-50"><Link2 size={12} /> Gắn kênh</Link>
             <button type="button" onClick={() => hide(x)} title="Job này không cần đo — không báo nữa" className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-bold text-slate-500 hover:bg-white"><EyeOff size={12} /> Không cần đo</button>
           </span>
         </div>

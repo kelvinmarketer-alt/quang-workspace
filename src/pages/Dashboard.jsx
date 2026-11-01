@@ -106,9 +106,10 @@ export default function Dashboard() {
         <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      {/* Máy tính bảng (md): 2 cột — câu trả lời + 4 số trải ngang, rồi lịch tuần | sức khoẻ thương hiệu (trước 1 cột dài 3–4 màn) */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
         {/* Việc của hôm nay */}
-        <div className="qws-answer card relative overflow-hidden p-4 sm:p-5 lg:col-span-8">
+        <div className="qws-answer card relative overflow-hidden p-4 sm:p-5 md:order-1 md:col-span-2 lg:order-none lg:col-span-8">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50 via-transparent to-transparent" />
           <div className="relative">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -132,8 +133,8 @@ export default function Dashboard() {
         </div>
 
         {/* Cột phải: lịch tuần + sắp tới + thông báo */}
-        <div className="card p-4 lg:col-span-4 lg:row-span-3">
-          <div className="mb-3 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Tuần này</h3><Link to="/lich" className="text-[12px] font-bold text-indigo-600">Lịch →</Link></div>
+        <div className="card p-4 md:order-3 lg:order-none lg:col-span-4 lg:row-span-3">
+          <div className="mb-3 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Tuần này</h3><Link to="/lich" className="-my-1.5 px-1 py-1.5 text-[12px] font-bold text-indigo-600">Lịch →</Link></div>
           <div className="mb-4 grid grid-cols-7 gap-1 text-center">{week.map((d) => { const on = d.toDateString() === now.toDateString(), l = lunarInfo(d); return (
             <div key={d.toISOString()} className={`rounded-xl py-1.5 ${on ? "bg-slate-900 text-white" : "text-slate-500"}`}>
               <div className="text-[10.5px] font-semibold">{DOW[d.getDay()]}</div>
@@ -152,7 +153,7 @@ export default function Dashboard() {
         </div>
 
         {/* 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:contents">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:order-2 md:col-span-2 md:grid-cols-4 lg:contents">
         <Kpi label={`Doanh thu ${year === curY ? `T1–T${curM}` : year}`} value={tot.rev} delta={pctOf(tot.rev, prevTot.rev)} sub={`so ${year - 1}`} spark={shown.map((m) => m.revenue)} color="#6366f1" />
         <Kpi label="Lợi nhuận gộp" value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`${tot.rev ? Math.round((tot.gp / tot.rev) * 100) : 0}% biên`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
         <Kpi label="Công nợ tới hạn" value={debt} sub={notDue > 0 ? `+ ${formatShort(notDue)} chưa tới hạn` : debt > 0 ? "chưa thu" : "không có nợ"} />
@@ -162,11 +163,11 @@ export default function Dashboard() {
         </div>
 
         {/* Sức khoẻ thương hiệu (chủ) / Top khách (tài khoản phụ) */}
-        <div className="card p-4 lg:col-span-8">
+        <div className="card p-4 md:order-4 lg:order-none lg:col-span-8">
           {isOwner ? <>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu</h3>
               <Link to="/bao-cao" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-slate-700 hover:bg-slate-200">Trung tâm báo cáo <ArrowUpRight size={14} /></Link></div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">{health.slice(0, 10).map((r) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{health.slice(0, 10).map((r) => (
               <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
                 <span className="flex min-w-0 items-center gap-2"><BrandAvatar r={r} size={24} /><span className="truncate text-[13px] font-bold text-slate-800">{r.name}</span></span>
                 <span className="flex gap-1">{["ads", "web", "fp", "seo"].map((k) => <i key={k} className={`bar-x h-1.5 flex-1 rounded-full ${rep.loading && !rep.data?.at ? "animate-pulse bg-slate-200" : DOT[r.cells[k].t]}`} />)}</span>
@@ -185,15 +186,15 @@ export default function Dashboard() {
 
       {more && <TodayPanel />}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className={`card p-4 ${coinOk ? "lg:col-span-5" : "lg:col-span-8"}`}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
+        <div className={`card p-4 md:col-span-2 ${coinOk ? "lg:col-span-5" : "lg:col-span-8"}`}>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
             <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
           <div className="h-56"><Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-slate-50" />}><RevenueChart data={chartData} /></Suspense></div>
           {year === curY && curM < 12 && <div className="text-[11px] text-slate-400">Chỉ vẽ tới tháng {curM} (tháng chưa tới không tính là 0).</div>}
         </div>
         {coinOk && <CoinTile session={settings.paperBot} />}
-        <div className="card p-4 lg:col-span-4">
+        <div className={`card p-4 ${coinOk ? "" : "md:col-span-2"} lg:col-span-4`}>
           <div className="mb-2 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Phiếu thu gần đây</h3><Link className="text-[12px] font-bold text-indigo-600" to="/ke-toan">Tất cả →</Link></div>
           <div className="space-y-1.5">{recent.map((x) => (
             <div key={x.projectId + x.id} className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2">
