@@ -97,7 +97,8 @@ export function useReportData(days = 30) {
     if (!isOwner) return;
     if (!force) { const c = readCache(key); if (c) { setSt({ data: c, loading: false }); return; } }
     setSt((s) => ({ ...s, loading: true }));
-    loadAll(P, settings, adsResults).then((d) => { const v = { key, at: Date.now(), ...d }; writeCache(v); setSt({ data: v, loading: false }); })
+    // 01/11: kênh nào lỗi (mất mạng, đứt giữa chừng) thì KHÔNG nhớ 20 phút — lần mở sau lấy lại, không giữ kết quả rỗng
+    loadAll(P, settings, adsResults).then((d) => { const v = { key, at: Date.now(), ...d }; if (!d.errors?.length) writeCache(v); else MEM = v; setSt({ data: v, loading: false }); })
       .catch((e) => setSt((s) => ({ ...s, loading: false, data: s.data || { errors: [e.message] } })));
   }, [isOwner, key]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(false); }, [load]);

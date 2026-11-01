@@ -125,7 +125,7 @@ export default function Dashboard() {
               <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
               <MiniTile to="/chi-phi" icon={Repeat} label="Sắp gia hạn" value={renewN} sub="7 ngày tới" />
               {isOwner
-                ? <MiniTile to="/bao-cao" icon={Activity} label="Thương hiệu cần chú ý" value={rep.loading && !rep.data?.at ? "…" : attention.length} sub={`${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
+                ? <MiniTile to="/bao-cao" icon={Activity} label="Thương hiệu cần chú ý" value={rep.loading && !rep.data?.at ? "…" : rep.data?.errors?.length ? "?" : attention.length} sub={rep.data?.errors?.length ? "chưa lấy được số kênh — mở Báo cáo, Làm mới" : `${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
                 : <MiniTile to="/khach-hang" icon={Activity} label="Khách hàng" value={customerList.length} sub="đang quản lý" />}
             </div>
             {urgent.length > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (

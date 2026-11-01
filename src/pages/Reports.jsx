@@ -96,7 +96,7 @@ function ReportMatrix() {
         </div>
       </div>
 
-      <MatrixAnswer list={list} loading={loading} miss={miss} />
+      <MatrixAnswer list={list} loading={loading} miss={miss} errors={rep.data?.errors || []} />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Thương hiệu · job đang chạy" value={`${active.length} · ${active.reduce((a, r) => a + r.jobs.length, 0)}`} sub={`${rows.length} khách đang hoạt động`} />
         <Tile label="Đạt chỉ tiêu" value={list.filter((r) => r.state === "g").length} sub="không kênh nào dưới chỉ tiêu" tone="text-emerald-600" />
@@ -165,8 +165,11 @@ function ReportMatrix() {
 
 // Câu trả lời đầu trang + "Việc nên làm hôm nay" (tự rút từ ô đỏ / việc trễ / thiếu đo lường — không gọi AI)
 const CH = { ads: "quảng cáo", web: "website", fp: "fanpage", seo: "SEO" };
-function MatrixAnswer({ list, loading, miss }) {
+function MatrixAnswer({ list, loading, miss, errors = [] }) {
   if (loading) return <AnswerCard eyebrow="Trung tâm báo cáo" title="Đang lấy số các kênh…" />;
+  // 01/11: kênh lỗi → nói rõ, KHÔNG báo "mọi thứ đạt" (trước mất mạng là ra "Cả 10 thương hiệu không có kênh nào dưới chỉ tiêu")
+  const failed = errors.map((e) => String(e).split(":")[0]).filter(Boolean);
+  if (failed.length) return <AnswerCard eyebrow="Trung tâm báo cáo · 30 ngày" title={`Chưa lấy được số ${failed.join(", ").toLowerCase()} — bấm Làm mới`} desc="Kênh lỗi đang để trống, đừng đọc là 'đạt chỉ tiêu'. Thường do mạng chập chờn hoặc trang tải lại giữa chừng." />;
   const bad = list.filter((r) => r.state === "b"), good = list.filter((r) => r.state === "g");
   const why = (r) => Object.entries(r.cells).filter(([, x]) => x.t === "b").map(([k]) => CH[k]).join(", ");
   const desc = [bad.slice(0, 2).map((r) => `${r.name} tụt ${why(r) || "nhiều việc trễ"}`).join(" · "), miss.length ? `${miss.length} job chưa gắn đo lường` : null].filter(Boolean).join(" · ");
