@@ -12,6 +12,7 @@ import { buildSites } from "../lib/webData.js";
 import { listPages } from "../lib/fbPages.js";
 import { OFFICE_URL } from "../lib/office.js";
 import { ask } from "./ConfirmDialog.jsx";
+import { useMeasureSkip } from "./MeasureAlerts.jsx";
 
 const call = async (body) => { const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body }); if (error || data?.error) throw new Error(error?.message || data.error); return data; };
 const KINDS = { ads: ["Quảng cáo", Megaphone], web: ["Website", Globe], page: ["Fanpage", ThumbsUp] };
@@ -35,6 +36,7 @@ export default function JobConnections({ project }) {
   const [showAll, setShowAll] = useState(false);
   const [adding, setAdding] = useState(null); // kind đang mở ô "gắn thêm"
   const [busy, setBusy] = useState(null);
+  const { skip, hide, unhide } = useMeasureSkip();
   const reload = async (force) => {
     if (!force && CACHE) return setLists(CACHE);
     LOADING = LOADING || loadLists(settings).finally(() => { LOADING = null; });
@@ -79,7 +81,10 @@ export default function JobConnections({ project }) {
       </div>
       {!lists ? <div className="flex items-center gap-1.5 py-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tải kênh…</div> : (
         <div className="space-y-3">
-          {missing.length > 0 && <div className="rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-700">Job này chưa có {missing.map((k) => KINDS[k][0].toLowerCase()).join(", ")} để đo. Gắn bên dưới, hoặc bấm “Không cần đo” ở thông báo nếu job không cần.</div>}
+          {missing.length > 0 && (skip[project.id]
+            ? <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-500">Đã đánh dấu job này không cần đo — app không nhắc nữa.<button type="button" onClick={() => unhide(project.id)} className="font-bold text-indigo-600">Nhắc lại</button></div>
+            : <div className="flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12px] font-semibold text-amber-700"><span className="min-w-0 flex-1">Job này chưa có {missing.map((k) => KINDS[k][0].toLowerCase()).join(", ")} để đo. Gắn bên dưới nếu cần theo dõi.</span>
+                <button type="button" onClick={() => hide({ id: project.id, job: project.name })} className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11.5px] font-bold text-slate-600 ring-1 ring-amber-200 hover:text-slate-900">Không cần đo</button></div>)}
           {kinds.map((kind) => {
             const [lb, I] = KINDS[kind], m = mine(kind), others = of(kind).filter((x) => owner[kind](x) !== cust.id);
             return (
