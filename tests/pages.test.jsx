@@ -102,6 +102,7 @@ describe("Coin · nhiều biểu đồ (05/11)", () => {
     await act(async () => { await new Promise((ok) => setTimeout(ok, 80)); });
     const cellSelects = screen.getAllByRole("combobox", { name: /Coin ô/ });
     expect(cellSelects.length).toBe(4);
+    expect(screen.getByRole("button", { name: "Đường ngang" })).toBeTruthy(); // chủ có thanh công cụ vẽ (06/11)
     await safely(() => fireEvent.click(screen.getAllByRole("button", { name: "M15" })[1]));
     await safely(() => fireEvent.change(cellSelects[2], { target: { value: "ETH" } }));
     await safely(() => fireEvent.click(screen.getByRole("button", { name: /^POC:/ })));
@@ -110,6 +111,17 @@ describe("Coin · nhiều biểu đồ (05/11)", () => {
     expect(JSON.parse(localStorage.getItem("qws_mkt_tags")).poc).toBe("line");
     // jsdom không có canvas thật → thư viện biểu đồ báo "Value is null" khi đo trục giá (máy thật không có); lỗi khác vẫn chặn
     expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("thành viên · Thị trường Coin", () => {
+  it("không có công cụ vẽ (hình vẽ chỉ của chủ)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
+    DATA = makeData({ isOwner: false, ownerId: "chu", perms: ["coin", "coinMarket", "coinDemo"], settings: { coinDrawings: { BTC: [{ id: "x", type: "hline", price: 1 }] } } });
+    const M = (await import("../src/pages/CoinMarket.jsx")).default;
+    await mount(<M />, "/coin");
+    expect(screen.queryByRole("button", { name: "Đường ngang" })).toBeNull();
     vi.unstubAllGlobals();
   });
 });

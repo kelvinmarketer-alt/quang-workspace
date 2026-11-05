@@ -77,3 +77,24 @@ describe("nhãn biểu đồ Coin (05/11)", async () => {
     localStorage.removeItem("qws_mkt_layers");
   });
 });
+
+describe("công cụ vẽ Coin (06/11)", async () => {
+  const { makeScale, moveDrawing, makeDrawing } = await import("../src/lib/chartDraw.js");
+  const C = [0, 3600, 7200, 10800].map((time) => ({ time }));
+  const sc = makeScale(C);
+  it("thời gian ↔ chỉ số nến, ngoài vùng nến thì ngoại suy", () => {
+    expect(sc.toL(3600)).toBe(1);
+    expect(sc.toL(5400)).toBe(1.5);
+    expect(sc.toL(18000)).toBe(5); // 2 nến sau nến cuối
+    expect(sc.toT(-1)).toBe(-3600);
+    expect(sc.toT(sc.toL(9000))).toBe(9000);
+  });
+  it("dời hình: đúng số nến + giá; đường ngang chỉ đổi giá", () => {
+    const r = makeDrawing("rect", { t: 0, price: 100 }, { t: 7200, price: 90 }, "1h");
+    const m = moveDrawing(r, 1, 5, sc);
+    expect([m.p1.t, m.p1.price, m.p2.t, m.p2.price]).toEqual([3600, 105, 10800, 95]);
+    const h = moveDrawing(makeDrawing("hline", { t: 0, price: 50 }, null, "1h"), 3, -2, sc);
+    expect(h.price).toBe(48);
+    expect(h.p1).toBeUndefined();
+  });
+});

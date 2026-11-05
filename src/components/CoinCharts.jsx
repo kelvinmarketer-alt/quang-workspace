@@ -4,7 +4,9 @@
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil } from "lucide-react";
+import { DrawLayer, makeDrawing, moveDrawing, TOOLS, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
+import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 
@@ -87,8 +89,13 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 // Biểu đồ nến: nến + EMA20/50 + khối lượng + mốc BOS/CHoCH + mốc thêm (lệnh bot) + đường giá ngang
 // Trục thời gian theo giờ VN (UTC+7, giống tab Demo). marks: mốc thêm theo giây UTC như nến.
 const VN = 7 * 3600;
-export function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, className = "h-[300px] w-full sm:h-[420px]" }) {
+// draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
+const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
+export function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, className = "h-[300px] w-full sm:h-[420px]" }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
+  const drawRef = useRef(draw); drawRef.current = draw;
+  const candlesRef = useRef(candles); candlesRef.current = candles;
+  const [edit, setEdit] = useState(null); // ô gõ chữ ghi chú: { id, x, y, value }
   const me = useRef(Math.random().toString(36).slice(2));
   const syncRef = useRef(syncKey); syncRef.current = syncKey;
   useEffect(() => {
@@ -100,7 +107,7 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
       timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8 },
       crosshair: { mode: 0 },
       // Điện thoại: vuốt dọc = cuộn trang (không bị biểu đồ "nuốt"), vuốt ngang = kéo nến, 2 ngón = phóng to
-      handleScroll: { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+      handleScroll: SCROLL,
     });
     const candle = chart.addSeries(CandlestickSeries, { upColor: "#10b981", downColor: "#f43f5e", borderVisible: false, wickUpColor: "#10b981", wickDownColor: "#f43f5e" });
     const vol = chart.addSeries(HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false, priceLineVisible: false });
@@ -123,8 +130,109 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
       else a.sync = a.candle.createPriceLine({ price, color: "#94a3b8", lineWidth: 1, lineStyle: 3, axisLabelVisible: true, title: "" });
     };
     HOVER.add(onHover);
-    return () => { HOVER.delete(onHover); chart.unsubscribeCrosshairMove(onMove); chart.remove(); api.current = null; };
+
+    // ---- Vẽ (chỉ chủ) ----
+    const layer = new DrawLayer(); candle.attachPrimitive(layer); a.layer = layer;
+    const el = box.current;
+    let pend = null, drag = null;
+    const local = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    const lock = (on) => chart.applyOptions({ handleScroll: on ? false : SCROLL, handleScale: !on });
+    a.lock = lock;
+    const commit = (list) => drawRef.current?.onChange(list.slice(-MAX_PER_COIN));
+    const onAxis = (x) => x > el.clientWidth - (chart.priceScale("right").width() || 0);
+    const down = (e) => {
+      const D = drawRef.current;
+      if (!D || D.hidden || e.button > 0) return;
+      const [x, y] = local(e), C = candlesRef.current;
+      if (onAxis(x) || !C.length) return;
+      if (D.tool !== "cursor") {
+        const p = layer.pointAt(x, y, C); if (!p) return;
+        e.preventDefault(); e.stopPropagation();
+        if (D.tool === "hline" || D.tool === "text") {
+          const d = makeDrawing(D.tool, p, null, D.tf);
+          commit([...D.items, d]); D.setSel(d.id); D.setTool("cursor");
+          if (D.tool === "text") setEdit({ id: d.id, x, y, value: "" });
+          return;
+        }
+        if (!pend) { pend = makeDrawing(D.tool, p, p, D.tf); layer.preview = pend; layer.sel = pend.id; layer.update(); return; }
+        const d = { ...pend, p2: p }; pend = null; layer.preview = null;
+        commit([...D.items, d]); D.setSel(d.id); D.setTool("cursor");
+        return;
+      }
+      const h = layer.hit(x, y);
+      if (!h) { if (D.sel && D.items.some((d) => d.id === D.sel)) D.setSel(null); return; }
+      e.preventDefault(); e.stopPropagation(); // không để biểu đồ kéo nến theo
+      D.setSel(h.id); layer.sel = h.id; layer.update();
+      const d0 = D.items.find((d) => d.id === h.id); if (!d0) return;
+      drag = { h, d0, l0: chart.timeScale().coordinateToLogical(x), p0: candle.coordinateToPrice(y), moved: false };
+      lock(true);
+    };
+    const move = (e) => {
+      const D = drawRef.current; if (!D) return;
+      const [x, y] = local(e), C = candlesRef.current;
+      if (pend) { const p = layer.pointAt(x, y, C); if (p) { layer.preview = { ...pend, p2: p }; layer.update(); } return; }
+      if (!drag) { if (e.target && el.contains(e.target)) el.style.cursor = D.hidden ? "" : D.tool !== "cursor" ? "crosshair" : layer.hit(x, y) ? "move" : ""; return; }
+      let d;
+      if (drag.h.part === "body") {
+        const l = chart.timeScale().coordinateToLogical(x), p = candle.coordinateToPrice(y);
+        if (l == null || p == null || drag.l0 == null || drag.p0 == null) return;
+        d = moveDrawing(drag.d0, l - drag.l0, p - drag.p0, layer.scale);
+      } else { const p = layer.pointAt(x, y, C); if (!p) return; d = { ...drag.d0, [drag.h.part]: p }; }
+      drag.moved = true; layer.preview = d; layer.update();
+    };
+    const up = () => {
+      if (!drag) return;
+      const D = drawRef.current, d = layer.preview;
+      lock(D && D.tool !== "cursor");
+      if (drag.moved && d && D) commit(D.items.map((x) => (x.id === d.id ? d : x)));
+      layer.preview = null; drag = null; layer.update();
+    };
+    const dbl = (e) => { // bấm đúp vào hình → sửa chữ ghi chú
+      const D = drawRef.current; if (!D || D.hidden) return;
+      const [x, y] = local(e), h = layer.hit(x, y); if (!h) return;
+      const d = D.items.find((v) => v.id === h.id); if (!d || d.type === "trend" || d.type === "fib") return;
+      e.stopPropagation(); D.setSel(d.id); setEdit({ id: d.id, x, y, value: d.text || "" });
+    };
+    const key = (e) => {
+      const D = drawRef.current; if (!D) return;
+      if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      if (e.key === "Escape" && (pend || D.tool !== "cursor")) { pend = null; layer.preview = null; layer.update(); D.setTool("cursor"); return; }
+      if ((e.key === "Delete" || e.key === "Backspace") && D.sel && D.items.some((d) => d.id === D.sel)) { e.preventDefault(); commit(D.items.filter((d) => d.id !== D.sel)); D.setSel(null); }
+    };
+    el.addEventListener("pointerdown", down, true);
+    el.addEventListener("dblclick", dbl, true);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("keydown", key);
+    a.cancel = () => { pend = null; layer.preview = null; layer.update(); };
+    return () => {
+      el.removeEventListener("pointerdown", down, true); el.removeEventListener("dblclick", dbl, true);
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("keydown", key);
+      HOVER.delete(onHover); chart.unsubscribeCrosshairMove(onMove); chart.remove(); api.current = null;
+    };
   }, []);
+
+  // Hình vẽ của coin này → lớp vẽ; đang chọn công cụ → khoá kéo nến cho khỏi lệch khi bấm
+  const dItems = draw?.items, dSel = draw?.sel, dHidden = !!draw?.hidden, dTool = draw?.tool || "cursor";
+  useEffect(() => {
+    const a = api.current; if (!a?.layer) return;
+    a.layer.sel = dSel; a.layer.set(dHidden ? [] : dItems || [], candles);
+  }, [dItems, dSel, dHidden, candles]);
+  useEffect(() => {
+    const a = api.current; if (!a?.lock) return;
+    a.lock(dTool !== "cursor" && !dHidden);
+    if (dTool === "cursor") a.cancel?.();
+  }, [dTool, dHidden]);
+  const saveText = (v) => {
+    const D = drawRef.current; if (!edit || !D) { setEdit(null); return; }
+    const d = D.items.find((x) => x.id === edit.id);
+    if (d) {
+      const text = String(v ?? "").trim().slice(0, 80);
+      if (d.type === "text" && !text) D.onChange(D.items.filter((x) => x.id !== d.id)); // ghi chú trống → bỏ
+      else if (text !== (d.text || "")) D.onChange(D.items.map((x) => (x.id === d.id ? { ...x, text } : x)));
+    }
+    setEdit(null);
+  };
 
   const m20 = tags ? modeOf(tags, "ema20", compact) : "line", m50 = tags ? modeOf(tags, "ema50", compact) : "line", mSmc = tags ? modeOf(tags, "smc", compact) : "full";
   useEffect(() => {
@@ -154,7 +262,55 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     a.lines = lines.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: ln.width || 1, lineStyle: ln.style ?? 2, axisLabelVisible: ln.axis !== false, title: ln.axis === false ? "" : ln.title }));
   }, [lines]);
 
-  return <div ref={box} className={className} />;
+  return (
+    <div className="relative w-full">
+      <div ref={box} className={className} />
+      {edit && (
+        <input autoFocus defaultValue={edit.value} maxLength={80} placeholder="Gõ ghi chú rồi Enter"
+          onKeyDown={(e) => { if (e.key === "Enter") saveText(e.currentTarget.value); else if (e.key === "Escape") { e.stopPropagation(); saveText(edit.value); } }}
+          onBlur={(e) => saveText(e.currentTarget.value)}
+          style={{ left: Math.max(4, Math.min(edit.x, (box.current?.clientWidth || 300) - 190)), top: Math.max(4, edit.y - 30) }}
+          className="absolute z-20 w-44 rounded-md border border-indigo-300 bg-white px-2 py-1 text-[12px] text-slate-800 shadow outline-none" />
+      )}
+    </div>
+  );
+}
+
+// Thanh công cụ vẽ (chỉ chủ): chọn công cụ, màu / sửa chữ / xoá hình đang chọn, ẩn tất cả, xoá hết của coin
+const TOOL_ICON = { cursor: MousePointer2, hline: Minus, trend: Slash, rect: Square, fib: null, text: Type };
+export function DrawBar({ tool, setTool, sel, setSel, hidden, setHidden, items, onChange, sym }) {
+  const d = items.find((x) => x.id === sel);
+  const recolor = (c) => onChange(items.map((x) => (x.id === sel ? { ...x, color: c } : x)));
+  const clearAll = async () => {
+    if (items.length && await ask(`Xoá hết ${items.length} hình vẽ của ${sym}?`, { ok: "Xoá hết", danger: true })) { onChange([]); setSel(null); }
+  };
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
+      <div className="flex rounded-lg bg-slate-100 p-0.5">
+        {TOOLS.map(([k, label]) => {
+          const I = TOOL_ICON[k];
+          return (
+            <button key={k} onClick={() => { setTool(k); if (hidden && k !== "cursor") setHidden(false); }} title={label} aria-label={label} aria-pressed={tool === k}
+              className={`flex items-center gap-1 rounded-md px-1.5 py-1 ${tool === k ? "bg-white text-indigo-600 shadow" : "text-slate-500 hover:text-slate-700"}`}>
+              {I ? <I size={13} /> : <span className="text-[10.5px] font-extrabold">Fib</span>}
+              {k !== "cursor" && k !== "fib" && <span className="hidden lg:inline">{label}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {d && (
+        <div className="flex items-center gap-1 rounded-lg bg-slate-100 px-1.5 py-0.5">
+          {COLORS.map((c) => <button key={c} onClick={() => recolor(c)} aria-label={`Màu ${c}`} className={`h-3.5 w-3.5 rounded-full ring-offset-1 ${d.color === c ? "ring-2 ring-indigo-400" : ""}`} style={{ background: c }} />)}
+          <button onClick={() => { onChange(items.filter((x) => x.id !== sel)); setSel(null); }} title="Xoá hình đang chọn (phím Delete)" aria-label="Xoá hình đang chọn" className="ml-0.5 rounded p-0.5 text-slate-500 hover:text-rose-600"><Trash2 size={13} /></button>
+        </div>
+      )}
+      <button onClick={() => setHidden(!hidden)} aria-pressed={hidden} title={hidden ? "Hiện hình vẽ" : "Ẩn hình vẽ"} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-slate-500 hover:text-slate-700">{hidden ? <EyeOff size={13} /> : <Eye size={13} />}<span className="hidden sm:inline">{items.length} hình</span></button>
+      {items.length > 0 && <button onClick={clearAll} className="rounded-md px-1.5 py-1 text-slate-400 hover:text-rose-600">Xoá hết {sym}</button>}
+      <span className="ml-auto hidden text-[10.5px] font-semibold text-slate-400 md:inline">
+        {tool === "cursor" ? <><Pencil size={10} className="inline" /> bấm hình để chọn, kéo để dời · bấm đúp sửa chữ · Delete xoá</> : tool === "hline" || tool === "text" ? "bấm 1 lần vào biểu đồ · Esc huỷ" : "bấm điểm đầu rồi điểm cuối · Esc huỷ"}
+      </span>
+    </div>
+  );
 }
 
 // ---- Lưới nhiều biểu đồ ----
@@ -200,7 +356,7 @@ function useCells(sym, tf, mkt, active) {
 }
 
 const EMPTY = [];
-function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, active, ai, onPick, onChange, onFocus, height }) {
+function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height }) {
   const { sym, tf } = cell;
   const st = useCells(sym, tf, mkt, active);
   const ta = useMemo(() => (st.candles.length > 30 ? analyze(st.candles) : null), [st.candles]);
@@ -210,7 +366,7 @@ function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, activ
   const lines = useMemo(() => buildLines({ levels: ta?.series.levels || [], ai, tags, compact }), [ta, ai, tags, compact]);
   const coins = watch.includes(sym) ? watch : [sym, ...watch];
   return (
-    <div onMouseDown={() => !selected && onPick(i)} className={`w-full min-w-0 shrink-0 snap-center rounded-xl border bg-white p-2 sm:w-auto ${selected ? "border-amber-400 ring-2 ring-amber-200" : "border-slate-200"}`}>
+    <div onPointerDownCapture={() => !selected && onPick(i)} className={`w-full min-w-0 shrink-0 snap-center rounded-xl border bg-white p-2 sm:w-auto ${selected ? "border-amber-400 ring-2 ring-amber-200" : "border-slate-200"}`}>
       <div className="flex flex-wrap items-center gap-1.5" onDoubleClick={() => onFocus(i)}>
         <select value={sym} onChange={(e) => onChange(i, { sym: e.target.value })} aria-label={`Coin ô ${i + 1}`} className="rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[12px] font-extrabold text-slate-700">
           {coins.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -229,7 +385,7 @@ function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, activ
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} className={`w-full ${height}`} />
+          <CandleChart candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} className={`w-full ${height}`} />
         </>)}
       </div>
     </div>
@@ -245,7 +401,7 @@ export function LayoutPicker({ n, setN }) {
   );
 }
 
-export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, onActive }) {
+export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive }) {
   const { n, cells, link, labels } = grid;
   const [focus, setFocus] = useState(null);
   const scroller = useRef(null);
@@ -267,7 +423,7 @@ export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, onAc
       <div ref={scroller} className={`flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto sm:grid sm:overflow-visible ${cols}`}>
         {shown.map((i) => (
           <GridCell key={i} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
-            ai={aiFor(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height} />
+            ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height} />
         ))}
       </div>
       {focus == null && n > 1 && (

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, loadTags, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
+import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, loadTags, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
@@ -459,6 +459,21 @@ export default function CoinMarket({ active = true }) {
   }, [sym, tf]); // eslint-disable-line react-hooks/exhaustive-deps
   const aiFor = (c) => cache[`${c.sym}-${c.tf}`];
 
+  // Hình vẽ (06/11, chỉ chủ): settings.coinDrawings[coin] — lưu cloud, mọi máy của chủ thấy; thành viên không nhận khoá này
+  const [tool, setTool] = useState("cursor");
+  const [selDraw, setSelDraw] = useState(null);
+  const [drawHidden, setDrawHidden] = useState(() => ls.get("qws_mkt_draw_hidden", false) === true);
+  const setHidden = (v) => { setDrawHidden(v); ls.set("qws_mkt_draw_hidden", v); if (v) setTool("cursor"); };
+  const saveDrawings = (coin, list) => {
+    const cur = settingsRef.current?.coinDrawings || {};
+    const next = { ...cur, [coin]: list };
+    if (!list.length) delete next[coin];
+    settingsRef.current = { ...settingsRef.current, coinDrawings: next }; // 2 lần sửa liền nhau không đè nhau
+    setSettings({ coinDrawings: next });
+  };
+  const drawingsOf = (coin) => (settings.coinDrawings && Array.isArray(settings.coinDrawings[coin]) ? settings.coinDrawings[coin] : NONE);
+  const drawFor = (c) => (isOwner ? { items: drawingsOf(c.sym), tool, setTool, sel: selDraw, setSel: setSelDraw, hidden: drawHidden, tf: c.tf, onChange: (list) => saveDrawings(c.sym, list) } : undefined);
+
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi
   const pickSym = async (v) => {
     const x = (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
@@ -584,9 +599,10 @@ export default function CoinMarket({ active = true }) {
               </>)}
             </div>
           </div>
+          {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid grid={grid} setGrid={setGrid} mkt={mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} onActive={onActiveCell} />
+              <ChartGrid grid={grid} setGrid={setGrid} mkt={mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />} />
             </div>
           ) : err ? (
@@ -594,7 +610,7 @@ export default function CoinMarket({ active = true }) {
           ) : (
             <div className="relative mt-2">
               {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-              <CandleChart candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} />
+              <CandleChart candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} />
               <TagBar tags={tags} setTags={setTags} extra={<>
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}
                 <GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />
