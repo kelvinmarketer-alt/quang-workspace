@@ -88,3 +88,28 @@ describe("thành viên", () => {
     expect(container.textContent).not.toMatch(/Đầu tư/);
   });
 });
+
+// Nến giả cho Binance (không gọi mạng thật)
+const fakeKlines = () => Array.from({ length: 120 }, (_, i) => { const t = 1_700_000_000_000 + i * 3_600_000, o = 100 + Math.sin(i / 5) * 5; return [t, o, o + 2, o - 2, o + Math.cos(i / 3), 1000 + i, t + 1, 0, 0, 500]; });
+
+describe("Coin · nhiều biểu đồ (05/11)", () => {
+  it("chọn 4 ô → 4 biểu đồ, đổi khung 1 ô + đổi nhãn không sập", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u) => ({ ok: true, status: 200, json: async () => (String(u).includes("/klines") ? fakeKlines() : { lastPrice: "101", priceChangePercent: "1.2", quoteVolume: "1" }) })));
+    localStorage.removeItem("qws_mkt_grid");
+    const M = (await import("../src/pages/CoinMarket.jsx")).default;
+    const { errors } = await mount(<M />, "/coin");
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: "4" })));
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 80)); });
+    const cellSelects = screen.getAllByRole("combobox", { name: /Coin ô/ });
+    expect(cellSelects.length).toBe(4);
+    await safely(() => fireEvent.click(screen.getAllByRole("button", { name: "M15" })[1]));
+    await safely(() => fireEvent.change(cellSelects[2], { target: { value: "ETH" } }));
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: /^POC:/ })));
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: "1 ô" })));
+    expect(screen.queryAllByRole("combobox", { name: /Coin ô/ }).length).toBe(0);
+    expect(JSON.parse(localStorage.getItem("qws_mkt_tags")).poc).toBe("line");
+    // jsdom không có canvas thật → thư viện biểu đồ báo "Value is null" khi đo trục giá (máy thật không có); lỗi khác vẫn chặn
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+});

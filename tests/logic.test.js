@@ -54,3 +54,26 @@ describe("phân quyền", () => {
     expect(a.coinMarket).toBe("view");
   });
 });
+
+describe("nhãn biểu đồ Coin (05/11)", async () => {
+  const { buildLines, modeOf, loadTags } = await import("../src/components/CoinCharts.jsx");
+  const levels = [{ price: 10, title: "Protected H", color: "#f00" }, { price: 5, title: "POC", color: "#999" }];
+  const all = Object.fromEntries(["protH", "protL", "kvUp", "kvDn", "poc", "ai"].map((k) => [k, "full"]));
+  it("3 mức: có nhãn / chỉ đường / ẩn", () => {
+    expect(buildLines({ levels, tags: all }).map((l) => [l.title, l.axis])).toEqual([["Protected H", true], ["POC", true]]);
+    expect(buildLines({ levels, tags: { ...all, protH: "line" } })[0].axis).toBe(false);
+    expect(buildLines({ levels, tags: { ...all, poc: "off" } }).map((l) => l.title)).toEqual(["Protected H"]);
+  });
+  it("ô nhỏ tự ẩn nhãn nhưng giữ đường", () => {
+    expect(modeOf(all, "poc", true)).toBe("line");
+    expect(modeOf({ poc: "off" }, "poc", true)).toBe("off");
+    expect(buildLines({ levels, tags: all, compact: true }).every((l) => l.axis === false)).toBe(true);
+  });
+  it("máy đã tắt nhóm cũ → chuyển đúng sang từng nhãn", () => {
+    localStorage.removeItem("qws_mkt_tags");
+    localStorage.setItem("qws_mkt_layers", JSON.stringify({ ema: false, levels: true }));
+    const t = loadTags();
+    expect([t.ema20, t.ema50, t.protH, t.poc, t.smc]).toEqual(["off", "off", "full", "full", "full"]);
+    localStorage.removeItem("qws_mkt_layers");
+  });
+});
