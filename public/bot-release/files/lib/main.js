@@ -133,7 +133,7 @@ const clamp = (v, lo, hi, d) => (isFinite(Number(v)) && v !== null && v !== "" ?
 function riskFrom(c) {
   const f = c.followDemo !== false && demoCfg;
   RISK = clamp(f ? demoCfg.riskPct : num(c.riskPct, ENV("RISK_PCT", 2)), 0.1, 5, 2);
-  MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 5, 3));
+  MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 10, 3)); // phương án D: tối đa 10 lệnh
   DAILY_STOP = clamp(f ? demoCfg.dailyStopPct : num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)), 0, 20, 6); // 0 = không dừng ngày (SW3)
   MAX_LEV = Math.round(clamp(f ? demoCfg.maxLev : num(c.maxLev, ENV("MAX_LEV", 20)), 1, 20, 20));
 }
@@ -145,7 +145,7 @@ async function refreshCfg() {
   demoCfg = cfgOf(demo); demoStart = Number(demo.startAt) > 0 ? Number(demo.startAt) : null; riskFrom(appCfg);
   const next = { ...demoCfg, riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV };
   cfgSrc = "phiên Demo trong app"; // đọc được phiên Demo (kể cả khi trùng mặc định)
-  if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; if (cfg.strategy === "sw3") { console.log(`[cấu hình] Dùng luật SW3 theo phiên Demo: ${cfg.coins.join("/")} H4 · rủi ro ${RISK}% · tối đa ${MAX_OPEN} lệnh`); return; } console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}${cfg.offStreams?.length ? ` · tắt riêng ${cfg.offStreams.join(", ")}` : ""}`); }
+  if (JSON.stringify(next) !== JSON.stringify(cfg)) { cfg = next; if (cfg.strategy === "sw3") { console.log(`[cấu hình] Dùng luật ${cfg.sw?.entry === "lim" ? "phương án D (SW3 + lệnh chờ M15)" : "SW3"} theo phiên Demo: ${cfg.coins.join("/")} H4 · rủi ro ${RISK}%${Object.keys(cfg.riskByCoin || {}).length ? ` (${Object.keys(cfg.riskByCoin).length} mã ${Object.values(cfg.riskByCoin)[0]}%)` : ""} · tối đa ${MAX_OPEN} lệnh`); return; } console.log(`[cấu hình] Dùng luật theo phiên Demo trong app: ${cfg.coins.join("/")} ${cfg.tfs.map((t) => TFS[t].label).join(" ")} · Key Volume ${cfg.keyVolume} · thuận D1 ${cfg.d1Bias ? "bật" : "tắt"} · tối ưu ${cfg.adaptive ? "bật" : "tắt"}${cfg.offStreams?.length ? ` · tắt riêng ${cfg.offStreams.join(", ")}` : ""}`); }
 }
 const symCoin = (s) => Object.entries(SYMBOLS).find(([, v]) => v === s)?.[0] || String(s).replace(/USDT$/, "");
 // Cặp của bot = cặp trong luật Demo (user thêm/sửa/xoá trong app) + cặp mặc định + cặp còn lệnh/vị thế bot đang giữ (vd cặp vừa bị xoá khỏi danh sách)
@@ -176,7 +176,8 @@ async function manage(posMap) {
         if (DRY) { if (now() > a.until) { log(`⌛ [thử] ${a.coin} ${a.tf} lệnh chờ hết hạn`); delete S.active[symbol]; } continue; }
         const o = await ex.order(symbol, a.entryCid).catch(() => null);
         const filled = Number(o?.executedQty || 0);
-        if (o && o.status === "FILLED") await protect(symbol, a, Math.abs(amt) || filled, "khớp đủ");
+        if (a.sw3 && a.limEntry && !(o && o.status === "FILLED") && now() > a.fallbackAt) { await fallbackSW3(symbol, a); continue; } // D: hết 4 giờ chưa khớp → vào thị trường
+        if (o && o.status === "FILLED") await protect(symbol, a, Math.abs(amt) || filled, a.limEntry ? "khớp lệnh chờ M15" : "khớp đủ", a.sw3 ? o : null);
         else if (o && ["CANCELED", "EXPIRED", "REJECTED"].includes(o.status)) { log(`✖ ${a.coin} ${a.tf} lệnh chờ ${o.status}`); delete S.active[symbol]; }
         else if (now() > a.until) {
           await ex.cancel(symbol, a.entryCid).catch(() => {});
@@ -265,15 +266,18 @@ async function scan(posMap, halted) {
     log(`🧪 Tạo tín hiệu GIẢ để thử quy trình: ${fc} LONG @ ~${lim.toFixed(2)} (SL -0,5%)`);
   }
   for (const p of fresh) {
+    // 06/11: đang DỪNG / chạm dừng ngày → KHÔNG đánh dấu đã xử lý: bấm "Chạy lại" khi tín hiệu còn hạn thì vẫn vào (trước đây bỏ luôn — lỡ lệnh XRP 06/11)
+    if (halted) { if (!S.haltSeen?.[p.id]) { S.haltSeen = { ...(S.haltSeen || {}), [p.id]: now() }; log(`· Tạm giữ tín hiệu ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}: ${halted} — chạy lại trước ${stamp(p.until)} thì vẫn vào`); journal({ ev: "skip", why: `${halted} (giữ tới ${stamp(p.until)})`, ...p, tags: undefined }); } continue; }
     S.handled[p.id] = now();
     const symbol = symOf(p.coin);
     if (p.blocked) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label}: ${p.blocked} (giống Demo)`); journal({ ev: "skip", why: p.blocked, ...p, tags: undefined }); continue; }
-    const why = halted || (S.active[symbol] || posMap[symbol] ? `đã có lệnh/vị thế ${p.coin}` : Object.keys(S.active).length >= MAX_OPEN ? `đủ ${MAX_OPEN} lệnh` : null);
+    const why = (S.active[symbol] || posMap[symbol] ? `đã có lệnh/vị thế ${p.coin}` : Object.keys(S.active).length >= MAX_OPEN ? `đủ ${MAX_OPEN} lệnh` : null);
     if (why) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"}: ${why}`); journal({ ev: "skip", why, ...p, tags: undefined }); continue; }
     try { await (p.market ? placeSW3(p, symbol) : place(p, symbol)); } catch (e) { log(`Lỗi đặt lệnh ${p.coin}:`, e.message); journal({ ev: "error", msg: e.message, ...p }); note(`⚠ Lỗi đặt lệnh ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}`, `${e.message} · ${modeLbl()}`, `qws-bot-err-${p.id}`); }
   }
   // dọn danh sách đã xử lý (> 2 ngày)
   for (const [k, t] of Object.entries(S.handled)) if (now() - t > 2 * 86400000) delete S.handled[k];
+  for (const [k, t] of Object.entries(S.haltSeen || {})) if (now() - t > 2 * 86400000) delete S.haltSeen[k];
   save();
   return raw;
 }
@@ -313,13 +317,26 @@ async function placeSW3(p, symbol) {
   const real = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
   let k = 1, mark = Number(real.markPrice);
   if (MODE === "testnet") { const t = await ex.markPrice(symbol); k = Number(t.markPrice) / mark; if (!(k > 0.9 && k < 1.1)) k = 1; mark = Number(t.markPrice); }
-  const dist = p.risk * k, rp = riskNow(), eq = await equityUsd(), riskUsd = (eq * rp) / 100;
+  const dist = p.risk * k, rp = Math.min(riskNow(), cfg.riskByCoin?.[p.coin] ?? Infinity), eq = await equityUsd(), riskUsd = (eq * rp) / 100; // D: 10 mã mới rủi ro riêng 0,45%
   let qty = riskUsd / dist; const maxQty = (MAX_LEV * eq) / mark; if (qty > maxQty) qty = maxQty;
   qty = ex.roundTo(qty, info.step, "floor");
   if (!(qty > 0) || qty * mark < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p, tags: undefined }); return; }
   const a = { id: p.id, coin: p.coin, tf: p.tf, setup: "SW3", sw3: true, side: p.side, k, dist, partR: p.partR, partFrac: p.partFrac, lim: mark, sl: ex.roundTo(mark - p.side * dist, info.tick), tp: ex.roundTo(mark + p.side * p.partR * dist, info.tick), qty, riskUsd: qty * dist, until: p.until, signalAt: p.signalAt, entryBarAt: p.signalAt + TFS["4h"].ms, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE, slSeq: 0, why3: p.why3 };
   await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
   await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+  if (p.limEntry) { // phương án D: lệnh chờ cách giá đóng nến 0,25 ATR (giá thật → quy đổi testnet); hết 4 giờ chưa khớp → vào thị trường (fallbackSW3)
+    const lp = ex.roundTo(p.lim * k, info.tick);
+    qty = ex.roundTo(Math.min(riskUsd / dist, (MAX_LEV * eq) / lp), info.step, "floor");
+    if (!(qty > 0) || qty * lp < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p, tags: undefined }); return; }
+    // dời SL theo 20 nến H4 tính cả nến tín hiệu (như bộ kiểm thử phương án D)
+    Object.assign(a, { limEntry: true, lim: lp, qty, riskUsd: qty * dist, sl: ex.roundTo(lp - p.side * dist, info.tick), tp: ex.roundTo(lp + p.side * p.partR * dist, info.tick), fallbackAt: p.fallbackAt, entryBarAt: p.signalAt });
+    await ex.placeLimit({ symbol, side: sideStr(p.side), quantity: qty, price: lp, clientId: a.entryCid });
+    S.active[symbol] = a;
+    log(`📌 D ${p.coin} ${dirStr(p.side)} lệnh chờ @ ${lp} · KL ${qty} · rủi ro ${(qty * dist).toFixed(2)}$ (${rp}%) · chưa khớp thì vào thị trường lúc ${stamp(p.fallbackAt)} · ${p.why3}`);
+    journal({ ev: "placed", ...a });
+    if (appCfg.notifyPending !== false) note(`📌 Lệnh chờ ${dirStr(p.side)} ${p.coin} H4 @ ${px(lp)}`, `Phương án D · rủi ro ${vn(qty * dist, 2)}$ · chưa khớp thì vào thị trường lúc ${stamp(p.fallbackAt)} · ${modeLbl()}`, `qws-bot-place-${p.id}`);
+    save(); return;
+  }
   await ex.placeMarket({ symbol, side: sideStr(p.side), quantity: qty, clientId: a.entryCid });
   S.active[symbol] = a;
   log(`📌 SW3 ${p.coin} ${dirStr(p.side)} lệnh thị trường KL ${qty} · rủi ro ${(qty * dist).toFixed(2)}$ (${rp}%) · ${p.why3}`);
@@ -329,6 +346,25 @@ async function placeSW3(p, symbol) {
   if (o?.status === "FILLED") await protect(symbol, a, Number(o.executedQty), "khớp lệnh thị trường", o); // chưa khớp → vòng quản lý kiểm tra tiếp
   save();
 }
+// D: hết 4 giờ lệnh chờ chưa khớp (đủ) → huỷ, vào phần còn lại bằng lệnh thị trường; giá vào = giá khớp bình quân. Bot tắt quá 1 giờ sau mốc → bỏ (Demo đã vào lúc khác)
+async function fallbackSW3(symbol, a) {
+  await ex.cancel(symbol, a.entryCid).catch(() => {});
+  const o = await ex.order(symbol, a.entryCid).catch(() => null), f1 = Number(o?.executedQty || 0), p1 = Number(o?.avgPrice || 0);
+  if (!f1 && now() > a.until) { log(`⌛ ${a.coin} quá hạn vào thị trường (bot tắt lúc ${stamp(a.fallbackAt)}) — bỏ`); journal({ ev: "expired", ...a }); delete S.active[symbol]; return; }
+  const info = await ex.symbolInfo(symbol), rem = ex.roundTo(a.qty - f1, info.step, "floor");
+  let f2 = 0, p2 = 0;
+  if (rem > 0 && rem * (p1 || a.lim) >= info.minNotional) {
+    const mc = a.entryCid.replace("qwsE", "qwsM");
+    await ex.placeMarket({ symbol, side: sideStr(a.side), quantity: rem, clientId: mc });
+    await sleep(1200);
+    const m = await ex.order(symbol, mc).catch(() => null); f2 = Number(m?.executedQty || 0); p2 = Number(m?.avgPrice || 0);
+  }
+  const tot = f1 + f2;
+  if (!tot) { log(`✖ ${a.coin} không vào được lệnh thị trường`); delete S.active[symbol]; return; }
+  a.fallback = f2 > 0;
+  await protect(symbol, a, tot, f1 ? (f2 ? "khớp một phần lệnh chờ + vào thị trường phần còn lại" : "khớp một phần lệnh chờ") : "không hồi sau 4 giờ → vào thị trường", { avgPrice: (f1 * p1 + f2 * p2) / tot, executedQty: tot });
+  save();
+}
 async function fillSW3(symbol, a, qty, why, o) {
   const info = await ex.symbolInfo(symbol);
   if (!o) o = await ex.order(symbol, a.entryCid).catch(() => null);
@@ -336,7 +372,7 @@ async function fillSW3(symbol, a, qty, why, o) {
   Object.assign(a, { stage: "open", openedAt: now(), filledQty: qty, lim: en, sl: ex.roundTo(en - a.side * a.dist, info.tick), tp: ex.roundTo(en + a.side * a.partR * a.dist, info.tick), riskUsd: qty * a.dist, q1: ex.roundTo(qty * a.partFrac, info.step, "floor"), partDone: false });
   try { await protectSW3(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/chốt 1/3 ${a.coin}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); throw e; }
   log(`✅ SW3 ${a.coin} ${dirStr(a.side)} ${why} @ ${en} · KL ${qty} · SL ${a.sl} · chốt 1/3 (${a.q1}) ở ${a.tp}`);
-  note(`✅ Vào ${dirStr(a.side)} ${a.coin} H4 @ ${px(en)} (SW3)`, `SL ${px(a.sl)} · chốt 1/3 ở ${px(a.tp)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${a.why3 || ""} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
+  note(`✅ Vào ${dirStr(a.side)} ${a.coin} H4 @ ${px(en)} (${a.limEntry ? `phương án D · ${why}` : "SW3"})`, `SL ${px(a.sl)} · chốt 1/3 ở ${px(a.tp)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${a.why3 || ""} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
   journal({ ev: "open", ...a });
 }
 const slCid = (a) => a.entryCid.replace("qwsE", `qwsS${a.slSeq || 0}`).slice(0, 36);
@@ -459,7 +495,7 @@ async function closeAll(at, posMap) {
   save();
   return true;
 }
-const cfgSummary = () => { const { strategy, sw, coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, riskBySetup, cfgVer } = cfg; return { strategy, sw, coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, riskBySetup, cfgVer }; };
+const cfgSummary = () => { const { strategy, sw, coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, riskBySetup, riskByCoin, cfgVer } = cfg; return { strategy, sw, coins, tfs, setups, keyVolume, d1Bias, sigVol, noEngulf, maxExtAtr, minSlAtr, adaptive, learnLoss, rr, streakN, streakRiskPct, riskBySetup, riskByCoin, cfgVer }; };
 // Chuỗi thua (luật Demo v9): số lệnh THUA liền gần nhất của chế độ đang chạy (bỏ lệnh thử) → đủ streakN thì rủi ro = streakRiskPct (≤ rủi ro cài đặt) tới khi thắng lại
 function lossRun() { let n = 0; for (const t of HIST) { if (t.setup === "TEST" || (t.mode && t.mode !== MODE)) continue; if (Number(t.pnl) < 0) n++; else if (Number(t.pnl) > 0) break; } return n; }
 const riskNow = () => (cfg.streakN > 0 && lossRun() >= cfg.streakN ? Math.min(RISK, cfg.streakRiskPct ?? RISK / 2) : RISK);

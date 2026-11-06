@@ -9,7 +9,7 @@
 export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 }, "1w": { label: "W1", ms: 604800000 } };
 export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" }; // cặp mặc định; cặp do user thêm = <MÃ>USDT (Binance USDⓈ-M)
 export const symOf = (c) => SYMBOLS[c] || `${String(c || "").toUpperCase()}USDT`;
-export const MAX_COINS = 8;
+export const MAX_COINS = 18; // 06/11: phương án D chạy 18 mã
 export const SETUPS = {
   TREND: { label: "Thuận xu hướng (TREND_CONFIRM)", desc: "Giá trên/dưới EMA200 + EMA50 cùng hướng, ADX ≥ 20; hồi về EMA50 → nến tín hiệu (engulfing/nến lớn ≥0.8 ATR, volume > TB20) → nến xác nhận đóng vượt nến tín hiệu." },
   SFP: { label: "Quét thanh khoản (SFP)", desc: "Râu quét qua đỉnh/đáy swing (cao nhất/thấp nhất 20 nến) rồi đóng cửa quay lại, râu ≥40% thân nến, volume ≥ 1.5× TB20." },
@@ -43,6 +43,25 @@ export const SW3_MANAGE = [
   "Phần còn lại: sau mỗi nến H4 đóng, dời cắt lỗ lên đáy thấp nhất 20 nến H4 gần nhất (lệnh BÁN: đỉnh cao nhất), chỉ dời theo hướng có lợi, tới khi bị chạm.",
   "Rủi ro 1% vốn/lệnh, tối đa 4 lệnh mở, mỗi mã 1 lệnh. Không chốt lời cố định, không đóng theo thời gian.",
 ];
+// ---------------- PHƯƠNG ÁN D (sếp duyệt 06/11/2026): SW3 + điểm vào lệnh chờ M15 + 18 mã ----------------
+// Kiểm thử 2018–11/2026 (scratchpad bt10 sw.mjs/sw_final.py, báo cáo ~/Desktop/Kiem-thu-da-khung-M5-M15.html): ~18,5 lệnh/tháng,
+// rủi ro 0,85%/0,45%: 48%/năm (2018–23), 69%/năm (2024–26), sụt lớn nhất 24%. Tín hiệu giữ nguyên 5 tiêu chí SW3; chỉ khác cách vào + danh sách mã.
+export const SW3D_COINS2 = ["LINK", "AVAX", "DOT", "TRX", "ATOM", "ETC", "BCH", "NEAR", "XLM", "UNI"]; // 10 mã mới (chọn trước khi xem kết quả) — ½ rủi ro
+export const SW3D_DEFAULT = {
+  ...SW3_DEFAULT, variant: "D", cfgVer: 14, riskPct: 0.85, maxOpen: 10,
+  coins: [...SW3_DEFAULT.coins, ...SW3D_COINS2], riskByCoin: Object.fromEntries(SW3D_COINS2.map((c) => [c, 0.45])),
+  sw: { ...SW3_DEFAULT.sw, entry: "lim", limAtr: 0.25, limH: 4 }, // lệnh chờ cách giá đóng 0,25 ATR, chờ 4 giờ (16 nến M15), không khớp → vào thị trường
+};
+export const isSW3D = (session) => isSW3(session) && session?.cfg?.sw?.entry === "lim";
+export const SW3D_MANAGE = [
+  "Nến H4 đạt đủ 5 tiêu chí → đặt LỆNH CHỜ cách giá đóng nến 0,25 ATR theo hướng có lợi (MUA thấp hơn, BÁN cao hơn).",
+  "Theo dõi nến M15: giá hồi chạm thì khớp (phí thấp). Hết 4 giờ (16 nến M15) chưa khớp → vào lệnh thị trường để không lỡ cú chạy.",
+  "Cắt lỗ cách giá vào 2 ATR(14) H4, đặt ngay trên sàn.",
+  "Lời +0,75R: chốt 1/3 vị thế bằng lệnh giới hạn đặt sẵn, rồi dời cắt lỗ về giá vào (hoà vốn).",
+  "Phần còn lại: dời cắt lỗ theo đáy thấp nhất 20 nến H4 đã đóng (lệnh BÁN: đỉnh cao nhất), chỉ dời theo hướng có lợi.",
+  "Rủi ro 0,85% vốn/lệnh cho 8 mã cũ, 0,45% cho 10 mã mới (LINK, AVAX, DOT, TRX, ATOM, ETC, BCH, NEAR, XLM, UNI); tối đa 10 lệnh mở, mỗi mã 1 lệnh.",
+];
+export const sw3Manage = (cfg) => (cfg?.sw?.entry === "lim" ? SW3D_MANAGE : SW3_MANAGE);
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
@@ -90,8 +109,8 @@ export const MIN_RR = 1.5; // luật của Quang: R:R tối thiểu 1:1,5 — m�
 const cleanCoins = (l, d) => { const c = [...new Set((l || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); return c.length ? c : [...d]; };
 export function cfgOf(session) {
   if (isSW3(session)) { // SW3 có bộ cấu hình riêng — không đi qua các bước nâng phiên v2–v12 của bộ luật cũ
-    const s = session.cfg;
-    return { ...SW3_DEFAULT, ...s, sw: { ...SW3_DEFAULT.sw, ...(s.sw || {}) }, strategy: "sw3", cfgVer: SW3_DEFAULT.cfgVer, tfs: ["4h"], setups: ["SW3"], adaptive: false, learnLoss: false, coins: cleanCoins(s.coins, SW3_DEFAULT.coins) };
+    const s = session.cfg, B = s.sw?.entry === "lim" ? SW3D_DEFAULT : SW3_DEFAULT; // phương án D = SW3 + lệnh chờ M15
+    return { ...B, ...s, sw: { ...B.sw, ...(s.sw || {}) }, strategy: "sw3", cfgVer: B.cfgVer, tfs: ["4h"], setups: ["SW3"], adaptive: false, learnLoss: false, coins: cleanCoins(s.coins, B.coins) };
   }
   const c = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
   const ver = session?.cfg?.cfgVer || 1;
@@ -710,10 +729,11 @@ async function runSW3(session, onProgress) {
   const off = new Set(cfg.offStreams || []), coins = cfg.coins.filter((c) => !off.has(`${c}|4h`));
   const from = startAt - 700 * step; // ~117 ngày trước ngày bắt đầu: làm nóng EMA200 H4 + nối đúng chuỗi "nhịp phá vỡ" đang diễn ra
   onProgress(`Tải nến H4 ${coins.length} mã + BTC D1…`);
-  const fund = {}, KH = {};
+  const fund = {}, KH = {}, KM = {}, lim = P.entry === "lim"; // D: mô phỏng lệnh chờ trên nến M15
   let BD = [];
   await Promise.all([
     ...coins.map((c) => loadKlines(symOf(c), "4h", from).then((r) => { KH[c] = r; })),
+    ...(lim ? coins.map((c) => loadKlines(symOf(c), "15m", startAt - D1).then((r) => { KM[c] = r; })) : []),
     loadKlines("BTCUSDT", "1d", startAt - 320 * D1).then((r) => { BD = r; }),
     ...coins.map((c) => loadFunding(symOf(c), from).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })),
   ]);
@@ -723,8 +743,10 @@ async function runSW3(session, onProgress) {
   const btcAt = (tClose) => { let lo = 0, hi = BD.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (BD[m][0] + D1 <= tClose) { r = m; lo = m + 1; } else hi = m - 1; } return r < P.btcEma ? 0 : BD[r][4] > BE[r] ? 1 : -1; }; // nến ngày BTC ĐÃ ĐÓNG gần nhất
   const trades = [], pending = [], skipLog = [], skipped = {}, streams = [], levels = {};
   const bump = (k) => { skipped[k] = (skipped[k] || 0) + 1; };
+  const M15 = TFS["15m"].ms, wBars = Math.round(((P.limH || 4) * 3600000) / M15);
   for (const coin of coins) {
     const K = (KH[coin] || []).filter((k) => k[0] + step <= until), n = K.length;
+    const KM15 = lim ? (KM[coin] || []).filter((k) => k[0] + M15 <= until) : [];
     if (n < 320) { streams.push({ coin, tf: "4h", bars: n, note: "thiếu dữ liệu" }); continue; }
     const O = K.map((k) => k[1]), H = K.map((k) => k[2]), L = K.map((k) => k[3]), C = K.map((k) => k[4]), V = K.map((k) => k[5]);
     const { atr } = atrAdx(H, L, C), E = emaArr(C, P.emaH4), VM = smaArr(V, P.volN), HH = hiPrev(H, P.brkN), LL = loPrev(L, P.brkN);
@@ -745,7 +767,30 @@ async function runSW3(session, onProgress) {
       }
       return { e, x: null, en, risk, p1, stop, half, feeR: (feeIn + pFee) / risk, mfe, mae, open: true };
     };
-    let occ = -1, nSig = 0;
+    // D: lệnh chờ cách giá đóng limAtr ATR, chờ wBars nến M15; không khớp → vào giá mở nến H4 kế (thị trường). Sau đó quản lý trên nến M15,
+    // dời SL theo đáy/đỉnh 20 nến H4 đã đóng tính tới lúc đóng nến M15 đang xét (y như bộ kiểm thử bt10/sw.mjs).
+    let hP = 0; const hAt = (t) => { while (hP + 1 < n && K[hP + 1][0] + step <= t) hP++; while (hP > 0 && K[hP][0] + step > t) hP--; return K[hP][0] + step <= t ? hP : -1; };
+    const simLim = (i, side) => {
+      const T = K[i][0] + step, A = atr[i], lp = C[i] - side * P.limAtr * A, risk = P.stopAtr * A;
+      let k0 = 0; { let lo = 0, hi = KM15.length; while (lo < hi) { const m = (lo + hi) >> 1; if (KM15[m][0] < T) lo = m + 1; else hi = m; } k0 = lo; }
+      let e = -1, en = 0, mk = false;
+      for (let k = k0; k < Math.min(k0 + wBars, KM15.length); k++) { const b = KM15[k]; if (side === 1 ? b[3] <= lp : b[2] >= lp) { e = k; en = side === 1 ? Math.min(lp, b[1]) : Math.max(lp, b[1]); mk = true; break; } }
+      if (e < 0) { e = k0 + wBars; en = e < KM15.length ? KM15[e][1] : i + 2 < n ? O[i + 2] : C[Math.min(i + 1, n - 1)]; } // hết 4 giờ → vào thị trường
+      const entryAt = e < KM15.length ? KM15[e][0] : T + wBars * M15, feeIn = (mk ? maker : taker) * en, p1 = en + side * P.partR * risk;
+      let stop = en - side * risk, half = false, booked = 0, pFee = 0, mfe = 0, mae = 0;
+      for (let k = e; k < KM15.length; k++) {
+        const [, o, h, l] = KM15[k];
+        if (side === 1 ? l <= stop : h >= stop) {
+          const px0 = k === e ? stop : side === 1 ? Math.min(stop, o) : Math.max(stop, o), rem = half ? 1 - PF : 1;
+          return { entryAt, exitAt: KM15[k][0] + M15, en, mk, risk, p1, stop, half, px: px0, feeR: (feeIn + pFee + rem * taker * px0) / risk, gross: booked + rem * (((px0 - en) * side - taker * px0 - feeIn) / risk), mfe, mae };
+        }
+        mfe = Math.max(mfe, ((side === 1 ? h : l) - en) * side / risk); mae = Math.max(mae, Math.min(((en - (side === 1 ? l : h)) * side) / risk, 1.2));
+        if (!half && (side === 1 ? h >= p1 : l <= p1)) { booked = PF * (((p1 - en) * side - maker * p1 - feeIn) / risk); pFee = PF * maker * p1; half = true; if ((en - stop) * side > 0) stop = en; }
+        const hj = hAt(KM15[k][0] + M15); if (hj >= 0) { const ns = trailAt(hj, side); if ((ns - stop) * side > 0) stop = ns; }
+      }
+      return { entryAt, exitAt: null, en, mk, risk, p1, stop, half, feeR: (feeIn + pFee) / risk, mfe, mae, open: true };
+    };
+    let occ = -1, nSig = 0, realTo = -Infinity; // realTo: lệnh thật (D) của mã đang mở tới lúc nào — mỗi mã 1 lệnh
     for (let i = 300; i < n; i++) {
       if (i <= occ) continue;
       const side = C[i] > HH[i] ? 1 : C[i] < LL[i] ? -1 : 0; if (!side) continue;
@@ -756,16 +801,28 @@ async function runSW3(session, onProgress) {
       const fail = brk < P.brkAtr ? `phá vỡ yếu (${fmt2(brk)} < ${fmt2(P.brkAtr)} ATR)` : vx < P.volX ? `volume thấp (${fmt2(vx)}× < ${fmt2(P.volX)}×)` : h4 !== side ? `ngược EMA200 H4 của ${coin}` : btc !== side ? "ngược xu hướng BTC (EMA50 D1)" : null;
       const base = { id: `${coin}-4h-${K[i][0]}-SW3`, key: `${coin}|4h`, coin, tf: "4h", setup: "SW3", side, signalAt: K[i][0], tags, why3, cell: `${coin}|4h|SW3`, grp: "4h|SW3" };
       if (live) nSig++;
-      if (i === n - 1) { // nến tín hiệu VỪA đóng → vào lệnh thị trường ở nến kế (bot thật vào ngay)
-        if (live && !fail) pending.push({ ...base, market: true, lim: C[i], risk: P.stopAtr * atr[i], sl: C[i] - side * P.stopAtr * atr[i], tp: C[i] + side * P.partR * P.stopAtr * atr[i], partR: P.partR, partFrac: PF, until: K[i][0] + 2 * step });
+      if (i === n - 1) { // nến tín hiệu VỪA đóng → SW3: vào lệnh thị trường ở nến kế · D: lệnh chờ 0,25 ATR, hết 4 giờ thì vào thị trường (bot thật làm y vậy)
+        const risk = P.stopAtr * atr[i];
+        if (live && !fail && P.entry === "lim") { const lp = C[i] - side * P.limAtr * atr[i], fb = K[i][0] + step + (P.limH || 4) * 3600000; pending.push({ ...base, market: false, limEntry: true, lim: lp, risk, sl: lp - side * risk, tp: lp + side * P.partR * risk, partR: P.partR, partFrac: PF, fallbackAt: fb, until: fb + 3600000 }); }
+        else if (live && !fail) pending.push({ ...base, market: true, lim: C[i], risk, sl: C[i] - side * risk, tp: C[i] + side * P.partR * risk, partR: P.partR, partFrac: PF, until: K[i][0] + 2 * step });
         else if (live) { bump(failKey(fail)); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: fail }); }
         break;
       }
       const t = sim(i, side); occ = t.open ? Infinity : t.x; // nhịp phá vỡ (kể cả cú bị loại) chiếm mã tới khi thoát theo luật
       if (!live) continue;
       if (fail) { bump(failKey(fail)); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: fail }); continue; }
+      const last = C[n - 1];
+      if (lim) { // D: lệnh thật vào bằng lệnh chờ M15 (khác lệnh bóng dùng để tính nhịp)
+        if (K[i][0] + step < realTo) { bump("đang có lệnh mã này"); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: "đang có lệnh mã này" }); continue; }
+        const m = simLim(i, side); realTo = m.open ? Infinity : m.exitAt;
+        const fundR = (fund[coin] ? fund[coin](m.entryAt, m.open ? until : m.exitAt) : 0) * side * m.en / m.risk;
+        const tr = { ...base, why3: `${why3} · ${m.mk ? "khớp lệnh chờ M15" : "không hồi → vào thị trường sau 4 giờ"}`, fill: m.mk ? "lim" : "mkt", entryAt: m.entryAt, entry: m.en, sl: m.en - side * m.risk, curSl: m.stop, tp: m.p1, risk: m.risk, rr: P.partR, beAtR: 0, part: m.half ? P.partR : 0, pf: PF, be: m.half,
+          exitAt: m.exitAt, exit: m.open ? null : m.px, reason: m.open ? "Đang mở" : sw3Reason({ entry: m.en, side, risk: m.risk, part: m.half }, m.stop), r: m.open ? null : m.gross - fundR, fundR, feeR: m.feeR + fundR, mfe: m.mfe, mae: m.mae, last, lastBarAt: K[n - 1][0] };
+        tr.uR = m.open ? uRof(tr.part, tr.entry, last, side, tr.risk, tr.feeR, PF) : null;
+        trades.push(tr); continue;
+      }
       const toT = t.open ? until : K[t.x][0] + step, fundR = (fund[coin] ? fund[coin](K[t.e][0], toT) : 0) * side * t.en / t.risk;
-      const r = t.open ? null : t.gross - fundR, last = C[n - 1];
+      const r = t.open ? null : t.gross - fundR;
       const tr = { ...base, entryAt: K[t.e][0], entry: t.en, sl: t.en - side * t.risk, curSl: t.stop, tp: t.p1, risk: t.risk, rr: P.partR, beAtR: 0, part: t.half ? P.partR : 0, pf: PF, be: t.half,
         exitAt: t.open ? null : K[t.x][0] + step, exit: t.open ? null : t.px, reason: t.open ? "Đang mở" : sw3Reason({ entry: t.en, side, risk: t.risk, part: t.half }, t.stop), r, fundR, feeR: t.feeR + fundR, mfe: t.mfe, mae: t.mae, last, lastBarAt: K[n - 1][0] };
       tr.uR = t.open ? uRof(tr.part, tr.entry, last, side, tr.risk, tr.feeR, PF) : null;
@@ -824,7 +881,7 @@ function portfolio(trades, cfg, startAt, until) {
     if (open.length >= cfg.maxOpen) { taken.push({ ...tr, status: "skip", why: `đủ ${cfg.maxOpen} lệnh mở` }); continue; }
     if (cfg.dailyStopPct > 0 && (dayPnl[day] || 0) <= -(cfg.dailyStopPct / 100) * eq) { taken.push({ ...tr, status: "skip", why: `chạm dừng ngày -${cfg.dailyStopPct}%` }); continue; }
     const reduced = cfg.streakN > 0 && lossRun >= cfg.streakN; // (dailyStopPct 0 = không dừng ngày — SW3)
-    const rp0 = reduced ? cfg.streakRiskPct ?? cfg.riskPct / 2 : cfg.riskPct, riskUsd = eq * (Math.min(rp0, cfg.riskBySetup?.[tr.setup] ?? rp0) / 100); // v12: rủi ro riêng theo setup
+    const rp0 = reduced ? cfg.streakRiskPct ?? cfg.riskPct / 2 : cfg.riskPct, riskUsd = eq * (Math.min(rp0, cfg.riskBySetup?.[tr.setup] ?? rp0, cfg.riskByCoin?.[tr.coin] ?? rp0) / 100); // v12: rủi ro riêng theo setup · D: rủi ro riêng theo mã (10 mã mới 0,45%)
     let qty = riskUsd / tr.risk; const maxQty = (cfg.maxLev * eq) / tr.entry;
     if (qty > maxQty) qty = maxQty;
     const lev = (qty * tr.entry) / eq;

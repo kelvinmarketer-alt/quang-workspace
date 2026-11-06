@@ -127,3 +127,31 @@ describe("phương pháp SW3 (06/11)", async () => {
     expect(P.trades.filter((t) => t.status === "skip").length).toBe(0);
   });
 });
+
+describe("phương án D (06/11): SW3 + lệnh chờ M15 + 18 mã", async () => {
+  const { cfgOf, finalize, SW3D_COINS2, MAX_COINS } = await import("../src/lib/paperBot.js");
+  const cfg = cfgOf({ cfg: { strategy: "sw3", sw: { entry: "lim" }, riskByCoin: { LINK: 0.45 } } });
+  it("cấu hình D: 18 mã, rủi ro 0,85%, tối đa 10 lệnh, lệnh chờ 0,25 ATR trong 4 giờ", () => {
+    expect(MAX_COINS).toBeGreaterThanOrEqual(18);
+    expect(cfg.coins.length).toBe(18);
+    expect(cfg.coins).toEqual(expect.arrayContaining(SW3D_COINS2));
+    expect(cfg.riskPct).toBe(0.85);
+    expect(cfg.maxOpen).toBe(10);
+    expect(cfg.sw).toMatchObject({ entry: "lim", limAtr: 0.25, limH: 4, stopAtr: 2, partR: 0.75 });
+    expect(cfg.cfgVer).toBe(14);
+  });
+  it("phiên SW3 cũ (không có sw.entry) giữ nguyên vào thị trường, 8 mã, 4 lệnh", () => {
+    const old = cfgOf({ cfg: { strategy: "sw3" } });
+    expect(old.sw.entry).toBeUndefined();
+    expect(old.coins.length).toBe(8);
+    expect(old.maxOpen).toBe(4);
+  });
+  it("rủi ro theo mã: mã mới 0,45%, mã cũ 0,85%", () => {
+    const mk = (coin, i) => ({ id: `${coin}-4h-${i}-SW3`, key: `${coin}|4h`, coin, tf: "4h", setup: "SW3", side: 1, entryAt: 1000 + i, entry: 100, sl: 90, curSl: 90, tp: 107.5, risk: 10, part: 0, pf: 1 / 3, feeR: 0, exitAt: 1500 + i, r: -1, lastBarAt: 1000 });
+    const L = [mk("BTC", 0), mk("LINK", 1)];
+    const P = finalize({ cfg, startAt: 0, until: 5000, stopped: true, trades: L, baseTrades: L }, null).portfolio;
+    const [b, l] = P.trades;
+    expect(b.riskUsd).toBeCloseTo(1000 * 0.0085, 6);
+    expect(l.riskUsd).toBeCloseTo(1000 * 0.0045, 6); // lệnh BTC chưa đóng lúc LINK vào → vốn vẫn 1.000$
+  });
+});

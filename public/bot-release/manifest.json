@@ -1,7 +1,7 @@
 {
-  "sha": "40eaa60140b01c5b93f9e17e4a425bb2491a1f91",
-  "date": "2026-11-06T10:00:23+07:00",
-  "msg": "SW3 (sếp duyệt 06/11, rủi ro 1%): vào lệnh thị trường khi nến H4 tín hiệu đóng → SL 2 ATR (STOP_MARKET) + lệnh giới hạn reduceOnly chốt 1/3 ở +0,75R → khớp thì dời SL về giá vào → mỗi nến H4 đóng dời SL theo đáy/đỉnh 20 nến (raw.sw3Levels từ Demo, quy đổi giá testnet), chỉ dời theo hướng có lợi, giá đã qua mức mới thì đóng thị trường; SW3 không time stop, dừng ngày 0 = tắt; đồng bộ luật SW3 từ app",
+  "sha": "4fff5182056fd0b1e477dce427cc83fec496b6d3",
+  "date": "2026-11-06T11:56:36+07:00",
+  "msg": "Phương án D (sếp duyệt 06/11): SW3 + lệnh chờ M15 + 18 mã — tín hiệu H4 đạt 5 tiêu chí → LIMIT cách giá đóng 0,25 ATR (quy đổi testnet), hết 4 giờ chưa khớp thì huỷ và vào MARKET phần còn lại (fallbackSW3, quá 1 giờ sau mốc thì bỏ); SL 2 ATR từ giá vào thực, dời theo 20 nến H4 tính cả nến tín hiệu; rủi ro riêng theo mã (riskByCoin, 10 mã mới 0,45%); tối đa 10 lệnh (clamp 1–10); cfgSummary gửi riskByCoin. Sửa lỗi lỡ lệnh XRP 06/11: khi bot đang DỪNG/chạm dừng ngày KHÔNG đánh dấu tín hiệu đã xử lý — bấm Chạy lại khi tín hiệu còn hạn thì vẫn vào. Đồng bộ luật D từ app. Thử trên sàn giả: khớp lệnh chờ → SL + chốt 1/3 → hoà vốn → đóng sạch; không hồi → vào thị trường SL đúng 2 ATR; LINK rủi ro 0,45%",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "e39f14f9d66038ee7aaf6e5c66bd3897d479ff01"
+      "sha": "15a67a9a3bd8f1c438b0773efafdb7039747c144"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "3dbc8c9106c4ba2dd78b6db91478bbb274ed329d"
+      "sha": "dce40b96ee231fe75f5c04384c5bc5ff62f9331f"
     },
     {
       "path": "lib/report.js",

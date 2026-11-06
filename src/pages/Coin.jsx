@@ -103,7 +103,8 @@ function RiskRules({ live = false }) {
   const c = { ...base, ...own, ...(live && bot && own.riskPct != null && own.riskPct !== base.riskPct ? { riskBySetup: {} } : {}) };
   const diff = live && bot && ["riskPct", "maxOpen", "dailyStopPct", "maxLev"].some((k) => own[k] != null && own[k] !== Number(base[k]));
   const rules = c.strategy === "sw3" ? [ // SW3 (06/11): không có TP cố định / không đuổi giá — quản lý bằng chốt 1/3 + dời SL
-    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh, mỗi mã 1`], ["Dừng ngày", Number(c.dailyStopPct) > 0 ? `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%` : "không dừng ngày"],
+    ["Rủi ro", `${fmtNum(c.riskPct, 2, 0)}% vốn / lệnh${Object.keys(c.riskByCoin || {}).length ? ` (${Object.keys(c.riskByCoin).length} mã mới ${fmtNum(Math.min(c.riskPct, Object.values(c.riskByCoin)[0]), 2, 0)}%)` : ""}`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh, mỗi mã 1`],
+    ...(c.sw?.entry === "lim" ? [["Điểm vào", "lệnh chờ M15 0,25 ATR · 4 giờ chưa khớp → thị trường"]] : []), ["Dừng ngày", Number(c.dailyStopPct) > 0 ? `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%` : "không dừng ngày"],
     ["Cắt lỗ", `${fmtNum(c.sw?.stopAtr, 1, 0)} ATR H4, luôn đặt trên sàn`], ["Chốt lời", `1/3 ở +${fmtNum(c.sw?.partR, 2, 0)}R rồi hoà vốn`], ["Phần còn lại", `dời SL theo đáy/đỉnh ${c.sw?.trailN} nến H4`],
     ["Xu hướng", "thuận EMA200 H4 + BTC EMA50 D1"], ["Ví", "chỉ Futures, không đụng Spot"],
   ] : [

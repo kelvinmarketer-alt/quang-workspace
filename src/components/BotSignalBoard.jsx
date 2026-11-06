@@ -69,7 +69,7 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
     return { coin, items, best: Math.min(...items.map((r) => order[r.st])), price: items[0]?.price };
   }).sort((a, b) => a.best - b.best);
   const planOf = (r) => (r.open ? { side: r.open.side, entry: r.open.entry, sl: r.open.curSl ?? r.open.sl, tp: r.open.tp, setup: r.open.setup, rr: r.open.uR, at: r.open.entryAt }
-    : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.market ? r.pend.tp : r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.until, market: r.pend.market } : null); // SW3: vào lệnh thị trường, TP = mức chốt 1/3
+    : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.market || r.pend.limEntry ? r.pend.tp : r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.limEntry ? r.pend.fallbackAt : r.pend.until, market: r.pend.market, limEntry: r.pend.limEntry } : null); // SW3: vào lệnh thị trường, TP = mức chốt 1/3 · D: lệnh chờ, tới fallbackAt chưa khớp thì vào thị trường
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -107,7 +107,7 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                             <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
                             <span className="text-rose-600">SL <b>{fmtPx(plan.sl)}</b></span>
                             <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "TP"} <b>{fmtPx(plan.tp)}</b></span>
-                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
+                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
                           </span>
                         </> : <>
                           <Clock size={12} className="shrink-0 text-slate-400" />

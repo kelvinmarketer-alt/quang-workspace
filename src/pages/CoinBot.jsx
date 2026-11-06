@@ -9,7 +9,7 @@ import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
-import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE } from "../lib/paperBot.js";
+import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE, SW3D_DEFAULT, SW3D_MANAGE } from "../lib/paperBot.js";
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
 
@@ -235,22 +235,31 @@ function CoinsEditor({ coins, onChange }) {
 const EDIT_TFS = ["5m", "15m", "1h", "4h"];
 // Luật SW3 (sếp duyệt 06/11): 5 tiêu chí vào lệnh + quản lý lệnh — hiện ở form phiên mới và nút "Xem luật"
 export function Sw3Rules({ cfg }) {
-  const c = cfg || SW3_DEFAULT;
+  const c = cfg || SW3D_DEFAULT, d = c.sw?.entry === "lim";
+  const rb = Object.entries(c.riskByCoin || {}).filter(([k]) => (c.coins || []).includes(k));
   return (
     <div className="space-y-2 text-[12px] leading-snug text-slate-600">
       <div className="font-extrabold text-slate-800">Vào lệnh khi nến H4 vừa đóng đạt ĐỦ 5 tiêu chí</div>
       <ol className="space-y-1.5">{SW3_RULES.map((r, i) => (
         <li key={r.k} className="flex gap-2"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-extrabold text-white">{i + 1}</span><span><b className="text-slate-800">{r.t}.</b> {r.d}</span></li>
       ))}</ol>
-      <div className="pt-1 font-extrabold text-slate-800">Quản lý lệnh</div>
-      <ul className="list-disc space-y-1 pl-5">{SW3_MANAGE.map((m) => <li key={m}>{m.replace("Rủi ro 1% vốn/lệnh, tối đa 4 lệnh mở", `Rủi ro ${fmtNum(c.riskPct, 2, 0)}% vốn/lệnh, tối đa ${c.maxOpen} lệnh mở`)}</li>)}</ul>
-      <div className="rounded-lg bg-slate-50 p-2 text-[11.5px] text-slate-500">Kiểm thử 2018–11/2026 trên 8 mã (đã trừ phí, funding thật): thắng khoảng 62%, khoảng 8–9 lệnh/tháng. Kiểm walk-forward 2020–2026: 7/7 năm lãi. Ở rủi ro 1%/lệnh, sụt vốn lớn nhất khi kiểm thử khoảng 21%, chạy thật có thể tới khoảng 30%. Kết quả quá khứ, không phải tư vấn đầu tư.</div>
+      <div className="pt-1 font-extrabold text-slate-800">{d ? "Điểm vào M15 + quản lý lệnh (phương án D)" : "Quản lý lệnh"}</div>
+      <ul className="list-disc space-y-1 pl-5">{d ? <>
+        {SW3D_MANAGE.slice(0, -1).map((m) => <li key={m}>{m}</li>)}
+        <li>Rủi ro {fmtNum(c.riskPct, 2, 0)}% vốn/lệnh{rb.length ? `, riêng ${rb.map(([k]) => k).join(", ")} ${fmtNum(Math.min(c.riskPct, rb[0][1]), 2, 0)}%` : ""}; tối đa {c.maxOpen} lệnh mở, mỗi mã 1 lệnh.</li>
+      </> : SW3_MANAGE.map((m) => <li key={m}>{m.replace("Rủi ro 1% vốn/lệnh, tối đa 4 lệnh mở", `Rủi ro ${fmtNum(c.riskPct, 2, 0)}% vốn/lệnh, tối đa ${c.maxOpen} lệnh mở`)}</li>)}</ul>
+      <div className="rounded-lg bg-slate-50 p-2 text-[11.5px] text-slate-500">{d
+        ? "Kiểm thử 2018–11/2026 trên 18 mã (đã trừ phí, funding thật): khoảng 18–19 lệnh/tháng, thắng khoảng 62%, lãi 48%/năm (2018–23) và 69%/năm (2024–26), sụt vốn lớn nhất khoảng 24%. 10 mã mới kém đều hơn 8 mã cũ nên chỉ ½ rủi ro. Kết quả quá khứ, không phải tư vấn đầu tư."
+        : "Kiểm thử 2018–11/2026 trên 8 mã (đã trừ phí, funding thật): thắng khoảng 62%, khoảng 8–9 lệnh/tháng. Kiểm walk-forward 2020–2026: 7/7 năm lãi. Ở rủi ro 1%/lệnh, sụt vốn lớn nhất khi kiểm thử khoảng 21%, chạy thật có thể tới khoảng 30%. Kết quả quá khứ, không phải tư vấn đầu tư."}</div>
     </div>
   );
 }
 function Sw3SetupForm({ initial, onStart, onCancel, onLegacy, follow }) {
-  const [days, setDays] = useState(0);
-  const [c, setC] = useState(() => cfgOf({ cfg: { ...SW3_DEFAULT, ...(initial?.strategy === "sw3" ? initial : {}), strategy: "sw3" } }));
+  const [days, setDays] = useState(90); // 06/11 sếp: phiên mới phải có sẵn lệnh lịch sử các tháng gần nhất để đo
+  const [v, setV] = useState(initial?.strategy === "sw3" && initial?.sw?.entry !== "lim" ? "sw3" : "D");
+  const base = (x) => (x === "D" ? SW3D_DEFAULT : SW3_DEFAULT);
+  const [c, setC] = useState(() => cfgOf({ cfg: { ...base(v), strategy: "sw3" } }));
+  const pick = (x) => { setV(x); setC(cfgOf({ cfg: { ...base(x), strategy: "sw3" } })); };
   const field = (k, label, step = 1, suffix = "") => (
     <label className="block text-[12px]"><span className="mb-1 block font-semibold text-slate-500">{label}</span>
       <div className="flex items-center gap-1"><input type="number" step={step} value={c[k]} onChange={(e) => setC({ ...c, [k]: Number(e.target.value) })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
@@ -260,18 +269,19 @@ function Sw3SetupForm({ initial, onStart, onCancel, onLegacy, follow }) {
   const ok = c.coins.length && c.capital > 0 && c.riskPct > 0 && c.maxOpen > 0;
   return (
     <Card className="!p-4">
-      <div className="mb-1 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Phiên demo · phương pháp SW3 (swing H4)</div>
+      <div className="mb-1 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Phiên demo · {v === "D" ? "phương án D (SW3 + lệnh chờ M15, 18 mã)" : "phương pháp SW3 (swing H4, 8 mã)"}</div>
       <div className="mb-3 text-[11.5px] text-slate-500">Bot thật (Testnet) chạy đúng luật này theo phiên Demo. <button onClick={onLegacy} className="font-bold text-indigo-600">Dùng bộ luật cũ v12</button></div>
       <FollowNote mode={follow} />
       <div className="space-y-3">
+        <div className="flex flex-wrap gap-1.5">{[["D", "Phương án D · ~19 lệnh/tháng"], ["sw3", "SW3 · 8 mã, vào ngay"]].map(([x, l]) => <button key={x} onClick={() => pick(x)} className={chip(v === x)}>{l}</button>)}</div>
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3"><Sw3Rules cfg={c} /></div>
-        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Bắt đầu</div><div className="flex flex-wrap gap-1.5">{[[0, "Từ bây giờ (đo thật)"], [30, "Chạy lại 30 ngày"], [90, "Chạy lại 90 ngày"]].map(([d, l]) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{l}</button>)}</div>
-          <div className="mt-1 text-[11px] text-slate-400">"Từ bây giờ" chỉ tính lệnh mới nên số đo sạch nhất; chạy lại quá khứ để xem ngay lệnh mẫu.</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Bắt đầu</div><div className="flex flex-wrap gap-1.5">{[[0, "Từ bây giờ"], [30, "Chạy lại 30 ngày"], [90, "Chạy lại 90 ngày"], [180, "Chạy lại 180 ngày"]].map(([d, l]) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{l}</button>)}</div>
+          <div className="mt-1 text-[11px] text-slate-400">Chạy lại quá khứ để có sẵn lịch sử lệnh các tháng gần nhất mà đo lường; lệnh mới từ lúc bắt đầu vẫn ghi tiếp vào cùng phiên.</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures, khung H4)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("capital", "Vốn ảo", 100, "$")}{field("riskPct", "Rủi ro / lệnh", 0.25, "%")}{field("maxOpen", "Tối đa lệnh mở")}{field("maxLev", "Đòn bẩy tối đa", 1, "x")}</div>
         <div className="flex gap-2">
           {onCancel && <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Huỷ</button>}
-          <button disabled={!ok} onClick={() => onStart({ startAt: Date.now() - days * 86400000, cfg: { strategy: "sw3", coins: c.coins, capital: c.capital, riskPct: c.riskPct, maxOpen: c.maxOpen, maxLev: c.maxLev }, createdAt: Date.now() })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-sm font-bold text-white disabled:opacity-40"><Play size={15} /> Bắt đầu chạy demo SW3</button>
+          <button disabled={!ok} onClick={() => onStart({ startAt: Date.now() - days * 86400000, cfg: { strategy: "sw3", coins: c.coins, capital: c.capital, riskPct: c.riskPct, maxOpen: c.maxOpen, maxLev: c.maxLev, ...(v === "D" ? { sw: { entry: "lim" }, riskByCoin: c.riskByCoin } : {}) }, createdAt: Date.now() })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-sm font-bold text-white disabled:opacity-40"><Play size={15} /> Bắt đầu chạy demo {v === "D" ? "phương án D" : "SW3"}</button>
         </div>
       </div>
     </Card>

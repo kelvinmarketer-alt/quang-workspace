@@ -101,16 +101,19 @@ const RULES = [
   ["streakN", "Giảm rủi ro sau chuỗi thua", (v) => (Number(v) > 0 ? `thua ${v} lệnh liền` : "tắt")],
   ["streakRiskPct", "Rủi ro khi đang chuỗi thua", (v) => (fin(v) ? `${fmtNum(v, 2, 0)}%` : "—")],
   ["riskBySetup", "Rủi ro riêng theo setup", (v) => (v && Object.keys(v).length ? Object.entries(v).map(([k, x]) => `${setupName(k)} ${fmtNum(x, 2, 0)}%`).join(", ") : "không"), "obj"],
+  ["riskByCoin", "Rủi ro riêng theo mã", (v) => (v && Object.keys(v).length ? Object.entries(v).map(([k, x]) => `${k} ${fmtNum(x, 2, 0)}%`).join(", ") : "không"), "obj"],
+  ["sw", "Cách vào lệnh", (v) => (v?.entry === "lim" ? "lệnh chờ M15 (0,25 ATR, 4 giờ)" : "thị trường"), "entry"],
   ["cfgVer", "Phiên bản luật", (v) => (v ? `v${v}` : "—")],
 ];
 const objKey = (o) => JSON.stringify(Object.entries(o || {}).sort(([p], [q]) => (p < q ? -1 : 1)).map(([k, v]) => [k, Number(v)]));
-const same = (a, b, kind) => (kind === "arr" ? [...(a || [])].sort().join() === [...(b || [])].sort().join() : kind === "bool" ? !!a === !!b : kind === "obj" ? objKey(a) === objKey(b) : Number(a) === Number(b));
+const same = (a, b, kind) => (kind === "arr" ? [...(a || [])].sort().join() === [...(b || [])].sort().join() : kind === "bool" ? !!a === !!b : kind === "obj" ? objKey(a) === objKey(b) : kind === "entry" ? (a?.entry || "mkt") === (b?.entry || "mkt") : Number(a) === Number(b));
 export function cfgDiff(sum, demo) {
   if (!sum || !demo) return [];
   return RULES.filter(([k, , , kind]) => sum[k] !== undefined && !same(sum[k], demo[k], kind)).map(([k, label, f]) => ({ key: k, label, demo: f(demo[k]), bot: f(sum[k]) }));
 }
 export function rulesText(c) {
   if (!c) return "";
+  if (c.strategy === "sw3" && c.sw?.entry === "lim") return `Phương án D (SW3 + lệnh chờ M15) · ${(c.coins || []).length} mã · phá đỉnh/đáy 30 nến H4 ≥ 0,3 ATR, volume ≥ 1,3×, thuận EMA200 H4 + BTC EMA50 D1 · lệnh chờ 0,25 ATR, 4 giờ không khớp → thị trường · SL 2 ATR, chốt 1/3 ở +0,75R, dời theo 20 nến`;
   if (c.strategy === "sw3") return `SW3 swing H4 · ${(c.coins || []).join("/")} · phá đỉnh/đáy 30 nến ≥ 0,3 ATR, volume ≥ 1,3×, thuận EMA200 H4 + BTC EMA50 D1 · SL 2 ATR, chốt 1/3 ở +0,75R, dời theo 20 nến`;
   const p = [(c.coins || []).join("/"), (c.tfs || []).map((x) => TFS[x]?.label || x).join(" ")];
   if (c.setups) p.push(`${c.setups.length} setup`);
