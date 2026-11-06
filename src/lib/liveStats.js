@@ -111,6 +111,7 @@ export function cfgDiff(sum, demo) {
 }
 export function rulesText(c) {
   if (!c) return "";
+  if (c.strategy === "sw3") return `SW3 swing H4 · ${(c.coins || []).join("/")} · phá đỉnh/đáy 30 nến ≥ 0,3 ATR, volume ≥ 1,3×, thuận EMA200 H4 + BTC EMA50 D1 · SL 2 ATR, chốt 1/3 ở +0,75R, dời theo 20 nến`;
   const p = [(c.coins || []).join("/"), (c.tfs || []).map((x) => TFS[x]?.label || x).join(" ")];
   if (c.setups) p.push(`${c.setups.length} setup`);
   if (Number(c.keyVolume) > 0) p.push(Number(c.keyVolume) > 1 ? `Key Volume top ${c.keyVolume}` : "Key Volume");

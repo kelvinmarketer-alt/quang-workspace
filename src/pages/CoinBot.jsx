@@ -9,7 +9,7 @@ import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
-import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS } from "../lib/paperBot.js";
+import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE } from "../lib/paperBot.js";
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
 
@@ -73,6 +73,7 @@ const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padSta
 const ago = (t) => { const d = (Date.now() - t) / 86400000; return d >= 1 ? `${Math.floor(d)} ngày ${Math.floor((d % 1) * 24)} giờ` : `${Math.floor(d * 24)} giờ`; };
 const tone = (v) => (v == null ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const setupName = (k) => SETUPS[k]?.label.split(" (")[0] || k;
+const tpLbl = (t) => (t?.setup === "SW3" ? "Chốt 1/3" : "TP"); // SW3 không có TP cố định — mức này chỉ chốt 1/3 vị thế
 const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "LONG" : "SHORT"}</span>;
 
 // Biểu đồ nến của 1 luồng (cặp × khung) + điểm vào/ra của mọi lệnh bot + đường Entry/SL/TP lệnh đang mở / lệnh đang chọn + lệnh chờ.
@@ -132,7 +133,7 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     const show = focus ? [focus] : trades.filter((t) => !t.exitAt), L = [];
     for (const t of show) {
       const tag = `${t.side === 1 ? "LONG" : "SHORT"}`;
-      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: "SL" }, { price: t.tp, color: "#059669", title: "TP" });
+      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: "SL" }, { price: t.tp, color: "#059669", title: tpLbl(t) });
     }
     for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
     a.lines = L.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: 1, lineStyle: ln.style ?? 2, axisLabelVisible: true, title: ln.title }));
@@ -232,7 +233,55 @@ function CoinsEditor({ coins, onChange }) {
 
 // Khung giờ bot được chọn (27/10: thêm H1, H4 — bot thật quét mỗi nến M5 đóng nên khung lớn cũng bắt kịp)
 const EDIT_TFS = ["5m", "15m", "1h", "4h"];
-function SetupForm({ initial, onStart, onCancel, follow }) {
+// Luật SW3 (sếp duyệt 06/11): 5 tiêu chí vào lệnh + quản lý lệnh — hiện ở form phiên mới và nút "Xem luật"
+export function Sw3Rules({ cfg }) {
+  const c = cfg || SW3_DEFAULT;
+  return (
+    <div className="space-y-2 text-[12px] leading-snug text-slate-600">
+      <div className="font-extrabold text-slate-800">Vào lệnh khi nến H4 vừa đóng đạt ĐỦ 5 tiêu chí</div>
+      <ol className="space-y-1.5">{SW3_RULES.map((r, i) => (
+        <li key={r.k} className="flex gap-2"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-extrabold text-white">{i + 1}</span><span><b className="text-slate-800">{r.t}.</b> {r.d}</span></li>
+      ))}</ol>
+      <div className="pt-1 font-extrabold text-slate-800">Quản lý lệnh</div>
+      <ul className="list-disc space-y-1 pl-5">{SW3_MANAGE.map((m) => <li key={m}>{m.replace("Rủi ro 1% vốn/lệnh, tối đa 4 lệnh mở", `Rủi ro ${fmtNum(c.riskPct, 2, 0)}% vốn/lệnh, tối đa ${c.maxOpen} lệnh mở`)}</li>)}</ul>
+      <div className="rounded-lg bg-slate-50 p-2 text-[11.5px] text-slate-500">Kiểm thử 2018–11/2026 trên 8 mã (đã trừ phí, funding thật): thắng khoảng 62%, khoảng 8–9 lệnh/tháng. Kiểm walk-forward 2020–2026: 7/7 năm lãi. Ở rủi ro 1%/lệnh, sụt vốn lớn nhất khi kiểm thử khoảng 21%, chạy thật có thể tới khoảng 30%. Kết quả quá khứ, không phải tư vấn đầu tư.</div>
+    </div>
+  );
+}
+function Sw3SetupForm({ initial, onStart, onCancel, onLegacy, follow }) {
+  const [days, setDays] = useState(0);
+  const [c, setC] = useState(() => cfgOf({ cfg: { ...SW3_DEFAULT, ...(initial?.strategy === "sw3" ? initial : {}), strategy: "sw3" } }));
+  const field = (k, label, step = 1, suffix = "") => (
+    <label className="block text-[12px]"><span className="mb-1 block font-semibold text-slate-500">{label}</span>
+      <div className="flex items-center gap-1"><input type="number" step={step} value={c[k]} onChange={(e) => setC({ ...c, [k]: Number(e.target.value) })} className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />{suffix && <span className="text-slate-400">{suffix}</span>}</div>
+    </label>
+  );
+  const chip = (on) => `rounded-lg px-3 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
+  const ok = c.coins.length && c.capital > 0 && c.riskPct > 0 && c.maxOpen > 0;
+  return (
+    <Card className="!p-4">
+      <div className="mb-1 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Phiên demo · phương pháp SW3 (swing H4)</div>
+      <div className="mb-3 text-[11.5px] text-slate-500">Bot thật (Testnet) chạy đúng luật này theo phiên Demo. <button onClick={onLegacy} className="font-bold text-indigo-600">Dùng bộ luật cũ v12</button></div>
+      <FollowNote mode={follow} />
+      <div className="space-y-3">
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3"><Sw3Rules cfg={c} /></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Bắt đầu</div><div className="flex flex-wrap gap-1.5">{[[0, "Từ bây giờ (đo thật)"], [30, "Chạy lại 30 ngày"], [90, "Chạy lại 90 ngày"]].map(([d, l]) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{l}</button>)}</div>
+          <div className="mt-1 text-[11px] text-slate-400">"Từ bây giờ" chỉ tính lệnh mới nên số đo sạch nhất; chạy lại quá khứ để xem ngay lệnh mẫu.</div></div>
+        <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures, khung H4)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{field("capital", "Vốn ảo", 100, "$")}{field("riskPct", "Rủi ro / lệnh", 0.25, "%")}{field("maxOpen", "Tối đa lệnh mở")}{field("maxLev", "Đòn bẩy tối đa", 1, "x")}</div>
+        <div className="flex gap-2">
+          {onCancel && <button onClick={onCancel} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600">Huỷ</button>}
+          <button disabled={!ok} onClick={() => onStart({ startAt: Date.now() - days * 86400000, cfg: { strategy: "sw3", coins: c.coins, capital: c.capital, riskPct: c.riskPct, maxOpen: c.maxOpen, maxLev: c.maxLev }, createdAt: Date.now() })} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 py-2.5 text-sm font-bold text-white disabled:opacity-40"><Play size={15} /> Bắt đầu chạy demo SW3</button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+function SetupForm(props) {
+  const [legacy, setLegacy] = useState(false); // mặc định SW3 (phương pháp đang dùng từ 06/11)
+  return legacy ? <LegacySetupForm {...props} onSw3={() => setLegacy(false)} /> : <Sw3SetupForm {...props} onLegacy={() => setLegacy(true)} />;
+}
+function LegacySetupForm({ initial, onStart, onCancel, follow, onSw3 }) {
   const [days, setDays] = useState(90);
   const [c, setC] = useState(() => cfgOf({ cfg: initial }));
   const tog = (k, v) => setC((o) => ({ ...o, [k]: o[k].includes(v) ? o[k].filter((x) => x !== v) : [...o[k], v] }));
@@ -245,14 +294,14 @@ function SetupForm({ initial, onStart, onCancel, follow }) {
   const ok = c.coins.length && c.tfs.length && c.setups.length && c.capital > 0 && c.riskPct > 0;
   return (
     <Card className="!p-4">
-      <div className="mb-3 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Cấu hình phiên demo</div>
+      <div className="mb-3 flex items-center gap-2 text-[15px] font-extrabold text-slate-800"><Settings2 size={17} className="text-indigo-500" /> Cấu hình phiên demo · bộ luật cũ v12 <button onClick={onSw3} className="ml-auto text-[12px] font-bold text-indigo-600">← Về SW3</button></div>
       <FollowNote mode={follow} />
       <div className="space-y-3">
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Chạy lại từ quá khứ</div><div className="flex flex-wrap gap-1.5">{[30, 60, 90].map((d) => <button key={d} onClick={() => setDays(d)} className={chip(days === d)}>{d} ngày trước</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Cặp (Binance Futures)</div><CoinsEditor coins={c.coins} onChange={(coins) => setC((o) => ({ ...o, coins }))} /></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Khung giờ</div><div className="flex flex-wrap gap-1.5">{EDIT_TFS.map((k) => <button key={k} onClick={() => tog("tfs", k)} className={chip(c.tfs.includes(k))}>{TFS[k].label}</button>)}</div></div>
         <div><div className="mb-1 text-[12px] font-semibold text-slate-500">Setup theo bộ kiến thức</div>
-          <div className="space-y-1">{Object.entries(SETUPS).map(([k, s]) => (
+          <div className="space-y-1">{Object.entries(SETUPS).filter(([k]) => k !== "SW3").map(([k, s]) => (
             <button key={k} onClick={() => tog("setups", k)} className={`block w-full rounded-lg border px-3 py-2 text-left ${c.setups.includes(k) ? "border-indigo-300 bg-indigo-50/60" : "border-slate-200 opacity-60"}`}>
               <div className="text-[12.5px] font-bold text-slate-800">{c.setups.includes(k) ? "☑" : "☐"} {s.label}</div><div className="text-[11px] leading-snug text-slate-500">{s.desc}</div>
             </button>
@@ -542,7 +591,7 @@ export default function CoinBot({ active: visible = true }) {
       const evs = [];
       for (const t of rows) {
         const was = prevSt.current.get(t.id);
-        if (!was && t.status === "open") evs.push({ text: `Mở ${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TFS[t.tf].label} @ ${px(t.entry)} · SL ${px(t.curSl)} · TP ${px(t.tp)}`, ok: true });
+        if (!was && t.status === "open") evs.push({ text: `Mở ${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TFS[t.tf].label} @ ${px(t.entry)} · SL ${px(t.curSl)} · ${tpLbl(t)} ${px(t.tp)}`, ok: true });
         if (was === "open" && t.status === "done") evs.push({ text: `Đóng ${t.coin} ${TFS[t.tf].label} · ${t.reason} ${rr(t.r)} (${usd(t.pnl)})`, ok: t.r >= 0 });
       }
       if (evs.length) { setToast({ ...evs[evs.length - 1], more: evs.length - 1, at: Date.now() }); try { navigator.vibrate?.(60); } catch { /* bỏ qua */ } }
@@ -653,7 +702,8 @@ export default function CoinBot({ active: visible = true }) {
               <div className="mt-1 text-[11px] leading-snug text-slate-500">Lưu xong Demo chạy lại từ {dt(session.startAt)} với danh sách cặp mới (cặp xoá → lệnh demo của cặp đó biến mất). Bot thật nhận trong ~5 phút; lệnh/vị thế đang mở của cặp vừa xoá vẫn được bot quản lý (SL/TP) tới khi đóng.</div>
             </div>
           )}
-          {showRules && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng (v{cfg.cfgVer}){cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.streakN > 0 ? ` · thua ${cfg.streakN} lệnh liền → rủi ro ${fmtNum(cfg.streakRiskPct, 2, 0)}% tới khi thắng lại` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""}{cfg.htfFilter ? ` · thuận khung lớn ${cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}` : ""}{cfg.d1Bias ? " · bias D1 (chỉ thuận xu hướng D1)" : ""}{cfg.sigVol ? " · vol nến tín hiệu > TB20" : ""} · rủi ro {cfg.streakN > 0 ? "" : "cố định "}{fmtNum(cfg.riskPct, 2, 0)}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, v]) => `${k} ${fmtNum(Math.min(v, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
+          {showRules && cfg.strategy === "sw3" && <div className="mt-1 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3"><Sw3Rules cfg={cfg} /></div>}
+          {showRules && cfg.strategy !== "sw3" && <div className="mt-1 rounded-lg bg-slate-50 p-2 leading-relaxed">Luật đang áp dụng (v{cfg.cfgVer}){cfg.maxFeeR > 0 ? ` · bỏ lệnh phí > ${cfg.maxFeeR}R` : ""} · vào lệnh chờ{cfg.maxExtAtr > 0 ? ` · không đuổi >${cfg.maxExtAtr} ATR` : ""}{cfg.minSlAtr > 0 ? ` · SL ≥${cfg.minSlAtr} ATR` : ""}{cfg.streakN > 0 ? ` · thua ${cfg.streakN} lệnh liền → rủi ro ${fmtNum(cfg.streakRiskPct, 2, 0)}% tới khi thắng lại` : ""}{cfg.keyVolume > 0 ? ` · tại Key Volume${cfg.keyVolume > 1 ? ` top ${cfg.keyVolume}` : ""}` : ""}{cfg.sigVol ? " · nến tín hiệu vol > TB20" : ""}{cfg.noEngulf ? " · không đuổi sau engulfing" : ""}{cfg.htfFilter ? ` · thuận khung lớn ${cfg.tfs.map((x) => `${TFS[x].label}→${TFS[TFS[x].htf].label}`).join(", ")}` : ""}{cfg.d1Bias ? " · bias D1 (chỉ thuận xu hướng D1)" : ""}{cfg.sigVol ? " · vol nến tín hiệu > TB20" : ""} · rủi ro {cfg.streakN > 0 ? "" : "cố định "}{fmtNum(cfg.riskPct, 2, 0)}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, v]) => `${k} ${fmtNum(Math.min(v, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · R:R ≥ 1:{String(MIN_RR).replace(".", ",")}{cfg.adaptive ? ` · tối ưu ${cfg.lookback} lệnh/thận trọng ${cfg.confK}${cfg.tfGate ? "/nghỉ khung lỗ" : ""}` : ""}</div>}
           {busy && <span className="ml-1 inline-flex items-center gap-1 text-indigo-600"><Loader2 size={11} className="animate-spin" />{busy}</span>}
           {res && !busy && <span className="text-slate-400"> · bot xét nến lúc {dt(res.at)}</span>}
           {res && busy && <span className="text-slate-400"> · đang hiện kết quả lúc {dt(res.at)}</span>}
@@ -765,7 +815,7 @@ export default function CoinBot({ active: visible = true }) {
             <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
           </div>
           <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} />
-          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · TP {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
+          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
         </Card>
 
         {open.length > 0 && (
@@ -778,7 +828,7 @@ export default function CoinBot({ active: visible = true }) {
                   <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
                   <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
                   <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {fmtNum(toTp, 2, 2)}%</span></div>
+                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
                   <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
                 </div>
               );
@@ -856,7 +906,7 @@ export default function CoinBot({ active: visible = true }) {
                   <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
                   <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
                   <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">TP {px(t.tp)} · còn {fmtNum(toTp, 2, 2)}%</span></div>
+                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
                   <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
                 </div>
               );
@@ -901,9 +951,10 @@ export default function CoinBot({ active: visible = true }) {
                 <span className={`w-[72px] shrink-0 text-right font-extrabold tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
-                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">SL {px(t.sl)}</span><span className="text-emerald-600">TP {px(t.tp)}</span>
+                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">SL {px(t.sl)}</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}</span>
                 <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${t.reason}` : t.exitAt ? `${t.reason} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
               </div>
+              {t.why3 && <div className="mt-0.5 text-[11px] leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3}</div>}
               {t.lesson && <div className="mt-0.5 text-[11px] leading-snug text-rose-700/80">Rút kinh nghiệm: {t.lesson}</div>}
             </button>
           ); })}</div>

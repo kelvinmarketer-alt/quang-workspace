@@ -15,7 +15,34 @@ export const SETUPS = {
   SFP: { label: "Quét thanh khoản (SFP)", desc: "Râu quét qua đỉnh/đáy swing (cao nhất/thấp nhất 20 nến) rồi đóng cửa quay lại, râu ≥40% thân nến, volume ≥ 1.5× TB20." },
   BREAKOUT: { label: "Breakout 2 nến (EA)", desc: "Nến thân dài (≥60% biên) + volume ≥1.5× TB20 đóng vượt đỉnh/đáy 20 nến, thuận EMA200; nến kế cùng màu đóng vượt nến phá vỡ mới vào." },
   SMC: { label: "Đảo chiều SMC (CHoCH → OB)", desc: "Cấu trúc đang giảm (tăng) bị phá bằng nến đóng vượt đỉnh (đáy) swing = CHoCH; chờ giá hồi về Order Block khởi nguồn + nến từ chối → vào." },
+  SW3: { label: "Swing H4 phá vỡ 30 nến (SW3)", desc: "Nến H4 đóng vượt đỉnh/đáy 30 nến ≥ 0,3 ATR, volume ≥ 1,3× TB20, thuận EMA200 H4 của mã và EMA50 D1 của BTC, cú phá vỡ đầu tiên của nhịp. Cắt lỗ 2 ATR, chốt 1/3 ở +0,75R rồi hoà vốn, phần còn lại dời theo đáy/đỉnh 20 nến." },
 };
+
+// ---------------- PHƯƠNG PHÁP SW3 (sếp duyệt 06/11/2026, rủi ro 1%/lệnh) ----------------
+// Chọn bằng walk-forward 2.880 cấu hình trên 8 năm (2018–11/2026, 8 mã): 2020–2026 kiểm ngoài mẫu 7/7 năm lãi.
+// Báo cáo: ~/Desktop/Phuong-phap-coin-moi.html. Bộ máy khớp từng bước với bộ kiểm thử nghiên cứu (scratchpad bt10/eng.mjs):
+// vào giá mở nến kế, phí lệnh thị trường 0,05% + trượt 0,02%, chốt 1/3 bằng lệnh giới hạn 0,02%, funding thật trên cả vị thế.
+export const SW3_DEFAULT = {
+  strategy: "sw3", cfgVer: 13, capital: 1000, riskPct: 1, maxOpen: 4, maxLev: 20, dailyStopPct: 0, feePct: 0.05, makerPct: 0.02, slipPct: 0.02,
+  coins: ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "LTC", "DOGE"], tfs: ["4h"], setups: ["SW3"], adaptive: false, learnLoss: false, offStreams: [],
+  sw: { brkN: 30, brkAtr: 0.3, volX: 1.3, volN: 20, emaH4: 200, btcEma: 50, stopAtr: 2, partR: 0.75, partFrac: 1 / 3, trailN: 20 },
+};
+export const isSW3 = (session) => session?.cfg?.strategy === "sw3";
+// 5 tiêu chí vào lệnh + quản lý lệnh — dùng chung cho thẻ "Luật" trong app và nhãn từng lệnh
+export const SW3_RULES = [
+  { k: "brk", t: "Phá đỉnh/đáy 30 nến H4", d: "Nến H4 đóng cửa CAO hơn mọi đỉnh của 30 nến H4 trước (≈ 5 ngày) thì xét MUA; THẤP hơn mọi đáy 30 nến trước thì xét BÁN. Chỉ tính nến đã đóng." },
+  { k: "str", t: "Cú phá vỡ đủ mạnh", d: "Giá đóng cửa vượt mức đỉnh/đáy cũ ít nhất 0,3 ATR(14) H4. Cú phá chỉ chạm nhẹ hay bị bỏ vì dễ là phá vỡ giả." },
+  { k: "vol", t: "Có volume xác nhận", d: "Volume nến phá vỡ ≥ 1,3 lần trung bình 20 nến H4 trước đó." },
+  { k: "trend", t: "Thuận xu hướng 2 khung", d: "MUA khi giá mã trên EMA200 H4 (≈ 33 ngày) VÀ giá đóng ngày của BTC trên EMA50 D1. BÁN khi cả hai cùng dưới. Lệch một trong hai thì bỏ." },
+  { k: "first", t: "Cú phá vỡ đầu tiên của nhịp", d: "Mã vừa có một cú phá vỡ (kể cả cú không đạt lọc) mà nhịp đó chưa kết thúc theo luật thoát bên dưới thì bỏ qua cú phá vỡ mới. Mỗi mã chỉ 1 lệnh một lúc." },
+];
+export const SW3_MANAGE = [
+  "Vào lệnh thị trường ngay khi nến tín hiệu đóng (giá mở nến H4 kế).",
+  "Cắt lỗ cách giá vào 2 ATR(14) H4, đặt ngay trên sàn.",
+  "Lời +0,75R: chốt 1/3 vị thế bằng lệnh giới hạn đặt sẵn, rồi dời cắt lỗ về giá vào (hoà vốn).",
+  "Phần còn lại: sau mỗi nến H4 đóng, dời cắt lỗ lên đáy thấp nhất 20 nến H4 gần nhất (lệnh BÁN: đỉnh cao nhất), chỉ dời theo hướng có lợi, tới khi bị chạm.",
+  "Rủi ro 1% vốn/lệnh, tối đa 4 lệnh mở, mỗi mã 1 lệnh. Không chốt lời cố định, không đóng theo thời gian.",
+];
 
 // Mặc định đề xuất cho vốn 1.000$ (bản 2 — đã kiểm tra walk-forward 30–150 ngày, xem ghi chú dưới)
 export const DEFAULT_CFG = {
@@ -60,7 +87,12 @@ const V4_KEYS = ["learnLoss", "lessonN", "lessonMin", "verifyOpt", "optVariants"
 const V3_KEYS = ["maxExtAtr", "minSlAtr", "limitAt", "fillBars", "entryMode", "minExp", "confK"];
 const V2_KEYS = ["beAtR", "makerPct", "entryMode", "partialAtR", "warmupDays", "lookback", "minSample", "minExp", "confK", "tfGate", "maxFeeR", "cfgVer"];
 export const MIN_RR = 1.5; // luật của Quang: R:R tối thiểu 1:1,5 — mọi mức chốt lời (kể cả chốt 1 nửa) không thấp hơn
+const cleanCoins = (l, d) => { const c = [...new Set((l || []).map((x) => String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, "")).filter(Boolean))].slice(0, MAX_COINS); return c.length ? c : [...d]; };
 export function cfgOf(session) {
+  if (isSW3(session)) { // SW3 có bộ cấu hình riêng — không đi qua các bước nâng phiên v2–v12 của bộ luật cũ
+    const s = session.cfg;
+    return { ...SW3_DEFAULT, ...s, sw: { ...SW3_DEFAULT.sw, ...(s.sw || {}) }, strategy: "sw3", cfgVer: SW3_DEFAULT.cfgVer, tfs: ["4h"], setups: ["SW3"], adaptive: false, learnLoss: false, coins: cleanCoins(s.coins, SW3_DEFAULT.coins) };
+  }
   const c = { ...DEFAULT_CFG, ...(session?.cfg || {}) };
   const ver = session?.cfg?.cfgVer || 1;
   if (ver < 2) for (const k of V2_KEYS) c[k] = DEFAULT_CFG[k];
@@ -364,8 +396,8 @@ function simTrade(K, s, cfg, atr, endIdx, e50, f) {
   return { entryIdx: e, entry, sl: s.sl, curSl: sl, tp: trail ? null : tp, trail, risk, rr: cfg.rr, beAtR: cfg.beAtR, part, exitIdx, exit, reason, be, feeR, mfe: maxR, mae, open: exit == null, r };
 }
 
-// R của lệnh (đã chốt 1 nửa ở part R thì nửa còn lại tính theo giá px)
-const uRof = (part, entry, px, side, risk, feeR) => (part ? 0.5 * part + (0.5 * (px - entry) * side) / risk : ((px - entry) * side) / risk) - feeR;
+// R của lệnh (đã chốt phần pf ở part R thì phần còn lại tính theo giá px) — bộ luật cũ chốt 1/2, SW3 chốt 1/3
+const uRof = (part, entry, px, side, risk, feeR, pf = 0.5) => (part ? pf * part + ((1 - pf) * (px - entry) * side) / risk : ((px - entry) * side) / risk) - feeR;
 
 // Các cấu hình bộ tối ưu được thử (R:R × dời hoà vốn) — luôn gồm cấu hình gốc của phiên
 function variantsOf(cfg) {
@@ -449,6 +481,7 @@ export const LEVELS = ["cặp + khung + setup", "khung + setup (mọi cặp)", "
 // session: { startAt, stoppedAt?, cfg } · onProgress(text)
 // Trả về dữ liệu THÔ (lệnh theo R); finalize() ghép giá realtime + tính danh mục.
 export async function runSession(session, onProgress = () => {}) {
+  if (isSW3(session)) return runSW3(session, onProgress);
   const cfg = cfgOf(session);
   const until = session.stoppedAt || Date.now(), startAt = session.startAt;
   const learnFrom = cfg.adaptive ? startAt - cfg.warmupDays * 86400000 : startAt;
@@ -661,18 +694,106 @@ export async function runSession(session, onProgress = () => {}) {
   return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState, pending, skipLog, lessons, lessonsActive, metaNow, metaEvents, trades: cfg.adaptive ? trades : baseTrades, baseTrades, rejected, optLog, optState, skipped, streams, learned: shadows.filter((s) => !s.live).length, at: Date.now() };
 }
 
+// ---------------- Chạy phiên SW3 ----------------
+// Lý do thoát theo vị trí cắt lỗ lúc chạm: chưa chốt 1/3 → cắt lỗ (hoặc giảm lỗ nhờ dời SL); đã chốt → hoà vốn / khoá lời
+function sw3Reason(t, stop) {
+  const lock = ((stop - t.entry) * t.side) / t.risk;
+  if (!t.part) return lock > -0.98 ? "Dời SL theo đáy/đỉnh 20 nến (giảm lỗ)" : "Cắt lỗ";
+  return lock > 0.005 ? "Chốt 1/3 + dời SL khoá lời" : "Chốt 1/3 + hoà vốn";
+}
+const hiPrev = (H, n) => H.map((_, i) => { let m = -Infinity; for (let j = Math.max(0, i - n); j < i; j++) m = Math.max(m, H[j]); return m; }); // đỉnh n nến TRƯỚC nến i
+const loPrev = (L, n) => L.map((_, i) => { let m = Infinity; for (let j = Math.max(0, i - n); j < i; j++) m = Math.min(m, L[j]); return m; });
+async function runSW3(session, onProgress) {
+  const cfg = cfgOf(session), P = cfg.sw, step = TFS["4h"].ms, D1 = TFS["1d"].ms;
+  const until = session.stoppedAt || Date.now(), startAt = session.startAt;
+  const taker = (cfg.feePct + cfg.slipPct) / 100, maker = cfg.makerPct / 100, PF = P.partFrac;
+  const off = new Set(cfg.offStreams || []), coins = cfg.coins.filter((c) => !off.has(`${c}|4h`));
+  const from = startAt - 700 * step; // ~117 ngày trước ngày bắt đầu: làm nóng EMA200 H4 + nối đúng chuỗi "nhịp phá vỡ" đang diễn ra
+  onProgress(`Tải nến H4 ${coins.length} mã + BTC D1…`);
+  const fund = {}, KH = {};
+  let BD = [];
+  await Promise.all([
+    ...coins.map((c) => loadKlines(symOf(c), "4h", from).then((r) => { KH[c] = r; })),
+    loadKlines("BTCUSDT", "1d", startAt - 320 * D1).then((r) => { BD = r; }),
+    ...coins.map((c) => loadFunding(symOf(c), from).then((r) => { fund[c] = fundingSum(r); }).catch(() => { fund[c] = () => 0; })),
+  ]);
+  onProgress("Tính tín hiệu SW3…");
+  BD = BD.filter((k) => k[0] + D1 <= until);
+  const BE = emaArr(BD.map((k) => k[4]), P.btcEma);
+  const btcAt = (tClose) => { let lo = 0, hi = BD.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (BD[m][0] + D1 <= tClose) { r = m; lo = m + 1; } else hi = m - 1; } return r < P.btcEma ? 0 : BD[r][4] > BE[r] ? 1 : -1; }; // nến ngày BTC ĐÃ ĐÓNG gần nhất
+  const trades = [], pending = [], skipLog = [], skipped = {}, streams = [], levels = {};
+  const bump = (k) => { skipped[k] = (skipped[k] || 0) + 1; };
+  for (const coin of coins) {
+    const K = (KH[coin] || []).filter((k) => k[0] + step <= until), n = K.length;
+    if (n < 320) { streams.push({ coin, tf: "4h", bars: n, note: "thiếu dữ liệu" }); continue; }
+    const O = K.map((k) => k[1]), H = K.map((k) => k[2]), L = K.map((k) => k[3]), C = K.map((k) => k[4]), V = K.map((k) => k[5]);
+    const { atr } = atrAdx(H, L, C), E = emaArr(C, P.emaH4), VM = smaArr(V, P.volN), HH = hiPrev(H, P.brkN), LL = loPrev(L, P.brkN);
+    const trailAt = (k, side) => { let m = side === 1 ? Infinity : -Infinity; for (let j = Math.max(0, k - P.trailN + 1); j <= k; j++) m = side === 1 ? Math.min(m, L[j]) : Math.max(m, H[j]); return m; }; // đáy/đỉnh 20 nến gần nhất tính tới nến k (đã đóng)
+    levels[coin] = { barAt: K[n - 1][0], lo: trailAt(n - 1, 1), hi: trailAt(n - 1, -1) }; // bot thật dùng để dời SL sau mỗi nến H4
+    // Mô phỏng 1 lệnh y như bộ kiểm thử nghiên cứu: SL chạm (giá mở nhảy qua SL → khớp giá mở) → chốt 1/3 → dời hoà vốn → dời theo 20 nến
+    const sim = (i, side) => {
+      const e = i + 1, en = O[e], risk = P.stopAtr * atr[i], feeIn = taker * en, p1 = en + side * P.partR * risk;
+      let stop = en - side * risk, half = false, booked = 0, pFee = 0, mfe = 0, mae = 0;
+      for (let k = e; k < n; k++) {
+        if (side === 1 ? L[k] <= stop : H[k] >= stop) {
+          const px0 = side === 1 ? Math.min(stop, O[k]) : Math.max(stop, O[k]), rem = half ? 1 - PF : 1;
+          return { e, x: k, en, risk, p1, stop, half, px: px0, feeR: (feeIn + pFee + rem * taker * px0) / risk, gross: booked + rem * (((px0 - en) * side - taker * px0 - feeIn) / risk), mfe, mae };
+        }
+        mfe = Math.max(mfe, ((side === 1 ? H[k] : L[k]) - en) * side / risk); mae = Math.max(mae, Math.min(((en - (side === 1 ? L[k] : H[k])) * side) / risk, 1.2));
+        if (!half && (side === 1 ? H[k] >= p1 : L[k] <= p1)) { booked = PF * (((p1 - en) * side - maker * p1 - feeIn) / risk); pFee = PF * maker * p1; half = true; if ((en - stop) * side > 0) stop = en; }
+        const ns = trailAt(k, side); if ((ns - stop) * side > 0) stop = ns;
+      }
+      return { e, x: null, en, risk, p1, stop, half, feeR: (feeIn + pFee) / risk, mfe, mae, open: true };
+    };
+    let occ = -1, nSig = 0;
+    for (let i = 300; i < n; i++) {
+      if (i <= occ) continue;
+      const side = C[i] > HH[i] ? 1 : C[i] < LL[i] ? -1 : 0; if (!side) continue;
+      const live = K[i][0] >= startAt, tc = K[i][0] + step;
+      const brk = ((C[i] - (side === 1 ? HH[i] : LL[i])) * side) / atr[i], vx = V[i] / (VM[i - 1] || Infinity), h4 = C[i] > E[i] ? 1 : -1, btc = btcAt(tc);
+      const tags = { brk: +brk.toFixed(2), vol: +vx.toFixed(2), ema: h4 * side, btc: btc * side };
+      const why3 = `phá vượt ${fmt2(brk)} ATR · volume ${fmt2(vx)}× · ${h4 === 1 ? "trên" : "dưới"} EMA200 H4 · BTC ${btc === 1 ? "trên" : btc === -1 ? "dưới" : "chưa rõ"} EMA50 D1`;
+      const fail = brk < P.brkAtr ? `phá vỡ yếu (${fmt2(brk)} < ${fmt2(P.brkAtr)} ATR)` : vx < P.volX ? `volume thấp (${fmt2(vx)}× < ${fmt2(P.volX)}×)` : h4 !== side ? `ngược EMA200 H4 của ${coin}` : btc !== side ? "ngược xu hướng BTC (EMA50 D1)" : null;
+      const base = { id: `${coin}-4h-${K[i][0]}-SW3`, key: `${coin}|4h`, coin, tf: "4h", setup: "SW3", side, signalAt: K[i][0], tags, why3, cell: `${coin}|4h|SW3`, grp: "4h|SW3" };
+      if (live) nSig++;
+      if (i === n - 1) { // nến tín hiệu VỪA đóng → vào lệnh thị trường ở nến kế (bot thật vào ngay)
+        if (live && !fail) pending.push({ ...base, market: true, lim: C[i], risk: P.stopAtr * atr[i], sl: C[i] - side * P.stopAtr * atr[i], tp: C[i] + side * P.partR * P.stopAtr * atr[i], partR: P.partR, partFrac: PF, until: K[i][0] + 2 * step });
+        else if (live) { bump(failKey(fail)); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: fail }); }
+        break;
+      }
+      const t = sim(i, side); occ = t.open ? Infinity : t.x; // nhịp phá vỡ (kể cả cú bị loại) chiếm mã tới khi thoát theo luật
+      if (!live) continue;
+      if (fail) { bump(failKey(fail)); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: fail }); continue; }
+      const toT = t.open ? until : K[t.x][0] + step, fundR = (fund[coin] ? fund[coin](K[t.e][0], toT) : 0) * side * t.en / t.risk;
+      const r = t.open ? null : t.gross - fundR, last = C[n - 1];
+      const tr = { ...base, entryAt: K[t.e][0], entry: t.en, sl: t.en - side * t.risk, curSl: t.stop, tp: t.p1, risk: t.risk, rr: P.partR, beAtR: 0, part: t.half ? P.partR : 0, pf: PF, be: t.half,
+        exitAt: t.open ? null : K[t.x][0] + step, exit: t.open ? null : t.px, reason: t.open ? "Đang mở" : sw3Reason({ entry: t.en, side, risk: t.risk, part: t.half }, t.stop), r, fundR, feeR: t.feeR + fundR, mfe: t.mfe, mae: t.mae, last, lastBarAt: K[n - 1][0] };
+      tr.uR = t.open ? uRof(tr.part, tr.entry, last, side, tr.risk, tr.feeR, PF) : null;
+      trades.push(tr);
+    }
+    streams.push({ coin, tf: "4h", bars: n, signals: nSig, lastBar: K[n - 1][0] });
+  }
+  trades.sort((a, b) => a.entryAt - b.entryAt);
+  skipLog.sort((a, b) => b.t - a.t); skipLog.length = Math.min(skipLog.length, 400);
+  return { cfg, startAt, until, stopped: !!session.stoppedAt, tfState: [], pending, skipLog, lessons: [], lessonsActive: [], metaNow: {}, metaEvents: [], trades, baseTrades: trades, rejected: [], optLog: [], optState: [], skipped, streams, learned: 0, sw3Levels: levels, at: Date.now() };
+}
+const failKey = (f) => f.replace(/ \(.*\)$/, "").replace(/ của [A-Z0-9]+$/, " của mã"); // gom lý do bỏ (bỏ số đo riêng từng lệnh) cho phễu tín hiệu
+const fmt2 = (v) => (isFinite(v) ? Number(v).toFixed(2).replace(".", ",") : "—");
+
 // Ghép nến đang chạy (WebSocket) vào lệnh đang mở: chạm SL/TP → đóng ngay; còn lại lãi/lỗ theo giá hiện tại.
 // live: { "BTC|5m": {t, h, l, c} } · hits: Map id → lúc phát hiện chạm (giữ thời điểm ổn định giữa các nhịp)
 function applyTick(t, bar, cfg, hits) {
   if (t.exitAt != null || !bar || bar.t <= t.lastBarAt) return t;
-  const side = t.side, slip = cfg.slipPct / 100;
-  const hitSl = ((side === 1 ? bar.l : bar.h) - t.curSl) * side <= 0, hitTp = ((side === 1 ? bar.h : bar.l) - t.tp) * side >= 0;
+  const side = t.side, slip = cfg.slipPct / 100, sw3 = t.setup === "SW3";
+  // SW3: TP chỉ là mức chốt 1/3 (không đóng cả lệnh) → chỉ cắt lỗ / dời SL mới đóng; phần chốt 1/3 cập nhật ở lần tính nến kế
+  const hitSl = ((side === 1 ? bar.l : bar.h) - t.curSl) * side <= 0, hitTp = !sw3 && t.tp != null && ((side === 1 ? bar.h : bar.l) - t.tp) * side >= 0;
   if (hitSl || hitTp) { // cùng chạm trong 1 nến → tính THUA như luật chung
-    const exit = hitSl ? t.curSl * (1 - side * slip) : t.tp;
+    const exit = hitSl ? (sw3 ? t.curSl : t.curSl * (1 - side * slip)) : t.tp; // SW3: trượt giá đã nằm trong phí
     if (!hits.has(t.id)) hits.set(t.id, Date.now());
-    return { ...t, exit, exitAt: hits.get(t.id), reason: hitSl ? (t.be ? (t.part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ") : "Chốt lời", r: uRof(t.part, t.entry, exit, side, t.risk, t.feeR), uR: null, last: bar.c, liveExit: true };
+    const exitFee = sw3 ? (1 - (t.part ? t.pf : 0)) * (cfg.feePct + cfg.slipPct) / 100 * exit / t.risk : 0;
+    return { ...t, exit, exitAt: hits.get(t.id), reason: hitSl ? (sw3 ? sw3Reason(t, t.curSl) : t.be ? (t.part ? "Chốt 1 nửa + hoà vốn" : "Hoà vốn") : "Cắt lỗ") : "Chốt lời", r: uRof(t.part, t.entry, exit, side, t.risk, t.feeR + exitFee, t.pf), uR: null, last: bar.c, liveExit: true };
   }
-  return { ...t, last: bar.c, uR: uRof(t.part, t.entry, bar.c, side, t.risk, t.feeR), mfe: Math.max(t.mfe || 0, (((side === 1 ? bar.h : bar.l) - t.entry) * side) / t.risk) };
+  return { ...t, last: bar.c, uR: uRof(t.part, t.entry, bar.c, side, t.risk, t.feeR, t.pf), mfe: Math.max(t.mfe || 0, (((side === 1 ? bar.h : bar.l) - t.entry) * side) / t.risk) };
 }
 export function finalize(raw, live, hits = new Map()) {
   if (!raw) return null;
@@ -701,8 +822,8 @@ function portfolio(trades, cfg, startAt, until) {
     settle(tr.entryAt);
     const day = dayOf(tr.entryAt);
     if (open.length >= cfg.maxOpen) { taken.push({ ...tr, status: "skip", why: `đủ ${cfg.maxOpen} lệnh mở` }); continue; }
-    if ((dayPnl[day] || 0) <= -(cfg.dailyStopPct / 100) * eq) { taken.push({ ...tr, status: "skip", why: `chạm dừng ngày -${cfg.dailyStopPct}%` }); continue; }
-    const reduced = cfg.streakN > 0 && lossRun >= cfg.streakN;
+    if (cfg.dailyStopPct > 0 && (dayPnl[day] || 0) <= -(cfg.dailyStopPct / 100) * eq) { taken.push({ ...tr, status: "skip", why: `chạm dừng ngày -${cfg.dailyStopPct}%` }); continue; }
+    const reduced = cfg.streakN > 0 && lossRun >= cfg.streakN; // (dailyStopPct 0 = không dừng ngày — SW3)
     const rp0 = reduced ? cfg.streakRiskPct ?? cfg.riskPct / 2 : cfg.riskPct, riskUsd = eq * (Math.min(rp0, cfg.riskBySetup?.[tr.setup] ?? rp0) / 100); // v12: rủi ro riêng theo setup
     let qty = riskUsd / tr.risk; const maxQty = (cfg.maxLev * eq) / tr.entry;
     if (qty > maxQty) qty = maxQty;

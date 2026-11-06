@@ -69,7 +69,7 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
     return { coin, items, best: Math.min(...items.map((r) => order[r.st])), price: items[0]?.price };
   }).sort((a, b) => a.best - b.best);
   const planOf = (r) => (r.open ? { side: r.open.side, entry: r.open.entry, sl: r.open.curSl ?? r.open.sl, tp: r.open.tp, setup: r.open.setup, rr: r.open.uR, at: r.open.entryAt }
-    : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.until } : null);
+    : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.market ? r.pend.tp : r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.until, market: r.pend.market } : null); // SW3: vào lệnh thị trường, TP = mức chốt 1/3
 
   return (
     <Card className="!p-0 overflow-hidden">
@@ -101,13 +101,13 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                         <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
                         {plan ? <>
                           <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "LONG" : "SHORT"}</span>
-                          <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{label}</span>
+                          <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{plan.market && !t ? "VÀO NGAY" : label}</span>
                           <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
                           <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums">
-                            <span>{t ? "vào" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
+                            <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
                             <span className="text-rose-600">SL <b>{fmtPx(plan.sl)}</b></span>
-                            <span className="text-emerald-600">TP <b>{fmtPx(plan.tp)}</b></span>
-                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">huỷ {dt(plan.until).slice(6)}</span> : null}
+                            <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "TP"} <b>{fmtPx(plan.tp)}</b></span>
+                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
                           </span>
                         </> : <>
                           <Clock size={12} className="shrink-0 text-slate-400" />

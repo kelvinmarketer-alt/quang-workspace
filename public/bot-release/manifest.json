@@ -1,7 +1,7 @@
 {
-  "sha": "2ca7673d1d4055a477e2b6c86cadb8575457590f",
-  "date": "2026-10-30T23:59:35+07:00",
-  "msg": "Luật v12: rủi ro riêng theo setup (BREAKOUT/SFP 1%) khi tính khối lượng lệnh",
+  "sha": "40eaa60140b01c5b93f9e17e4a425bb2491a1f91",
+  "date": "2026-11-06T10:00:23+07:00",
+  "msg": "SW3 (sếp duyệt 06/11, rủi ro 1%): vào lệnh thị trường khi nến H4 tín hiệu đóng → SL 2 ATR (STOP_MARKET) + lệnh giới hạn reduceOnly chốt 1/3 ở +0,75R → khớp thì dời SL về giá vào → mỗi nến H4 đóng dời SL theo đáy/đỉnh 20 nến (raw.sw3Levels từ Demo, quy đổi giá testnet), chỉ dời theo hướng có lợi, giá đã qua mức mới thì đóng thị trường; SW3 không time stop, dừng ngày 0 = tắt; đồng bộ luật SW3 từ app",
   "files": [
     {
       "path": "README.md",
@@ -25,15 +25,15 @@
     },
     {
       "path": "lib/binance.js",
-      "sha": "aa9e2900069248cb0b31b93e6eb87cb2ca05d2af"
+      "sha": "c76edf74ff070a7179a3b7e84fe933030ca88eec"
     },
     {
       "path": "lib/main.js",
-      "sha": "454316991397fdc0f093e3cb82b3e1d0270512d6"
+      "sha": "e39f14f9d66038ee7aaf6e5c66bd3897d479ff01"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "93c387f62bc1ae6edb613c38bd70173535ac94d0"
+      "sha": "3dbc8c9106c4ba2dd78b6db91478bbb274ed329d"
     },
     {
       "path": "lib/report.js",
@@ -53,7 +53,7 @@
     },
     {
       "path": "supabase.sql",
-      "sha": "d896a13e755d0acd64a12f36d5f3a05dcca61621"
+      "sha": "de22e0bac0d79b9e70e0b9c27ad4c2ce9106bca6"
     },
     {
       "path": "windows/install.ps1",

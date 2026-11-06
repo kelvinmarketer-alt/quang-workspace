@@ -98,3 +98,32 @@ describe("công cụ vẽ Coin (06/11)", async () => {
     expect(h.p1).toBeUndefined();
   });
 });
+
+describe("phương pháp SW3 (06/11)", async () => {
+  const { cfgOf, finalize } = await import("../src/lib/paperBot.js");
+  const cfg = cfgOf({ cfg: { strategy: "sw3", riskPct: 1, tfs: ["5m"], setups: ["TREND"] } });
+  const base = { id: "BTC-4h-1-SW3", key: "BTC|4h", coin: "BTC", tf: "4h", setup: "SW3", side: 1, entryAt: 1000, entry: 100, sl: 90, curSl: 90, tp: 107.5, risk: 10, part: 0, pf: 1 / 3, feeR: 0.01, exitAt: null, r: null, lastBarAt: 1000, last: 100 };
+  const raw = (t) => ({ cfg, startAt: 0, until: 2000, stopped: false, trades: [t], baseTrades: [t] });
+  it("cấu hình SW3 luôn H4, không tối ưu, không dừng ngày", () => {
+    expect(cfg.tfs).toEqual(["4h"]);
+    expect(cfg.setups).toEqual(["SW3"]);
+    expect(cfg.adaptive).toBe(false);
+    expect(cfg.dailyStopPct).toBe(0);
+    expect(cfg.maxOpen).toBe(4);
+    expect(cfg.sw.partR).toBe(0.75);
+  });
+  it("chạm mức chốt 1/3 KHÔNG đóng cả lệnh, chạm SL thì đóng", () => {
+    const up = finalize(raw(base), { "BTC|4h": { t: 2000, h: 109, l: 99, c: 108 } }).trades[0];
+    expect(up.exitAt).toBeNull();
+    expect(up.uR).toBeCloseTo(0.8 - 0.01, 5);
+    const dn = finalize(raw({ ...base, part: 0.75, curSl: 100 }), { "BTC|4h": { t: 2000, h: 101, l: 99, c: 99.5 } }, new Map()).trades[0];
+    expect(dn.exitAt).not.toBeNull();
+    expect(dn.reason).toBe("Chốt 1/3 + hoà vốn");
+    expect(dn.r).toBeCloseTo(0.25 - 0.01 - (2 / 3) * 0.0007 * 100 / 10, 5); // 1/3 × 0,75R − phí
+  });
+  it("dừng ngày 0 = không bỏ lệnh nào", () => {
+    const L = [0, 1, 2].map((i) => ({ ...base, id: `x${i}`, coin: `C${i}`, entryAt: 1000 + i, exitAt: 1000 + i + 0.5, r: -1 }));
+    const P = finalize({ cfg, startAt: 0, until: 5000, stopped: true, trades: L, baseTrades: L }, null).portfolio;
+    expect(P.trades.filter((t) => t.status === "skip").length).toBe(0);
+  });
+});
