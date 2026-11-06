@@ -275,6 +275,7 @@ async function scan(posMap, halted) {
     if (why) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"}: ${why}`); journal({ ev: "skip", why, ...p, tags: undefined }); continue; }
     try { await (p.market ? placeSW3(p, symbol) : place(p, symbol)); } catch (e) { log(`Lỗi đặt lệnh ${p.coin}:`, e.message); journal({ ev: "error", msg: e.message, ...p }); note(`⚠ Lỗi đặt lệnh ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}`, `${e.message} · ${modeLbl()}`, `qws-bot-err-${p.id}`); }
   }
+  if (!halted && cfg.strategy === "sw3" && appCfg.followOpen !== false) await followDemoOpen(raw, posMap);
   // dọn danh sách đã xử lý (> 2 ngày)
   for (const [k, t] of Object.entries(S.handled)) if (now() - t > 2 * 86400000) delete S.handled[k];
   for (const [k, t] of Object.entries(S.haltSeen || {})) if (now() - t > 2 * 86400000) delete S.haltSeen[k];
@@ -346,6 +347,49 @@ async function placeSW3(p, symbol) {
   if (o?.status === "FILLED") await protect(symbol, a, Number(o.executedQty), "khớp lệnh thị trường", o); // chưa khớp → vòng quản lý kiểm tra tiếp
   save();
 }
+// 07/11 (sếp: "Demo chạy thì testnet cũng phải có lệnh"): lệnh Demo ĐANG MỞ mà bot chưa có (tín hiệu trước lúc bật bot / bot tắt lúc tín hiệu)
+// → vào thị trường theo, SL = SL hiện tại của Demo, chốt 1/3 = cùng mức giá Demo. Bỏ nếu giá đã tới mức chốt 1/3 hoặc còn cách SL < 0,3R gốc.
+// Mỗi lệnh Demo chỉ theo 1 lần (S.traded); tắt bằng config.followOpen = false.
+async function followDemoOpen(raw, posMap) {
+  S.traded ||= {}; S.followSkip ||= {};
+  const open = (raw.trades || []).filter((t) => t.setup === "SW3" && t.entryAt && t.exitAt == null);
+  const ids = new Set(open.map((t) => t.id));
+  for (const k of Object.keys(S.followSkip)) if (!ids.has(k)) delete S.followSkip[k];
+  for (const t of open) {
+    const symbol = symOf(t.coin);
+    if (S.traded[t.id] || S.active[symbol] || posMap[symbol]) continue;
+    const skip = (why) => { if (S.followSkip[t.id] !== why) { S.followSkip[t.id] = why; log(`· Không theo lệnh Demo ${t.coin} ${dirStr(t.side)}: ${why}`); journal({ ev: "skip", why: `theo Demo: ${why}`, id: t.id, coin: t.coin, tf: t.tf, setup: t.setup, side: t.side }); } };
+    if (Object.keys(S.active).length >= MAX_OPEN) { skip(`đủ ${MAX_OPEN} lệnh`); continue; }
+    const real = await fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json());
+    const m = Number(real.markPrice), sl = t.curSl ?? t.sl, partDone = !!(t.be || t.part > 0);
+    if (!(m > 0) || !((m - sl) * t.side > 0)) { skip("giá đã qua SL của Demo"); continue; }
+    if (!partDone && !((t.tp - m) * t.side > 0)) { skip("giá đã tới mức chốt 1/3 của Demo"); continue; }
+    if (Math.abs(m - sl) < 0.3 * t.risk) { skip("giá còn quá sát SL (< 0,3R)"); continue; }
+    if (DRY) { log(`📌 [thử] theo lệnh Demo ${t.coin} ${dirStr(t.side)} @ ~${m} · SL ${sl}`); S.traded[t.id] = now(); continue; }
+    try { await adoptSW3(t, symbol, m, sl, partDone); } catch (e) { log(`Lỗi theo lệnh Demo ${t.coin}:`, e.message); journal({ ev: "error", msg: e.message, id: t.id, coin: t.coin }); }
+  }
+}
+async function adoptSW3(t, symbol, realMark, sl0, partDone) {
+  const info = await ex.symbolInfo(symbol);
+  let k = 1, mark = realMark;
+  if (MODE === "testnet") { const x = await ex.markPrice(symbol); k = Number(x.markPrice) / realMark; if (!(k > 0.9 && k < 1.1)) k = 1; mark = Number(x.markPrice); }
+  const sl = ex.roundTo(sl0 * k, info.tick), tp = ex.roundTo(t.tp * k, info.tick), dist = Math.abs(mark - sl);
+  const rp = Math.min(riskNow(), cfg.riskByCoin?.[t.coin] ?? Infinity), eq = await equityUsd(), riskUsd = (eq * rp) / 100;
+  const qty = ex.roundTo(Math.min(riskUsd / dist, (MAX_LEV * eq) / mark), info.step, "floor");
+  if (!(qty > 0) || qty * mark < info.minNotional) { log(`· Bỏ theo lệnh Demo ${t.coin}: khối lượng ${qty} quá nhỏ`); S.traded[t.id] = now(); return; }
+  const a = { id: t.id, coin: t.coin, tf: t.tf, setup: "SW3", sw3: true, adopt: true, adoptSl: sl, adoptTp: tp, side: t.side, k, dist, partR: Math.abs(tp - mark) / dist, partFrac: t.pf || 1 / 3, lim: mark, sl, tp, qty, riskUsd: qty * dist, until: now() + 3600000, signalAt: t.signalAt, entryBarAt: t.signalAt, entryCid: cid({ ...t, signalAt: t.signalAt + 1000 }, "E"), stage: "entry", placedAt: now(), mode: MODE, slSeq: 0, partDone, why3: `theo lệnh Demo đang mở (Demo vào ${stamp(t.entryAt)} @ ${px(t.entry)})` };
+  await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
+  await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+  S.traded[t.id] = now();
+  await ex.placeMarket({ symbol, side: sideStr(t.side), quantity: qty, clientId: a.entryCid });
+  S.active[symbol] = a;
+  log(`📌 Theo lệnh Demo ${t.coin} ${dirStr(t.side)} thị trường KL ${qty} · SL ${sl} · chốt 1/3 ở ${partDone ? "(Demo đã chốt)" : tp} · rủi ro ${(qty * dist).toFixed(2)}$ (${rp}%)`);
+  journal({ ev: "placed", ...a });
+  await sleep(1200);
+  const o = await ex.order(symbol, a.entryCid).catch(() => null);
+  if (o?.status === "FILLED") await protect(symbol, a, Number(o.executedQty), "theo lệnh Demo đang mở", o);
+  save();
+}
 // D: hết 4 giờ lệnh chờ chưa khớp (đủ) → huỷ, vào phần còn lại bằng lệnh thị trường; giá vào = giá khớp bình quân. Bot tắt quá 1 giờ sau mốc → bỏ (Demo đã vào lúc khác)
 async function fallbackSW3(symbol, a) {
   await ex.cancel(symbol, a.entryCid).catch(() => {});
@@ -369,7 +413,8 @@ async function fillSW3(symbol, a, qty, why, o) {
   const info = await ex.symbolInfo(symbol);
   if (!o) o = await ex.order(symbol, a.entryCid).catch(() => null);
   const en = Number(o?.avgPrice) > 0 ? Number(o.avgPrice) : a.lim;
-  Object.assign(a, { stage: "open", openedAt: now(), filledQty: qty, lim: en, sl: ex.roundTo(en - a.side * a.dist, info.tick), tp: ex.roundTo(en + a.side * a.partR * a.dist, info.tick), riskUsd: qty * a.dist, q1: ex.roundTo(qty * a.partFrac, info.step, "floor"), partDone: false });
+  if (a.adopt) Object.assign(a, { stage: "open", openedAt: now(), filledQty: qty, lim: en, sl: a.adoptSl, tp: a.adoptTp, dist: Math.abs(en - a.adoptSl), riskUsd: qty * Math.abs(en - a.adoptSl), q1: a.partDone ? 0 : ex.roundTo(qty * a.partFrac, info.step, "floor") }); // theo lệnh Demo: giữ đúng SL / mức chốt của Demo
+  else Object.assign(a, { stage: "open", openedAt: now(), filledQty: qty, lim: en, sl: ex.roundTo(en - a.side * a.dist, info.tick), tp: ex.roundTo(en + a.side * a.partR * a.dist, info.tick), riskUsd: qty * a.dist, q1: ex.roundTo(qty * a.partFrac, info.step, "floor"), partDone: false });
   try { await protectSW3(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/chốt 1/3 ${a.coin}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); throw e; }
   log(`✅ SW3 ${a.coin} ${dirStr(a.side)} ${why} @ ${en} · KL ${qty} · SL ${a.sl} · chốt 1/3 (${a.q1}) ở ${a.tp}`);
   note(`✅ Vào ${dirStr(a.side)} ${a.coin} H4 @ ${px(en)} (${a.limEntry ? `phương án D · ${why}` : "SW3"})`, `SL ${px(a.sl)} · chốt 1/3 ở ${px(a.tp)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${a.why3 || ""} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);

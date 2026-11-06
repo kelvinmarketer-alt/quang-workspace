@@ -1,7 +1,7 @@
 {
-  "sha": "4fff5182056fd0b1e477dce427cc83fec496b6d3",
-  "date": "2026-11-06T11:56:36+07:00",
-  "msg": "Phương án D (sếp duyệt 06/11): SW3 + lệnh chờ M15 + 18 mã — tín hiệu H4 đạt 5 tiêu chí → LIMIT cách giá đóng 0,25 ATR (quy đổi testnet), hết 4 giờ chưa khớp thì huỷ và vào MARKET phần còn lại (fallbackSW3, quá 1 giờ sau mốc thì bỏ); SL 2 ATR từ giá vào thực, dời theo 20 nến H4 tính cả nến tín hiệu; rủi ro riêng theo mã (riskByCoin, 10 mã mới 0,45%); tối đa 10 lệnh (clamp 1–10); cfgSummary gửi riskByCoin. Sửa lỗi lỡ lệnh XRP 06/11: khi bot đang DỪNG/chạm dừng ngày KHÔNG đánh dấu tín hiệu đã xử lý — bấm Chạy lại khi tín hiệu còn hạn thì vẫn vào. Đồng bộ luật D từ app. Thử trên sàn giả: khớp lệnh chờ → SL + chốt 1/3 → hoà vốn → đóng sạch; không hồi → vào thị trường SL đúng 2 ATR; LINK rủi ro 0,45%",
+  "sha": "4026c6c3d5f8a318d69d102ec56358ae3c4f2110",
+  "date": "2026-11-07T00:46:02+07:00",
+  "msg": "Theo lệnh Demo đang mở (sếp 07/11: Demo chạy thì testnet cũng phải có lệnh): lệnh SW3/D Demo đang mở mà bot chưa có → vào thị trường theo, SL = SL hiện tại của Demo, chốt 1/3 = cùng mức giá Demo (Demo đã chốt thì chỉ đặt SL); bỏ nếu giá đã tới mức chốt 1/3 hoặc cách SL < 0,3R gốc; mỗi lệnh Demo chỉ theo 1 lần (S.traded); tắt bằng config.followOpen=false. Thử sàn giả 6 tình huống đạt",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "15a67a9a3bd8f1c438b0773efafdb7039747c144"
+      "sha": "0a104ef7686fd297fcfcd77f6bebd04941988168"
     },
     {
       "path": "lib/paperBot.js",
