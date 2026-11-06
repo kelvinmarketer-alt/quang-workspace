@@ -41,7 +41,8 @@ function FollowNote({ mode, compact }) {
 }
 
 // Bot thật đang "theo Demo" → đổi cấu hình phiên Demo là đổi luôn bot (sau ~5 phút). 01/11: liệt kê thay đổi + hỏi trước.
-async function confirmLiveFollow(oldCfg = {}, newCfg = {}) {
+async function confirmLiveFollow(oldRaw = {}, newRaw = {}) {
+  const oldCfg = oldRaw ? cfgOf({ cfg: oldRaw }) : {}, newCfg = cfgOf({ cfg: newRaw || {} }); // so cấu hình THỰC (đã điền mặc định) — tránh hiện "undefined%"
   const r = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
   if (r.error) return true;
   const c = r.data?.data?.config || {}; // chưa lưu cấu hình riêng = bot đang theo Demo (mặc định)
@@ -51,6 +52,7 @@ async function confirmLiveFollow(oldCfg = {}, newCfg = {}) {
   num("riskPct", "Rủi ro / lệnh", "%"); num("maxOpen", "Tối đa lệnh mở", ""); num("dailyStopPct", "Dừng ngày khi lỗ", "%"); num("maxLev", "Đòn bẩy tối đa", "x");
   const set = (k, lb) => { const a = (oldCfg[k] || []).join("/"), b = (newCfg[k] || []).join("/"); if (a && a !== b) L.push(`${lb}: ${a} → ${b}`); };
   set("coins", "Cặp"); set("tfs", "Khung");
+  if ((oldCfg.sw?.entry || "") !== (newCfg.sw?.entry || "")) L.push(`Cách vào lệnh: ${oldCfg.sw?.entry === "lim" ? "lệnh chờ M15" : "thị trường"} → ${newCfg.sw?.entry === "lim" ? "lệnh chờ M15 (phương án D)" : "thị trường"}`);
   if (!L.length) return true;
   const st = c.mode ? null : await supabase.from("qws_live_bot").select("data").eq("id", "status").maybeSingle();
   const live = (c.mode || st?.data?.data?.mode) === "live";
