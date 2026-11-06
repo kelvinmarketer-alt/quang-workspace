@@ -102,8 +102,12 @@ function RiskRules({ live = false }) {
   const own = live && bot ? Object.fromEntries(["riskPct", "maxOpen", "dailyStopPct", "maxLev"].filter((k) => bot[k] != null).map((k) => [k, Number(bot[k])])) : {};
   const c = { ...base, ...own, ...(live && bot && own.riskPct != null && own.riskPct !== base.riskPct ? { riskBySetup: {} } : {}) };
   const diff = live && bot && ["riskPct", "maxOpen", "dailyStopPct", "maxLev"].some((k) => own[k] != null && own[k] !== Number(base[k]));
-  const rules = [
-    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh${Object.keys(c.riskBySetup || {}).length ? ` (${Object.entries(c.riskBySetup).map(([k, v]) => `${k} ${fmtNum(Math.min(v, c.riskPct), 1, 0)}%`).join(", ")})` : ""}`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh`], ["Dừng ngày", `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%`],
+  const rules = c.strategy === "sw3" ? [ // SW3 (06/11): không có TP cố định / không đuổi giá — quản lý bằng chốt 1/3 + dời SL
+    ["Rủi ro", `${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh, mỗi mã 1`], ["Dừng ngày", Number(c.dailyStopPct) > 0 ? `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%` : "không dừng ngày"],
+    ["Cắt lỗ", `${fmtNum(c.sw?.stopAtr, 1, 0)} ATR H4, luôn đặt trên sàn`], ["Chốt lời", `1/3 ở +${fmtNum(c.sw?.partR, 2, 0)}R rồi hoà vốn`], ["Phần còn lại", `dời SL theo đáy/đỉnh ${c.sw?.trailN} nến H4`],
+    ["Xu hướng", "thuận EMA200 H4 + BTC EMA50 D1"], ["Ví", "chỉ Futures, không đụng Spot"],
+  ] : [
+    ["Rủi ro",`${fmtNum(c.riskPct, 1, 0)}% vốn / lệnh${Object.keys(c.riskBySetup || {}).length ? ` (${Object.entries(c.riskBySetup).map(([k, v]) => `${k} ${fmtNum(Math.min(v, c.riskPct), 1, 0)}%`).join(", ")})` : ""}`], ["Cùng lúc", `tối đa ${c.maxOpen} lệnh`], ["Dừng ngày", `khi lỗ ${fmtNum(c.dailyStopPct, 1, 0)}%`],
     ["Chốt lời", `R:R 1:${fmtNum(c.rr, 1, 0)}`], ["Cắt lỗ", `SL ≥ ${fmtNum(c.minSlAtr, 1, 0)} ATR, luôn đặt`], ["Không đuổi giá", `≤ ${fmtNum(c.maxExtAtr, 1, 0)} ATR từ EMA50`],
     ...(c.d1Bias ? [["Xu hướng", "chỉ thuận D1"]] : []), ["Ví", "chỉ Futures, không đụng Spot"],
   ];
