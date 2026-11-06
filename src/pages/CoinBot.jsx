@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle, History } from "lucide-react";
+import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle, History, Trash2 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import BotSignalBoard from "../components/BotSignalBoard.jsx";
@@ -601,8 +601,17 @@ export default function CoinBot({ active: visible = true }) {
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Demo tự động.</div></Card>;
   if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
-  if (!session || (config && isOwner)) return <SetupForm initial={session?.cfg} follow={follow} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} />;
+  // 06/11: xoá lịch sử Demo (sếp yêu cầu, làm lại phương pháp mới) — giữ 1 bản dự phòng ẩn settings.paperBotArchive để khôi phục nếu bấm nhầm
+  const archive = isOwner && !session ? settings.paperBotArchive : null;
+  const restore = async () => { if (await ask(`Khôi phục phiên Demo đã xoá lúc ${dt(archive.removedAt)}?`, { ok: "Khôi phục" })) { saveWithLog(archive.session, "Khôi phục lịch sử Demo"); setSettings({ paperBotArchive: null }); } };
+  if (!session || (config && isOwner)) return <>{archive?.session && <Card className="!p-3 mb-3"><div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-500"><History size={14} className="text-slate-400" /> Đã xoá lịch sử Demo lúc <b className="text-slate-700">{dt(archive.removedAt)}</b> — app còn giữ 1 bản dự phòng. <button onClick={restore} className="font-bold text-indigo-600">Khôi phục</button></div></Card>}<SetupForm initial={session?.cfg} follow={follow} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} /></>;
 
+  const wipe = async () => {
+    const n = P ? P.trades.filter((t) => t.status !== "skip").length : null;
+    if (!(await ask(`Xoá lịch sử giao dịch Demo?\n${n != null ? `${n} lệnh` : "Toàn bộ lệnh"} từ ${dt(session.startAt)} sẽ không hiện nữa (Demo, Tổng quan Coin, biểu đồ). Bot thật không bị ảnh hưởng.\nApp giữ 1 bản dự phòng ẩn — bấm "Khôi phục" nếu cần lấy lại.`, { ok: "Xoá lịch sử", danger: true }))) return;
+    setSettings({ paperBotArchive: { session, removedAt: Date.now() } });
+    saveWithLog(null, "Xoá lịch sử Demo");
+  };
   const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.\nBot thật KHÔNG dừng theo — muốn dừng bot thật vào tab Bot thật.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
   const eqNow = P ? P.equity + P.unrealized : null, pnl = eqNow != null ? eqNow - cfg.capital : null;
   const open = P ? P.trades.filter((t) => t.status === "open") : [];
@@ -624,7 +633,7 @@ export default function CoinBot({ active: visible = true }) {
           {cfg.adaptive && <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"><Brain size={11} /> Tự tối ưu</span>}
           <div className="ml-auto flex gap-1.5">
             <button onClick={run} disabled={!!busy} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[12px] font-bold text-slate-600 disabled:opacity-50"><RefreshCw size={13} className={busy ? "animate-spin" : ""} /> Cập nhật</button>
-            {!isOwner ? <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[12px] font-bold text-sky-700">Chỉ xem</span> : session.stoppedAt ? <button onClick={() => setConfig(true)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Play size={13} /> Phiên mới</button>
+            {!isOwner ? <span className="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[12px] font-bold text-sky-700">Chỉ xem</span> : session.stoppedAt ? <><button onClick={wipe} className="flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-[12px] font-bold text-rose-600 hover:bg-rose-50"><Trash2 size={13} /> Xoá lịch sử</button><button onClick={() => setConfig(true)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Play size={13} /> Phiên mới</button></>
               : <button onClick={stop} className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Square size={12} /> Dừng</button>}
           </div>
         </div>
