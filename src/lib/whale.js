@@ -9,7 +9,8 @@ const FAPI = "https://fapi.binance.com";
 const OI_PERIOD = { "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "1d" };
 const TF_SEC = { "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800 };
 // Ngưỡng "lệnh lớn" theo giá trị USD 1 lần khớp (gộp aggTrade): BTC/ETH thanh khoản rất dày nên ngưỡng cao hơn
-export const bigMin = (sym) => ({ BTC: 500000, ETH: 250000, SOL: 150000, XAU: 150000, BNB: 100000, XRP: 100000, DOGE: 100000 })[sym] ?? 50000;
+// (07/11 đo giờ vắng: BTC ~140 lệnh/phút, lớn nhất ~250K$ → ngưỡng 500K gần như không có chấm nào)
+export const bigMin = (sym) => ({ BTC: 200000, ETH: 150000, SOL: 75000, XAU: 75000, BNB: 75000, XRP: 75000, DOGE: 75000 })[sym] ?? 30000;
 
 // CVD từ nến: [{ time, value }] — cộng dồn trong 300 nến đang hiện
 export function cvdOf(candles) {
