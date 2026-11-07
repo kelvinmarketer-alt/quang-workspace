@@ -47,7 +47,7 @@ function demoTrades(session) {
   return p;
 }
 
-const NONE = []; // mảng rỗng cố định (tắt lớp) — tránh vẽ lại biểu đồ mỗi lần render
+const NONE = [], NOFLOW = {}; // mảng rỗng cố định (tắt lớp) — tránh vẽ lại biểu đồ mỗi lần render
 
 const TONE = { slate: "text-slate-700", emerald: "text-emerald-600", rose: "text-rose-600", amber: "text-amber-600", indigo: "text-indigo-600" };
 
@@ -446,7 +446,7 @@ export default function CoinMarket({ active = true }) {
   const setGrid = (g) => { setGridState(g); saveGrid(g); };
   const multi = grid.n > 1;
   const [flowOn, setFlowOn] = useState(loadFlows);
-  const { flow, w: whale, fut: flowFut } = useFlow(sym, tf, usedMkt, data.key === key ? data.ltf : NONE, multi ? {} : flowOn); // dấu chân dòng tiền lớn — chỉ biểu đồ 1 ô
+  const { flow, w: whale, fut: flowFut } = useFlow(sym, tf, usedMkt, data.key === key ? data.ltf : NONE, multi ? NOFLOW : flowOn); // dấu chân dòng tiền lớn (lưới: từng ô tự lấy)
   const setLayout = (n) => {
     const active = grid.active < n ? grid.active : 0; // ô đang chọn mang theo coin/khung đang xem
     setGrid({ ...grid, n, active, cells: grid.cells.map((c, j) => (j === active ? { sym, tf } : c)) });
@@ -604,8 +604,9 @@ export default function CoinMarket({ active = true }) {
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid grid={grid} setGrid={setGrid} mkt={mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} />
+              <ChartGrid grid={grid} setGrid={setGrid} mkt={mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />} />
+              <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />
             </div>
           ) : err ? (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>

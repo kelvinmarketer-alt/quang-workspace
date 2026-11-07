@@ -93,7 +93,7 @@ export const FLOWS = [
   ["badge", "Funding · L/S", "#64748b", "Nhãn góc trái: funding hiện tại, OI 24h, tỉ lệ Long/Short của tài khoản lớn (top trader)"],
 ];
 export const loadFlows = () => ({ delta: false, cvd: true, oi: false, big: true, liq: true, badge: true, ...(ls.get("qws_mkt_flow", {}) || {}) });
-export function FlowBar({ on, setOn, fut, w }) {
+export function FlowBar({ on, setOn, fut, w, grid }) {
   const flip = (k) => setOn((o) => { const n = { ...o, [k]: !o[k] }; ls.set("qws_mkt_flow", n); return n; });
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1 text-[10.5px] font-semibold text-slate-400">
@@ -104,7 +104,7 @@ export function FlowBar({ on, setOn, fut, w }) {
           <span style={{ color: on[k] && !need ? color : undefined }}>{k === "big" ? "●" : k === "liq" ? "■" : "━"}</span>{label}
         </button>
       ); })}
-      <span className="ml-auto hidden sm:inline">{on.big || on.liq ? `lệnh lớn ≥ ${usdK(w.min)}$ · đã ghi ${w.big.length} lệnh lớn${fut ? `, ${w.liq.length} thanh lý` : ""} từ lúc mở · ` : ""}chỉ để tham khảo</span>
+      <span className="ml-auto hidden sm:inline">{on.big || on.liq ? `lệnh lớn ≥ ${usdK(w.min)}$ · đã ghi ${w.big.length} lệnh lớn${fut ? `, ${w.liq.length} thanh lý` : ""} từ lúc mở · ` : ""}{grid ? "CVD/OI hiện khi phóng to ô · " : ""}chỉ để tham khảo</span>
     </div>
   );
 }
@@ -418,8 +418,8 @@ function useCells(sym, tf, mkt, active) {
   return st;
 }
 
-const EMPTY = [];
-function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height }) {
+const EMPTY = [], NOFLOW = {};
+function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn }) {
   const { sym, tf } = cell;
   const st = useCells(sym, tf, mkt, active);
   const ta = useMemo(() => (st.candles.length > 30 ? analyze(st.candles) : null), [st.candles]);
@@ -428,6 +428,7 @@ function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, activ
   const chg = last && prev ? ((last.close - prev.close) / prev.close) * 100 : null;
   const lines = useMemo(() => buildLines({ levels: ta?.series.levels || [], ai, tags, compact }), [ta, ai, tags, compact]);
   const coins = watch.includes(sym) ? watch : [sym, ...watch];
+  const { flow } = useFlow(sym, tf, st.market, st.candles, flowOn || NOFLOW);
   return (
     <div onPointerDownCapture={() => !selected && onPick(i)} className={`w-full min-w-0 shrink-0 snap-center rounded-xl border bg-white p-2 sm:w-auto ${selected ? "border-amber-400 ring-2 ring-amber-200" : "border-slate-200"}`}>
       <div className="flex flex-wrap items-center gap-1.5" onDoubleClick={() => onFocus(i)}>
@@ -448,7 +449,7 @@ function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, activ
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} className={`w-full ${height}`} />
+          <CandleChart candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
         </>)}
       </div>
     </div>
@@ -464,7 +465,7 @@ export function LayoutPicker({ n, setN }) {
   );
 }
 
-export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive }) {
+export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn }) {
   const { n, cells, link, labels } = grid;
   const [focus, setFocus] = useState(null);
   const scroller = useRef(null);
@@ -486,7 +487,8 @@ export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, draw
       <div ref={scroller} className={`flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto sm:grid sm:overflow-visible ${cols}`}>
         {shown.map((i) => (
           <GridCell key={i} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
-            ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height} />
+            ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height}
+            flowOn={flowOn && (focus === i || n <= 2 ? flowOn : { ...flowOn, cvd: false, oi: false })} />
         ))}
       </div>
       {focus == null && n > 1 && (

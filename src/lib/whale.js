@@ -23,6 +23,45 @@ const getJson = async (url) => { const r = await fetch(url); if (!r.ok) throw ne
 const STORE = new Map(); // pair → { big: [], liq: [] }
 const storeOf = (pair) => { let s = STORE.get(pair); if (!s) STORE.set(pair, (s = { big: [], liq: [] })); return s; };
 
+// Kết nối WebSocket chung: key = sàn|mã → { ws, subs, dead }; ô cuối cùng rời đi thì đóng
+const WS = new Map();
+function wsJoin(pair, fut, min, cb) {
+  const key = `${fut ? "f" : "s"}|${pair}`;
+  let c = WS.get(key);
+  if (!c) {
+    const s = storeOf(pair), lo = pair.toLowerCase();
+    const url = fut ? `wss://fstream.binance.com/market/stream?streams=${lo}@aggTrade/${lo}@forceOrder` : `wss://stream.binance.com:9443/stream?streams=${lo}@aggTrade`; // Binance Futures chuyển luồng thị trường sang /market (đường /stream cũ không còn gửi — thử 07/11)
+    c = { subs: new Set(), dead: false, retry: null, ws: null };
+    const ping = () => c.subs.forEach((f) => f());
+    const open = () => {
+      c.ws = new WebSocket(url);
+      c.ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        const d = m.data || m;
+        if (d.e === "aggTrade") {
+          const usd = +d.p * +d.q; if (usd < min) return;
+          s.big.push({ t: Math.floor(d.T / 1000), price: +d.p, usd, buy: !d.m }); // m = bên mua là maker → lệnh BÁN chủ động
+          if (s.big.length > 400) s.big.splice(0, s.big.length - 400);
+          ping();
+        } else if (d.e === "forceOrder") {
+          const o = d.o, usd = +o.ap * +o.z || +o.p * +o.q;
+          s.liq.push({ t: Math.floor(o.T / 1000), price: +o.ap || +o.p, usd, longLiq: o.S === "SELL" }); // lệnh SELL bắt buộc = long bị thanh lý
+          if (s.liq.length > 400) s.liq.splice(0, s.liq.length - 400);
+          ping();
+        }
+      };
+      c.ws.onclose = () => { if (!c.dead) c.retry = setTimeout(open, 5000); };
+    };
+    open();
+    WS.set(key, c);
+  }
+  c.subs.add(cb);
+  return () => {
+    c.subs.delete(cb);
+    if (!c.subs.size) { c.dead = true; clearTimeout(c.retry); try { c.ws?.close(); } catch { /* đã đóng */ } WS.delete(key); }
+  };
+}
+
 // on: { oi, big, liq } — chỉ mở kết nối cho lớp đang bật
 export function useWhale(sym, tf, market, on) {
   const pair = pairOf(sym), fut = market === "futures";
@@ -58,36 +97,11 @@ export function useWhale(sym, tf, market, on) {
     return () => { off = true; clearInterval(t); };
   }, [pair, tf, fut, on.oi, on.badge]);
 
-  // WebSocket: lệnh lớn (aggTrade) + thanh lý (forceOrder, chỉ Futures)
+  // WebSocket dùng chung theo mã (nhiều ô cùng coin chỉ 1 kết nối): lệnh lớn (aggTrade) + thanh lý (forceOrder, chỉ Futures)
   useEffect(() => {
     if (!on.big && !on.liq) return;
-    const s = storeOf(pair), min = bigMin(sym.toUpperCase().replace(/USDT$/, "")), lo = pair.toLowerCase();
-    const streams = [on.big && `${lo}@aggTrade`, on.liq && fut && `${lo}@forceOrder`].filter(Boolean).join("/");
-    if (!streams) return;
-    const url = fut ? `wss://fstream.binance.com/market/stream?streams=${streams}` : `wss://stream.binance.com:9443/stream?streams=${streams}`;
-    let ws, dead = false, retry;
     const bump = () => { if (!pend.current) { pend.current = true; setTimeout(() => { pend.current = false; setTick((x) => x + 1); }, 1500); } };
-    const open = () => {
-      ws = new WebSocket(url);
-      ws.onmessage = (ev) => {
-        let m; try { m = JSON.parse(ev.data); } catch { return; }
-        const d = m.data || m;
-        if (d.e === "aggTrade") {
-          const usd = +d.p * +d.q; if (usd < min) return;
-          s.big.push({ t: Math.floor(d.T / 1000), price: +d.p, usd, buy: !d.m }); // m = bên mua là maker → lệnh BÁN chủ động
-          if (s.big.length > 400) s.big.splice(0, s.big.length - 400);
-          bump();
-        } else if (d.e === "forceOrder") {
-          const o = d.o, usd = +o.ap * +o.z || +o.p * +o.q;
-          s.liq.push({ t: Math.floor(o.T / 1000), price: +o.ap || +o.p, usd, longLiq: o.S === "SELL" }); // lệnh SELL bắt buộc = long bị thanh lý
-          if (s.liq.length > 400) s.liq.splice(0, s.liq.length - 400);
-          bump();
-        }
-      };
-      ws.onclose = () => { if (!dead) retry = setTimeout(open, 5000); };
-    };
-    open();
-    return () => { dead = true; clearTimeout(retry); try { ws?.close(); } catch { /* đã đóng */ } };
+    return wsJoin(pair, fut, bigMin(sym.toUpperCase().replace(/USDT$/, "")), bump);
   }, [pair, fut, on.big, on.liq, sym]);
 
   const s = storeOf(pair);
