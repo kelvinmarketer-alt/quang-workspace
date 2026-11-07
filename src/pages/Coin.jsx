@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck, Cpu } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -82,8 +82,10 @@ const CoinMarket = lazy(() => import("./CoinMarket.jsx"));
 const CoinBot = lazy(() => import("./CoinBot.jsx"));
 // Tab "Bot thật": theo dõi bot giao dịch chạy trên VPS (chỉ chủ)
 const CoinLive = lazy(() => import("./CoinLive.jsx"));
+// Tab "EA MT5" (07/11, chỉ chủ): EA QWS_Gop chạy trong MT5 trên máy bàn — bảng Supabase qws_mt5_bot
+const CoinMT5 = lazy(() => import("./CoinMT5.jsx"));
 
-const COIN_TABS = ["overview", "invest", "market", "bot", "live"];
+const COIN_TABS = ["overview", "invest", "market", "bot", "live", "mt5"];
 // Tab "Tổng quan" (chỉ chủ): tài sản + bot thật + demo + cảnh báo giá trong 1 màn hình
 const CoinOverview = lazy(() => import("./CoinOverview.jsx"));
 
@@ -126,7 +128,7 @@ function RiskRules({ live = false }) {
 export default function Coin() {
   const { isOwner, perms = [] } = useData();
   // Tab theo quyền (21/10): chủ thấy hết; thành viên thấy tab được cấp (Tổng quan Coin luôn chỉ chủ)
-  const allowTab = { overview: isOwner, invest: isOwner || perms.includes("coinInvest"), market: isOwner || perms.includes("coinMarket"), bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive") };
+  const allowTab = { overview: isOwner, invest: isOwner || perms.includes("coinInvest"), market: isOwner || perms.includes("coinMarket"), bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive"), mt5: isOwner };
   // ?tab=live|bot|market|invest (vd link từ thông báo đẩy) → mở đúng tab; không có thì nhớ tab lần trước
   const [sp, setSp] = useSearchParams();
   const qTab = sp.get("tab");
@@ -150,8 +152,8 @@ export default function Coin() {
   return (
     <div className="bento space-y-3 p-3 sm:space-y-4 sm:p-5">
       <div className="flex items-stretch gap-1 sm:gap-2">
-      <div className={`flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-5"}`}>
-        {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (
+      <div className={`flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-none bg-white/70 p-1 shadow-sm [scrollbar-width:none] sm:grid sm:overflow-visible sm:rounded-2xl ${["", "sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4", "sm:grid-cols-5", "sm:grid-cols-6"][COIN_TABS.filter((k) => allowTab[k]).length] || "sm:grid-cols-6"}`}>
+        {[["overview", "Tổng quan", LayoutDashboard, "Tổng quan"], ["invest", "Đầu tư", Wallet, "Đầu tư"], ["market", "Thị trường", CandlestickChart, "Thị trường"], ["bot", "Demo tự động", Bot, "Demo"], ["live", "Bot thật", Radio, "Bot thật"], ["mt5", "EA MT5", Cpu, "MT5"]].filter(([k]) => allowTab[k]).map(([k, label, Icon, short]) => (
           <button key={k} onClick={() => pick(k)} className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-extrabold transition sm:flex-row sm:gap-1.5 sm:py-2 sm:text-sm ${cur === k ? "tab-active bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow" : "text-slate-500 hover:text-slate-800"}`}>
             <Icon size={16} className="shrink-0" /> <span className="whitespace-nowrap sm:hidden">{short}</span><span className="hidden whitespace-nowrap sm:inline">{label}</span>
           </button>
@@ -166,7 +168,8 @@ export default function Coin() {
       {allowTab.market && (seen.market || cur === "market") && <div className={cur === "market" ? "" : "hidden"}><Suspense fallback={fb}><CoinMarket active={cur === "market"} /></Suspense></div>}
       {allowTab.bot && (seen.bot || cur === "bot") && <div className={cur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "bot"} /></Suspense></div>}
       {allowTab.live && (seen.live || cur === "live") && <div className={cur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "live"} /></Suspense></div>}
-      {cur !== "invest" && <RiskRules live={cur === "live"} />}
+      {isOwner && (seen.mt5 || cur === "mt5") && <div className={cur === "mt5" ? "" : "hidden"}><Suspense fallback={fb}><CoinMT5 active={cur === "mt5"} /></Suspense></div>}
+      {cur !== "invest" && cur !== "mt5" && <RiskRules live={cur === "live"} />}
     </div>
   );
 }
