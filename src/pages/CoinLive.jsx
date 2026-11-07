@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown, XOctagon, ListChecks, BarChart3, GitCompare, BellRing } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -218,6 +219,7 @@ export default function CoinLive({ active }) {
           <div key={a.sym} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
             <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge><span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span>{a.stage === "open" && st.posPnl?.[a.sym] && <b className={`tabular-nums ${tone(st.posPnl[a.sym].uPnl)}`}>{fmtUsdSigned(st.posPnl[a.sym].uPnl)}</b>}</div>
             <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">SL {fmtPx(a.sl)}</span><span className="text-emerald-600">{a.sw3 ? `Chốt 1/3 ${fmtPx(a.tp)}${a.partDone ? " ✓" : ""}` : `TP ${fmtPx(a.tp)}`}</span><span>KL {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400">huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+            {a.sw3 && a.stage === "open" && (() => { const g = sw3Targets(a.lim, a.side, a.dist); return g && <div className="mt-1 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums"><span className="text-emerald-600" title="Không phải lệnh trên sàn — mốc kỳ vọng theo lịch sử 2.100 lệnh D">TP kỳ vọng <b>{fmtPx(g.avg)}</b> (+{SW3_TP.avgR.toLocaleString("vi-VN")}R)</span><span className="text-teal-600">Mục tiêu xa {fmtPx(g.far)} (+{SW3_TP.farR.toLocaleString("vi-VN")}R)</span></div>; })()}
             {a.sw3 && a.stage === "open" && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt TP — SL trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm SL.</div>}
           </div>
         ))}</div> : <div className="py-3 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần). Lệnh chờ / đang chạy sẽ hiện ngay tại đây.

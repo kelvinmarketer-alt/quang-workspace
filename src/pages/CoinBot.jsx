@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle, History, Trash2 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -90,6 +91,9 @@ function OpenCard({ t, lv }) {
       <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
       <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
       <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
+      {t.setup === "SW3" && (() => { const g = sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)); if (!g) return null; const d = (x) => fmtNum(((x - t.last) / t.last) * 100 * t.side, 2, 2); return (
+        <div className="mt-1 flex flex-wrap justify-between gap-x-2 text-[11px] tabular-nums"><span className="text-emerald-600" title="Không phải lệnh trên sàn. Lịch sử 2.100 lệnh D: lệnh đã chốt 1/3 và có lãi thì phần còn lại đóng trung bình ở +1,5R">TP kỳ vọng <b>{px(g.avg)}</b> (+{fmtNum(SW3_TP.avgR, 1, 1)}R){(g.avg - t.last) * t.side > 0 ? ` · còn ${d(g.avg)}%` : " ✓ đã vượt"}</span><span className="text-teal-600" title="10% lệnh D tốt nhất trong lịch sử chạy tới mức này">Mục tiêu xa {px(g.far)} (+{fmtNum(SW3_TP.farR, 1, 1)}R){(g.far - t.last) * t.side > 0 ? ` · còn ${d(g.far)}%` : " ✓"}</span></div>
+      ); })()}
       {t.setup === "SW3" && (() => { const lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null, nb = t.side === 1 ? "đáy" : "đỉnh"; return (
         <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{t.part ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt TP — giữ tới khi chạm SL. SL tự dời theo {nb} 20 nến H4{lvl != null && isFinite(lvl) ? <> (hiện <b className="tabular-nums">{px(lvl)}</b>{(lvl - t.curSl) * t.side > 0 ? "" : ` — SL chỉ dời khi mốc này ${t.side === 1 ? "lên trên" : "xuống dưới"} ${px(t.curSl)}`})</> : ""}, chỉ dời theo hướng có lợi.</div>
       ); })()}
@@ -153,6 +157,8 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus,
       const tag = `${t.side === 1 ? "LONG" : "SHORT"}`;
       L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: t.be ? "SL (hoà vốn)" : "SL" }, { price: t.tp, color: "#059669", title: t.setup === "SW3" && t.part ? "Đã chốt 1/3" : tpLbl(t) });
       const lv = !t.exitAt && t.setup === "SW3" ? trail?.[t.coin] : null, lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null;
+      const g = t.setup === "SW3" && !t.exitAt ? sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)) : null;
+      if (g) L.push({ price: g.avg, color: "#10b981", title: `TP kỳ vọng +${fmtNum(SW3_TP.avgR, 1, 1)}R`, style: 2 }, { price: g.far, color: "#14b8a6", title: `Mục tiêu xa +${fmtNum(SW3_TP.farR, 1, 1)}R`, style: 3 });
       if (lvl != null && isFinite(lvl) && Math.abs(lvl - (t.curSl ?? t.sl)) > 1e-9) L.push({ price: lvl, color: "#a855f7", title: `Mốc dời SL (${t.side === 1 ? "đáy" : "đỉnh"} 20 nến H4)`, style: 1 });
     }
     for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
