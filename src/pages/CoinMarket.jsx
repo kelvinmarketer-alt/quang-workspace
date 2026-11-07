@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Term } from "../components/Term.jsx";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -697,22 +698,22 @@ export default function CoinMarket({ active = true }) {
           <Card className={`!p-3 transition-opacity ${stale ? "opacity-40" : ""}`}>
             <div className="space-y-2.5">
               <Group title="Xu hướng">
-                <Row label="Cấu trúc" value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />
-                <Row label="EMA 20/50" value={s.ema.stack.split(" ")[0]} tone={s.ema.stack.startsWith("tăng") ? "emerald" : s.ema.stack.startsWith("giảm") ? "rose" : "slate"} sub={`${px(s.ema.e20)} / ${px(s.ema.e50)}`} />
-                <Row label="Bộ lọc EA" value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${fmtNum(s.trendFilter.adx, 0)}${s.trendFilter.adxOk ? " ✓" : " yếu"} · ${s.sideway.isSideway ? "sideway" : "có xu hướng"}`} />
-                <Row label="Vùng giá 100 nến" value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} />
+                <Row label={<Term k="smc">Cấu trúc</Term>} value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${({ BOS: "Tiếp diễn", CHoCH: "Đảo chiều" })[s.structure.lastEvent.kind] || s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />
+                <Row label={<Term k="ema20">TB 20/50 nến</Term>} value={s.ema.stack.split(" ")[0]} tone={s.ema.stack.startsWith("tăng") ? "emerald" : s.ema.stack.startsWith("giảm") ? "rose" : "slate"} sub={`${px(s.ema.e20)} / ${px(s.ema.e50)}`} />
+                <Row label={<Term k="eaFilter" />} value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${fmtNum(s.trendFilter.adx, 0)}${s.trendFilter.adxOk ? " ✓" : " yếu"} · ${s.sideway.isSideway ? "sideway" : "có xu hướng"}`} />
+                <Row label={<Term k="range" />} value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} />
               </Group>
               <Group title="Động lượng & khối lượng">
-                <Row label="RSI 14" value={fmtNum(rsiV, 1)} tone={rsiV > 70 ? "rose" : rsiV < 30 ? "emerald" : "slate"} sub={rsiV > 70 ? "quá mua" : rsiV < 30 ? "quá bán" : s.momentum.divergence[0] || "trung tính"} />
-                <Row label="MACD" value={s.momentum.macdHist > 0 ? "dương" : "âm"} tone={s.momentum.macdHist > 0 ? "emerald" : "rose"} sub={s.momentum.macdCross ? `${s.momentum.macdCross.dir} ${s.momentum.macdCross.ago} nến trước` : (Math.abs(s.momentum.macdHist) > Math.abs(s.momentum.macdHistPrev || 0) ? "đang mạnh lên" : "đang yếu đi")} />
+                <Row label={<Term k="rsi" />} value={fmtNum(rsiV, 1)} tone={rsiV > 70 ? "rose" : rsiV < 30 ? "emerald" : "slate"} sub={rsiV > 70 ? "quá mua" : rsiV < 30 ? "quá bán" : s.momentum.divergence[0] || "trung tính"} />
+                <Row label={<Term k="macd" />} value={s.momentum.macdHist > 0 ? "dương" : "âm"} tone={s.momentum.macdHist > 0 ? "emerald" : "rose"} sub={s.momentum.macdCross ? `${s.momentum.macdCross.dir} ${s.momentum.macdCross.ago} nến trước` : (Math.abs(s.momentum.macdHist) > Math.abs(s.momentum.macdHistPrev || 0) ? "đang mạnh lên" : "đang yếu đi")} />
                 <Row label="Khối lượng nến đóng" value={`${fmtNum(s.volume.relVolLastClosed, 2)}× TB`} tone={s.volume.relVolLastClosed > 1.5 ? "amber" : "slate"} sub={`mua chủ động 20 nến ${fmtPct((s.volume.buyRatio20 || 0) * 100, 0)}`} />
-                <Row label="Biến động ATR" value={fmtPct(s.volatility.atrPct, 2)} sub={px(s.volatility.atr)} />
+                <Row label={<Term k="atr">Biến động (ATR)</Term>} value={fmtPct(s.volatility.atrPct, 2)} sub={px(s.volatility.atr)} />
               </Group>
               <Group title="Vùng giá quan trọng">
-                <Row label="Key Volume" value={s.keyVolume.maxVolume100 ? `${px(s.keyVolume.maxVolume100.bottom)}–${px(s.keyVolume.maxVolume100.top)}` : "—"} tone="amber" sub={s.keyVolume.maxVolume100 ? `${fmtNum(s.keyVolume.maxVolume100.volX, 1)}× TB${s.keyVolume.maxVolume100.defended ? " · đã được bảo vệ" : ""}` : ""} />
-                <Row label="Protected H / L" value={`${px(s.protected.protectedHigh?.price)} / ${px(s.protected.protectedLow?.price)}`} tone="indigo" sub={s.protected.protectedLow?.broken ? "đã thủng đáy bảo vệ!" : s.protected.protectedHigh?.broken ? "đã vượt đỉnh bảo vệ!" : "chưa bị phá"} />
-                <Row label="POC (Volume Profile)" value={px(s.volumeProfile?.poc)} sub={s.volumeProfile?.hvn?.[0] ? `HVN ${px(s.volumeProfile.hvn[0].bottom)}–${px(s.volumeProfile.hvn[0].top)}` : ""} />
-                <Row label="OB / FVG gần" value={`${s.orderBlocks.length} / ${s.fvg.length}`} tone="indigo" />
+                <Row label={<Term k="kvUp">Vùng khối lượng lớn</Term>} value={s.keyVolume.maxVolume100 ? `${px(s.keyVolume.maxVolume100.bottom)}–${px(s.keyVolume.maxVolume100.top)}` : "—"} tone="amber" sub={s.keyVolume.maxVolume100 ? `${fmtNum(s.keyVolume.maxVolume100.volX, 1)}× TB${s.keyVolume.maxVolume100.defended ? " · đã được bảo vệ" : ""}` : ""} />
+                <Row label={<Term k="protH">Đỉnh / đáy bảo vệ</Term>} value={`${px(s.protected.protectedHigh?.price)} / ${px(s.protected.protectedLow?.price)}`} tone="indigo" sub={s.protected.protectedLow?.broken ? "đã thủng đáy bảo vệ!" : s.protected.protectedHigh?.broken ? "đã vượt đỉnh bảo vệ!" : "chưa bị phá"} />
+                <Row label={<Term k="poc" />} value={px(s.volumeProfile?.poc)} sub={s.volumeProfile?.hvn?.[0] ? `HVN ${px(s.volumeProfile.hvn[0].bottom)}–${px(s.volumeProfile.hvn[0].top)}` : ""} />
+                <Row label={<Term k="obfvg" />} value={`${s.orderBlocks.length} / ${s.fvg.length}`} tone="indigo" />
               </Group>
             </div>
           </Card>

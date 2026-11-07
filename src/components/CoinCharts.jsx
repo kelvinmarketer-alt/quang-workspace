@@ -10,6 +10,8 @@ import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 import { useWhale, cvdOf, flowMarks, bigMin, usdK } from "../lib/whale.js";
+import { termVi } from "../lib/glossary.js";
+import { GlossaryButton } from "./Term.jsx";
 
 export const precisionOf = (p) => (!p ? 2 : p >= 1000 ? 2 : p >= 10 ? 2 : p >= 1 ? 3 : Math.min(8, Math.ceil(-Math.log10(p)) + 3)); // chỉ cho thang giá biểu đồ
 // Giá: kiểu chung fmtPx; coin giá rất nhỏ (< 0,01 — PEPE, SHIB…) cần thêm số lẻ để không thành "0,000005"
@@ -18,11 +20,11 @@ const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v 
 
 // ---- Nhãn trên biểu đồ ----
 // [khoá, tên trên nút, màu mẫu]
-export const TAGS = [
-  ["ema20", "EMA20", "#f59e0b"], ["ema50", "EMA50", "#6366f1"], ["smc", "BOS/CHoCH", "#10b981"],
-  ["protH", "Protected H", "#fb7185"], ["protL", "Protected L", "#34d399"],
-  ["kvUp", "KeyVol↑", "#eab308"], ["kvDn", "KeyVol↓", "#eab308"], ["poc", "POC", "#94a3b8"],
-  ["ai", "Vào/SL/TP AI", "#6366f1"],
+export const TAGS = [ // nhãn tiếng Việt lấy từ lib/glossary.js (08/11)
+  ["ema20", termVi("ema20"), "#f59e0b"], ["ema50", termVi("ema50"), "#6366f1"], ["smc", termVi("smc"), "#10b981"],
+  ["protH", termVi("protH"), "#fb7185"], ["protL", termVi("protL"), "#34d399"],
+  ["kvUp", termVi("kvUp"), "#eab308"], ["kvDn", termVi("kvDn"), "#eab308"], ["poc", termVi("poc"), "#94a3b8"],
+  ["ai", termVi("ai"), "#6366f1"],
 ];
 const LEVEL_TAG = { "KeyVol↑": "kvUp", "KeyVol↓": "kvDn", "Protected H": "protH", "Protected L": "protL", POC: "poc" };
 const NEXT = { full: "line", line: "off", off: "full" };
@@ -47,14 +49,14 @@ export function buildLines({ levels = [], ai, tags, compact }) {
   const out = [];
   for (const l of levels) {
     const m = modeOf(tags, LEVEL_TAG[l.title] || "poc", compact);
-    if (m !== "off") out.push({ price: l.price, color: l.color, title: l.title, style: 1, width: 1, axis: m === "full" });
+    if (m !== "off") out.push({ price: l.price, color: l.color, title: LEVEL_TAG[l.title] ? termVi(LEVEL_TAG[l.title]) : l.title, style: 1, width: 1, axis: m === "full" });
   }
   const am = modeOf(tags, "ai", compact);
   if (am !== "off") (ai?.setups || []).filter((x) => x.valid).forEach((x, i) => {
-    const L = x.direction === "long" ? "L" : "S", style = i === 0 ? 0 : 2, axis = am === "full";
-    out.push({ price: x.entry, color: "#6366f1", title: `${L} Entry`, style, width: 2, axis });
-    out.push({ price: x.stop_loss, color: "#f43f5e", title: `${L} SL`, style, axis });
-    x.take_profit.forEach((tp, j) => out.push({ price: tp, color: "#10b981", title: `${L} TP${j + 1}`, style, axis }));
+    const L = x.direction === "long" ? "MUA" : "BÁN", style = i === 0 ? 0 : 2, axis = am === "full";
+    out.push({ price: x.entry, color: "#6366f1", title: `AI vào ${L}`, style, width: 2, axis });
+    out.push({ price: x.stop_loss, color: "#f43f5e", title: `AI cắt lỗ ${L}`, style, axis });
+    x.take_profit.forEach((tp, j) => out.push({ price: tp, color: "#10b981", title: `AI chốt lời ${j + 1}`, style, axis }));
   });
   return out;
 }
@@ -77,6 +79,7 @@ export function TagBar({ tags, setTags, compact, extra }) {
       })}
       <button onClick={() => all("full")} className="rounded-md px-1.5 py-0.5 text-indigo-500 hover:bg-indigo-50">Hiện hết</button>
       <button onClick={() => all("line")} className="rounded-md px-1.5 py-0.5 text-indigo-500 hover:bg-indigo-50">Ẩn nhãn</button>
+      <GlossaryButton keys={["ema20", "ema50", "smc", "protH", "protL", "kvUp", "kvDn", "poc", "ai", "tf"]} label="Giải thích" />
       {extra}
       <span className="ml-auto hidden sm:inline">bấm nút: <Tag size={9} className="inline" /> có nhãn → chỉ đường → ẩn · giờ VN</span>
     </div>
@@ -85,12 +88,12 @@ export function TagBar({ tags, setTags, compact, extra }) {
 
 // ---- Dòng tiền lớn / "dấu chân cá mập" (07/11) — bật/tắt từng lớp, nhớ trên máy ----
 export const FLOWS = [
-  ["delta", "Volume Δ", "#10b981", "Cột khối lượng tô theo phe thắng trong nến: xanh = mua chủ động nhiều hơn, đỏ = bán chủ động nhiều hơn"],
-  ["cvd", "CVD", "#0ea5e9", "Tầng phụ: cộng dồn (mua chủ động − bán chủ động). Giá lên mà CVD đi ngang/giảm = lực mua yếu, có người xả"],
-  ["oi", "OI", "#a855f7", "Tầng phụ: tổng giá trị hợp đồng đang mở (Futures, sàn giữ ~30 ngày). Giá lên + OI tăng = tiền mới vào"],
-  ["big", "Lệnh lớn", "#f59e0b", "Chấm tròn: lệnh khớp lớn (≥ ngưỡng theo mã) gộp theo nến — xanh dưới nến = MUA chủ động, đỏ trên nến = BÁN chủ động. Chỉ có từ lúc mở biểu đồ"],
-  ["liq", "Thanh lý", "#f97316", "Ô vuông: lệnh bị thanh lý gộp theo nến — cam dưới nến = LONG bị thanh lý, xanh trên nến = SHORT bị thanh lý. Chỉ có từ lúc mở biểu đồ"],
-  ["badge", "Funding · L/S", "#64748b", "Nhãn góc trái: funding hiện tại, OI 24h, tỉ lệ Long/Short của tài khoản lớn (top trader)"],
+  ["delta", termVi("delta"), "#10b981", "Cột khối lượng tô theo phe thắng trong nến: xanh = mua chủ động nhiều hơn, đỏ = bán chủ động nhiều hơn"],
+  ["cvd", termVi("cvd"), "#0ea5e9", "Tầng phụ: cộng dồn (mua chủ động − bán chủ động). Giá lên mà CVD đi ngang/giảm = lực mua yếu, có người xả"],
+  ["oi", termVi("oi"), "#a855f7", "Tầng phụ: tổng giá trị hợp đồng đang mở (Futures, sàn giữ ~30 ngày). Giá lên + OI tăng = tiền mới vào"],
+  ["big", termVi("big"), "#f59e0b", "Chấm tròn: lệnh khớp lớn (≥ ngưỡng theo mã) gộp theo nến — xanh dưới nến = MUA chủ động, đỏ trên nến = BÁN chủ động. Chỉ có từ lúc mở biểu đồ"],
+  ["liq", termVi("liq"), "#f97316", "Ô vuông: lệnh bị thanh lý gộp theo nến — cam dưới nến = LONG bị thanh lý, xanh trên nến = SHORT bị thanh lý. Chỉ có từ lúc mở biểu đồ"],
+  ["badge", "Phí giữ lệnh · TK lớn", "#64748b", "Nhãn góc trái: funding hiện tại, OI 24h, tỉ lệ Long/Short của tài khoản lớn (top trader)"],
 ];
 export const loadFlows = () => ({ delta: false, cvd: true, oi: false, big: true, liq: true, badge: true, ...(ls.get("qws_mkt_flow", {}) || {}) });
 export function FlowBar({ on, setOn, fut, w, grid }) {
@@ -104,7 +107,8 @@ export function FlowBar({ on, setOn, fut, w, grid }) {
           <span style={{ color: on[k] && !need ? color : undefined }}>{k === "big" ? "●" : k === "liq" ? "■" : "━"}</span>{label}
         </button>
       ); })}
-      <span className="ml-auto hidden sm:inline">{on.big || on.liq ? `lệnh lớn ≥ ${usdK(w.min)}$ · đã ghi ${w.big.length} lệnh lớn${fut ? `, ${w.liq.length} thanh lý` : ""} từ lúc mở · ` : ""}{grid ? "CVD/OI hiện khi phóng to ô · " : ""}chỉ để tham khảo</span>
+      <GlossaryButton keys={["delta", "cvd", "oi", "big", "liq", "funding", "topLS"]} label="Giải thích" />
+      <span className="ml-auto hidden sm:inline">{on.big || on.liq ? `lệnh lớn ≥ ${usdK(w.min)}$ · đã ghi ${w.big.length} lệnh lớn${fut ? `, ${w.liq.length} lần cháy TK` : ""} từ lúc mở · ` : ""}{grid ? "CVD/OI hiện khi phóng to ô · " : ""}chỉ để tham khảo</span>
     </div>
   );
 }
@@ -117,9 +121,9 @@ export function useFlow(sym, tf, market, candles, on) {
   const first = candles[0]?.time ?? 0;
   const marks = useMemo(() => flowMarks({ big: w.big, liq: w.liq, tf, on, min, first }), [w.tick, w.big, w.liq, tf, on.big, on.liq, min, first]); // eslint-disable-line react-hooks/exhaustive-deps
   const badge = on.badge && fut && (w.funding != null || w.topLS || w.oiChg != null) ? (<>
-    {w.funding != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.funding > 0.03 ? "text-rose-600" : w.funding < -0.01 ? "text-emerald-600" : "text-slate-600"}`} title="Funding: dương = long trả phí cho short (đám đông nghiêng long). Quá cao (> 0,03%/8h) thường là long quá đà">Funding {fmtNum(w.funding, 4, 4)}%</span>}
-    {w.oiChg != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.oiChg >= 0 ? "text-violet-600" : "text-slate-500"}`} title="Giá trị hợp đồng mở hiện tại và thay đổi 24 giờ">OI {usdK(w.oiNow)}$ {w.oiChg >= 0 ? "+" : ""}{fmtNum(w.oiChg, 1, 1)}%/24h</span>}
-    {w.topLS && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.topLS.long >= 50 ? "text-emerald-600" : "text-rose-600"}`} title="Tỉ lệ vị thế Long/Short của nhóm tài khoản lớn nhất trên Binance (top trader)">TK lớn: {fmtNum(w.topLS.long, 0, 0)}% long</span>}
+    {w.funding != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.funding > 0.03 ? "text-rose-600" : w.funding < -0.01 ? "text-emerald-600" : "text-slate-600"}`} title="Funding: dương = long trả phí cho short (đám đông nghiêng long). Quá cao (> 0,03%/8h) thường là long quá đà">Phí giữ lệnh {fmtNum(w.funding, 4, 4)}%</span>}
+    {w.oiChg != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.oiChg >= 0 ? "text-violet-600" : "text-slate-500"}`} title="Giá trị hợp đồng mở hiện tại và thay đổi 24 giờ">Tiền lệnh mở {usdK(w.oiNow)}$ {w.oiChg >= 0 ? "+" : ""}{fmtNum(w.oiChg, 1, 1)}%/24h</span>}
+    {w.topLS && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.topLS.long >= 50 ? "text-emerald-600" : "text-rose-600"}`} title="Tỉ lệ vị thế Long/Short của nhóm tài khoản lớn nhất trên Binance (top trader)">TK lớn: {fmtNum(w.topLS.long, 0, 0)}% MUA</span>}
   </>) : null;
   const flow = useMemo(() => ({ delta: !!on.delta, cvd, oi: on.oi && fut && w.oi.length ? w.oi : null, marks, badge }), [on.delta, cvd, on.oi, fut, w.oi, marks, badge]);
   return { flow, w: { ...w, min }, fut };
@@ -289,7 +293,7 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     a.l20.applyOptions({ visible: m20 !== "off", lastValueVisible: m20 === "full" });
     a.l50.applyOptions({ visible: m50 !== "off", lastValueVisible: m50 === "full" });
     const m = [
-      ...(mSmc === "off" ? [] : events.map((ev) => ({ time: ev.time, position: ev.dir === "up" ? "belowBar" : "aboveBar", color: ev.dir === "up" ? "#10b981" : "#f43f5e", shape: ev.dir === "up" ? "arrowUp" : "arrowDown", text: mSmc === "full" ? ev.kind : "" }))),
+      ...(mSmc === "off" ? [] : events.map((ev) => ({ time: ev.time, position: ev.dir === "up" ? "belowBar" : "aboveBar", color: ev.dir === "up" ? "#10b981" : "#f43f5e", shape: ev.dir === "up" ? "arrowUp" : "arrowDown", text: mSmc === "full" ? (ev.kind === "BOS" ? "Tiếp diễn" : ev.kind === "CHoCH" ? "Đảo chiều" : ev.kind) : "" }))),
       ...(marks || []), ...(flow?.marks || []),
     ].filter((x) => x.time >= first && x.time <= last).map((x) => ({ ...x, time: T(x.time) })).sort((x, y) => x.time - y.time);
     a.markers.setMarkers(m);
@@ -307,8 +311,8 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     for (let i = a.chart.panes().length - 1; i >= 1; i--) a.chart.removePane(i);
     let pane = 1;
     const sub = (color, title) => a.chart.addSeries(LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title, priceFormat: { type: "volume" } }, pane++);
-    if (hasCvd) a.cvdS = sub("#0ea5e9", "CVD");
-    if (hasOi) a.oiS = sub("#a855f7", "OI $");
+    if (hasCvd) a.cvdS = sub("#0ea5e9", "Mua−bán cộng dồn");
+    if (hasOi) a.oiS = sub("#a855f7", "Tiền lệnh mở $");
     const P = a.chart.panes(); P[0]?.setStretchFactor(P.length > 1 ? 3.2 : 1); for (let i = 1; i < P.length; i++) P[i].setStretchFactor(1);
   }, [hasCvd, hasOi]);
   useEffect(() => {

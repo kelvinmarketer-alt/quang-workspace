@@ -6,6 +6,7 @@ import { Radar, Zap, Clock, CheckCircle2 } from "lucide-react";
 import { Card } from "./ui.jsx";
 import { TFS, SETUPS, symOf } from "../lib/paperBot.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
+import InfoTip from "./InfoTip.jsx";
 
 const setupName = (k) => SETUPS[k]?.label.split(" (")[0] || k;
 const pad = (n) => String(n).padStart(2, "0");
@@ -29,10 +30,10 @@ async function pressure(coin, tf) {
 }
 
 const STATUS = {
-  open: ["ĐÃ KHỚP", "border-emerald-300 bg-emerald-50 text-emerald-700"],
+  open: ["ĐANG CÓ LỆNH", "border-emerald-300 bg-emerald-50 text-emerald-700"],
   pend: ["CHỜ KHỚP", "border-amber-300 bg-amber-50 text-amber-700"],
   block: ["BỊ LỌC", "border-slate-200 bg-slate-100 text-slate-500"],
-  wait: ["CHỜ TÍN HIỆU", "border-slate-200 bg-slate-50 text-slate-500"],
+  wait: ["CHƯA CÓ LỆNH", "border-slate-200 bg-slate-50 text-slate-500"],
   stop: ["ĐÃ DỪNG", "border-slate-200 bg-slate-100 text-slate-500"],
   off: ["ĐÃ TẮT KHUNG", "border-slate-200 bg-slate-100 text-slate-400"],
 };
@@ -76,7 +77,8 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
         <Radar size={15} className="text-cyan-500" />
         <span className="text-[13px] font-extrabold uppercase tracking-wide text-slate-800">Bảng tín hiệu bot</span>
-        <span className="text-[11px] text-slate-400">{rows.filter((r) => r.st === "open").length} đã khớp · {rows.filter((r) => r.st === "pend").length} chờ khớp · bấm khung để xem biểu đồ</span>
+        <InfoTip label="Giải thích bảng tín hiệu"><b className="text-slate-800">Bảng này đọc thế nào?</b><br />Mỗi dòng là 1 mã bot đang theo dõi.<br /><b>ĐANG CÓ LỆNH</b>: bot đang giữ lệnh mã này (giá vào, cắt lỗ, chốt 1/3, lãi/lỗ hiện tại).<br /><b>CHỜ KHỚP</b>: vừa có tín hiệu, bot đặt lệnh chờ — giá hồi về thì khớp, 4 giờ không hồi thì vào giá thị trường.<br /><b>CHƯA CÓ LỆNH</b>: mã này chưa có tín hiệu mới. Bot chờ một nến H4 đóng đạt đủ 5 điều kiện (phá đỉnh/đáy 30 nến, khối lượng lớn, thuận xu hướng mã và BTC, cú phá đầu tiên). Dòng chữ bên cạnh chỉ là <b>lệnh gần nhất đã đóng</b> của mã đó để tham khảo — không phải lệnh đang chờ.<br /><b>Lực mua/bán 20 nến</b>: trong 20 nến gần nhất, bao nhiêu % khối lượng là mua chủ động.</InfoTip>
+        <span className="text-[11px] text-slate-400">{rows.filter((r) => r.st === "open").length} đang có lệnh · {rows.filter((r) => r.st === "pend").length} chờ khớp · {rows.filter((r) => r.st === "wait").length} chưa có lệnh · bấm dòng để xem biểu đồ</span>
       </div>
       <div className="hidden grid-cols-[130px_1fr_150px] gap-3 border-b border-slate-100 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-400 md:grid">
         <span>Cặp</span><span>Lệnh theo luật bot (từng khung)</span><span className="text-right">Lực mua / bán 20 nến</span>
@@ -100,19 +102,19 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px]">
                         <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
                         {plan ? <>
-                          <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "LONG" : "SHORT"}</span>
+                          <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "MUA" : "BÁN"}</span>
                           <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{plan.market && !t ? "VÀO NGAY" : label}</span>
                           <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
                           <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums">
                             <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
-                            <span className="text-rose-600">SL <b>{fmtPx(plan.sl)}</b></span>
-                            <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "TP"} <b>{fmtPx(plan.tp)}</b></span>
+                            <span className="text-rose-600">Cắt lỗ <b>{fmtPx(plan.sl)}</b></span>
+                            <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} <b>{fmtPx(plan.tp)}</b></span>
                             {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
                           </span>
                         </> : <>
                           <Clock size={12} className="shrink-0 text-slate-400" />
-                          <span className="min-w-0 flex-1 truncate text-slate-500">{r.last ? <>Gần nhất {dt(r.last.entryAt)} · {r.last.side === 1 ? "LONG" : "SHORT"} · <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{r.last.reason} {rr(r.last.r)}</b></> : "Chưa có lệnh"}</span>
-                          <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh</span>
+                          <span className="min-w-0 flex-1 truncate text-slate-500"><span className="font-semibold text-slate-600">Chờ nến H4 đạt đủ điều kiện</span>{r.last ? <> · lệnh gần nhất đã đóng: {dt(r.last.entryAt)} {r.last.side === 1 ? "MUA" : "BÁN"} → <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{r.last.reason} {rr(r.last.r)}</b></> : ""}</span>
+                          <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh từ đầu phiên</span>
                         </>}
                       </div>
                     </button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
+import { Term } from "../components/Term.jsx";
 import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown, XOctagon, ListChecks, BarChart3, GitCompare, BellRing } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -23,12 +24,12 @@ const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 
 const dt = (t) => { if (t == null) return "—"; const d = new Date(t); return isNaN(d) ? "—" : `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const fmtR = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2)}R`);
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
-const side = (s) => <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "LONG" : "SHORT"}</span>;
+const side = (s) => <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "MUA" : "BÁN"}</span>;
 const EV = { placed: "Đặt lệnh chờ", open: "Khớp lệnh", close: "Đóng lệnh", expired: "Huỷ (giá không về)", skip: "Bỏ tín hiệu", error: "Lỗi", closeAll: "Đóng hết vị thế" };
 const MODE_L = { testnet: "Testnet", live: "Tiền thật" };
 const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/\s+/g, " ").trim();
 const Title = ({ icon: I, children, right }) => <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{I && <I size={13} className="text-indigo-500" />}{children}{right && <span className="ml-auto normal-case tracking-normal">{right}</span>}</div>;
-const Num = ({ label, v, sub, t = "text-slate-900" }) => <div className="min-w-0 bg-white px-3 py-2.5"><div className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`break-words text-lg font-extrabold leading-snug tabular-nums ${t}`}>{v}</div>{sub && <div className="break-words text-[11px] leading-snug text-slate-400">{sub}</div>}</div>;
+const Num = ({ label, v, sub, t = "text-slate-900" }) => <div className="min-w-0 bg-white px-3 py-2.5"><div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`break-words text-lg font-extrabold leading-snug tabular-nums ${t}`}>{v}</div>{sub && <div className="break-words text-[11px] leading-snug text-slate-400">{sub}</div>}</div>;
 
 // Bản bot đang chạy so với bản mới nhất đã phát hành trên web app (/bot-release/manifest.json) — thấy ngay ở đầu trang
 let REL = null;
@@ -218,12 +219,12 @@ export default function CoinLive({ active }) {
         {act.length ? <div className="space-y-1.5">{act.map((a) => (
           <div key={a.sym} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
             <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge><span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span>{a.stage === "open" && st.posPnl?.[a.sym] && <b className={`tabular-nums ${tone(st.posPnl[a.sym].uPnl)}`}>{fmtUsdSigned(st.posPnl[a.sym].uPnl)}</b>}</div>
-            <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">SL {fmtPx(a.sl)}</span><span className="text-emerald-600">{a.sw3 ? `Chốt 1/3 ${fmtPx(a.tp)}${a.partDone ? " ✓" : ""}` : `TP ${fmtPx(a.tp)}`}</span><span>KL {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400">huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
-            {a.sw3 && a.stage === "open" && (() => { const g = sw3Targets(a.lim, a.side, a.dist); return g && <div className="mt-1 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums"><span className="text-emerald-600" title="Không phải lệnh trên sàn — mốc kỳ vọng theo lịch sử 2.100 lệnh D">TP kỳ vọng <b>{fmtPx(g.avg)}</b> (+{SW3_TP.avgR.toLocaleString("vi-VN")}R)</span><span className="text-teal-600">Mục tiêu xa {fmtPx(g.far)} (+{SW3_TP.farR.toLocaleString("vi-VN")}R)</span></div>; })()}
-            {a.sw3 && a.stage === "open" && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt TP — SL trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm SL.</div>}
+            <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">Cắt lỗ {fmtPx(a.sl)}</span><span className="text-emerald-600">{a.sw3 ? `Chốt 1/3 ${fmtPx(a.tp)}${a.partDone ? " ✓" : ""}` : `Chốt lời ${fmtPx(a.tp)}`}</span><span>Khối lượng {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400">huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
+            {a.sw3 && a.stage === "open" && (() => { const g = sw3Targets(a.lim, a.side, a.dist); return g && <div className="mt-1 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums"><span className="text-emerald-600"><Term k="tpExp">Chốt lời kỳ vọng</Term> <b>{fmtPx(g.avg)}</b> (+{SW3_TP.avgR.toLocaleString("vi-VN")}R)</span><span className="text-teal-600"><Term k="tpFar" align="right" /> {fmtPx(g.far)} (+{SW3_TP.farR.toLocaleString("vi-VN")}R)</span></div>; })()}
+            {a.sw3 && a.stage === "open" && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt mức chốt lời cố định — cắt lỗ trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm cắt lỗ.</div>}
           </div>
         ))}</div> : <div className="py-3 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần). Lệnh chờ / đang chạy sẽ hiện ngay tại đây.
-          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "SHORT" : "LONG"} · {lastT.reason || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
+          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "BÁN" : "MUA"} · {lastT.reason || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
         </div>}
       </Card>
 
@@ -376,8 +377,8 @@ function LiveResults({ hist, st, session }) {
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Lãi / lỗ tổng" v={fmtUsdSigned(S.total)} sub={`TB ${fmtUsdSigned(S.expUsd)}/lệnh`} t={tone(S.total)} />
         <Num label="Tỉ lệ thắng" v={fmtPct(S.winRate)} sub={`${S.wins} thắng · ${S.losses} thua · ${S.bes} hoà`} />
-        <Num label="R TB / lệnh" v={fmtR(S.avgR)} sub="đã trừ phí" t={tone(S.avgR)} />
-        <Num label="Profit factor" v={pf} sub=">1 là có lãi" t={S.pf == null ? undefined : S.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
+        <Num label={<Term k="avgR" />} v={fmtR(S.avgR)} sub="đã trừ phí" t={tone(S.avgR)} />
+        <Num label={<Term k="pf" />} v={pf} sub=">1 là có lãi" t={S.pf == null ? undefined : S.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
         <Num label="Sụt vốn lớn nhất" v={S.maxDDUsd ? fmtUsd(-S.maxDDUsd) : fmtUsd(0)} sub={S.maxDDPct != null ? `${fmtPct(S.maxDDPct)} vốn (ước tính)` : "chưa rõ vốn"} t={S.maxDDPct > 20 ? "text-rose-600" : undefined} />
         <Num label="Chuỗi thua dài nhất" v={S.worstStreak} sub={`thắng liền nhiều nhất ${S.bestStreak}`} />
         <Num label="Số lệnh" v={S.n} sub={S.first ? `từ ${dt(S.first)}${S.open ? ` · ${S.open} đang mở` : ""}` : null} />
@@ -437,7 +438,7 @@ function LiveResults({ hist, st, session }) {
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
             <span>{dt(t.entryAt)} · {fmtPx(t.entry)} → {t.exit != null ? fmtPx(t.exit) : "…"}</span>
-            <span className="text-rose-500">SL {fmtPx(t.sl)}</span><span className="text-emerald-600">TP {fmtPx(t.tp)}</span>
+            <span className="text-rose-500">Cắt lỗ {fmtPx(t.sl)}</span><span className="text-emerald-600">{t.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} {fmtPx(t.tp)}</span>
             {(t.reason || t.exitAt) && <span>{t.reason || "Đóng"}{t.exitAt ? ` · ${dt(t.exitAt)}` : ""}</span>}
             {t.riskUsd != null && <span className="text-slate-400">rủi ro {fmtUsd(t.riskUsd)}</span>}
           </div>
@@ -497,7 +498,7 @@ function DemoVsLive({ session, list, others, events }) {
                 <Num label="Tín hiệu trùng" v={res.nBoth} sub="khớp cả hai" t="text-emerald-700" />
                 <Num label="Chỉ Demo vào" v={res.nDemo} sub="bot không vào" t={res.nDemo ? "text-amber-700" : undefined} />
                 <Num label="Chỉ bot vào" v={res.nLive} sub="demo không vào" t={res.nLive ? "text-violet-700" : undefined} />
-                <Num label="Chênh R TB" v={fmtR(res.diffR)} sub={res.nPairs ? `thật ${fmtR(res.liveR)} − demo ${fmtR(res.demoR)}` : "chưa có cặp lệnh đã đóng"} t={tone(res.diffR)} />
+                <Num label={<Term k="avgR">Chênh lời/lỗ TB (R)</Term>} v={fmtR(res.diffR)} sub={res.nPairs ? `thật ${fmtR(res.liveR)} − demo ${fmtR(res.demoR)}` : "chưa có cặp lệnh đã đóng"} t={tone(res.diffR)} />
                 <Num label="Trượt giá TB" v={slipTxt(res.slip)} sub="dương = vào giá xấu hơn" t={res.slip > 0.02 ? "text-rose-600" : undefined} />
               </div>
               <div className="flex flex-wrap items-center gap-1.5">

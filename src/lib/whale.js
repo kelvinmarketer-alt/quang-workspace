@@ -120,7 +120,7 @@ export function flowMarks({ big, liq, tf, on, min, first }) {
   if (on.liq) {
     const g = new Map();
     for (const x of liq) { const t = Math.floor(x.t / sec) * sec; if (t < first) continue; const k = `${t}|${x.longLiq ? 1 : 0}`; const v = g.get(k) || { t, longLiq: x.longLiq, usd: 0 }; v.usd += x.usd; g.set(k, v); }
-    for (const v of g.values()) if (v.usd >= 10000) out.push({ time: v.t, position: v.longLiq ? "belowBar" : "aboveBar", color: v.longLiq ? "#f97316" : "#0ea5e9", shape: "square", size: Math.min(2.5, 0.6 + Math.log2(1 + v.usd / 50000) * 0.5), text: `${v.longLiq ? "TL long" : "TL short"} ${usdK(v.usd)}`, id: `liq${v.t}${v.longLiq}` });
+    for (const v of g.values()) if (v.usd >= 10000) out.push({ time: v.t, position: v.longLiq ? "belowBar" : "aboveBar", color: v.longLiq ? "#f97316" : "#0ea5e9", shape: "square", size: Math.min(2.5, 0.6 + Math.log2(1 + v.usd / 50000) * 0.5), text: `${v.longLiq ? "Cháy MUA" : "Cháy BÁN"} ${usdK(v.usd)}`, id: `liq${v.t}${v.longLiq}` });
   }
   return out;
 }

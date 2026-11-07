@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
+import { Term, GlossaryButton } from "../components/Term.jsx";
 import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle, History, Trash2 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -76,28 +77,66 @@ const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padSta
 const ago = (t) => { const d = (Date.now() - t) / 86400000; return d >= 1 ? `${Math.floor(d)} ngày ${Math.floor((d % 1) * 24)} giờ` : `${Math.floor(d * 24)} giờ`; };
 const tone = (v) => (v == null ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const setupName = (k) => SETUPS[k]?.label.split(" (")[0] || k;
-const tpLbl = (t) => (t?.setup === "SW3" ? "Chốt 1/3" : "TP"); // SW3 không có TP cố định — mức này chỉ chốt 1/3 vị thế
-const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "LONG" : "SHORT"}</span>;
+const tpLbl = (t) => (t?.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"); // SW3 không có TP cố định — mức này chỉ chốt 1/3 vị thế
+const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "MUA" : "BÁN"}</span>;
 
 // Biểu đồ nến của 1 luồng (cặp × khung) + điểm vào/ra của mọi lệnh bot + đường Entry/SL/TP lệnh đang mở / lệnh đang chọn + lệnh chờ.
 // Giờ hiển thị theo giờ VN (UTC+7). Nến đang chạy cập nhật realtime từ WebSocket.
 const VN = 7 * 3600, toT = (ms) => Math.floor(ms / 1000) + VN;
+// Chi tiết lệnh SW3/D bằng lời thường (sếp 08/11): vì sao vào, vì sao không đặt chốt lời cố định, vì sao đóng / đang chờ gì
+const EXIT_WHY = {
+  "Cắt lỗ": "Giá đi ngược hướng lệnh và chạm mức cắt lỗ ban đầu (cách giá vào 2 lần biên độ nến H4) → mất đúng 1R như đã tính trước.",
+  "Dời SL theo đáy/đỉnh 20 nến (giảm lỗ)": "Chưa tới mức chốt 1/3, nhưng cắt lỗ đã được dời theo đỉnh/đáy 20 nến H4. Giá quay đầu chạm mức đã dời nên lỗ ít hơn 1R (hoặc hoà).",
+  "Chốt 1/3 + hoà vốn": "Đã chốt 1/3 ở +0,75R và dời cắt lỗ về giá vào. Sau đó giá quay về giá vào nên phần còn lại đóng hoà vốn — lệnh vẫn lãi nhờ phần đã chốt.",
+  "Chốt 1/3 + dời SL khoá lời": "Đã chốt 1/3, cắt lỗ dời dần theo xu hướng. Giá quay đầu chạm mức cắt lỗ đã khoá lời → đóng phần còn lại có lãi.",
+};
+function TradeWhy({ t, lv }) {
+  if (t.setup !== "SW3" || !t.why3) return t.why3 ? <div className="text-[11.5px] text-slate-500">Tiêu chí lúc vào: {t.why3}</div> : null;
+  const m = (re) => (t.why3.match(re) || [])[1];
+  const brk = m(/phá vượt ([\d.,-]+) ATR/), vol = m(/volume ([\d.,]+)×/), h4 = m(/(trên|dưới) EMA200 H4/), btc = m(/BTC (trên|dưới|chưa rõ) EMA50 D1/);
+  const L = t.side === 1, dir = L ? "MUA" : "BÁN", g = sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)), lvl = lv ? (L ? lv.lo : lv.hi) : null;
+  const sec = "rounded-lg bg-white/70 px-2.5 py-2 ring-1 ring-slate-100";
+  return (
+    <div className="grid gap-2 text-[11.5px] leading-snug text-slate-600 md:grid-cols-3">
+      <div className={sec}><b className="text-slate-800">1. Vì sao vào lệnh {dir}</b><ul className="mt-1 list-disc space-y-0.5 pl-4">
+        <li>Nến H4 đóng {L ? "phá lên trên đỉnh" : "phá xuống dưới đáy"} 30 nến gần nhất{brk ? <>, vượt <b>{brk.replace(".", ",")}</b> lần biên độ nến (cần ≥ 0,3)</> : ""}.</li>
+        {vol && <li>Khối lượng nến đó gấp <b>{vol.replace(".", ",")}</b> lần trung bình 20 nến (cần ≥ 1,3) → có tiền thật đẩy giá.</li>}
+        {h4 && <li>Giá {h4} đường TB 200 nến H4 → thuận xu hướng lớn của mã.</li>}
+        {btc && <li>BTC {btc} đường TB 50 nến ngày → thị trường chung cùng hướng.</li>}
+        <li>Là cú phá vỡ đầu tiên của nhịp (không đuổi theo cú thứ 2, 3).</li>
+        <li>{t.fill === "lim" ? "Vào bằng lệnh chờ trên M15: giá hồi lại 0,25 biên độ trong 4 giờ nên khớp giá đẹp hơn." : t.fill === "mkt" ? "Giá không hồi trong 4 giờ → vào giá thị trường để không lỡ cú chạy." : "Vào ở giá mở nến kế tiếp."}</li>
+      </ul></div>
+      <div className={sec}><b className="text-slate-800">2. Vì sao không đặt chốt lời cố định</b><ul className="mt-1 list-disc space-y-0.5 pl-4">
+        <li>Chốt 1/3 ở +0,75R ({px(t.tp)}) để có lãi sớm, rồi dời cắt lỗ về hoà vốn → lệnh không còn lỗ.</li>
+        <li>2/3 còn lại thả chạy, cắt lỗ dời theo {L ? "đáy" : "đỉnh"} 20 nến H4{lvl != null && isFinite(lvl) ? <> (đang ở <b>{px(lvl)}</b>)</> : ""}. Lợi nhuận của D đến từ số ít lệnh chạy rất xa — đặt chốt lời cố định sẽ cắt mất những lệnh đó.</li>
+        {g && <li>Chốt lời kỳ vọng <b>{px(g.avg)}</b> (+1,5R) = mức trung bình phần còn lại đóng ở trong 2.100 lệnh quá khứ; 1/10 lệnh chạy tới <b>{px(g.far)}</b> (+3,8R). Chỉ để tham khảo, không phải lệnh trên sàn.</li>}
+      </ul></div>
+      <div className={sec}><b className="text-slate-800">3. {t.exitAt ? "Vì sao đóng lệnh" : "Lệnh sẽ đóng khi nào"}</b>
+        {t.exitAt ? <p className="mt-1"><b>{t.reason}</b> @ {px(t.exit)} · {dt(t.exitAt)}<br />{EXIT_WHY[t.reason] || ""}</p>
+          : <ul className="mt-1 list-disc space-y-0.5 pl-4"><li>Giá chạm cắt lỗ <b>{px(t.curSl)}</b>{t.be ? " (đã hoà vốn — không lỗ)" : " → lỗ tối đa 1R"}.</li>{!t.part && <li>Hoặc chạm <b>{px(t.tp)}</b> thì chốt 1/3 trước, phần còn lại chạy tiếp.</li>}<li>Không có giới hạn thời gian — giữ tới khi xu hướng gãy.</li></ul>}
+      </div>
+    </div>
+  );
+}
 // Thẻ lệnh Demo đang mở. SW3/D: không có TP cố định — chốt 1/3 ở +0,75R, phần còn lại chạy tới khi chạm SL dời theo đỉnh/đáy 20 nến H4
 function OpenCard({ t, lv }) {
+  const [why, setWhy] = useState(false);
   const pos = Math.min(1, Math.max(0, (t.last - t.curSl) / (t.tp - t.curSl))), toTp = ((t.tp - t.last) / t.last) * 100 * t.side, toSl = ((t.last - t.curSl) / t.last) * 100 * t.side;
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
       <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
       <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
       <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
+      <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">Cắt lỗ {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
       {t.setup === "SW3" && (() => { const g = sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)); if (!g) return null; const d = (x) => fmtNum(((x - t.last) / t.last) * 100 * t.side, 2, 2); return (
-        <div className="mt-1 flex flex-wrap justify-between gap-x-2 text-[11px] tabular-nums"><span className="text-emerald-600" title="Không phải lệnh trên sàn. Lịch sử 2.100 lệnh D: lệnh đã chốt 1/3 và có lãi thì phần còn lại đóng trung bình ở +1,5R">TP kỳ vọng <b>{px(g.avg)}</b> (+{fmtNum(SW3_TP.avgR, 1, 1)}R){(g.avg - t.last) * t.side > 0 ? ` · còn ${d(g.avg)}%` : " ✓ đã vượt"}</span><span className="text-teal-600" title="10% lệnh D tốt nhất trong lịch sử chạy tới mức này">Mục tiêu xa {px(g.far)} (+{fmtNum(SW3_TP.farR, 1, 1)}R){(g.far - t.last) * t.side > 0 ? ` · còn ${d(g.far)}%` : " ✓"}</span></div>
+        <div className="mt-1 flex flex-wrap justify-between gap-x-2 text-[11px] tabular-nums"><span className="text-emerald-600"><Term k="tpExp">Chốt lời kỳ vọng</Term> <b>{px(g.avg)}</b> (+{fmtNum(SW3_TP.avgR, 1, 1)}R){(g.avg - t.last) * t.side > 0 ? ` · còn ${d(g.avg)}%` : " ✓ đã vượt"}</span><span className="text-teal-600"><Term k="tpFar" align="right" /> {px(g.far)} (+{fmtNum(SW3_TP.farR, 1, 1)}R){(g.far - t.last) * t.side > 0 ? ` · còn ${d(g.far)}%` : " ✓"}</span></div>
       ); })()}
       {t.setup === "SW3" && (() => { const lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null, nb = t.side === 1 ? "đáy" : "đỉnh"; return (
-        <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{t.part ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt TP — giữ tới khi chạm SL. SL tự dời theo {nb} 20 nến H4{lvl != null && isFinite(lvl) ? <> (hiện <b className="tabular-nums">{px(lvl)}</b>{(lvl - t.curSl) * t.side > 0 ? "" : ` — SL chỉ dời khi mốc này ${t.side === 1 ? "lên trên" : "xuống dưới"} ${px(t.curSl)}`})</> : ""}, chỉ dời theo hướng có lợi.</div>
+        <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{t.part ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt mức chốt lời cố định — giữ tới khi chạm cắt lỗ. Cắt lỗ tự dời theo {nb} 20 nến H4{lvl != null && isFinite(lvl) ? <> (hiện <b className="tabular-nums">{px(lvl)}</b>{(lvl - t.curSl) * t.side > 0 ? "" : ` — chỉ dời khi mốc này ${t.side === 1 ? "lên trên" : "xuống dưới"} ${px(t.curSl)}`})</> : ""}, chỉ dời theo hướng có lợi.</div>
       ); })()}
-      <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
+      <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400"><span>Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</span>
+        <button onClick={() => setWhy((v) => !v)} aria-expanded={why} className="ml-auto flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 font-bold text-indigo-500 hover:bg-indigo-50">Vì sao? <ChevronDown size={12} className={why ? "rotate-180" : ""} /></button></div>
+      {why && <div className="mt-1.5"><TradeWhy t={t} lv={lv} /></div>}
     </div>
   );
 }
@@ -154,14 +193,14 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus,
     a.lines.forEach((pl) => a.candle.removePriceLine(pl));
     const show = focus ? [focus] : trades.filter((t) => !t.exitAt), L = [];
     for (const t of show) {
-      const tag = `${t.side === 1 ? "LONG" : "SHORT"}`;
-      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: t.be ? "SL (hoà vốn)" : "SL" }, { price: t.tp, color: "#059669", title: t.setup === "SW3" && t.part ? "Đã chốt 1/3" : tpLbl(t) });
+      const tag = `${t.side === 1 ? "MUA" : "BÁN"}`;
+      L.push({ price: t.entry, color: "#6366f1", title: `Vào ${tag}`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: t.be ? "Cắt lỗ (hoà vốn)" : "Cắt lỗ" }, { price: t.tp, color: "#059669", title: t.setup === "SW3" && t.part ? "Đã chốt 1/3" : tpLbl(t) });
       const lv = !t.exitAt && t.setup === "SW3" ? trail?.[t.coin] : null, lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null;
       const g = t.setup === "SW3" && !t.exitAt ? sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)) : null;
-      if (g) L.push({ price: g.avg, color: "#10b981", title: `TP kỳ vọng +${fmtNum(SW3_TP.avgR, 1, 1)}R`, style: 2 }, { price: g.far, color: "#14b8a6", title: `Mục tiêu xa +${fmtNum(SW3_TP.farR, 1, 1)}R`, style: 3 });
-      if (lvl != null && isFinite(lvl) && Math.abs(lvl - (t.curSl ?? t.sl)) > 1e-9) L.push({ price: lvl, color: "#a855f7", title: `Mốc dời SL (${t.side === 1 ? "đáy" : "đỉnh"} 20 nến H4)`, style: 1 });
+      if (g) L.push({ price: g.avg, color: "#10b981", title: `Chốt lời kỳ vọng +${fmtNum(SW3_TP.avgR, 1, 1)}R`, style: 2 }, { price: g.far, color: "#14b8a6", title: `Mục tiêu xa +${fmtNum(SW3_TP.farR, 1, 1)}R`, style: 3 });
+      if (lvl != null && isFinite(lvl) && Math.abs(lvl - (t.curSl ?? t.sl)) > 1e-9) L.push({ price: lvl, color: "#a855f7", title: `Mốc dời cắt lỗ (${t.side === 1 ? "đáy" : "đỉnh"} 20 nến H4)`, style: 1 });
     }
-    for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
+    for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "MUA" : "BÁN"}` });
     a.lines = L.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: 1, lineStyle: ln.style ?? 2, axisLabelVisible: true, title: ln.title }));
   }, [lineSig]); // eslint-disable-line react-hooks/exhaustive-deps
   // nhảy tới lệnh đang chọn
@@ -193,7 +232,7 @@ function StatTable({ title, rows }) {
     <div className="min-w-0">
       <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{title}</div>
       <table className="w-full text-[12px]">
-        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" /><th className="py-1.5 pr-2 text-right">Lệnh</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right">R TB</th><th className="py-1.5 pr-2 text-right">PF</th><th className="py-1.5 text-right">Tổng R</th></tr></thead>
+        <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" /><th className="py-1.5 pr-2 text-right">Lệnh</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right"><Term k="avgR" align="right">R TB</Term></th><th className="py-1.5 pr-2 text-right"><Term k="pf" align="right">Hệ số lãi</Term></th><th className="py-1.5 text-right">Tổng R</th></tr></thead>
         <tbody>{rows.filter(([, s]) => s.n).map(([name, s]) => (
           <tr key={name} className="border-b border-slate-50">
             <td className="py-1.5 pr-2 font-bold text-slate-700">{name}</td>
@@ -627,7 +666,7 @@ export default function CoinBot({ active: visible = true }) {
       const evs = [];
       for (const t of rows) {
         const was = prevSt.current.get(t.id);
-        if (!was && t.status === "open") evs.push({ text: `Mở ${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TFS[t.tf].label} @ ${px(t.entry)} · SL ${px(t.curSl)} · ${tpLbl(t)} ${px(t.tp)}`, ok: true });
+        if (!was && t.status === "open") evs.push({ text: `Mở ${t.side === 1 ? "MUA" : "BÁN"} ${t.coin} ${TFS[t.tf].label} @ ${px(t.entry)} · cắt lỗ ${px(t.curSl)} · ${tpLbl(t)} ${px(t.tp)}`, ok: true });
         if (was === "open" && t.status === "done") evs.push({ text: `Đóng ${t.coin} ${TFS[t.tf].label} · ${t.reason} ${rr(t.r)} (${usd(t.pnl)})`, ok: t.r >= 0 });
       }
       if (evs.length) { setToast({ ...evs[evs.length - 1], more: evs.length - 1, at: Date.now() }); try { navigator.vibrate?.(60); } catch { /* bỏ qua */ } }
@@ -796,9 +835,9 @@ export default function CoinBot({ active: visible = true }) {
           <Num label="Lãi / lỗ" v={usd(pnl)} sub={`${pct((pnl / cfg.capital) * 100)}${P.unrealized ? ` · tạm tính ${usd(P.unrealized)}` : ""}`} tone={tone(pnl)} />
           <Num label="Tỉ lệ thắng" v={all.winRate != null ? `${fmtNum(all.winRate, 1, 1)}%` : "—"} sub={`${all.wins} thắng · ${all.losses} thua · ${all.bes} hoà`} />
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} className="hidden sm:block" />
-          <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} className="hidden sm:block" />
-          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} className="hidden sm:block" />
-          <Num label="Sụt vốn lớn nhất" v={`${fmtNum(P.maxDD, 1, 1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
+          <Num label={<Term k="avgR" />} v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} className="hidden sm:block" />
+          <Num label={<Term k="pf" />} v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} className="hidden sm:block" />
+          <Num label={<Term k="dd" />} v={`${fmtNum(P.maxDD, 1, 1)}%`} sub={usd(-P.maxDDUsd)} tone={P.maxDD > 20 ? "text-rose-600" : "text-slate-900"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} className="hidden sm:block" />
         </div>
         {(() => { // Chuỗi thua đang diễn ra + luật v9 (giảm rủi ro) đã đỡ được bao nhiêu
@@ -851,7 +890,8 @@ export default function CoinBot({ active: visible = true }) {
             <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
           </div>
           <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} trail={raw?.sw3Levels} />
-          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
+          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · cắt lỗ {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
+          {focus && focus.setup === "SW3" && <div className="border-t border-slate-100 bg-indigo-50/30 px-3 py-2"><TradeWhy t={focus} lv={focus.exitAt ? null : raw?.sw3Levels?.[focus.coin]} /></div>}
         </Card>
 
         {open.length > 0 && (
@@ -867,7 +907,7 @@ export default function CoinBot({ active: visible = true }) {
             <div className="space-y-1">{res.pending.map((p) => { const cur = live.current[`px|${p.coin}`], d = cur ? ((cur - p.lim) / p.lim) * 100 * p.side : null; return (
               <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
                 {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
-                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · SL {px(p.sl)}</span>
+                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · cắt lỗ {px(p.sl)}</span>
                 {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {fmtNum(Math.max(0, d), 2, 2)}%</span>}
                 <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
               </div>
@@ -965,10 +1005,10 @@ export default function CoinBot({ active: visible = true }) {
                 <span className={`w-[72px] shrink-0 text-right font-extrabold tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
-                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">SL {px(t.sl)}</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}</span>
+                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">Cắt lỗ {px(t.sl)}</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}</span>
                 <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${t.reason}` : t.exitAt ? `${t.reason} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
               </div>
-              {t.why3 && <div className="mt-0.5 text-[11px] leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3}</div>}
+              {t.why3 && <div className="mt-0.5 text-[11px] leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3} · <span className="font-semibold text-indigo-500">bấm để xem vì sao vào / vì sao đóng</span></div>}
               {t.lesson && <div className="mt-0.5 text-[11px] leading-snug text-rose-700/80">Rút kinh nghiệm: {t.lesson}</div>}
             </button>
           ); })}</div>
@@ -981,8 +1021,8 @@ export default function CoinBot({ active: visible = true }) {
         <PairReview cfg={cfg} list={list} ptrades={P.trades} canEdit={isOwner && !session.stoppedAt} onRemoveCoin={removeCoin} onToggleStream={toggleStream} />
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:hidden">
           <Num label="Lệnh đã đóng" v={all.n} sub={`${P.trades.filter((t) => t.status === "skip").length} bị danh mục bỏ`} />
-          <Num label="R TB / lệnh" v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} />
-          <Num label="Profit factor" v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
+          <Num label={<Term k="avgR" />} v={rr(all.avgR)} sub="kỳ vọng, đã trừ phí" tone={tone(all.avgR)} />
+          <Num label={<Term k="pf" />} v={all.pf == null ? "—" : all.pf === Infinity ? "∞" : fmtNum(all.pf, 2, 2)} sub=">1 là có lãi" tone={all.pf >= 1 ? "text-emerald-600" : "text-rose-600"} />
           <Num label="Chuỗi thua dài nhất" v={all.worstStreak} sub={`thắng liền nhiều nhất ${all.bestStreak}`} />
         </div>
         <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4 xl:grid-cols-8">
@@ -1022,7 +1062,7 @@ export default function CoinBot({ active: visible = true }) {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-[12px]">
               <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400">
-                <th className="py-1.5 pr-2">Khung</th><th className="py-1.5 pr-2 text-right">Lệnh (gốc)</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right">R TB</th><th className="py-1.5 pr-2 text-right">PF</th><th className="py-1.5 pr-2 text-right">Phí TB</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ gốc</th>{cfg.adaptive && <><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5">Bot hiện tại</th></>}
+                <th className="py-1.5 pr-2">Khung</th><th className="py-1.5 pr-2 text-right">Lệnh (gốc)</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right"><Term k="avgR" align="right">R TB</Term></th><th className="py-1.5 pr-2 text-right"><Term k="pf" align="right">Hệ số lãi</Term></th><th className="py-1.5 pr-2 text-right">Phí TB</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ gốc</th>{cfg.adaptive && <><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5">Bot hiện tại</th></>}
               </tr></thead>
               <tbody>{(() => {
                 const rows = cfg.tfs.map((tf) => ({ tf, b: statsOf(res.baseTrades.filter((t) => t.tf === tf)), a: statsOf(res.trades.filter((t) => t.tf === tf)), usdB: res.basePortfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), usdA: res.portfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), st: res.tfState?.find((x) => x.tf === tf) }));
@@ -1056,7 +1096,7 @@ export default function CoinBot({ active: visible = true }) {
                 <table className="w-full min-w-[520px] text-[12px]">
                   <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" />{cols.map(([l, , , c]) => <th key={l} className={`py-1.5 pr-2 text-right ${c}`}>{l}</th>)}</tr></thead>
                   <tbody>{[
-                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 1, 1)}%`)], ["R TB / lệnh", (s) => rr(s.avgR)], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
+                    ["Lệnh đã đóng", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 1, 1)}%`)], ["Lời/lỗ TB mỗi lệnh (R)", (s) => rr(s.avgR)], ["Hệ số lãi (lãi ÷ lỗ)", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))],
                     ["Vốn", (s, P) => usd(P.equity + P.unrealized, 0)], ["Sụt vốn lớn nhất", (s, P) => `${fmtNum(P.maxDD, 1, 1)}%`],
                   ].map(([l, f]) => <tr key={l} className="border-b border-slate-50"><td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>{cols.map(([k, s, P, c]) => <td key={k} className={`py-1.5 pr-2 text-right font-bold tabular-nums ${c}`}>{f(s, P)}</td>)}</tr>)}</tbody>
                 </table>
@@ -1101,7 +1141,7 @@ export default function CoinBot({ active: visible = true }) {
               <table className="w-full text-[12px]">
                 <thead><tr className="border-b border-slate-100 text-left text-[10px] uppercase text-slate-400"><th className="py-1.5 pr-2" /><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5 pr-2 text-right">Luật gốc</th><th className="py-1.5 text-right">Bị loại*</th></tr></thead>
                 <tbody>{[
-                  ["Lệnh", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 0, 0)}%`)], ["R TB", (s) => rr(s.avgR), true], ["Profit factor", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))], ["Tổng R", (s) => fmtNum(s.totalR, 1, 1), true],
+                  ["Lệnh", (s) => s.n], ["Tỉ lệ thắng", (s) => (s.winRate == null ? "—" : `${fmtNum(s.winRate, 0, 0)}%`)], ["R TB", (s) => rr(s.avgR), true], ["Hệ số lãi", (s) => (s.pf === Infinity ? "∞" : f2(s.pf))], ["Tổng R", (s) => fmtNum(s.totalR, 1, 1), true],
                 ].map(([l, f, col]) => (
                   <tr key={l} className="border-b border-slate-50">
                     <td className="py-1.5 pr-2 font-bold text-slate-600">{l}</td>
