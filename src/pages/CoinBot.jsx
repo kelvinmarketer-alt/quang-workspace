@@ -90,14 +90,14 @@ const EXIT_WHY = {
   "Chốt 1/3 + hoà vốn": "Đã chốt 1/3 ở +0,75R và dời cắt lỗ về giá vào. Sau đó giá quay về giá vào nên phần còn lại đóng hoà vốn — lệnh vẫn lãi nhờ phần đã chốt.",
   "Chốt 1/3 + dời SL khoá lời": "Đã chốt 1/3, cắt lỗ dời dần theo xu hướng. Giá quay đầu chạm mức cắt lỗ đã khoá lời → đóng phần còn lại có lãi.",
 };
-function TradeWhy({ t, lv }) {
+function TradeWhy({ t, lv, wide = false }) {
   if (t.setup !== "SW3" || !t.why3) return t.why3 ? <div className="text-[11.5px] text-slate-500">Tiêu chí lúc vào: {t.why3}</div> : null;
   const m = (re) => (t.why3.match(re) || [])[1];
   const brk = m(/phá vượt ([\d.,-]+) ATR/), vol = m(/volume ([\d.,]+)×/), h4 = m(/(trên|dưới) EMA200 H4/), btc = m(/BTC (trên|dưới|chưa rõ) EMA50 D1/);
   const L = t.side === 1, dir = L ? "MUA" : "BÁN", g = sw3Targets(t.entry, t.side, Math.abs(t.entry - t.sl)), lvl = lv ? (L ? lv.lo : lv.hi) : null;
   const sec = "rounded-lg bg-white/70 px-2.5 py-2 ring-1 ring-slate-100";
   return (
-    <div className="grid gap-2 text-[11.5px] leading-snug text-slate-600 md:grid-cols-3">
+    <div className={`grid gap-2 text-[11.5px] leading-snug text-slate-600 ${wide ? "md:grid-cols-3" : ""}`}>
       <div className={sec}><b className="text-slate-800">1. Vì sao vào lệnh {dir}</b><ul className="mt-1 list-disc space-y-0.5 pl-4">
         <li>Nến H4 đóng {L ? "phá lên trên đỉnh" : "phá xuống dưới đáy"} 30 nến gần nhất{brk ? <>, vượt <b>{brk.replace(".", ",")}</b> lần biên độ nến (cần ≥ 0,3)</> : ""}.</li>
         {vol && <li>Khối lượng nến đó gấp <b>{vol.replace(".", ",")}</b> lần trung bình 20 nến (cần ≥ 1,3) → có tiền thật đẩy giá.</li>}
@@ -891,7 +891,7 @@ export default function CoinBot({ active: visible = true }) {
           </div>
           <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} trail={raw?.sw3Levels} />
           {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · cắt lỗ {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
-          {focus && focus.setup === "SW3" && <div className="border-t border-slate-100 bg-indigo-50/30 px-3 py-2"><TradeWhy t={focus} lv={focus.exitAt ? null : raw?.sw3Levels?.[focus.coin]} /></div>}
+          {focus && focus.setup === "SW3" && <div className="border-t border-slate-100 bg-indigo-50/30 px-3 py-2"><TradeWhy t={focus} lv={focus.exitAt ? null : raw?.sw3Levels?.[focus.coin]} wide /></div>}
         </Card>
 
         {open.length > 0 && (
