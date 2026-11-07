@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, loadTags, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
+import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
@@ -445,6 +445,8 @@ export default function CoinMarket({ active = true }) {
   const [grid, setGridState] = useState(loadGrid);
   const setGrid = (g) => { setGridState(g); saveGrid(g); };
   const multi = grid.n > 1;
+  const [flowOn, setFlowOn] = useState(loadFlows);
+  const { flow, w: whale, fut: flowFut } = useFlow(sym, tf, usedMkt, data.key === key ? data.ltf : NONE, multi ? {} : flowOn); // dấu chân dòng tiền lớn — chỉ biểu đồ 1 ô
   const setLayout = (n) => {
     const active = grid.active < n ? grid.active : 0; // ô đang chọn mang theo coin/khung đang xem
     setGrid({ ...grid, n, active, cells: grid.cells.map((c, j) => (j === active ? { sym, tf } : c)) });
@@ -610,11 +612,12 @@ export default function CoinMarket({ active = true }) {
           ) : (
             <div className="relative mt-2">
               {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-              <CandleChart candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} />
+              <CandleChart candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className="h-[380px] w-full sm:h-[560px]" />
               <TagBar tags={tags} setTags={setTags} extra={<>
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}
                 <GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />
               </>} />
+              <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} />
             </div>
           )}
           {/* Lệnh bot demo trên biểu đồ (các cặp của bot × M5/M15) */}

@@ -9,6 +9,7 @@ import { DrawLayer, makeDrawing, moveDrawing, TOOLS, COLORS, MAX_PER_COIN } from
 import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
+import { useWhale, cvdOf, flowMarks, bigMin, usdK } from "../lib/whale.js";
 
 export const precisionOf = (p) => (!p ? 2 : p >= 1000 ? 2 : p >= 10 ? 2 : p >= 1 ? 3 : Math.min(8, Math.ceil(-Math.log10(p)) + 3)); // chỉ cho thang giá biểu đồ
 // Giá: kiểu chung fmtPx; coin giá rất nhỏ (< 0,01 — PEPE, SHIB…) cần thêm số lẻ để không thành "0,000005"
@@ -82,6 +83,48 @@ export function TagBar({ tags, setTags, compact, extra }) {
   );
 }
 
+// ---- Dòng tiền lớn / "dấu chân cá mập" (07/11) — bật/tắt từng lớp, nhớ trên máy ----
+export const FLOWS = [
+  ["delta", "Volume Δ", "#10b981", "Cột khối lượng tô theo phe thắng trong nến: xanh = mua chủ động nhiều hơn, đỏ = bán chủ động nhiều hơn"],
+  ["cvd", "CVD", "#0ea5e9", "Tầng phụ: cộng dồn (mua chủ động − bán chủ động). Giá lên mà CVD đi ngang/giảm = lực mua yếu, có người xả"],
+  ["oi", "OI", "#a855f7", "Tầng phụ: tổng giá trị hợp đồng đang mở (Futures, sàn giữ ~30 ngày). Giá lên + OI tăng = tiền mới vào"],
+  ["big", "Lệnh lớn", "#f59e0b", "Chấm tròn: lệnh khớp lớn (≥ ngưỡng theo mã) gộp theo nến — xanh dưới nến = MUA chủ động, đỏ trên nến = BÁN chủ động. Chỉ có từ lúc mở biểu đồ"],
+  ["liq", "Thanh lý", "#f97316", "Ô vuông: lệnh bị thanh lý gộp theo nến — cam dưới nến = LONG bị thanh lý, xanh trên nến = SHORT bị thanh lý. Chỉ có từ lúc mở biểu đồ"],
+  ["badge", "Funding · L/S", "#64748b", "Nhãn góc trái: funding hiện tại, OI 24h, tỉ lệ Long/Short của tài khoản lớn (top trader)"],
+];
+export const loadFlows = () => ({ delta: false, cvd: true, oi: false, big: true, liq: true, badge: true, ...(ls.get("qws_mkt_flow", {}) || {}) });
+export function FlowBar({ on, setOn, fut, w }) {
+  const flip = (k) => setOn((o) => { const n = { ...o, [k]: !o[k] }; ls.set("qws_mkt_flow", n); return n; });
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1 text-[10.5px] font-semibold text-slate-400">
+      <span className="mr-0.5 font-bold text-slate-500">Dòng tiền lớn:</span>
+      {FLOWS.map(([k, label, color, tip]) => { const need = (k === "oi" || k === "liq" || k === "badge") && !fut; return (
+        <button key={k} onClick={() => flip(k)} disabled={need} title={need ? `${label}: chỉ có ở Futures` : `${tip}. Bấm để ${on[k] ? "tắt" : "bật"}.`} aria-pressed={!!on[k]}
+          className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 transition disabled:opacity-40 ${on[k] && !need ? "border-slate-300 bg-white text-slate-700" : "border-dashed border-slate-200 text-slate-300 line-through"}`}>
+          <span style={{ color: on[k] && !need ? color : undefined }}>{k === "big" ? "●" : k === "liq" ? "■" : "━"}</span>{label}
+        </button>
+      ); })}
+      <span className="ml-auto hidden sm:inline">{on.big || on.liq ? `lệnh lớn ≥ ${usdK(w.min)}$ · đã ghi ${w.big.length} lệnh lớn${fut ? `, ${w.liq.length} thanh lý` : ""} từ lúc mở · ` : ""}chỉ để tham khảo</span>
+    </div>
+  );
+}
+// Gom dữ liệu cho CandleChart prop flow
+export function useFlow(sym, tf, market, candles, on) {
+  const fut = market === "futures";
+  const w = useWhale(sym, tf, market, { oi: on.oi && fut, big: on.big, liq: on.liq && fut, badge: on.badge && fut });
+  const min = bigMin(String(sym).toUpperCase().replace(/USDT$/, ""));
+  const cvd = useMemo(() => (on.cvd && candles.length ? cvdOf(candles) : null), [on.cvd, candles]);
+  const first = candles[0]?.time ?? 0;
+  const marks = useMemo(() => flowMarks({ big: w.big, liq: w.liq, tf, on, min, first }), [w.tick, w.big, w.liq, tf, on.big, on.liq, min, first]); // eslint-disable-line react-hooks/exhaustive-deps
+  const badge = on.badge && fut && (w.funding != null || w.topLS || w.oiChg != null) ? (<>
+    {w.funding != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.funding > 0.03 ? "text-rose-600" : w.funding < -0.01 ? "text-emerald-600" : "text-slate-600"}`} title="Funding: dương = long trả phí cho short (đám đông nghiêng long). Quá cao (> 0,03%/8h) thường là long quá đà">Funding {fmtNum(w.funding, 4, 4)}%</span>}
+    {w.oiChg != null && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.oiChg >= 0 ? "text-violet-600" : "text-slate-500"}`} title="Giá trị hợp đồng mở hiện tại và thay đổi 24 giờ">OI {usdK(w.oiNow)}$ {w.oiChg >= 0 ? "+" : ""}{fmtNum(w.oiChg, 1, 1)}%/24h</span>}
+    {w.topLS && <span className={`rounded bg-white/85 px-1.5 py-0.5 shadow-sm ${w.topLS.long >= 50 ? "text-emerald-600" : "text-rose-600"}`} title="Tỉ lệ vị thế Long/Short của nhóm tài khoản lớn nhất trên Binance (top trader)">TK lớn: {fmtNum(w.topLS.long, 0, 0)}% long</span>}
+  </>) : null;
+  const flow = useMemo(() => ({ delta: !!on.delta, cvd, oi: on.oi && fut && w.oi.length ? w.oi : null, marks, badge }), [on.delta, cvd, on.oi, fut, w.oi, marks, badge]);
+  return { flow, w: { ...w, min }, fut };
+}
+
 // ---- Đồng bộ vạch giá giữa các ô (cùng coin) ----
 const HOVER = new Set();
 const emitHover = (msg) => HOVER.forEach((f) => f(msg));
@@ -91,7 +134,7 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 const VN = 7 * 3600;
 // draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
 const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
-export function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, className = "h-[300px] w-full sm:h-[420px]" }) {
+export function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]" }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
@@ -241,20 +284,39 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     a.candle.applyOptions({ priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision } });
     a.chart.applyOptions({ localization: { locale: "vi-VN", priceFormatter: (p) => Number(p).toLocaleString("vi-VN", { minimumFractionDigits: precision, maximumFractionDigits: precision }) } }); // số kiểu Việt (83.003,06) như phần còn lại của app
     a.candle.setData(candles.map(({ time, open, high, low, close }) => ({ time: T(time), open, high, low, close })));
-    a.vol.setData(candles.map((c) => ({ time: T(c.time), value: c.volume, color: c.close >= c.open ? "rgba(16,185,129,0.35)" : "rgba(244,63,94,0.35)" })));
+    a.vol.setData(candles.map((c) => ({ time: T(c.time), value: c.volume, color: (flow?.delta ? (c.buy || 0) >= (c.sell || 0) : c.close >= c.open) ? `rgba(16,185,129,${flow?.delta ? 0.6 : 0.35})` : `rgba(244,63,94,${flow?.delta ? 0.6 : 0.35})` })));
     a.l20.setData(e20.map((p) => ({ time: T(p.time), value: p.value }))); a.l50.setData(e50.map((p) => ({ time: T(p.time), value: p.value })));
     a.l20.applyOptions({ visible: m20 !== "off", lastValueVisible: m20 === "full" });
     a.l50.applyOptions({ visible: m50 !== "off", lastValueVisible: m50 === "full" });
     const m = [
       ...(mSmc === "off" ? [] : events.map((ev) => ({ time: ev.time, position: ev.dir === "up" ? "belowBar" : "aboveBar", color: ev.dir === "up" ? "#10b981" : "#f43f5e", shape: ev.dir === "up" ? "arrowUp" : "arrowDown", text: mSmc === "full" ? ev.kind : "" }))),
-      ...(marks || []),
+      ...(marks || []), ...(flow?.marks || []),
     ].filter((x) => x.time >= first && x.time <= last).map((x) => ({ ...x, time: T(x.time) })).sort((x, y) => x.time - y.time);
     a.markers.setMarkers(m);
     if (fitted.current !== fitKey) { // đổi coin/khung → zoom ~120 nến gần nhất
       fitted.current = fitKey;
       a.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - (compact ? 90 : 120)), to: candles.length + 6 });
     }
-  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact]);
+  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact, flow?.marks, flow?.delta]);
+
+  // Tầng phụ dòng tiền: CVD (tầng 2) + OI (tầng 3) — dựng lại khi bật/tắt, cập nhật dữ liệu khi có nến mới
+  const hasCvd = !!flow?.cvd, hasOi = !!flow?.oi;
+  useEffect(() => {
+    const a = api.current; if (!a) return;
+    for (const k of ["cvdS", "oiS"]) if (a[k]) { a.chart.removeSeries(a[k]); a[k] = null; }
+    for (let i = a.chart.panes().length - 1; i >= 1; i--) a.chart.removePane(i);
+    let pane = 1;
+    const sub = (color, title) => a.chart.addSeries(LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title, priceFormat: { type: "volume" } }, pane++);
+    if (hasCvd) a.cvdS = sub("#0ea5e9", "CVD");
+    if (hasOi) a.oiS = sub("#a855f7", "OI $");
+    const P = a.chart.panes(); P[0]?.setStretchFactor(P.length > 1 ? 3.2 : 1); for (let i = 1; i < P.length; i++) P[i].setStretchFactor(1);
+  }, [hasCvd, hasOi]);
+  useEffect(() => {
+    const a = api.current; if (!a) return;
+    const T = (t) => t + VN, first = candles[0]?.time ?? 0;
+    if (a.cvdS && flow?.cvd) a.cvdS.setData(flow.cvd.map((p) => ({ time: T(p.time), value: p.value })));
+    if (a.oiS && flow?.oi) { const sec = candles.length > 1 ? candles[1].time - candles[0].time : 0; const m = new Map(); for (const p of flow.oi) if (p.time >= first - sec) m.set(sec ? Math.floor(p.time / sec) * sec : p.time, p.value); a.oiS.setData([...m].sort((x, y) => x[0] - y[0]).map(([t, v]) => ({ time: T(t), value: v }))); }
+  }, [flow?.cvd, flow?.oi, hasCvd, hasOi, candles]);
 
   useEffect(() => {
     const a = api.current; if (!a) return;
@@ -265,6 +327,7 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
   return (
     <div className="relative w-full">
       <div ref={box} className={className} />
+      {flow?.badge && <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex flex-wrap gap-1 text-[10.5px] font-bold tabular-nums">{flow.badge}</div>}
       {edit && (
         <input autoFocus defaultValue={edit.value} maxLength={80} placeholder="Gõ ghi chú rồi Enter"
           onKeyDown={(e) => { if (e.key === "Enter") saveText(e.currentTarget.value); else if (e.key === "Escape") { e.stopPropagation(); saveText(edit.value); } }}

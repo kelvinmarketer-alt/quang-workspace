@@ -81,12 +81,28 @@ const side = (s) => <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-e
 // Biểu đồ nến của 1 luồng (cặp × khung) + điểm vào/ra của mọi lệnh bot + đường Entry/SL/TP lệnh đang mở / lệnh đang chọn + lệnh chờ.
 // Giờ hiển thị theo giờ VN (UTC+7). Nến đang chạy cập nhật realtime từ WebSocket.
 const VN = 7 * 3600, toT = (ms) => Math.floor(ms / 1000) + VN;
-function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus }) {
+// Thẻ lệnh Demo đang mở. SW3/D: không có TP cố định — chốt 1/3 ở +0,75R, phần còn lại chạy tới khi chạm SL dời theo đỉnh/đáy 20 nến H4
+function OpenCard({ t, lv }) {
+  const pos = Math.min(1, Math.max(0, (t.last - t.curSl) / (t.tp - t.curSl))), toTp = ((t.tp - t.last) / t.last) * 100 * t.side, toSl = ((t.last - t.curSl) / t.last) * 100 * t.side;
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
+      <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
+      <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
+      <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
+      <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
+      {t.setup === "SW3" && (() => { const lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null, nb = t.side === 1 ? "đáy" : "đỉnh"; return (
+        <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-indigo-900/80"><b>{t.part ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt TP — giữ tới khi chạm SL. SL tự dời theo {nb} 20 nến H4{lvl != null && isFinite(lvl) ? <> (hiện <b className="tabular-nums">{px(lvl)}</b>{(lvl - t.curSl) * t.side > 0 ? "" : ` — SL chỉ dời khi mốc này ${t.side === 1 ? "lên trên" : "xuống dưới"} ${px(t.curSl)}`})</> : ""}, chỉ dời theo hướng có lợi.</div>
+      ); })()}
+      <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
+    </div>
+  );
+}
+function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus, trail }) {
   const box = useRef(null), api = useRef(null), [K, setK] = useState([]), fitted = useRef(""), step = TFS[tf].ms;
   const [kState, setKState] = useState("loading"), [retry, setRetry] = useState(0);
   // Chữ ký dữ liệu: chỉ vẽ lại mốc/đường giá khi lệnh thật sự đổi (giá realtime nhảy mỗi giây không làm vẽ lại)
   const markSig = trades.map((t) => `${t.id}:${t.exitAt || ""}:${t.r ?? ""}`).join("|") + `#${focus?.id || ""}`;
-  const lineSig = (focus ? [focus] : trades.filter((t) => !t.exitAt)).map((t) => `${t.id}:${t.entry}:${t.curSl ?? t.sl}:${t.tp}`).join("|") + "#" + pending.map((p) => `${p.id}:${p.lim}`).join("|");
+  const lineSig = (focus ? [focus] : trades.filter((t) => !t.exitAt)).map((t) => `${t.id}:${t.entry}:${t.curSl ?? t.sl}:${t.tp}:${t.part || 0}:${trail?.[t.coin]?.barAt || ""}`).join("|") + "#" + pending.map((p) => `${p.id}:${p.lim}`).join("|");
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true,
@@ -135,7 +151,9 @@ function BotChart({ coin, tf, startAt, rawAt, trades, pending, live, ver, focus 
     const show = focus ? [focus] : trades.filter((t) => !t.exitAt), L = [];
     for (const t of show) {
       const tag = `${t.side === 1 ? "LONG" : "SHORT"}`;
-      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: "SL" }, { price: t.tp, color: "#059669", title: tpLbl(t) });
+      L.push({ price: t.entry, color: "#6366f1", title: `${tag} vào`, style: 0 }, { price: t.curSl ?? t.sl, color: "#e11d48", title: t.be ? "SL (hoà vốn)" : "SL" }, { price: t.tp, color: "#059669", title: t.setup === "SW3" && t.part ? "Đã chốt 1/3" : tpLbl(t) });
+      const lv = !t.exitAt && t.setup === "SW3" ? trail?.[t.coin] : null, lvl = lv ? (t.side === 1 ? lv.lo : lv.hi) : null;
+      if (lvl != null && isFinite(lvl) && Math.abs(lvl - (t.curSl ?? t.sl)) > 1e-9) L.push({ price: lvl, color: "#a855f7", title: `Mốc dời SL (${t.side === 1 ? "đáy" : "đỉnh"} 20 nến H4)`, style: 1 });
     }
     for (const p of pending) L.push({ price: p.lim, color: "#f59e0b", title: `Chờ ${p.side === 1 ? "LONG" : "SHORT"}` });
     a.lines = L.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: 1, lineStyle: ln.style ?? 2, axisLabelVisible: true, title: ln.title }));
@@ -826,25 +844,14 @@ export default function CoinBot({ active: visible = true }) {
             ); })}
             <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
           </div>
-          <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} />
+          <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} trail={raw?.sw3Levels} />
           {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · SL {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
         </Card>
 
         {open.length > 0 && (
           <Card className="!p-3">
             <Title right={active && status === "live" ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh đang mở ({open.length})</Title>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => {
-              const pos = Math.min(1, Math.max(0, (t.last - t.curSl) / (t.tp - t.curSl))), toTp = ((t.tp - t.last) / t.last) * 100 * t.side, toSl = ((t.last - t.curSl) / t.last) * 100 * t.side;
-              return (
-                <div key={t.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
-                  <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
-                  <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
-                  <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
-                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
-                </div>
-              );
-            })}</div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => <OpenCard key={t.id} t={t} lv={raw?.sw3Levels?.[t.coin]} />)}</div>
           </Card>
         )}
 
@@ -911,18 +918,7 @@ export default function CoinBot({ active: visible = true }) {
         {open.length > 0 && (
           <Card className="!p-3">
             <Title right={active && status === "live" ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh đang mở ({open.length})</Title>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => {
-              const pos = Math.min(1, Math.max(0, (t.last - t.curSl) / (t.tp - t.curSl))), toTp = ((t.tp - t.last) / t.last) * 100 * t.side, toSl = ((t.last - t.curSl) / t.last) * 100 * t.side;
-              return (
-                <div key={t.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
-                  <div className="flex items-center gap-2">{side(t.side)}<b>{t.coin} {TFS[t.tf].label}</b><span className="truncate text-slate-400">{setupName(t.setup)}</span><span className={`ml-auto text-[14px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span></div>
-                  <div className="mt-1 flex justify-between tabular-nums text-slate-500"><span>Vào {px(t.entry)}</span><span className="font-bold text-slate-800">Giá {px(t.last)}</span><span className={`font-bold ${tone(t.uR)}`}>{rr(t.uR)}</span></div>
-                  <div className="relative mt-1.5 h-1.5 rounded-full bg-gradient-to-r from-rose-300 via-slate-200 to-emerald-300"><span className="absolute -top-1 h-3.5 w-1 -translate-x-1/2 rounded bg-slate-800 transition-all duration-700" style={{ left: `${pos * 100}%` }} /></div>
-                  <div className="mt-1 flex justify-between text-[11px] tabular-nums"><span className="text-rose-500">SL {px(t.curSl)}{t.be ? " (hoà vốn)" : ""} · còn {fmtNum(toSl, 2, 2)}%</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}{t.setup === "SW3" && t.part ? " ✓ đã chốt" : ` · còn ${fmtNum(toTp, 2, 2)}%`}</span></div>
-                  <div className="mt-1 text-[11px] text-slate-400">Mở {dt(t.entryAt)} · vị thế {usd(t.notional, 0)} ({fmtNum(t.lev, 1, 1)}x vốn) · rủi ro {usd(t.riskUsd)}{t.score ? ` · ${t.score.variant}` : ""}</div>
-                </div>
-              );
-            })}</div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => <OpenCard key={t.id} t={t} lv={raw?.sw3Levels?.[t.coin]} />)}</div>
           </Card>
         )}
 
