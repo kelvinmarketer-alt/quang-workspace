@@ -105,7 +105,7 @@ describe("Coin · nhiều biểu đồ (05/11)", () => {
     expect(screen.getByRole("button", { name: "Đường ngang" })).toBeTruthy(); // chủ có thanh công cụ vẽ (06/11)
     await safely(() => fireEvent.click(screen.getAllByRole("button", { name: "M15" })[1]));
     await safely(() => fireEvent.change(cellSelects[2], { target: { value: "ETH" } }));
-    await safely(() => fireEvent.click(screen.getByRole("button", { name: /^POC:/ })));
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: /^Giá GD nhiều nhất:/ })));
     await safely(() => fireEvent.click(screen.getByRole("button", { name: "1 ô" })));
     expect(screen.queryAllByRole("combobox", { name: /Coin ô/ }).length).toBe(0);
     expect(JSON.parse(localStorage.getItem("qws_mkt_tags")).poc).toBe("line");

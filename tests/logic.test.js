@@ -60,9 +60,9 @@ describe("nhãn biểu đồ Coin (05/11)", async () => {
   const levels = [{ price: 10, title: "Protected H", color: "#f00" }, { price: 5, title: "POC", color: "#999" }];
   const all = Object.fromEntries(["protH", "protL", "kvUp", "kvDn", "poc", "ai"].map((k) => [k, "full"]));
   it("3 mức: có nhãn / chỉ đường / ẩn", () => {
-    expect(buildLines({ levels, tags: all }).map((l) => [l.title, l.axis])).toEqual([["Protected H", true], ["POC", true]]);
+    expect(buildLines({ levels, tags: all }).map((l) => [l.title, l.axis])).toEqual([["Đỉnh bảo vệ", true], ["Giá GD nhiều nhất", true]]); // nhãn tiếng Việt (08/11)
     expect(buildLines({ levels, tags: { ...all, protH: "line" } })[0].axis).toBe(false);
-    expect(buildLines({ levels, tags: { ...all, poc: "off" } }).map((l) => l.title)).toEqual(["Protected H"]);
+    expect(buildLines({ levels, tags: { ...all, poc: "off" } }).map((l) => l.title)).toEqual(["Đỉnh bảo vệ"]);
   });
   it("ô nhỏ tự ẩn nhãn nhưng giữ đường", () => {
     expect(modeOf(all, "poc", true)).toBe("line");
