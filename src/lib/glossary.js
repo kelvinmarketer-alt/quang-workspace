@@ -41,3 +41,4 @@ export const GLOSSARY = {
   tf: { vi: "Khung nến", en: "M5 · M15 · H1 · H4 · D1 · W1", d: "Mỗi cây nến dài 5 phút, 15 phút, 1 giờ, 4 giờ, 1 ngày, 1 tuần." },
 };
 export const termVi = (k) => GLOSSARY[k]?.vi || k;
+export const viReason = (r) => (r ? String(r).replace(/SL/g, "cắt lỗ").replace(/TP/g, "chốt lời") : r); // lý do đóng do bot ghi (giữ nguyên trong luật) → hiển thị tiếng Việt

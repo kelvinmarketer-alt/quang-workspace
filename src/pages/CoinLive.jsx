@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Term } from "../components/Term.jsx";
+import { viReason } from "../lib/glossary.js";
 import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown, XOctagon, ListChecks, BarChart3, GitCompare, BellRing } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -224,7 +225,7 @@ export default function CoinLive({ active }) {
             {a.sw3 && a.stage === "open" && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt mức chốt lời cố định — cắt lỗ trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm cắt lỗ.</div>}
           </div>
         ))}</div> : <div className="py-3 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần). Lệnh chờ / đang chạy sẽ hiện ngay tại đây.
-          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "BÁN" : "MUA"} · {lastT.reason || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
+          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "BÁN" : "MUA"} · {viReason(lastT.reason) || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
         </div>}
       </Card>
 
@@ -439,7 +440,7 @@ function LiveResults({ hist, st, session }) {
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
             <span>{dt(t.entryAt)} · {fmtPx(t.entry)} → {t.exit != null ? fmtPx(t.exit) : "…"}</span>
             <span className="text-rose-500">Cắt lỗ {fmtPx(t.sl)}</span><span className="text-emerald-600">{t.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} {fmtPx(t.tp)}</span>
-            {(t.reason || t.exitAt) && <span>{t.reason || "Đóng"}{t.exitAt ? ` · ${dt(t.exitAt)}` : ""}</span>}
+            {(t.reason || t.exitAt) && <span>{viReason(t.reason) || "Đóng"}{t.exitAt ? ` · ${dt(t.exitAt)}` : ""}</span>}
             {t.riskUsd != null && <span className="text-slate-400">rủi ro {fmtUsd(t.riskUsd)}</span>}
           </div>
         </div>

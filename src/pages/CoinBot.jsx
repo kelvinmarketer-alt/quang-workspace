@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Term, GlossaryButton } from "../components/Term.jsx";
+import { viReason } from "../lib/glossary.js";
 import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, ChevronDown, Radio, Brain, Bell, Activity, AlertTriangle, History, Trash2 } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
@@ -112,7 +113,7 @@ function TradeWhy({ t, lv, wide = false }) {
         {g && <li>Chốt lời kỳ vọng <b>{px(g.avg)}</b> (+1,5R) = mức trung bình phần còn lại đóng ở trong 2.100 lệnh quá khứ; 1/10 lệnh chạy tới <b>{px(g.far)}</b> (+3,8R). Chỉ để tham khảo, không phải lệnh trên sàn.</li>}
       </ul></div>
       <div className={sec}><b className="text-slate-800">3. {t.exitAt ? "Vì sao đóng lệnh" : "Lệnh sẽ đóng khi nào"}</b>
-        {t.exitAt ? <p className="mt-1"><b>{t.reason}</b> @ {px(t.exit)} · {dt(t.exitAt)}<br />{EXIT_WHY[t.reason] || ""}</p>
+        {t.exitAt ? <p className="mt-1"><b>{viReason(t.reason)}</b> @ {px(t.exit)} · {dt(t.exitAt)}<br />{EXIT_WHY[t.reason] || ""}</p>
           : <ul className="mt-1 list-disc space-y-0.5 pl-4"><li>Giá chạm cắt lỗ <b>{px(t.curSl)}</b>{t.be ? " (đã hoà vốn — không lỗ)" : " → lỗ tối đa 1R"}.</li>{!t.part && <li>Hoặc chạm <b>{px(t.tp)}</b> thì chốt 1/3 trước, phần còn lại chạy tiếp.</li>}<li>Không có giới hạn thời gian — giữ tới khi xu hướng gãy.</li></ul>}
       </div>
     </div>
@@ -667,7 +668,7 @@ export default function CoinBot({ active: visible = true }) {
       for (const t of rows) {
         const was = prevSt.current.get(t.id);
         if (!was && t.status === "open") evs.push({ text: `Mở ${t.side === 1 ? "MUA" : "BÁN"} ${t.coin} ${TFS[t.tf].label} @ ${px(t.entry)} · cắt lỗ ${px(t.curSl)} · ${tpLbl(t)} ${px(t.tp)}`, ok: true });
-        if (was === "open" && t.status === "done") evs.push({ text: `Đóng ${t.coin} ${TFS[t.tf].label} · ${t.reason} ${rr(t.r)} (${usd(t.pnl)})`, ok: t.r >= 0 });
+        if (was === "open" && t.status === "done") evs.push({ text: `Đóng ${t.coin} ${TFS[t.tf].label} · ${viReason(t.reason)} ${rr(t.r)} (${usd(t.pnl)})`, ok: t.r >= 0 });
       }
       if (evs.length) { setToast({ ...evs[evs.length - 1], more: evs.length - 1, at: Date.now() }); try { navigator.vibrate?.(60); } catch { /* bỏ qua */ } }
     }
@@ -890,7 +891,7 @@ export default function CoinBot({ active: visible = true }) {
             <span className="ml-auto text-[11px] text-slate-400">▲▼ vào lệnh · ● thoát (xanh lãi, đỏ lỗ)</span>
           </div>
           <BotChart coin={sel.coin} tf={sel.tf} startAt={session.startAt} rawAt={res.at} trades={chartTrades} pending={chartPending} live={live} ver={ver} focus={focus && focus.coin === sel.coin && focus.tf === sel.tf ? focus : null} trail={raw?.sw3Levels} />
-          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · cắt lỗ {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${focus.reason} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
+          {focus && <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-slate-100 bg-indigo-50/50 px-3 py-2 text-[12px]">{side(focus.side)}<b>{focus.coin} {TFS[focus.tf].label}</b><span className="text-slate-500">{setupName(focus.setup)}</span><span className="tabular-nums">vào {px(focus.entry)} · cắt lỗ {px(focus.sl)} · {tpLbl(focus)} {px(focus.tp)}</span><span className={`font-extrabold ${tone(focus.r ?? focus.uR)}`}>{focus.exitAt ? `${viReason(focus.reason)} ${rr(focus.r)}` : `đang mở ${rr(focus.uR)}`}</span><button onClick={() => setFocus(null)} className="ml-auto text-[11px] font-bold text-indigo-600">Bỏ chọn</button>{histScroll.current > 0 && <button onClick={backToHistory} className="rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-bold text-indigo-600 ring-1 ring-indigo-100">← Về lịch sử</button>}</div>}
           {focus && focus.setup === "SW3" && <div className="border-t border-slate-100 bg-indigo-50/30 px-3 py-2"><TradeWhy t={focus} lv={focus.exitAt ? null : raw?.sw3Levels?.[focus.coin]} wide /></div>}
         </Card>
 
@@ -952,7 +953,7 @@ export default function CoinBot({ active: visible = true }) {
               <div key={i} className={`flex items-center gap-2 rounded-md px-1.5 py-1 text-[12px] ${fresh ? "bg-amber-50" : ""}`}>
                 <span className="w-[74px] shrink-0 tabular-nums text-[11px] text-slate-400">{dt(e.t)}</span>
                 {e.kind === "open" ? <span className="min-w-0 truncate">{side(t.side)} <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">@ {px(t.entry)}</span>{t.reducedRisk && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}</span>
-                  : <span className="min-w-0 truncate"><span className="font-bold text-slate-600">Đóng</span> <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">{t.reason}</span>{t.reducedRisk && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}</span>}
+                  : <span className="min-w-0 truncate"><span className="font-bold text-slate-600">Đóng</span> <b>{t.coin} {TFS[t.tf].label}</b> <span className="text-slate-500">{viReason(t.reason)}</span>{t.reducedRisk && <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}</span>}
                 {e.kind === "close" && <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${tone(t.pnl)}`}>{usd(t.pnl)}</span>}
               </div>
             ); }) : <div className="text-[12px] text-slate-400">Chưa có lệnh.</div>}</div>
@@ -1006,7 +1007,7 @@ export default function CoinBot({ active: visible = true }) {
               </div>
               <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
                 <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">Cắt lỗ {px(t.sl)}</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}</span>
-                <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${t.reason}` : t.exitAt ? `${t.reason} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
+                <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${viReason(t.reason)}` : t.exitAt ? `${viReason(t.reason)} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
               </div>
               {t.why3 && <div className="mt-0.5 text-[11px] leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3} · <span className="font-semibold text-indigo-500">bấm để xem vì sao vào / vì sao đóng</span></div>}
               {t.lesson && <div className="mt-0.5 text-[11px] leading-snug text-rose-700/80">Rút kinh nghiệm: {t.lesson}</div>}

@@ -7,6 +7,7 @@ import { Card } from "./ui.jsx";
 import { TFS, SETUPS, symOf } from "../lib/paperBot.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 import InfoTip from "./InfoTip.jsx";
+import { viReason } from "../lib/glossary.js";
 
 const setupName = (k) => SETUPS[k]?.label.split(" (")[0] || k;
 const pad = (n) => String(n).padStart(2, "0");
@@ -113,7 +114,7 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                           </span>
                         </> : <>
                           <Clock size={12} className="shrink-0 text-slate-400" />
-                          <span className="min-w-0 flex-1 truncate text-slate-500"><span className="font-semibold text-slate-600">Chờ nến H4 đạt đủ điều kiện</span>{r.last ? <> · lệnh gần nhất đã đóng: {dt(r.last.entryAt)} {r.last.side === 1 ? "MUA" : "BÁN"} → <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{r.last.reason} {rr(r.last.r)}</b></> : ""}</span>
+                          <span className="min-w-0 flex-1 truncate text-slate-500"><span className="font-semibold text-slate-600">Chờ nến H4 đạt đủ điều kiện</span>{r.last ? <> · lệnh gần nhất đã đóng: {dt(r.last.entryAt)} {r.last.side === 1 ? "MUA" : "BÁN"} → <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{viReason(r.last.reason)} {rr(r.last.r)}</b></> : ""}</span>
                           <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh từ đầu phiên</span>
                         </>}
                       </div>
