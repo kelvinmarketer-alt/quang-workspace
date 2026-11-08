@@ -166,20 +166,20 @@ export function candlePatterns(c) {
     const x = c[i], p = c[i - 1], pp = c[i - 2], body = Math.abs(x.close - x.open), range = x.high - x.low || 1e-12;
     const up = x.high - Math.max(x.open, x.close), dn = Math.min(x.open, x.close) - x.low, ago = L - 1 - i;
     const volUp = x.volume > p.volume;
-    if (x.close > x.open && p.close < p.open && x.close >= p.open && x.open <= p.close) out.push({ ago, name: `Bullish engulfing${volUp ? " + volume lớn hơn nến trước (chuẩn EA)" : " (volume chưa xác nhận)"}` });
-    if (x.close < x.open && p.close > p.open && x.close <= p.open && x.open >= p.close) out.push({ ago, name: `Bearish engulfing${volUp ? " + volume lớn hơn nến trước (chuẩn EA)" : " (volume chưa xác nhận)"}` });
-    if (dn > body * 2 && up < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Pin bar đuôi dưới (từ chối giá thấp)" });
-    if (up > body * 2 && dn < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Pin bar đuôi trên (từ chối giá cao)" });
-    if (body / range < 0.1) out.push({ ago, name: "Doji (lưỡng lự)" });
-    if (body / range > 0.85) out.push({ ago, name: `Marubozu ${x.close > x.open ? "tăng" : "giảm"} (thân dài râu ngắn — nến xác nhận mạnh)` });
-    if (x.high < p.high && x.low > p.low) out.push({ ago, name: "Inside bar (nén giá)" });
+    if (x.close > x.open && p.close < p.open && x.close >= p.open && x.open <= p.close) out.push({ ago, name: `Nến nhấn chìm TĂNG${volUp ? " + khối lượng lớn hơn nến trước (chuẩn EA)" : " (khối lượng chưa xác nhận)"}` });
+    if (x.close < x.open && p.close > p.open && x.close <= p.open && x.open >= p.close) out.push({ ago, name: `Nến nhấn chìm GIẢM${volUp ? " + khối lượng lớn hơn nến trước (chuẩn EA)" : " (khối lượng chưa xác nhận)"}` });
+    if (dn > body * 2 && up < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Nến râu dài phía dưới (từ chối giá thấp)" });
+    if (up > body * 2 && dn < body * 0.6 && body / range < 0.4) out.push({ ago, name: "Nến râu dài phía trên (từ chối giá cao)" });
+    if (body / range < 0.1) out.push({ ago, name: "Nến lưỡng lự (thân rất nhỏ)" });
+    if (body / range > 0.85) out.push({ ago, name: `Nến thân đặc ${x.close > x.open ? "TĂNG" : "GIẢM"} (thân dài râu ngắn — nến xác nhận mạnh)` });
+    if (x.high < p.high && x.low > p.low) out.push({ ago, name: "Nến nằm gọn trong nến trước (nén giá)" });
     // 3-Bar Reversal: nến 2 quét râu qua nến 1, nến 3 đóng vượt cả nến 1 & 2
-    if (p.low < pp.low && x.close > Math.max(pp.high, p.high)) out.push({ ago, name: "3-Bar Reversal TĂNG (quét đáy rồi đóng vượt đỉnh 2 nến trước)" });
-    if (p.high > pp.high && x.close < Math.min(pp.low, p.low)) out.push({ ago, name: "3-Bar Reversal GIẢM (quét đỉnh rồi đóng thủng đáy 2 nến trước)" });
+    if (p.low < pp.low && x.close > Math.max(pp.high, p.high)) out.push({ ago, name: "Đảo chiều 3 nến TĂNG (quét đáy rồi đóng vượt đỉnh 2 nến trước)" });
+    if (p.high > pp.high && x.close < Math.min(pp.low, p.low)) out.push({ ago, name: "Đảo chiều 3 nến GIẢM (quét đỉnh rồi đóng thủng đáy 2 nến trước)" });
     // Mother bar breakout: nến mẹ pp, nến con p nằm trong, nến x phá
     if (p.high <= pp.high && p.low >= pp.low) {
-      if (pp.close < pp.open && x.close > pp.open) out.push({ ago, name: "Mother Bar Breakout TĂNG (đóng trên giá mở nến mẹ)" });
-      if (pp.close > pp.open && x.close < pp.open) out.push({ ago, name: "Mother Bar Breakout GIẢM (đóng dưới giá mở nến mẹ)" });
+      if (pp.close < pp.open && x.close > pp.open) out.push({ ago, name: "Phá nến mẹ TĂNG (đóng trên giá mở nến mẹ)" });
+      if (pp.close > pp.open && x.close < pp.open) out.push({ ago, name: "Phá nến mẹ GIẢM (đóng dưới giá mở nến mẹ)" });
     }
   }
   return out;
@@ -254,9 +254,9 @@ export function sfpSignals(c, sw, n = 3) {
     const prior = sw.filter((s) => s.i + n < k);
     const h = [...prior].reverse().find((s) => s.type === "H"), l = [...prior].reverse().find((s) => s.type === "L");
     const pv = c.slice(Math.max(0, k - 20), k), avgV = pv.reduce((s2, y) => s2 + y.volume, 0) / (pv.length || 1), volRel = c[k].volume / (avgV || 1);
-    const valid = volRel >= 1.5 ? "HỢP LỆ (volume cao – SM tham gia)" : "YẾU (volume thấp – VSA: chưa coi là stop hunt)";
-    if (h && c[k].high > h.price && c[k].close < h.price) out.push({ dir: "giảm (bearish SFP – quét đỉnh)", level: rp(h.price), barsAgo: L - 1 - k, wick: rp(c[k].high), volRel: rp(volRel), valid });
-    if (l && c[k].low < l.price && c[k].close > l.price) out.push({ dir: "tăng (bullish SFP – quét đáy)", level: rp(l.price), barsAgo: L - 1 - k, wick: rp(c[k].low), volRel: rp(volRel), valid });
+    const valid = volRel >= 1.5 ? "HỢP LỆ (khối lượng cao – tay to tham gia)" : "YẾU (khối lượng thấp – chưa coi là quét thật)";
+    if (h && c[k].high > h.price && c[k].close < h.price) out.push({ dir: "giảm (râu quét qua đỉnh cũ rồi đóng lại dưới)", level: rp(h.price), barsAgo: L - 1 - k, wick: rp(c[k].high), volRel: rp(volRel), valid });
+    if (l && c[k].low < l.price && c[k].close > l.price) out.push({ dir: "tăng (râu quét qua đáy cũ rồi đóng lại trên)", level: rp(l.price), barsAgo: L - 1 - k, wick: rp(c[k].low), volRel: rp(volRel), valid });
   }
   return out;
 }
@@ -268,8 +268,8 @@ export function compression(c, atrNow) {
   const sideway = hi - lo < atrNow * 2.5;
   const last = c[L - 2]; let fakeout = null;
   const prev = c.slice(Math.max(0, L - 22), L - 2), ph = Math.max(...prev.map((x) => x.high)), pl = Math.min(...prev.map((x) => x.low));
-  if (last && last.low < pl && last.close > pl) fakeout = "quét đáy hộp rồi đóng lại vào trong (tín hiệu BUY theo EA)";
-  if (last && last.high > ph && last.close < ph) fakeout = "quét đỉnh hộp rồi đóng lại vào trong (tín hiệu SELL theo EA)";
+  if (last && last.low < pl && last.close > pl) fakeout = "quét đáy hộp rồi đóng lại vào trong (tín hiệu MUA theo EA)";
+  if (last && last.high > ph && last.close < ph) fakeout = "quét đỉnh hộp rồi đóng lại vào trong (tín hiệu BÁN theo EA)";
   return { sideway, boxHigh: hi, boxLow: lo, widthAtr: (hi - lo) / (atrNow || 1), fakeout };
 }
 
@@ -301,21 +301,21 @@ export function vsaBars(c, e20, e50) {
     const hi10 = Math.max(...c.slice(k - 10, k).map((y) => y.high)), lo10 = Math.min(...c.slice(k - 10, k).map((y) => y.low));
     const lowerVolThan2 = x.volume < c[k - 1].volume && x.volume < c[k - 2].volume;
     const tags = [];
-    if (trendUp && volRel >= 2 && (upper >= range * 0.45 || spreadRel < 0.8) && closePos < 0.6) tags.push("BUYING CLIMAX (cao trào mua – SM có thể đang bán)");
-    if (trendDn && volRel >= 2 && (lower >= range * 0.45 || spreadRel < 0.8) && closePos > 0.4) tags.push("SELLING CLIMAX (cao trào bán – SM có thể đang gom)");
-    if (x.high > hi10 && closePos < 0.35 && volRel >= 1.2) tags.push("UPTHRUST (phá đỉnh rồi đóng thấp – bẫy mua)");
-    if (x.low < lo10 && closePos > 0.65 && volRel >= 1.2) tags.push("DOWNTHRUST / SPRING (phá đáy rồi đóng cao – bẫy bán)");
-    if (upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("NO DEMAND (tăng yếu, volume thấp – không có cầu)");
-    if (!upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("NO SUPPLY (giảm yếu, volume thấp – cung cạn)");
-    if (volRel >= 1.8 && spreadRel < 0.8) tags.push("PHÂN KỲ: NỖ LỰC KHÔNG KẾT QUẢ (volume cao, biên độ hẹp – SM chặn đà/hấp thụ)");
-    if (spreadRel > 1.3 && volRel < 0.8) tags.push("PHÂN KỲ: biên độ rộng nhưng volume thấp (thiếu thanh khoản – di chuyển không bền)");
+    if (trendUp && volRel >= 2 && (upper >= range * 0.45 || spreadRel < 0.8) && closePos < 0.6) tags.push("CAO TRÀO MUA (khối lượng rất lớn ở đỉnh – tay to có thể đang bán ra)");
+    if (trendDn && volRel >= 2 && (lower >= range * 0.45 || spreadRel < 0.8) && closePos > 0.4) tags.push("CAO TRÀO BÁN (khối lượng rất lớn ở đáy – tay to có thể đang gom)");
+    if (x.high > hi10 && closePos < 0.35 && volRel >= 1.2) tags.push("BẪY PHÁ ĐỈNH (vượt đỉnh rồi đóng thấp – bẫy người mua)");
+    if (x.low < lo10 && closePos > 0.65 && volRel >= 1.2) tags.push("BẪY PHÁ ĐÁY (thủng đáy rồi đóng cao – bẫy người bán)");
+    if (upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("KHÔNG CÓ CẦU (tăng yếu, khối lượng thấp)");
+    if (!upBar && spreadRel < 0.8 && lowerVolThan2) tags.push("CẠN CUNG (giảm yếu, khối lượng thấp – ít người bán)");
+    if (volRel >= 1.8 && spreadRel < 0.8) tags.push("PHÂN KỲ: NỖ LỰC KHÔNG KẾT QUẢ (khối lượng cao, nến hẹp – tay to chặn đà/hấp thụ)");
+    if (spreadRel > 1.3 && volRel < 0.8) tags.push("PHÂN KỲ: nến dài nhưng khối lượng thấp (thiếu thanh khoản – di chuyển không bền)");
     // Stopping volume dạng phân phối: 3 nến cùng chiều, volume tăng dần, biên độ ngắn dần (≈ nêm)
     const b1 = c[k - 2], b2 = c[k - 1], s = (y) => y.high - y.low;
-    if (b1.volume < b2.volume && b2.volume < x.volume && s(b1) > s(b2) && s(b2) > s(x)) tags.push(upBar ? "STOPPING VOLUME khi tăng (vol tăng dần, biên độ ngắn dần – cảnh báo phân phối)" : "STOPPING VOLUME khi giảm (vol tăng dần, biên độ ngắn dần – cảnh báo gom hàng)");
-    if (trendDn && !upBar && volRel >= 2 && closePos > 0.5) tags.push("STOPPING VOLUME (đỡ giá khi giảm)");
-    if (upBar && spreadRel > 1.3 && closePos > 0.7 && volRel >= 1.5) tags.push("SOS – dấu hiệu sức mạnh (tăng rộng, close đỉnh, vol cao)");
-    if (!upBar && spreadRel > 1.3 && closePos < 0.3 && volRel >= 1.5) tags.push("SOW – dấu hiệu yếu (giảm rộng, close đáy, vol cao)");
-    if (!upBar && x.low < c[k - 1].low && closePos > 0.6 && volRel < 0.8) tags.push("TEST cung (thử đáy, volume thấp – tốt)");
+    if (b1.volume < b2.volume && b2.volume < x.volume && s(b1) > s(b2) && s(b2) > s(x)) tags.push(upBar ? "KHỐI LƯỢNG CHẶN ĐÀ khi tăng (khối lượng tăng dần, nến ngắn dần – cảnh báo xả hàng)" : "KHỐI LƯỢNG CHẶN ĐÀ khi giảm (khối lượng tăng dần, nến ngắn dần – cảnh báo gom hàng)");
+    if (trendDn && !upBar && volRel >= 2 && closePos > 0.5) tags.push("KHỐI LƯỢNG ĐỠ GIÁ (lực mua chặn đà giảm)");
+    if (upBar && spreadRel > 1.3 && closePos > 0.7 && volRel >= 1.5) tags.push("DẤU HIỆU MẠNH (nến tăng dài, đóng sát đỉnh, khối lượng cao)");
+    if (!upBar && spreadRel > 1.3 && closePos < 0.3 && volRel >= 1.5) tags.push("DẤU HIỆU YẾU (nến giảm dài, đóng sát đáy, khối lượng cao)");
+    if (!upBar && x.low < c[k - 1].low && closePos > 0.6 && volRel < 0.8) tags.push("THỬ CUNG (thử lại đáy, khối lượng thấp – tốt)");
     out.push({ barsAgo: L - 1 - k, dir: x.close >= x.open ? "tăng" : "giảm", volRel: rp(volRel), spreadRel: rp(spreadRel), close: closePos > 0.66 ? "đóng gần đỉnh" : closePos < 0.33 ? "đóng gần đáy" : "đóng giữa nến", tags });
   }
   return out;
@@ -325,8 +325,8 @@ export function vsaBars(c, e20, e50) {
 function volumeDivergence(c, sw) {
   const v = (i) => Math.max(c[i - 1]?.volume || 0, c[i].volume, c[i + 1]?.volume || 0);
   const hs = sw.filter((s) => s.type === "H").slice(-2), ls = sw.filter((s) => s.type === "L").slice(-2), out = [];
-  if (hs.length === 2 && hs[1].price > hs[0].price && v(hs[1].i) < v(hs[0].i) * 0.85) out.push("Phân kỳ volume ÂM: đỉnh sau cao hơn nhưng volume thấp hơn → lực mua suy yếu, cẩn trọng breakout giả");
-  if (ls.length === 2 && ls[1].price < ls[0].price && v(ls[1].i) < v(ls[0].i) * 0.85) out.push("Phân kỳ volume DƯƠNG: đáy sau thấp hơn nhưng volume thấp hơn → lực bán cạn dần");
+  if (hs.length === 2 && hs[1].price > hs[0].price && v(hs[1].i) < v(hs[0].i) * 0.85) out.push("Phân kỳ khối lượng ÂM: đỉnh sau cao hơn nhưng khối lượng thấp hơn → lực mua suy yếu, cẩn trọng breakout giả");
+  if (ls.length === 2 && ls[1].price < ls[0].price && v(ls[1].i) < v(ls[0].i) * 0.85) out.push("Phân kỳ khối lượng DƯƠNG: đáy sau thấp hơn nhưng khối lượng thấp hơn → lực bán cạn dần");
   return out;
 }
 
@@ -403,7 +403,7 @@ export function analyze(c) {
     range100: { high: rp(hi), low: rp(lo), equilibrium: rp((hi + lo) / 2), position: `${Math.round(pos * 100)}% (${pos > 0.55 ? "vùng premium – đắt" : pos < 0.45 ? "vùng discount – rẻ" : "quanh cân bằng"})` },
     patterns: candlePatterns(c),
     trendFilter: {
-      ema200: rp(e200[L - 1]), priceVsEma200: e200[L - 1] ? (price > e200[L - 1] ? "trên EMA200 (chỉ ưu tiên BUY)" : "dưới EMA200 (chỉ ưu tiên SELL)") : "chưa đủ 200 nến",
+      ema200: rp(e200[L - 1]), priceVsEma200: e200[L - 1] ? (price > e200[L - 1] ? "trên TB 200 nến (chỉ ưu tiên MUA)" : "dưới TB 200 nến (chỉ ưu tiên BÁN)") : "chưa đủ 200 nến",
       ema89SlopeBps: rp(slope89), ema89Flat: slope89 != null && Math.abs(slope89) <= 2,
       adx: rp(adxNow), adxOk: adxNow != null && adxNow > 20, diPlus: rp(dmi[L - 2]?.pdi), diMinus: rp(dmi[L - 2]?.mdi),
     },

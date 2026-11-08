@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Term } from "../components/Term.jsx";
+import InfoTip from "../components/InfoTip.jsx";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -538,12 +539,12 @@ export default function CoinMarket({ active = true }) {
 
   // Tín hiệu tự phát hiện theo bộ kiến thức (nến đã đóng)
   const sig = s ? [
-    ...s.vsa.flatMap((b) => b.tags.map((t) => ({ t: `VSA ${b.barsAgo}n: ${t}`, tone: /CLIMAX|UPTHRUST|NO DEMAND|SOW|STOPPING VOLUME khi tăng|PHÂN KỲ/.test(t) ? "rose" : "emerald" }))),
-    ...s.sfp.map((x) => ({ t: `SFP ${x.dir} ${px(x.level)} · vol ${fmtNum(x.volRel, 1)}x · ${x.valid}`, tone: x.dir.startsWith("tăng") ? "emerald" : "rose" })),
-    ...(s.sideway.fakeout ? [{ t: `Fakeout sideway: ${s.sideway.fakeout}`, tone: "amber" }] : []),
+    ...s.vsa.flatMap((b) => b.tags.map((t) => ({ t: `${b.barsAgo} nến trước · ${t}`, tone: /CAO TRÀO MUA|BẪY PHÁ ĐỈNH|KHÔNG CÓ CẦU|DẤU HIỆU YẾU|CHẶN ĐÀ khi tăng|PHÂN KỲ/.test(t) ? "rose" : "emerald" }))),
+    ...s.sfp.map((x) => ({ t: `Quét thanh khoản ${x.dir} · mốc ${px(x.level)} · khối lượng ${fmtNum(x.volRel, 1)}× TB · ${x.valid}`, tone: x.dir.startsWith("tăng") ? "emerald" : "rose" })),
+    ...(s.sideway.fakeout ? [{ t: `Phá giả hộp đi ngang: ${s.sideway.fakeout}`, tone: "amber" }] : []),
     ...s.volumeDivergence.map((t) => ({ t, tone: t.includes("ÂM") ? "rose" : "emerald" })),
     ...s.momentum.divergence.map((t) => ({ t, tone: t.includes("âm") ? "rose" : "emerald" })),
-    ...s.patterns.map((x) => ({ t: `${x.name} · ${x.ago}n trước`, tone: /TĂNG|Bullish|dưới|tăng/.test(x.name) ? "emerald" : /GIẢM|Bearish|trên|giảm/.test(x.name) ? "rose" : "slate" })),
+    ...s.patterns.map((x) => ({ t: `${x.name} · ${x.ago} nến trước`, tone: /TĂNG|râu dài phía dưới/.test(x.name) ? "emerald" : /GIẢM|râu dài phía trên/.test(x.name) ? "rose" : "slate" })),
   ].filter((x, i, arr) => arr.findIndex((y) => y.t === x.t) === i) : []; // bỏ dòng trùng (vd 2 đỉnh swing cùng bị quét ở 1 mức giá)
   const main = ai?.setups?.[0], others = ai?.setups?.slice(1) || [];
   const DETAIL = ai ? [["Khung lớn", ai.htf_context], ["Wyckoff", ai.wyckoff_phase], ["Bộ lọc xu hướng", ai.trend_filter], ["SMC", ai.smc], ["Thanh khoản", ai.liquidity], ["Price action", ai.price_action], ["Khối lượng", ai.volume], ["VSA", ai.vsa], ["Động lượng", ai.momentum]].filter(([, v]) => v) : [];
@@ -700,7 +701,7 @@ export default function CoinMarket({ active = true }) {
               <Group title="Xu hướng">
                 <Row label={<Term k="smc">Cấu trúc</Term>} value={s.structure.trend} tone={trendTone} sub={s.structure.lastEvent ? `${({ BOS: "Tiếp diễn", CHoCH: "Đảo chiều" })[s.structure.lastEvent.kind] || s.structure.lastEvent.kind} ${s.structure.lastEvent.dir} · ${s.structure.lastEvent.barsAgo} nến trước` : "chưa có BOS"} />
                 <Row label={<Term k="ema20">TB 20/50 nến</Term>} value={s.ema.stack.split(" ")[0]} tone={s.ema.stack.startsWith("tăng") ? "emerald" : s.ema.stack.startsWith("giảm") ? "rose" : "slate"} sub={`${px(s.ema.e20)} / ${px(s.ema.e50)}`} />
-                <Row label={<Term k="eaFilter" />} value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên BUY" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên SELL" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${fmtNum(s.trendFilter.adx, 0)}${s.trendFilter.adxOk ? " ✓" : " yếu"} · ${s.sideway.isSideway ? "sideway" : "có xu hướng"}`} />
+                <Row label={<Term k="eaFilter" />} value={s.trendFilter.priceVsEma200.startsWith("trên") ? "ưu tiên MUA" : s.trendFilter.priceVsEma200.startsWith("dưới") ? "ưu tiên BÁN" : "—"} tone={s.sideway.isSideway ? "amber" : s.trendFilter.priceVsEma200.startsWith("trên") ? "emerald" : "rose"} sub={`ADX ${fmtNum(s.trendFilter.adx, 0)}${s.trendFilter.adxOk ? " ✓" : " yếu"} · ${s.sideway.isSideway ? "đi ngang" : "có xu hướng"}`} />
                 <Row label={<Term k="range" />} value={s.range100.position.split(" (")[0]} tone={s.range100.position.includes("premium") ? "rose" : s.range100.position.includes("discount") ? "emerald" : "slate"} />
               </Group>
               <Group title="Động lượng & khối lượng">
@@ -721,10 +722,10 @@ export default function CoinMarket({ active = true }) {
 
         {/* Tín hiệu tự phát hiện + phân tích chi tiết của AI */}
         <Card className="!p-3 xl:col-span-2">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><Radar size={13} /> Tín hiệu nến đã đóng ({sig.length})</div>
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><Radar size={13} /> Tín hiệu nến đã đóng ({sig.length}) <InfoTip label="Các tín hiệu này là gì">Máy tự đọc các nến ĐÃ ĐÓNG gần nhất. <b>Xanh</b> = nghiêng về tăng, <b>đỏ</b> = nghiêng về giảm, <b>vàng</b> = cần chú ý. Gồm: (1) <b>Khối lượng–giá</b> (VSA): so khối lượng với độ dài nến để đoán tay to đang gom hay xả, vd "Cạn cung" = giảm yếu, ít người bán. (2) <b>Quét thanh khoản</b> (SFP): râu nến chọc qua đỉnh/đáy cũ rồi đóng lại vào trong — thường là bẫy cắt lỗ. (3) <b>Mẫu nến</b>: nhấn chìm, râu dài, nến mẹ… "N nến trước" = cách nến đang chạy N nến. Chỉ để tham khảo, bot D không dùng các tín hiệu này để vào lệnh; không phải tư vấn đầu tư.</InfoTip></div>
           {sig.length ? (
             <div className="flex flex-wrap gap-1">{sig.map((x, i) => <span key={i} className={`rounded-md px-2 py-1 text-[11.5px] font-semibold ${{ rose: "bg-rose-50 text-rose-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", slate: "bg-slate-50 text-slate-600" }[x.tone]}`}>{x.t}</span>)}</div>
-          ) : <div className="text-[12px] text-slate-400">Chưa có tín hiệu VSA / SFP / mẫu nến đặc biệt ở các nến gần nhất.</div>}
+          ) : <div className="text-[12px] text-slate-400">Chưa có tín hiệu khối lượng–giá, quét thanh khoản hay mẫu nến đặc biệt ở các nến gần nhất.</div>}
 
           {DETAIL.length > 0 && (
             <div className="mt-3 border-t border-slate-100 pt-2.5">
