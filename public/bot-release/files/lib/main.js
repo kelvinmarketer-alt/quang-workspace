@@ -267,7 +267,7 @@ async function scan(posMap, halted) {
   }
   for (const p of fresh) {
     // 06/11: đang DỪNG / chạm dừng ngày → KHÔNG đánh dấu đã xử lý: bấm "Chạy lại" khi tín hiệu còn hạn thì vẫn vào (trước đây bỏ luôn — lỡ lệnh XRP 06/11)
-    if (halted) { if (!S.haltSeen?.[p.id]) { S.haltSeen = { ...(S.haltSeen || {}), [p.id]: now() }; log(`· Tạm giữ tín hiệu ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}: ${halted} — chạy lại trước ${stamp(p.until)} thì vẫn vào`); journal({ ev: "skip", why: `${halted} (giữ tới ${stamp(p.until)})`, ...p, tags: undefined }); } continue; }
+    if (halted) { if (!S.haltSeen?.[p.id]) { S.haltSeen = { ...(S.haltSeen || {}), [p.id]: now() }; log(`· Tạm giữ tín hiệu ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}: ${halted} — chạy lại trước ${stamp(p.until)} thì vẫn vào`); journal({ ev: "skip", why: `${halted} (giữ tới ${stamp(p.until)})`, ...p, tags: undefined }); note(`⏸ Có tín hiệu ${dirStr(p.side)} ${p.coin} ${TFS[p.tf].label} nhưng bot đang dừng`, `${halted} — bấm "Chạy lại" trước ${stamp(p.until)} thì vẫn vào · ${modeLbl()}`, `qws-bot-halt-${p.id}`); } continue; }
     S.handled[p.id] = now();
     const symbol = symOf(p.coin);
     if (p.blocked) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label}: ${p.blocked} (giống Demo)`); journal({ ev: "skip", why: p.blocked, ...p, tags: undefined }); continue; }
@@ -385,6 +385,7 @@ async function adoptSW3(t, symbol, realMark, sl0, partDone) {
   S.active[symbol] = a;
   log(`📌 Theo lệnh Demo ${t.coin} ${dirStr(t.side)} thị trường KL ${qty} · SL ${sl} · chốt 1/3 ở ${partDone ? "(Demo đã chốt)" : tp} · rủi ro ${(qty * dist).toFixed(2)}$ (${rp}%)`);
   journal({ ev: "placed", ...a });
+  note(`📌 Theo lệnh Demo: ${dirStr(t.side)} ${t.coin} H4 @ ~${px(mark)}`, `Vào thị trường (Demo vào ${stamp(t.entryAt)} @ ${px(t.entry)}) · SL ${px(sl)} · rủi ro ${vn(qty * dist, 2)}$ · ${modeLbl()}`, `qws-bot-adopt-${t.id}`); // 08/11: trước không báo điện thoại
   await sleep(1200);
   const o = await ex.order(symbol, a.entryCid).catch(() => null);
   if (o?.status === "FILLED") await protect(symbol, a, Number(o.executedQty), "theo lệnh Demo đang mở", o);

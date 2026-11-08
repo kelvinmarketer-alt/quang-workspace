@@ -236,7 +236,7 @@ export default function CoinLive({ active }) {
         {(st.events || []).length ? <div className="divide-y divide-slate-100">{st.events.map((e, i) => (
           <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-[12px]">
             <span className="w-[118px] shrink-0 tabular-nums text-[11px] text-slate-400">{typeof e.at === "number" ? (e.at > 1e9 ? dt(e.at) : "") : e.at}</span>
-            <b className={e.ev === "close" ? (e.pnl >= 0 ? "text-emerald-700" : "text-rose-700") : e.ev === "error" ? "text-rose-700" : "text-slate-700"}>{EV[e.ev] || e.ev}</b>
+            <b className={e.ev === "close" ? (e.pnl >= 0 ? "text-emerald-700" : "text-rose-700") : e.ev === "error" ? "text-rose-700" : "text-slate-700"}>{e.ev === "placed" && e.sw3 && !e.limEntry ? (e.adopt ? "Vào lệnh (theo Demo)" : "Vào lệnh thị trường") : EV[e.ev] || e.ev}</b>
             {e.coin && <span className="flex items-center gap-1">{e.side ? side(e.side) : null} {e.coin} {TF[e.tf] || ""}</span>}
             {e.ev === "close" && <span className={`ml-auto font-extrabold tabular-nums ${tone(e.pnl)}`}>{fmtUsdSigned(e.pnl)}{e.R != null ? ` · ${fmtR(e.R)}` : ""}</span>}
             {e.ev === "moveSl" && e.from != null && <span className="tabular-nums text-slate-500">{fmtPx(e.from)} → {fmtPx(e.to)}</span>}
