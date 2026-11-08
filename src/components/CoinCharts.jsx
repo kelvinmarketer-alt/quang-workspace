@@ -4,7 +4,7 @@
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil, Focus } from "lucide-react";
 import { DrawLayer, makeDrawing, moveDrawing, TOOLS, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
 import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
@@ -146,6 +146,7 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
   const [edit, setEdit] = useState(null); // ô gõ chữ ghi chú: { id, x, y, value }
   const me = useRef(Math.random().toString(36).slice(2));
   const syncRef = useRef(syncKey); syncRef.current = syncKey;
+  const compactRef = useRef(compact); compactRef.current = compact;
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true,
@@ -188,6 +189,14 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     a.lock = lock;
     const commit = (list) => drawRef.current?.onChange(list.slice(-MAX_PER_COIN));
     const onAxis = (x) => x > el.clientWidth - (chart.priceScale("right").width() || 0);
+    // Căn lại: giá tự co giãn vừa nến đang hiện + về ~120 nến gần nhất (nút "Căn chart" và bấm đúp vào trục giá)
+    a.refit = () => {
+      const n = candlesRef.current.length; if (!n) return;
+      chart.priceScale("right").applyOptions({ autoScale: true });
+      chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - (compactRef.current ? 90 : 120)), to: n + 6 });
+    };
+    const axisDbl = (e) => { const r = el.getBoundingClientRect(); if (onAxis(e.clientX - r.left)) a.refit(); };
+    el.addEventListener("dblclick", axisDbl);
     const down = (e) => {
       const D = drawRef.current;
       if (!D || D.hidden || e.button > 0) return;
@@ -254,7 +263,7 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
     window.addEventListener("keydown", key);
     a.cancel = () => { pend = null; layer.preview = null; layer.update(); };
     return () => {
-      el.removeEventListener("pointerdown", down, true); el.removeEventListener("dblclick", dbl, true);
+      el.removeEventListener("pointerdown", down, true); el.removeEventListener("dblclick", dbl, true); el.removeEventListener("dblclick", axisDbl);
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("keydown", key);
       HOVER.delete(onHover); chart.unsubscribeCrosshairMove(onMove); chart.remove(); api.current = null;
     };
@@ -332,6 +341,10 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
   return (
     <div className="relative w-full">
       <div ref={box} className={className} />
+      <button type="button" onClick={() => api.current?.refit?.()} title="Căn lại biểu đồ: giá tự co giãn vừa nến, về các nến gần nhất (hoặc bấm đúp vào trục giá)" aria-label="Căn lại biểu đồ"
+        className="absolute bottom-7 right-16 z-10 flex items-center gap-1 rounded-md border border-slate-200 bg-white/90 px-1.5 py-1 text-[10.5px] font-bold text-slate-500 shadow-sm hover:text-indigo-600">
+        <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
+      </button>
       {flow?.badge && <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex flex-wrap gap-1 text-[10.5px] font-bold tabular-nums">{flow.badge}</div>}
       {edit && (
         <input autoFocus defaultValue={edit.value} maxLength={80} placeholder="Gõ ghi chú rồi Enter"
