@@ -26,7 +26,7 @@ const dt = (t) => { if (t == null) return "—"; const d = new Date(t); return i
 const fmtR = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2)}R`);
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const side = (s) => <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "MUA" : "BÁN"}</span>;
-const EV = { placed: "Đặt lệnh chờ", open: "Khớp lệnh", close: "Đóng lệnh", expired: "Huỷ (giá không về)", skip: "Bỏ tín hiệu", error: "Lỗi", closeAll: "Đóng hết vị thế" };
+const EV = { placed: "Đặt lệnh chờ", open: "Khớp lệnh", close: "Đóng lệnh", expired: "Huỷ (giá không về)", skip: "Bỏ tín hiệu", error: "Lỗi", closeAll: "Đóng hết vị thế", moveSl: "Dời cắt lỗ", partial: "Chốt 1/3", test: "Lệnh thử" };
 const MODE_L = { testnet: "Testnet", live: "Tiền thật" };
 const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/\s+/g, " ").trim();
 const Title = ({ icon: I, children, right }) => <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{I && <I size={13} className="text-indigo-500" />}{children}{right && <span className="ml-auto normal-case tracking-normal">{right}</span>}</div>;
@@ -235,10 +235,12 @@ export default function CoinLive({ active }) {
         <Title>Nhật ký bot</Title>
         {(st.events || []).length ? <div className="divide-y divide-slate-100">{st.events.map((e, i) => (
           <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-[12px]">
-            <span className="w-[118px] shrink-0 tabular-nums text-[11px] text-slate-400">{typeof e.at === "number" ? dt(e.at) : e.at}</span>
+            <span className="w-[118px] shrink-0 tabular-nums text-[11px] text-slate-400">{typeof e.at === "number" ? (e.at > 1e9 ? dt(e.at) : "") : e.at}</span>
             <b className={e.ev === "close" ? (e.pnl >= 0 ? "text-emerald-700" : "text-rose-700") : e.ev === "error" ? "text-rose-700" : "text-slate-700"}>{EV[e.ev] || e.ev}</b>
             {e.coin && <span className="flex items-center gap-1">{e.side ? side(e.side) : null} {e.coin} {TF[e.tf] || ""}</span>}
             {e.ev === "close" && <span className={`ml-auto font-extrabold tabular-nums ${tone(e.pnl)}`}>{fmtUsdSigned(e.pnl)}{e.R != null ? ` · ${fmtR(e.R)}` : ""}</span>}
+            {e.ev === "moveSl" && e.from != null && <span className="tabular-nums text-slate-500">{fmtPx(e.from)} → {fmtPx(e.to)}</span>}
+            {e.ev === "partial" && <span className="tabular-nums text-slate-500">@ {fmtPx(e.price ?? (typeof e.at === "number" && e.at < 1e9 ? e.at : null))}</span>}
             {(e.why || e.msg) && <span className="text-slate-400">{e.why || e.msg}</span>}
           </div>
         ))}</div> : <div className="py-4 text-center text-[12px] text-slate-400">Chưa có hoạt động.</div>}

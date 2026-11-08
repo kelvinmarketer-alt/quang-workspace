@@ -451,7 +451,7 @@ async function manageSW3(symbol, a, amt) {
   const left = Math.abs(amt);
   if (!a.partDone && a.filledQty && left <= a.filledQty - (a.q1 || 0) * 0.5) { // lệnh chốt 1/3 đã khớp → dời SL về giá vào
     a.partDone = true;
-    log(`💰 ${a.coin} đã chốt 1/3 ở ${a.tp}`); journal({ ev: "partial", id: a.id, coin: a.coin, at: a.tp, qty: a.filledQty - left });
+    log(`💰 ${a.coin} đã chốt 1/3 ở ${a.tp}`); journal({ ev: "partial", id: a.id, coin: a.coin, price: a.tp, qty: a.filledQty - left }); // "price" (không dùng "at" — trùng mốc giờ của journal → app hiện 01/01)
     note(`💰 Chốt 1/3 ${a.coin} H4 @ ${px(a.tp)} (+${vn(a.partR, 2)}R)`, `Dời SL về giá vào ${px(a.lim)} — phần còn lại chạy theo đáy/đỉnh 20 nến · ${modeLbl(a.mode)}`, `qws-bot-part-${a.id}`);
     await moveSl(symbol, a, a.lim, "hoà vốn sau khi chốt 1/3");
   }

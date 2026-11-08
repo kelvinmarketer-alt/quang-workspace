@@ -1,7 +1,7 @@
 {
-  "sha": "4026c6c3d5f8a318d69d102ec56358ae3c4f2110",
-  "date": "2026-11-07T00:46:02+07:00",
-  "msg": "Theo lệnh Demo đang mở (sếp 07/11: Demo chạy thì testnet cũng phải có lệnh): lệnh SW3/D Demo đang mở mà bot chưa có → vào thị trường theo, SL = SL hiện tại của Demo, chốt 1/3 = cùng mức giá Demo (Demo đã chốt thì chỉ đặt SL); bỏ nếu giá đã tới mức chốt 1/3 hoặc cách SL < 0,3R gốc; mỗi lệnh Demo chỉ theo 1 lần (S.traded); tắt bằng config.followOpen=false. Thử sàn giả 6 tình huống đạt",
+  "sha": "24f5721a3eac99ca964ab3693c4b5dbf2e3b9e2e",
+  "date": "2026-11-08T09:22:44+07:00",
+  "msg": "Nhật ký: sự kiện chốt 1/3 ghi giá vào 'price' (trước dùng 'at' đè mốc giờ → app hiện 01/01)",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "0a104ef7686fd297fcfcd77f6bebd04941988168"
+      "sha": "cfa7e654064715efd9973fe15aa6d1e70d9418c2"
     },
     {
       "path": "lib/paperBot.js",
