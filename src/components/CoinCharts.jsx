@@ -4,7 +4,7 @@
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil, Focus } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil, Focus, Spline } from "lucide-react";
 import { DrawLayer, makeDrawing, moveDrawing, TOOLS, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
 import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
@@ -42,6 +42,9 @@ export function loadTags() {
   return { ...def, ema20: e, ema50: e, smc: m(old.smc), protH: m(old.levels), protL: m(old.levels), kvUp: m(old.levels), kvDn: m(old.levels), poc: m(old.levels), ai: m(old.ai) };
 }
 export const saveTags = (t) => ls.set("qws_mkt_tags", t);
+// Nút ẩn/hiện CẢ HAI đường EMA 20 + 50 (không phải xoay 3 mức)
+export const emaOff = (tags) => (tags?.ema20 === "off" && tags?.ema50 === "off");
+export const toggleEma = (setTags) => setTags((t) => { const off = !emaOff(t); const n = { ...t, ema20: off ? "off" : "line", ema50: off ? "off" : "line" }; saveTags(n); return n; });
 // Ô nhỏ (lưới 4–6 ô) mặc định không vẽ nhãn trục cho đỡ rối: "full" → "line"
 export const modeOf = (tags, k, compact) => { const m = tags[k] || "full"; return compact && m === "full" ? "line" : m; };
 
@@ -139,7 +142,7 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 const VN = 7 * 3600;
 // draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
 const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
-export function CandleChart({ candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]" }) {
+export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]" }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
@@ -341,10 +344,18 @@ export function CandleChart({ candles, e20, e50, events, marks, lines, precision
   return (
     <div className="relative w-full">
       <div ref={box} className={className} />
-      <button type="button" onClick={() => api.current?.refit?.()} title="Căn lại biểu đồ: giá tự co giãn vừa nến, về các nến gần nhất (hoặc bấm đúp vào trục giá)" aria-label="Căn lại biểu đồ"
-        className="absolute bottom-7 right-16 z-10 flex items-center gap-1 rounded-md border border-slate-200 bg-white/90 px-1.5 py-1 text-[10.5px] font-bold text-slate-500 shadow-sm hover:text-indigo-600">
-        <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
-      </button>
+      <div className="absolute bottom-7 right-16 z-10 flex items-center gap-1">
+        {onEma && (
+          <button type="button" onClick={onEma} aria-pressed={!emaOff(tags)} title={emaOff(tags) ? "Đang ẩn 2 đường trung bình (EMA 20/50). Bấm để hiện" : "Bấm để ẩn 2 đường trung bình (EMA 20/50)"} aria-label="Ẩn hiện đường EMA"
+            className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10.5px] font-bold shadow-sm ${emaOff(tags) ? "border-dashed border-slate-300 bg-white/90 text-slate-400 line-through" : "border-slate-200 bg-white/90 text-slate-600 hover:text-indigo-600"}`}>
+            <Spline size={12} />EMA
+          </button>
+        )}
+        <button type="button" onClick={() => api.current?.refit?.()} title="Căn lại biểu đồ: giá tự co giãn vừa nến, về các nến gần nhất (hoặc bấm đúp vào trục giá)" aria-label="Căn lại biểu đồ"
+          className="flex items-center gap-1 rounded-md border border-slate-200 bg-white/90 px-1.5 py-1 text-[10.5px] font-bold text-slate-500 shadow-sm hover:text-indigo-600">
+          <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
+        </button>
+      </div>
       {flow?.badge && <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex flex-wrap gap-1 text-[10.5px] font-bold tabular-nums">{flow.badge}</div>}
       {edit && (
         <input autoFocus defaultValue={edit.value} maxLength={80} placeholder="Gõ ghi chú rồi Enter"
@@ -439,7 +450,7 @@ function useCells(sym, tf, mkt, active) {
 }
 
 const EMPTY = [], NOFLOW = {};
-function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn }) {
+function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn }) {
   const { sym, tf } = cell;
   const st = useCells(sym, tf, mkt, active);
   const ta = useMemo(() => (st.candles.length > 30 ? analyze(st.candles) : null), [st.candles]);
@@ -469,7 +480,7 @@ function GridCell({ i, cell, mkt, watch, tags, compact, focused, selected, activ
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
+          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
         </>)}
       </div>
     </div>
@@ -485,7 +496,7 @@ export function LayoutPicker({ n, setN }) {
   );
 }
 
-export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn }) {
+export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn }) {
   const { n, cells, link, labels } = grid;
   const [focus, setFocus] = useState(null);
   const scroller = useRef(null);
@@ -506,7 +517,7 @@ export function ChartGrid({ grid, setGrid, mkt, watch, tags, active, aiFor, draw
     <div className="min-w-0">
       <div ref={scroller} className={`flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto sm:grid sm:overflow-visible ${cols}`}>
         {shown.map((i) => (
-          <GridCell key={i} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
+          <GridCell key={i} onEma={onEma} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
             ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height}
             flowOn={flowOn && (focus === i || n <= 2 ? flowOn : { ...flowOn, cvd: false, oi: false })} />
         ))}
