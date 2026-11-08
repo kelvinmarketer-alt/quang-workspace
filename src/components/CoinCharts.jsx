@@ -10,6 +10,7 @@ import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 import { useWhale, cvdOf, flowMarks, bigMin, usdK } from "../lib/whale.js";
+import { useLiveKline, mergeBar } from "../lib/liveKline.js";
 import { termVi } from "../lib/glossary.js";
 import { GlossaryButton } from "./Term.jsx";
 
@@ -419,6 +420,8 @@ function useCells(sym, tf, mkt, active) {
     const t = setInterval(() => { if (!document.hidden && activeRef.current) go(true); }, 60000);
     return () => { off = true; clearInterval(t); };
   }, [sym, tf, mkt]);
+  // Nến đang chạy realtime (WebSocket chung theo mã+khung), lưới nhiều ô → 2 giây/lần cho nhẹ máy
+  useLiveKline(sym, TF[tf].api, st.market, active && st.key === `${sym}-${tf}-${mkt}` && !!st.market, (bar) => setSt((s) => ({ ...s, candles: mergeBar(s.candles, bar) })), 2000);
   return st;
 }
 

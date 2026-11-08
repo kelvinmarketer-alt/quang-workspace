@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Term } from "../components/Term.jsx";
 import InfoTip from "../components/InfoTip.jsx";
+import { useLiveKline, mergeBar } from "../lib/liveKline.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -390,6 +391,11 @@ export default function CoinMarket({ active = true }) {
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [sym, tf, mkt]);
 
+  // Nến đang chạy realtime (WebSocket) — trước 08/11 chart chỉ nhảy 1 phút/lần theo REST
+  useLiveKline(sym, TF[tf].api, data.market, active && data.key === key && !!data.market, (bar) => {
+    setData((d) => (d.key === keyRef.current ? { ...d, ltf: mergeBar(d.ltf, bar) } : d));
+    setTick((t) => (t && t.sym === sym ? { ...t, price: bar.close } : t));
+  });
   const ta = useMemo(() => (data.ltf.length > 30 ? analyze(data.ltf) : null), [data.ltf]);
   const s = ta?.summary;
   const stale = data.key !== key; // đang hiện nến/giá của coin/khung cũ → làm mờ + hiện đang tải
