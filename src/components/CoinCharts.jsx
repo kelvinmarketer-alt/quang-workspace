@@ -335,11 +335,13 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     if (a.oiS && flow?.oi) { const sec = candles.length > 1 ? candles[1].time - candles[0].time : 0; const m = new Map(); for (const p of flow.oi) if (p.time >= first - sec) m.set(sec ? Math.floor(p.time / sec) * sec : p.time, p.value); a.oiS.setData([...m].sort((x, y) => x[0] - y[0]).map(([t, v]) => ({ time: T(t), value: v }))); }
   }, [flow?.cvd, flow?.oi, hasCvd, hasOi, candles]);
 
+  // Chỉ vẽ lại khi NỘI DUNG đường đổi (08/11: nến chạy realtime làm mảng `lines` đổi tham chiếu mỗi giây → đường Vào/SL/TP nhấp nháy)
+  const linesSig = JSON.stringify(lines);
   useEffect(() => {
     const a = api.current; if (!a) return;
     a.lines.forEach((pl) => a.candle.removePriceLine(pl));
     a.lines = lines.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: ln.width || 1, lineStyle: ln.style ?? 2, axisLabelVisible: ln.axis !== false, title: ln.axis === false ? "" : ln.title }));
-  }, [lines]);
+  }, [linesSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative w-full">
