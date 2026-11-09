@@ -195,10 +195,14 @@ def main():
         if k.startswith("MT5_"):
             os.environ[k] = v
     supa = Supa(url, key)
-    while not mt5.initialize():
+    # ghim đúng terminal IC Markets như mt5_bridge.py (máy có cả bản FTMO — không dùng); MT5_TERMINAL đổi đường dẫn
+    term = os.environ.get("MT5_TERMINAL") or r"C:\Program Files\MetaTrader 5-2\terminal64.exe"
+    kw = {"path": term} if os.path.isfile(term) else {}
+    while not mt5.initialize(**kw):
         log("MT5 chưa sẵn sàng:", mt5.last_error(), "— thử lại sau 15 giây")
         time.sleep(15)
-    log("đã nối MT5", mt5.terminal_info().name if mt5.terminal_info() else "")
+    ai = mt5.account_info()
+    log("đã nối MT5", mt5.terminal_info().name if mt5.terminal_info() else "", "| server:", ai.server if ai else "?")
     feed = Feed(supa)
     fails = 0
     while True:
