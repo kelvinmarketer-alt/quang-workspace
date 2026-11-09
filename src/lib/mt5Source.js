@@ -7,6 +7,7 @@
 // Khối lượng = tick volume (số lần giá nhảy), KHÔNG phải khối lượng khớp thật; không có mua/bán chủ động → nf = true.
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase.js";
+import { fmtNum } from "./format.js";
 
 const T = "qws_mt5_bot";
 export const FX_DEFAULT = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"]; // = 6 mã của EA + 3 cặp chính; bridge/mt5_market.py giữ cùng danh sách
@@ -117,4 +118,55 @@ export function useMt5Live(sym, interval, enabled, onBar, every = 1000) {
     });
     return () => { off(); clearTimeout(timer); };
   }, [sym, interval, enabled, every]);
+}
+
+// ---- Lệnh của EA QWS_Gop để vẽ lên biểu đồ Forex (hàng 'status' = vị thế/lệnh chờ, 'history' = lệnh đã đóng; cùng bảng, chỉ chủ đọc) ----
+export function useEaTrades(active) {
+  const [d, setD] = useState({ st: null, hist: null, loaded: false });
+  useEffect(() => {
+    if (!active) return undefined;
+    let off = false;
+    const go = async () => {
+      try {
+        const { data, error } = await supabase.from(T).select("id,data").in("id", ["status", "history"]);
+        if (error) throw error;
+        if (off) return;
+        const r = (id) => (data || []).find((x) => x.id === id)?.data || null;
+        setD({ st: r("status"), hist: r("history"), loaded: true });
+      } catch { if (!off) setD((x) => ({ ...x, loaded: true })); }
+    };
+    go();
+    const t = setInterval(() => { if (!document.hidden) go(); }, 30000);
+    return () => { off = true; clearInterval(t); };
+  }, [active]);
+  return d;
+}
+// Mã của EA có thể kèm hậu tố sàn (XAUUSDm) → khớp theo tiền tố ngắn
+export const eaMatch = (eaSym, sym) => { const s = String(eaSym || "").toUpperCase(); return s === sym || (s.startsWith(sym) && s.length <= sym.length + 3); };
+const rTxt = (r) => (r == null || !isFinite(r) ? "" : `${r >= 0 ? "+" : ""}${fmtNum(r, 1, 1)}R`);
+// d = { st, hist } · stepSec = độ dài 1 nến (giây). Trả { marks, lines, stat } cho đúng 1 mã
+export function eaOverlay(d, sym, stepSec) {
+  const marks = [], lines = [], snap = (ms) => Math.floor(ms / 1000 / stepSec) * stepSec;
+  const done = (d?.hist?.trades || []).filter((t) => t && t.closed && eaMatch(t.sym, sym));
+  const open = (d?.st?.positions || []).filter((p) => p && eaMatch(p.sym, sym));
+  const pend = (d?.st?.orders || []).filter((o) => o && eaMatch(o.sym, sym));
+  const col = (side) => (side === 1 ? "#10b981" : "#f43f5e"), word = (side) => (side === 1 ? "MUA" : "BÁN");
+  for (const t of done) {
+    if (t.t_in) marks.push({ time: snap(t.t_in), position: t.side === 1 ? "belowBar" : "aboveBar", color: col(t.side), shape: t.side === 1 ? "arrowUp" : "arrowDown", text: t.side === 1 ? "L" : "S" });
+    const r = t.R ?? (t.risk ? t.pnl / t.risk : null);
+    if (t.t_out) marks.push({ time: snap(t.t_out - 1), position: t.side === 1 ? "aboveBar" : "belowBar", color: (r ?? t.pnl ?? 0) >= 0 ? "#059669" : "#e11d48", shape: "circle", text: rTxt(r) });
+  }
+  for (const p of open) {
+    if (p.t) marks.push({ time: snap(p.t), position: p.side === 1 ? "belowBar" : "aboveBar", color: col(p.side), shape: p.side === 1 ? "arrowUp" : "arrowDown", text: p.side === 1 ? "L" : "S" });
+    lines.push({ price: p.open, color: "#8b5cf6", title: `EA ${word(p.side)}`, style: 0, width: 2 });
+    if (p.sl) lines.push({ price: p.sl, color: "#e11d48", title: "EA SL", style: 2 });
+    if (p.tp) lines.push({ price: p.tp, color: "#059669", title: "EA TP", style: 2 });
+  }
+  for (const o of pend) {
+    lines.push({ price: o.price, color: "#f59e0b", title: `EA chờ ${word(o.side)}`, style: 2, width: 2 });
+    if (o.sl) lines.push({ price: o.sl, color: "#fb7185", title: "EA chờ · SL", style: 3 });
+  }
+  const rs = done.map((t) => t.R ?? (t.risk ? t.pnl / t.risk : null)).filter((r) => r != null && isFinite(r));
+  const stat = { n: done.length + open.length, win: done.filter((t) => (t.R ?? t.pnl) > 0).length, loss: done.filter((t) => (t.R ?? t.pnl) < 0).length, open: open.length, pend: pend.length, sumR: rs.reduce((a, r) => a + r, 0) };
+  return { marks, lines, stat };
 }

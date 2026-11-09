@@ -66,4 +66,30 @@ describe("mt5Source", () => {
     expect(coin.sys).not.toMatch(/TICK VOLUME/);
     vi.unstubAllGlobals();
   });
+
+  it("eaOverlay: lệnh đã đóng → mũi tên vào + chấm thoát ±R; vị thế mở → đường vào/SL/TP; lệnh chờ → đường chờ; chỉ đúng mã (kể cả hậu tố sàn)", async () => {
+    const { eaOverlay, eaMatch } = await import("../src/lib/mt5Source.js");
+    const H = 3600, t0 = 1_700_000_000;
+    const d = {
+      hist: { trades: [
+        { id: 1, sym: "XAUUSD", side: 1, t_in: (t0 + 100) * 1000, t_out: (t0 + 2 * H + 5) * 1000, pnl: 12.5, risk: 20, R: 0.625, closed: true },
+        { id: 2, sym: "XAUUSD", side: -1, t_in: (t0 + 3 * H) * 1000, t_out: (t0 + 4 * H) * 1000, pnl: -20, risk: 20, closed: true },   // R suy ra từ pnl/risk = −1
+        { id: 3, sym: "BTCUSD", side: 1, t_in: t0 * 1000, t_out: (t0 + H) * 1000, pnl: 5, risk: 10, R: 0.5, closed: true },
+        { id: 4, sym: "XAUUSD", side: 1, t_in: t0 * 1000, closed: false },
+      ] },
+      st: { positions: [{ ticket: 9, sym: "XAUUSDm", side: -1, open: 4100, sl: 4150, tp: 4000, t: (t0 + 5 * H) * 1000 }, { ticket: 10, sym: "EURUSD", side: 1, open: 1.08, sl: 1.07 }], orders: [{ ticket: 11, sym: "XAUUSD", side: 1, price: 4050, sl: 4020 }] },
+    };
+    const o = eaOverlay(d, "XAUUSD", H);
+    expect(o.stat).toMatchObject({ n: 3, win: 1, loss: 1, open: 1, pend: 1 });
+    expect(o.stat.sumR).toBeCloseTo(0.625 - 1, 6);
+    const entry = o.marks.filter((m) => m.shape.startsWith("arrow")), exit = o.marks.filter((m) => m.shape === "circle");
+    expect(entry).toHaveLength(3); expect(exit).toHaveLength(2);
+    expect(entry.every((m) => m.time % H === 0)).toBe(true);                   // đã canh về đúng đầu nến
+    expect(exit.find((m) => m.color === "#059669").text).toMatch(/^\+0,6R$/);    // R kiểu Việt
+    expect(exit.find((m) => m.color === "#e11d48").text).toMatch(/^-1,0R$/);
+    expect(o.lines.map((l) => l.title)).toEqual(["EA BÁN", "EA SL", "EA TP", "EA chờ MUA", "EA chờ · SL"]);
+    expect(o.lines.find((l) => l.title === "EA TP").price).toBe(4000);
+    expect(eaMatch("XAUUSDm", "XAUUSD")).toBe(true); expect(eaMatch("US500Cash", "US500")).toBe(false); expect(eaMatch("EURUSD", "XAUUSD")).toBe(false);
+    expect(eaOverlay({}, "XAUUSD", H)).toMatchObject({ marks: [], lines: [], stat: { n: 0 } });
+  });
 });

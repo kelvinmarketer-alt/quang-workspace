@@ -456,14 +456,14 @@ function useCells(sym, tf, mkt, active) {
 }
 
 const EMPTY = [], NOFLOW = {};
-function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn }) {
+function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn, extra }) {
   const { sym, tf } = cell;
   const st = useCells(sym, tf, mkt, active);
   const ta = useMemo(() => (st.candles.length > 30 ? analyze(st.candles) : null), [st.candles]);
   const last = st.candles[st.candles.length - 1], prev = st.candles[st.candles.length - 2];
   const price = last?.close;
   const chg = last && prev ? ((last.close - prev.close) / prev.close) * 100 : null;
-  const lines = useMemo(() => buildLines({ levels: ta?.series.levels || [], ai, tags, compact }), [ta, ai, tags, compact]);
+  const lines = useMemo(() => [...buildLines({ levels: ta?.series.levels || [], ai, tags, compact }), ...(extra?.lines || EMPTY)], [ta, ai, tags, compact, extra]);
   const coins = watch.includes(sym) ? watch : [sym, ...watch];
   const { flow } = useFlow(sym, tf, st.market, st.candles, flowOn || NOFLOW);
   return (
@@ -486,7 +486,7 @@ function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={st.market === "mt5" ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
+          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={extra?.marks || EMPTY} lines={lines} precision={st.market === "mt5" ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
         </>)}
       </div>
     </div>
@@ -502,7 +502,7 @@ export function LayoutPicker({ n, setN }) {
   );
 }
 
-export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn }) {
+export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn, extraFor }) {
   const { n, cells, link, labels } = grid;
   const [focus, setFocus] = useState(null);
   const scroller = useRef(null);
@@ -525,7 +525,7 @@ export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFo
         {shown.map((i) => (
           <GridCell key={i} onEma={onEma} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
             ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height}
-            flowOn={flowOn && (focus === i || n <= 2 ? flowOn : { ...flowOn, cvd: false, oi: false })} />
+            flowOn={flowOn && (focus === i || n <= 2 ? flowOn : { ...flowOn, cvd: false, oi: false })} extra={extraFor?.(cells[i].sym, cells[i].tf)} />
         ))}
       </div>
       {focus == null && n > 1 && (

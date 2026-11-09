@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Term } from "../components/Term.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
-import { fxDigits, FX_DEFAULT, useMt5Feed } from "../lib/mt5Source.js";
+import { fxDigits, FX_DEFAULT, useMt5Feed, useEaTrades, eaOverlay } from "../lib/mt5Source.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, toggleEma, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -467,14 +467,19 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
   // Nhãn trên biểu đồ: từng cái 3 mức có nhãn → chỉ đường → ẩn (nhớ trên máy này, dùng chung cho mọi ô)
   const [tags, setTags] = useState(loadTags);
   // Đường Key Volume / Protected / POC + Entry/SL/TP của AI + lệnh bot demo đang mở vẽ lên biểu đồ
+  // Lệnh EA MT5 (chỉ ở thị trường Forex, chỉ chủ): vị thế/lệnh chờ/lịch sử của EA QWS_Gop vẽ lên chart — dữ liệu cùng bảng qws_mt5_bot
+  const [eaOn, setEaOn] = useState(() => ls.get("qws_fx_ea", true) !== false);
+  const eaData = useEaTrades(fx && isOwner && active && eaOn);
+  const eaView = useMemo(() => (fx && isOwner && eaOn ? eaOverlay(eaData, sym, TF[tf].ms / 1000) : null), [fx, isOwner, eaOn, eaData, sym, tf]);
   const lines = useMemo(() => {
     const out = buildLines({ levels: ta?.series.levels || [], ai, tags });
+    if (eaView) out.push(...eaView.lines);
     for (const t of botList) if (t.open) {
       out.push({ price: t.entry, color: "#8b5cf6", title: `Bot ${t.side === 1 ? "LONG" : "SHORT"}`, style: 0, width: 2 });
       out.push({ price: t.sl, color: "#e11d48", title: "Bot SL", style: 2 }, { price: t.tp, color: "#059669", title: "Bot TP", style: 2 });
     }
     return out;
-  }, [ai, ta, botList, tags]);
+  }, [ai, ta, botList, tags, eaView]);
 
   // Nhiều biểu đồ (1 / 2 / 4 / 6 ô): ô đang chọn = coin + khung của cả trang (AI, chỉ báo, cảnh báo giá bên dưới)
   const [grid, setGridState] = useState(() => loadGrid(fx));
@@ -643,7 +648,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
+              <ChartGrid extraFor={fx && isOwner && eaOn ? (c, t) => eaOverlay(eaData, c, TF[t].ms / 1000) : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />} />
               {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />}
             </div>
@@ -652,12 +657,25 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
           ) : (
             <div className="relative mt-2">
               {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-              <CandleChart onEma={() => toggleEma(setTags)} candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className="h-[380px] w-full sm:h-[560px]" />
+              <CandleChart onEma={() => toggleEma(setTags)} candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={fx ? eaView?.marks || NONE : botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className="h-[380px] w-full sm:h-[560px]" />
               <TagBar tags={tags} setTags={setTags} extra={<>
+                {eaView && eaView.marks.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh EA L/S · ● thoát ±R{eaView.stat.open > 0 && <> · <span className="text-violet-500">━</span> EA đang mở</>}</span>}
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}
                 <GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />
               </>} />
               {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} />}
+            </div>
+          )}
+          {/* Lệnh EA MT5 trên biểu đồ Forex */}
+          {fx && isOwner && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-slate-100 pt-1.5 text-[11px]">
+              <label className="flex cursor-pointer items-center gap-1.5 font-bold text-slate-600">
+                <input type="checkbox" checked={eaOn} onChange={(e) => { setEaOn(e.target.checked); ls.set("qws_fx_ea", e.target.checked); }} />
+                <Bot size={13} className="text-violet-500" /> Hiện lệnh EA MT5
+              </label>
+              {eaOn && !eaData.loaded ? <span className="flex items-center gap-1 text-slate-400"><Loader2 size={11} className="animate-spin" /> Đang tải lệnh EA…</span>
+                : eaOn && eaView && (eaView.stat.n + eaView.stat.pend === 0 ? <span className="text-slate-400">EA chưa có lệnh nào ở {sym}{["XAUUSD", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"].includes(sym) ? "" : " (EA chỉ giao dịch XAUUSD, BTCUSD, ETHUSD, US500, JP225, US2000)"}.</span>
+                : <span className="text-slate-500">{eaView.stat.n} lệnh {sym}: <b className="text-emerald-600">{eaView.stat.win} thắng</b> · <b className="text-rose-600">{eaView.stat.loss} thua</b>{eaView.stat.open ? <> · <b className="text-violet-600">{eaView.stat.open} đang mở</b></> : null}{eaView.stat.pend ? <> · <b className="text-amber-600">{eaView.stat.pend} lệnh chờ</b></> : null} · tổng <b className={eaView.stat.sumR >= 0 ? "text-emerald-600" : "text-rose-600"}>{sR(eaView.stat.sumR, 1)}</b></span>)}
             </div>
           )}
           {/* Lệnh bot demo trên biểu đồ (các cặp của bot × M5/M15) */}

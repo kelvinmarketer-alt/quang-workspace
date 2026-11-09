@@ -226,3 +226,28 @@ describe("Cảnh báo giá Forex (09/11)", () => {
     vi.doUnmock("../src/lib/mt5Source.js"); vi.doUnmock("../src/lib/coinShared.js"); vi.doUnmock("../src/lib/supabase.js");
   });
 });
+
+describe("Thị trường Forex · lệnh EA MT5 trên biểu đồ (09/11)", () => {
+  it("có dòng 'Hiện lệnh EA MT5' + thống kê lệnh của mã đang xem; tắt được; không sập", async () => {
+    vi.resetModules();
+    const T0 = 1_700_000_000;
+    const bars = Array.from({ length: 320 }, (_, i) => { const o = 2600 + Math.sin(i / 7) * 30, c = 2600 + Math.sin((i + 1) / 7) * 30; return { time: T0 + i * 3600, open: o, high: Math.max(o, c) + 4, low: Math.min(o, c) - 4, close: c, volume: 200 + i, buy: 100, sell: 100, nf: true }; });
+    const q = { ts: Date.now(), live: true, ok: ["XAUUSD"], missing: [], q: { XAUUSD: { bid: 2650.12, ask: 2650.4, digits: 2, f: { "4h": [bars[319].time, 1, 2, 0.5, 1.5, 9], "1d": [T0, 2600, 2660, 2590, 2650, 1] } } } };
+    const ea = { loaded: true, hist: { trades: [{ id: 1, sym: "XAUUSD", side: 1, t_in: (T0 + 200 * 3600) * 1000, t_out: (T0 + 210 * 3600) * 1000, pnl: 15, risk: 10, R: 1.5, closed: true }, { id: 2, sym: "XAUUSD", side: -1, t_in: (T0 + 250 * 3600) * 1000, t_out: (T0 + 260 * 3600) * 1000, pnl: -10, risk: 10, R: -1, closed: true }] }, st: { positions: [{ ticket: 3, sym: "XAUUSD", side: 1, open: 2640, sl: 2600, tp: null, t: (T0 + 300 * 3600) * 1000 }], orders: [] } };
+    vi.doMock("../src/lib/mt5Source.js", async (orig) => ({ ...(await orig()), mt5Klines: async () => bars, mt5Ticker: async () => ({ price: 2650.12, chg: 1.9, vol: 0 }), subscribeQuotes: (cb) => { cb(q); return () => {}; }, useMt5Feed: () => ({ q, err: null, loaded: true, ts: q.ts, online: true, ok: q.ok, missing: [] }), useMt5Live: () => {}, useEaTrades: () => ea }));
+    localStorage.removeItem("qws_fx_ea"); localStorage.removeItem("qws_fx_grid"); localStorage.setItem("qws_fx_sym", JSON.stringify("XAUUSD"));
+    const M = (await import("../src/pages/CoinMarket.jsx")).default;
+    const { errors, container } = await mount(<M venue="forex" />, "/coin");
+    expect(container.textContent).toMatch(/Hiện lệnh EA MT5/);
+    expect(container.textContent).toMatch(/3 lệnh XAUUSD:\s*1 thắng\s*·\s*1 thua\s*·\s*1 đang mở/);
+    expect(container.textContent).toMatch(/lệnh EA L\/S/);
+    const box = screen.getByRole("checkbox", { name: /Hiện lệnh EA MT5/ });
+    await safely(() => fireEvent.click(box));
+    expect(container.textContent).not.toMatch(/3 lệnh XAUUSD/);
+    expect(JSON.parse(localStorage.getItem("qws_fx_ea"))).toBe(false);
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    localStorage.removeItem("qws_fx_ea");
+    vi.doUnmock("../src/lib/mt5Source.js");
+  });
+});
+
