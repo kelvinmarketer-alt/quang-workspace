@@ -42,8 +42,10 @@ def log(*a):
 def load_env():
     env = dict(os.environ)
     here = os.path.dirname(os.path.abspath(__file__))
-    for d in (here, os.path.dirname(here)):
-        f = os.path.join(d, ".env")
+    # cùng nguồn khoá với mt5_bridge.py: QWS_ENV, hoặc .env của qws-live-bot (máy bàn Windows)
+    files = [os.path.join(here, ".env"), os.path.join(os.path.dirname(here), ".env")]
+    files.append(os.environ.get("QWS_ENV") or r"C:\Users\PC\Projects\qws-live-bot\.env")
+    for f in files:
         if os.path.isfile(f):
             for line in open(f, encoding="utf-8", errors="ignore"):
                 line = line.strip()
