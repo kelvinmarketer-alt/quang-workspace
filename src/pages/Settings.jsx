@@ -110,7 +110,7 @@ export default function Settings() {
   };
 
   // Chia trang thành các mục (nhớ mục đang mở trên máy này) — trước đây 1 trang cuộn rất dài
-  const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["office", "Văn phòng AI", Building2], ["members", "Phân quyền", Users2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
+  const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["members", "Phân quyền", Users2], ["office", "Văn phòng AI", Building2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
   const [sec, setSec0] = useState(() => { try { return localStorage.getItem("qws_settings_sec") || "account"; } catch { return "account"; } });
   const cur = SECS.some(([k]) => k === sec) ? sec : "account";
   const setSec = (k) => { setSec0(k); try { localStorage.setItem("qws_settings_sec", k); } catch { /* bỏ qua */ } };

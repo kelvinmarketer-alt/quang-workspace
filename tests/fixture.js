@@ -30,6 +30,6 @@ const DATA = {
 };
 const ACT = /^(add|update|delete|set|remove|run|skip|allocate|transfer|import|export|reset|undo|unlock|lock|change|toggle|save|mark|hide|unhide|setToast)/;
 export function makeData(over = {}) {
-  const base = { ...DATA, isOwner: true, ownerId: "u1", myEmail: "chu@example.com", perms: ["dashboard", "customers", "resources", "ads", "web", "fanpage", "ketoan", "coin", "tasks", "coinInvest", "coinMarket", "coinDemo", "coinLive"], editable: [], canEdit: () => true, syncStatus: "idle", vaultPrivate: true, vaultHasPin: false, vaultLocked: false, ...over };
+  const base = { ...DATA, isOwner: true, ownerId: "u1", myEmail: "chu@example.com", perms: ["dashboard", "customers", "resources", "ads", "web", "fanpage", "ketoan", "coin", "tasks", "library", "coinInvest", "coinMarket", "coinDemo", "coinLive"], editable: [], canEdit: () => true, syncStatus: "idle", vaultPrivate: true, vaultHasPin: false, vaultLocked: false, ...over };
   return new Proxy(base, { get: (t, k) => (k in t ? t[k] : typeof k === "string" && ACT.test(k) ? () => {} : undefined) });
 }

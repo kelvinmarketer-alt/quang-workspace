@@ -173,9 +173,9 @@ export default function Dashboard() {
         {/* Sức khoẻ thương hiệu (chủ) / Top khách (tài khoản phụ) */}
         <div className="card p-4 md:order-4 lg:order-none lg:col-span-8">
           {isOwner ? <>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu</h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu{health.length > 5 ? <span className="ml-1.5 text-[12px] font-semibold text-slate-400">5 / {health.length} · xấu nhất trước</span> : null}</h3>
               <Link to="/bao-cao" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-slate-700 hover:bg-slate-200">Trung tâm báo cáo <ArrowUpRight size={14} /></Link></div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{health.slice(0, 10).map((r) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{[...health].sort((a, b) => ["ads", "web", "fp", "seo"].filter((k) => b.cells[k].t === "b").length - ["ads", "web", "fp", "seo"].filter((k) => a.cells[k].t === "b").length).slice(0, 5).map((r) => (
               <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
                 <span className="flex min-w-0 items-center gap-2"><BrandAvatar r={r} size={24} /><span className="truncate text-[13px] font-bold text-slate-800">{r.name}</span></span>
                 <span className="flex gap-1">{["ads", "web", "fp", "seo"].map((k) => { const lb = `${KLBL[k]}: ${rep.loading && !rep.data?.at ? "đang tải" : TLBL[r.cells[k].t] || "không chạy"}${r.cells[k].v ? ` · ${r.cells[k].v}` : ""}`; return <i key={k} title={lb} aria-label={lb} role="img" className={`bar-x h-1.5 flex-1 rounded-full ${rep.loading && !rep.data?.at ? "animate-pulse bg-slate-200" : DOT[r.cells[k].t]}`} />; })}</span>

@@ -60,7 +60,7 @@ const NAV = [
   { to: "/khach-hang", label: "Khách & Dự án", icon: Users, feat: "customers", group: "biz" },
   { to: "/ke-toan", label: "Kế toán & Chi phí", icon: Calculator, feat: "ketoan", group: "fin" },
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
-  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "me" },
+  { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "biz" },
   { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin", group: "fin" },
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "resources", group: "biz" },
@@ -73,9 +73,9 @@ const NAV = [
 ];
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
-  { id: "biz", label: "Kinh doanh", order: ["/", "/bao-cao", "/khach-hang"] },
+  { id: "biz", label: "Kinh doanh", order: ["/", "/cong-viec", "/bao-cao", "/khach-hang"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
-  { id: "me", label: "Cá nhân", order: ["/cong-viec", "/kho-tai-lieu", "/tai-khoan"] },
+  { id: "me", label: "Lưu trữ", order: ["/kho-tai-lieu"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
 ];
 const navKey = (n) => n.key || n.to || n.href;
@@ -84,6 +84,8 @@ const navKey = (n) => n.key || n.to || n.href;
 // key = tab đầu → ghim cũ của /bao-cao, /khach-hang vẫn dùng được.
 const HUBS = [
   { id: "report", label: "Báo cáo", icon: BarChart3, group: "biz", tabs: [["/bao-cao", "Tổng hợp", BarChart3], ["/quang-cao", "Quảng cáo", Megaphone], ["/website", "Website", Globe], ["/fanpage", "Fanpage", ThumbsUp]] },
+  // 09/11: Kho tài liệu + Tài khoản & Thẻ → 1 mục "Kho" (Tài khoản & Thẻ vẫn chỉ chủ; thành viên chỉ có Kho tài liệu thì không hiện thanh tab)
+  { id: "store", label: "Kho", icon: Library, group: "me", tabs: [["/kho-tai-lieu", "Tài liệu", Library], ["/tai-khoan", "Tài khoản & Thẻ", KeyRound]] },
   { id: "cust", label: "Khách & Dự án", icon: Users, group: "biz", tabs: [["/khach-hang", "Khách & dự án", Users], ["/tai-nguyen", "Tài nguyên", FolderOpen]], also: ["/du-an", "/don-hang"] },
 ];
 const inPath = (path, t) => path === t || path.startsWith(t + "/");
@@ -132,7 +134,7 @@ function useNavItems() {
 // Ghim menu — localStorage "qws_nav_pins" (mảng key to|href)
 const PIN_KEY = "qws_nav_pins";
 function readPins() {
-  try { const v = JSON.parse(localStorage.getItem(PIN_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; }
+  try { const v = JSON.parse(localStorage.getItem(PIN_KEY) || "[]"); return Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === "string").map((x) => (x === "/tai-khoan" ? "/kho-tai-lieu" : x)))] : []; } catch { return []; } // ghim cũ "Tài khoản & Thẻ" → mục Kho (09/11)
 }
 function useNavPins() {
   const [pins, setPins] = useState(readPins);
