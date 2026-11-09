@@ -100,10 +100,10 @@ export function useWhale(sym, tf, market, on) {
 
   // WebSocket dùng chung theo mã (nhiều ô cùng coin chỉ 1 kết nối): lệnh lớn (aggTrade) + thanh lý (forceOrder, chỉ Futures)
   useEffect(() => {
-    if (!on.big && !on.liq) return;
+    if ((!on.big && !on.liq) || market === "mt5") return;
     const bump = () => { if (!pend.current) { pend.current = true; setTimeout(() => { pend.current = false; setTick((x) => x + 1); }, 1500); } };
     return wsJoin(pair, fut, bigMin(sym.toUpperCase().replace(/USDT$/, "")), bump);
-  }, [pair, fut, on.big, on.liq, sym]);
+  }, [pair, fut, on.big, on.liq, sym, market]);
 
   const s = storeOf(pair);
   return { ...info, big: s.big, liq: s.liq, tick, fut };

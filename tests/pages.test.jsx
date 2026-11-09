@@ -125,3 +125,74 @@ describe("thành viên · Thị trường Coin", () => {
     vi.unstubAllGlobals();
   });
 });
+
+// ---- 09/11: Trade COIN (gộp Demo + Bot thật) · Trade Forex · Thị trường Forex ----
+describe("Coin · Trade COIN / Trade Forex (09/11)", () => {
+  const stubNet = () => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
+  it("thanh tab: Trade COIN + Trade Forex, không còn Demo tự động / Bot thật / EA MT5 ở hàng trên", async () => {
+    stubNet(); localStorage.removeItem("qws_coin_tab");
+    const C = (await import("../src/pages/Coin.jsx")).default;
+    const { container } = await mount(<C />, "/coin");
+    const tabs = [...container.querySelectorAll("button")].map((b) => b.textContent.trim());
+    expect(tabs.some((t) => /Trade COIN/.test(t))).toBe(true);
+    expect(tabs.some((t) => /Trade Forex/.test(t))).toBe(true);
+    expect(tabs.some((t) => /^EA MT5$/.test(t))).toBe(false);
+    vi.unstubAllGlobals();
+  });
+  it("link cũ ?tab=live mở Trade COIN + công tắc Bot thật; ?tab=mt5 mở Trade Forex", async () => {
+    stubNet(); localStorage.removeItem("qws_coin_tab"); localStorage.removeItem("qws_trade_sub");
+    const C = (await import("../src/pages/Coin.jsx")).default;
+    const { errors, unmount } = await mount(<C />, "/coin?tab=live");
+    expect(localStorage.getItem("qws_coin_tab")).toBe("trade");
+    expect(localStorage.getItem("qws_trade_sub")).toBe("live");
+    expect(screen.getAllByRole("button", { name: /Demo tự động/ }).length).toBeGreaterThan(0); // công tắc Demo | Bot thật
+    unmount();
+    await mount(<C />, "/coin?tab=mt5");
+    expect(localStorage.getItem("qws_coin_tab")).toBe("forex");
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+  it("Thị trường: công tắc Coin | Forex — Forex không sập khi cầu nối MT5 chưa chạy", async () => {
+    stubNet(); localStorage.setItem("qws_coin_tab", "market"); localStorage.setItem("qws_market_sub", "forex");
+    const C = (await import("../src/pages/Coin.jsx")).default;
+    const { errors, container } = await mount(<C />, "/coin");
+    expect(container.textContent).toMatch(/Thị trường Forex · MT5/);
+    expect(container.textContent).toMatch(/Cầu nối giá MT5 chưa chạy|Mã MT5/);
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    localStorage.removeItem("qws_market_sub"); localStorage.removeItem("qws_coin_tab");
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("Thị trường Forex · có dữ liệu MT5 (09/11)", () => {
+  it("hiện giá + nến + AI, không có Futures/Spot, dòng tiền lớn, cảnh báo giá Binance; không sập", async () => {
+    vi.resetModules();
+    const T0 = 1_700_000_000;
+    const bars = Array.from({ length: 320 }, (_, i) => { const o = 2600 + Math.sin(i / 7) * 30, c = 2600 + Math.sin((i + 1) / 7) * 30; return { time: T0 + i * 3600, open: o, high: Math.max(o, c) + 4, low: Math.min(o, c) - 4, close: c, volume: 200 + i, buy: 100 + i / 2, sell: 100 + i / 2, nf: true }; });
+    const q = { ts: Date.now(), live: true, ok: ["XAUUSD"], missing: [], q: { XAUUSD: { bid: 2650.12, ask: 2650.4, digits: 2, f: { "4h": [bars[319].time, 1, 2, 0.5, 1.5, 9], "1d": [T0, 2600, 2660, 2590, 2650, 1] } } } };
+    vi.doMock("../src/lib/mt5Source.js", async (orig) => ({
+      ...(await orig()),
+      mt5Klines: async () => bars, mt5Ticker: async () => ({ price: 2650.12, chg: 1.9, vol: 0 }), mt5Exists: async () => true,
+      subscribeQuotes: (cb) => { cb(q); return () => {}; },
+      useMt5Feed: () => ({ q, err: null, loaded: true, ts: q.ts, online: true, ok: q.ok, missing: [] }),
+      useMt5Live: () => {},
+    }));
+    localStorage.removeItem("qws_fx_grid"); localStorage.removeItem("qws_fx_sym");
+    const M = (await import("../src/pages/CoinMarket.jsx")).default;
+    const { errors, container } = await mount(<M venue="forex" />, "/coin");
+    const t = container.textContent;
+    expect(t).toMatch(/MT5 đang gửi giá/);
+    expect(t).toMatch(/XAUUSD/);
+    expect(t).not.toMatch(/Dòng tiền lớn/);
+    expect(t).not.toMatch(/Cảnh báo giá/);
+    expect(screen.queryByRole("button", { name: "Futures" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Spot" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Phân tích/ }).length).toBeGreaterThan(0);
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: "4" })));
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 80)); });
+    expect(screen.getAllByRole("combobox", { name: /Coin ô/ }).length).toBe(4);
+    expect(JSON.parse(localStorage.getItem("qws_fx_grid")).cells[0].sym).toBe("XAUUSD"); // lưới Forex tách khỏi lưới Coin
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    vi.doUnmock("../src/lib/mt5Source.js");
+  });
+});

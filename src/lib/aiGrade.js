@@ -5,6 +5,7 @@
 import { fetchKlines, TF } from "./ta.js";
 
 const FINE = { "5m": "1m", "15m": "5m", "1h": "5m", "4h": "15m", "1d": "1h", "1w": "4h" };
+const FINE_MT5 = { "15m": "5m", "1h": "5m", "4h": "15m", "1d": "1h", "1w": "4h" }; // MT5 không có M1 (cầu nối chỉ gửi M5 trở lên)
 const MAX_BARS = 100, TTL = 5 * 60000;
 const CACHE = new Map(), INFLIGHT = new Map();
 
@@ -33,10 +34,10 @@ export function gradeRecord(rec) {
   const p = (async () => {
     let res = gradeBars(rec, []);
     if (res.outcome !== "none") {
-      const tf = TF[rec.tf], opts = { market: rec.market === "futures" ? "futures" : "spot" };
+      const tf = TF[rec.tf], opts = { market: rec.market === "mt5" ? "mt5" : rec.market === "futures" ? "futures" : "spot" }, FN = opts.market === "mt5" ? FINE_MT5 : FINE;
       const main = await fetchKlines(rec.symbol, tf?.api || rec.tf, MAX_BARS, { ...opts, startTime: rec.at }); // nến mở SAU lúc phân tích
       const nextOpen = main.length ? main[0].time * 1000 : Date.now();
-      const fine = FINE[rec.tf] && nextOpen > rec.at + 1000 ? await fetchKlines(rec.symbol, FINE[rec.tf], 100, { ...opts, startTime: rec.at, endTime: nextOpen - 1 }).catch(() => []) : [];
+      const fine = FN[rec.tf] && nextOpen > rec.at + 1000 ? await fetchKlines(rec.symbol, FN[rec.tf], 100, { ...opts, startTime: rec.at, endTime: nextOpen - 1 }).catch(() => []) : [];
       res = gradeBars(rec, [...fine, ...main]);
       const closedAll = main.length >= MAX_BARS && tf && main[MAX_BARS - 1].time * 1000 + tf.ms <= Date.now();
       if (res.outcome === "open" && closedAll) res.expired = true; // hết 100 nến vẫn chưa chạm → chốt "Chưa chạm"

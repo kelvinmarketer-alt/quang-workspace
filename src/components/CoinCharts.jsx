@@ -11,6 +11,7 @@ import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 import { useWhale, cvdOf, flowMarks, bigMin, usdK } from "../lib/whale.js";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
+import { fxDigits } from "../lib/mt5Source.js";
 import { termVi } from "../lib/glossary.js";
 import { GlossaryButton } from "./Term.jsx";
 
@@ -409,9 +410,12 @@ export function DrawBar({ tool, setTool, sel, setSel, hidden, setHidden, items, 
 
 // ---- Lưới nhiều biểu đồ ----
 export const LAYOUTS = [1, 2, 4, 6];
-const DEFAULT_CELLS = [["BTC", "1w"], ["BTC", "1d"], ["BTC", "4h"], ["BTC", "1h"], ["ETH", "4h"], ["SOL", "4h"]].map(([sym, tf]) => ({ sym, tf }));
-export function loadGrid() {
-  const g = ls.get("qws_mkt_grid", null) || {};
+const COIN_CELLS = [["BTC", "1w"], ["BTC", "1d"], ["BTC", "4h"], ["BTC", "1h"], ["ETH", "4h"], ["SOL", "4h"]].map(([sym, tf]) => ({ sym, tf }));
+const FX_CELLS = [["XAUUSD", "1w"], ["XAUUSD", "1d"], ["XAUUSD", "4h"], ["XAUUSD", "1h"], ["EURUSD", "4h"], ["BTCUSD", "4h"]].map(([sym, tf]) => ({ sym, tf }));
+export const FX_PRESET = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US500"]; // "4 mã" của thị trường Forex
+export function loadGrid(forex = false) {
+  const g = ls.get(forex ? "qws_fx_grid" : "qws_mkt_grid", null) || {};
+  const DEFAULT_CELLS = forex ? FX_CELLS : COIN_CELLS;
   const cells = Array.isArray(g.cells) ? g.cells.filter((c) => c && c.sym && TF[c.tf]) : [];
   return {
     n: LAYOUTS.includes(g.n) ? g.n : 1,
@@ -420,7 +424,7 @@ export function loadGrid() {
     link: !!g.link, labels: !!g.labels,
   };
 }
-export const saveGrid = (g) => ls.set("qws_mkt_grid", g);
+export const saveGrid = (g, forex = false) => ls.set(forex ? "qws_fx_grid" : "qws_mkt_grid", g);
 
 // Nến của 1 ô: sàn đang chọn trước, mã không có → sàn còn lại; cập nhật mỗi phút khi tab đang mở
 function useCells(sym, tf, mkt, active) {
@@ -432,14 +436,14 @@ function useCells(sym, tf, mkt, active) {
     const go = async (silent) => {
       if (!silent) setSt((s) => ({ ...s, loading: true, err: "" }));
       try {
-        for (const m of [mkt, mkt === "futures" ? "spot" : "futures"]) {
+        for (const m of mkt === "mt5" ? ["mt5"] : [mkt, mkt === "futures" ? "spot" : "futures"]) {
           try {
             const c = await fetchKlines(sym, TF[tf].api, 300, { market: m });
             if (!off) setSt({ key: k, candles: c, market: m, err: "", loading: false });
             return;
           } catch (e) { if (!e.badSymbol) throw e; }
         }
-        throw new Error(`Không có ${sym}/USDT trên Binance`);
+        throw new Error(mkt === "mt5" ? `Không có ${sym} trên MT5` : `Không có ${sym}/USDT trên Binance`);
       } catch (e) { if (!off && !silent) setSt({ key: k, candles: [], market: "", err: e.message || String(e), loading: false }); }
     };
     go(false);
@@ -469,7 +473,7 @@ function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected
           {coins.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <span className={`font-mono text-[12.5px] font-extrabold tabular-nums ${chg == null ? "text-slate-700" : chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{px(price)}</span>
-        {st.market && st.market !== mkt && <span className="text-[10px] font-semibold text-amber-600">{st.market === "spot" ? "Spot" : "Futures"}</span>}
+        {st.market && st.market !== mkt && st.market !== "mt5" && <span className="text-[10px] font-semibold text-amber-600">{st.market === "spot" ? "Spot" : "Futures"}</span>}
         <div className="ml-auto flex items-center gap-1">
           <div className="flex rounded-md bg-slate-100 p-0.5">
             {Object.keys(TF).map((k) => <button key={k} onClick={() => onChange(i, { tf: k })} className={`rounded px-1.5 py-px text-[10.5px] font-extrabold ${tf === k ? "bg-white text-amber-600 shadow" : "text-slate-500"}`}>{TF[k].label}</button>)}
@@ -482,7 +486,7 @@ function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
+          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={EMPTY} lines={lines} precision={st.market === "mt5" ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
         </>)}
       </div>
     </div>
@@ -536,13 +540,13 @@ export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFo
 }
 
 // Nút phụ của lưới, gắn vào cuối hàng nhãn
-export function GridOptions({ grid, setGrid, sym, tf }) {
+export function GridOptions({ grid, setGrid, sym, tf, forex = false }) {
   const preset = (kind) => {
     if (kind === "tf") {
       const tfs = ["1w", "1d", "4h", "1h"];
       setGrid({ ...grid, n: 4, link: true, active: Math.max(0, tfs.indexOf(tf)), cells: [...tfs.map((t) => ({ sym, tf: t })), ...grid.cells.slice(4)] });
     } else {
-      const syms = [sym, ...["BTC", "ETH", "XAU", "SOL", "BNB"].filter((s) => s !== sym)].slice(0, 4);
+      const syms = [sym, ...(forex ? FX_PRESET : ["BTC", "ETH", "XAU", "SOL", "BNB"]).filter((s) => s !== sym)].slice(0, 4);
       setGrid({ ...grid, n: 4, link: false, active: 0, cells: [...syms.map((s) => ({ sym: s, tf })), ...grid.cells.slice(4)] });
     }
   };
@@ -550,8 +554,8 @@ export function GridOptions({ grid, setGrid, sym, tf }) {
   return (<>
     <span className="mx-1 h-3 w-px bg-slate-200" />
     <button onClick={() => preset("tf")} className={`${btn} border-slate-200 bg-white text-slate-600 hover:border-indigo-300`}>{sym} · 4 khung</button>
-    <button onClick={() => preset("coin")} className={`${btn} border-slate-200 bg-white text-slate-600 hover:border-indigo-300`}>4 coin · {TF[tf]?.label}</button>
-    <button onClick={() => setGrid({ ...grid, link: !grid.link })} aria-pressed={grid.link} title="Đổi coin ở 1 ô thì mọi ô đổi theo" className={`${btn} ${grid.link ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 bg-white text-slate-500"}`}><Link2 size={10} /> Cùng coin</button>
+    <button onClick={() => preset("coin")} className={`${btn} border-slate-200 bg-white text-slate-600 hover:border-indigo-300`}>{forex ? "4 mã" : "4 coin"} · {TF[tf]?.label}</button>
+    <button onClick={() => setGrid({ ...grid, link: !grid.link })} aria-pressed={grid.link} title="Đổi mã ở 1 ô thì mọi ô đổi theo" className={`${btn} ${grid.link ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 bg-white text-slate-500"}`}><Link2 size={10} /> Cùng coin</button>
     {grid.n >= 4 && <button onClick={() => setGrid({ ...grid, labels: !grid.labels })} aria-pressed={grid.labels} title="Ô nhỏ mặc định chỉ vẽ đường, không vẽ nhãn ở trục giá" className={`${btn} ${grid.labels ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 bg-white text-slate-500"}`}><Tag size={10} /> Nhãn trục</button>}
   </>);
 }

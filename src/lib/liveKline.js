@@ -2,6 +2,7 @@
 // Futures dùng đường /market/stream (đường /stream cũ không còn gửi dữ liệu — thử 07–08/11). Nhiều ô cùng mã+khung dùng chung 1 kết nối.
 import { useEffect, useRef } from "react";
 import { pairOf } from "./ta.js";
+import { useMt5Live } from "./mt5Source.js";
 
 const CONN = new Map(); // key → { ws, subs, dead, retry, last }
 
@@ -45,8 +46,9 @@ export function mergeBar(candles, bar) {
 // Gọi onBars(fn) tối đa 1 lần / every ms với nến mới nhất; nến vừa ĐÓNG thì đẩy ngay
 export function useLiveKline(sym, interval, market, enabled, onBar, every = 1000) {
   const cb = useRef(onBar); cb.current = onBar;
+  useMt5Live(sym, interval, enabled && market === "mt5", onBar, every); // Forex/CFD: nến đang chạy lấy từ cầu nối MT5 (6 giây/lần), không có WebSocket
   useEffect(() => {
-    if (!enabled || !sym || !interval || !market) return;
+    if (!enabled || !sym || !interval || !market || market === "mt5") return;
     let pend = null, timer = null;
     const flush = () => { timer = null; if (pend) { const b = pend; pend = null; cb.current(b); } };
     const off = join(pairOf(sym), interval, market === "futures", (bar, closed) => {

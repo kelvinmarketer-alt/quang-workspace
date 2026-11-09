@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Term } from "../components/Term.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
+import { fxDigits, FX_DEFAULT, useMt5Feed } from "../lib/mt5Source.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, toggleEma, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -10,7 +11,7 @@ import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { mergeCmd } from "../lib/coinShared.js";
 import { ask } from "../components/ConfirmDialog.jsx";
-import { TF, MARKETS, fetchKlines, fetchTicker24, symbolExists, analyze, htfContext, compactCandles } from "../lib/ta.js";
+import { TF, MARKETS, COIN_MARKETS, fetchKlines, fetchTicker24, symbolExists, analyze, htfContext, compactCandles } from "../lib/ta.js";
 import { aiMarketAnalysis } from "../lib/ai.js";
 import { KNOWLEDGE, KNOWLEDGE_SOURCES } from "../lib/tradeKnowledge.js";
 import { fmtNum, fmtPct } from "../lib/format.js";
@@ -152,7 +153,7 @@ function KnowledgePanel() {
 // Lịch sử phân tích AI (settings.coinAnalyses — lưu cloud, mọi máy thấy) + tự chấm đúng/sai theo nến sau lúc phân tích.
 // Chỉ chấm khi khung này hiện trên màn hình (lười); kết quả giữ trong bộ nhớ (lib/aiGrade.js).
 const OUTCOME = { tp: ["Chạm TP", "bg-emerald-50 text-emerald-700"], sl: ["Chạm SL", "bg-rose-50 text-rose-700"], open: ["Chưa chạm", "bg-slate-100 text-slate-600"], none: ["Không có kèo", "bg-slate-50 text-slate-400"], error: ["Lỗi tải nến", "bg-amber-50 text-amber-700"] };
-function AiHistory({ recs, active, sym, onOpen, className = "" }) {
+function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
   const box = useRef(null);
   const [seen, setSeen] = useState(false);
   const [grades, setGrades] = useState(() => Object.fromEntries(recs.map((r) => [r.id, cachedGrade(r)]).filter(([, g]) => g)));
@@ -184,7 +185,7 @@ function AiHistory({ recs, active, sym, onOpen, className = "" }) {
     const t = setInterval(() => { if (!document.hidden) run(); }, 5 * 60000); // lệnh chưa chạm → chấm lại
     return () => { off = true; clearInterval(t); };
   }, [seen, active, sig]); // eslint-disable-line react-hooks/exhaustive-deps
-  const list = only ? recs.filter((r) => r.symbol === `${sym}USDT`) : recs;
+  const list = only ? recs.filter((r) => r.symbol === symKey) : recs;
   const sum = gradeSummary(list, grades);
   return (
     <Card className={`!p-3 ${className}`}>
@@ -334,20 +335,46 @@ function PriceAlerts({ active, pair, market, price }) {
   );
 }
 
-export default function CoinMarket({ active = true }) {
+// Dải trạng thái nguồn giá MT5 (chỉ ở thị trường Forex): cầu nối trên máy bàn còn gửi giá không
+function Mt5FeedBar({ feed }) {
+  const { q, err, loaded, ts, online } = feed;
+  const age = ts ? Math.round((Date.now() - ts) / 1000) : null;
+  if (!loaded) return null;
+  if (err && !q) return <div className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-[12px] font-semibold text-rose-700"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> Không đọc được dữ liệu MT5: {err}</div>;
+  if (!q) return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-snug text-amber-900">
+      <div className="flex items-center gap-1.5 font-extrabold"><AlertTriangle size={14} /> Cầu nối giá MT5 chưa chạy</div>
+      <div className="mt-1">Trên máy bàn Windows: mở MT5, rồi chạy <b>bridge\mt5_market.py</b> (hoặc bấm <b>cai-cau-noi-gia.bat</b> để tự chạy mỗi lần đăng nhập). Vài giây sau tab này có giá + nến. Hướng dẫn chi tiết: file <b>bridge/HUONG-DAN-GIA-MT5.md</b> trong repo quang-workspace.</div>
+    </div>
+  );
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl px-3 py-1.5 text-[12px] font-semibold ${online ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+      <span className="flex items-center gap-1.5 font-extrabold"><span className={`h-2 w-2 rounded-full ${online ? "animate-pulse bg-emerald-500" : "bg-amber-500"}`} />{online ? "MT5 đang gửi giá" : "MT5 mất liên lạc"}</span>
+      <span>{age != null ? (age < 90 ? `cập nhật ${age} giây trước` : `lần cuối ${Math.round(age / 60)} phút trước`) : ""}</span>
+      {!online && <span>Máy bàn / MT5 đang tắt — biểu đồ hiện dữ liệu lần cuối.</span>}
+      {online && q.live === false && <span>Chợ đang đóng cửa (cuối tuần / ngoài giờ) — giá là phiên cuối.</span>}
+      {online && q.live !== false && <span className="text-emerald-700/70">Khối lượng là tick volume (không phải khối lượng khớp thật) · không có mua/bán chủ động</span>}
+    </div>
+  );
+}
+
+export default function CoinMarket({ active = true, venue = "coin" }) {
+  const fx = venue === "forex"; // 09/11: cùng trang, nguồn nến = MT5 (Forex/CFD) thay Binance — mọi khoá lưu trên máy tách riêng (qws_fx_*)
+  const K = fx ? { sym: "qws_fx_sym", tf: "qws_fx_tf", ai: "qws_fx_ai", watch: "qws_fx_watch" } : { sym: "qws_mkt_sym", tf: "qws_mkt_tf", ai: "qws_mkt_ai", watch: "qws_mkt_watch" };
+  const feed = useMt5Feed(fx && active);
   const { settings = {}, coins = [], setSettings, isOwner } = useData();
   const activeRef = useRef(active); activeRef.current = active; // tab Thị trường đang ẩn → không poll nến
   const hasKey = settings.aiReady ?? !!(settings.openaiKey || "").trim();
-  const [sym, setSym] = useState(() => ls.get("qws_mkt_sym", "BTC"));
-  const [tf, setTf] = useState(() => { const v = ls.get("qws_mkt_tf", "4h"); return TF[v] ? v : "4h"; });
-  const [mkt, setMkt] = useState(() => (ls.get("qws_mkt_market", "futures") === "spot" ? "spot" : "futures")); // nguồn ưu tiên; mã không có → tự sang sàn kia
-  const [extraWatch, setExtraWatch] = useState(() => ls.get("qws_mkt_watch", []));
+  const [sym, setSym] = useState(() => ls.get(K.sym, fx ? "XAUUSD" : "BTC"));
+  const [tf, setTf] = useState(() => { const v = ls.get(K.tf, "4h"); return TF[v] ? v : "4h"; });
+  const [mkt, setMkt] = useState(() => (fx ? "mt5" : ls.get("qws_mkt_market", "futures") === "spot" ? "spot" : "futures")); // nguồn ưu tiên; mã không có → tự sang sàn kia
+  const [extraWatch, setExtraWatch] = useState(() => ls.get(K.watch, []));
   const [q, setQ] = useState("");
   const [data, setData] = useState({ key: "", ltf: [], htf: [], market: "" });
   const [tick, setTick] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
-  const [cache, setCache] = useState(() => ls.get("qws_mkt_ai", {}));
+  const [cache, setCache] = useState(() => ls.get(K.ai, {}));
   const [aiBusy, setAiBusy] = useState(false);
   const [aiErr, setAiErr] = useState("");
   const [qBusy, setQBusy] = useState(false);
@@ -357,14 +384,14 @@ export default function CoinMarket({ active = true }) {
   const keyRef = useRef(key); keyRef.current = key; // chống kết quả coin cũ về muộn đè coin mới
   const settingsRef = useRef(settings); settingsRef.current = settings;
 
-  const watch = useMemo(() => [...new Set([...DEFAULT_WATCH, ...coins.map((c) => (c.symbol || "").toUpperCase()), ...extraWatch].filter((s) => s && s !== "USDT"))], [coins, extraWatch]);
+  const watch = useMemo(() => (fx ? [...new Set([...FX_DEFAULT, ...extraWatch])] : [...new Set([...DEFAULT_WATCH, ...coins.map((c) => (c.symbol || "").toUpperCase()), ...extraWatch].filter((s) => s && s !== "USDT"))]), [coins, extraWatch, fx]);
 
   // Tải nến + giá 24h: ưu tiên sàn đang chọn; mã không có trên sàn đó (400) → tự dùng sàn còn lại
   const load = async (silent) => {
     const k = key, base = sym, want = mkt;
     if (!silent) { setLoading(true); setErr(""); }
     try {
-      const order = AVAIL.get(`${want}|${base}`) === false ? [otherMkt(want)] : [want, otherMkt(want)];
+      const order = fx ? ["mt5"] : AVAIL.get(`${want}|${base}`) === false ? [otherMkt(want)] : [want, otherMkt(want)];
       let got = null;
       for (const m of order) {
         try {
@@ -376,7 +403,7 @@ export default function CoinMarket({ active = true }) {
           AVAIL.set(`${m}|${base}`, true); got = { ltf, htf, t, market: m }; break;
         } catch (e) { if (!e.badSymbol) throw e; AVAIL.set(`${m}|${base}`, false); }
       }
-      if (!got) throw new Error(`Không có cặp ${base}/USDT trên Binance Futures lẫn Spot`);
+      if (!got) throw new Error(fx ? `Sàn MT5 (IC Markets) không có mã ${base}` : `Không có cặp ${base}/USDT trên Binance Futures lẫn Spot`);
       if (keyRef.current !== k) return; // đã đổi coin/khung → bỏ kết quả cũ
       setData({ key: k, ltf: got.ltf, htf: got.htf, market: got.market });
       if (got.t) setTick({ sym: base, market: got.market, ...got.t });
@@ -385,7 +412,7 @@ export default function CoinMarket({ active = true }) {
     if (!silent && keyRef.current === k) setLoading(false);
   };
   useEffect(() => {
-    ls.set("qws_mkt_sym", sym); ls.set("qws_mkt_tf", tf); ls.set("qws_mkt_market", mkt);
+    ls.set(K.sym, sym); ls.set(K.tf, tf); if (!fx) ls.set("qws_mkt_market", mkt);
     load(false);
     const t = setInterval(() => { if (!document.hidden && activeRef.current) load(true); }, 60000); // cập nhật nến mỗi phút
     return () => clearInterval(t); /* eslint-disable-next-line */
@@ -399,13 +426,13 @@ export default function CoinMarket({ active = true }) {
   const ta = useMemo(() => (data.ltf.length > 30 ? analyze(data.ltf) : null), [data.ltf]);
   const s = ta?.summary;
   const stale = data.key !== key; // đang hiện nến/giá của coin/khung cũ → làm mờ + hiện đang tải
-  const usedMkt = data.key === key && data.market ? data.market : AVAIL.get(`${mkt}|${sym}`) === false ? otherMkt(mkt) : mkt;
+  const usedMkt = fx ? "mt5" : data.key === key && data.market ? data.market : AVAIL.get(`${mkt}|${sym}`) === false ? otherMkt(mkt) : mkt;
   const price = (tick?.sym === sym ? tick.price : null) || (data.key.startsWith(sym + "-") ? s?.price : null);
-  const prec = precisionOf(price);
+  const prec = fx ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price);
   const ai = cache[aiKey];
 
   // Lệnh bot demo trên biểu đồ (chỉ chủ): các cặp của bot × M5/M15 — tính lười, dùng chung kết quả 5 phút
-  const session = isOwner ? settings.paperBot || null : null;
+  const session = isOwner && !fx ? settings.paperBot || null : null;
   const sessKey = sessKeyOf(session);
   const botEligible = !!session && cfgOf(session).coins.includes(sym) && (tf === "5m" || tf === "15m"); // cặp bot đang chạy (user tự thêm/sửa/xoá)
   const [botOn, setBotOn] = useState(() => ls.get("qws_mkt_bot", true) !== false);
@@ -450,10 +477,11 @@ export default function CoinMarket({ active = true }) {
   }, [ai, ta, botList, tags]);
 
   // Nhiều biểu đồ (1 / 2 / 4 / 6 ô): ô đang chọn = coin + khung của cả trang (AI, chỉ báo, cảnh báo giá bên dưới)
-  const [grid, setGridState] = useState(loadGrid);
-  const setGrid = (g) => { setGridState(g); saveGrid(g); };
+  const [grid, setGridState] = useState(() => loadGrid(fx));
+  const setGrid = (g) => { setGridState(g); saveGrid(g, fx); };
   const multi = grid.n > 1;
-  const [flowOn, setFlowOn] = useState(loadFlows);
+  const [flowOnCoin, setFlowOn] = useState(loadFlows);
+  const flowOn = fx ? NOFLOW : flowOnCoin; // Forex: không có mua/bán chủ động, lệnh lớn, thanh lý, OI → lớp dòng tiền tắt hẳn
   const { flow, w: whale, fut: flowFut } = useFlow(sym, tf, usedMkt, data.key === key ? data.ltf : NONE, multi ? NOFLOW : flowOn); // dấu chân dòng tiền lớn (lưới: từng ô tự lấy)
   const setLayout = (n) => {
     const active = grid.active < n ? grid.active : 0; // ô đang chọn mang theo coin/khung đang xem
@@ -486,30 +514,30 @@ export default function CoinMarket({ active = true }) {
 
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi
   const pickSym = async (v) => {
-    const x = (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
+    const x = fx ? (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "") : (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/USDT$/, "");
     if (!x || qBusy) return;
     setQErr(""); setQNote("");
     if (!watch.includes(x)) {
       setQBusy(true);
       let found = null;
       try {
-        for (const m of [mkt, otherMkt(mkt)]) { const ok = await symbolExists(x, m); AVAIL.set(`${m}|${x}`, ok); if (ok) { found = m; break; } }
-      } catch { setQBusy(false); setQErr("Không kiểm tra được mã (lỗi mạng) — thử lại"); return; }
+        for (const m of fx ? ["mt5"] : [mkt, otherMkt(mkt)]) { const ok = await symbolExists(x, m); AVAIL.set(`${m}|${x}`, ok); if (ok) { found = m; break; } }
+      } catch (e) { setQBusy(false); setQErr(fx ? e.message || "Không kiểm tra được mã MT5 — thử lại" : "Không kiểm tra được mã (lỗi mạng) — thử lại"); return; }
       setQBusy(false);
-      if (!found) { setQErr(`Không có cặp ${x}/USDT trên Binance Futures lẫn Spot`); return; }
-      if (found !== mkt) setQNote(`${x} không có trên ${MARKETS[mkt].label} — đang xem ${MARKETS[found].label}`);
-      const nw = [...extraWatch, x].slice(-12); setExtraWatch(nw); ls.set("qws_mkt_watch", nw);
+      if (!found) { setQErr(fx ? `Sàn MT5 (IC Markets) không có mã ${x}` : `Không có cặp ${x}/USDT trên Binance Futures lẫn Spot`); return; }
+      if (!fx && found !== mkt) setQNote(`${x} không có trên ${MARKETS[mkt].label} — đang xem ${MARKETS[found].label}`);
+      const nw = [...extraWatch, x].slice(-12); setExtraWatch(nw); ls.set(K.watch, nw);
     }
     setSym(x); setQ("");
   };
-  const removeWatch = (x) => { const nw = extraWatch.filter((w) => w !== x); setExtraWatch(nw); ls.set("qws_mkt_watch", nw); };
+  const removeWatch = (x) => { const nw = extraWatch.filter((w) => w !== x); setExtraWatch(nw); ls.set(K.watch, nw); };
 
   // Lưu bản gọn lên cloud (settings.coinAnalyses, 60 bản mới nhất) để mọi máy xem + tự chấm đúng/sai
   const saveAnalysis = (r) => {
     const pick = (r.setups || []).find((x) => x.valid) || null, at = r.at || Date.now();
     const head = String(r.headline || "").trim(), wait = !pick && r.wait_for ? `Chờ: ${r.wait_for}` : "";
     const rec = {
-      id: `${at}-${sym}-${tf}`, symbol: `${sym}USDT`, market: usedMkt, tf, at,
+      id: `${at}-${sym}-${tf}`, symbol: fx ? sym : `${sym}USDT`, market: usedMkt, tf, at,
       side: pick ? (pick.direction === "short" ? "SHORT" : "LONG") : null,
       entry: pick?.entry ?? null, sl: pick?.stop_loss ?? null, tp: pick?.take_profit?.[0] ?? null,
       summary: [head, wait].filter(Boolean).join(" · ").slice(0, 200),
@@ -521,21 +549,21 @@ export default function CoinMarket({ active = true }) {
     if (!s || stale) return; // chưa tải xong coin mới → không gửi dữ liệu coin cũ cho AI
     setAiBusy(true); setAiErr("");
     try {
-      const r = await aiMarketAnalysis({ symbol: sym, tf: TF[tf].label, htf: TF[tf].htf, summary: s, htfSummary: htfContext(data.htf), candles: compactCandles(data.ltf, 40), apiKey: settings.openaiKey, model: "gpt-4o" });
+      const r = await aiMarketAnalysis({ symbol: sym, tf: TF[tf].label, htf: TF[tf].htf, summary: s, htfSummary: htfContext(data.htf), candles: compactCandles(data.ltf, 40), apiKey: settings.openaiKey, model: "gpt-4o", venue });
       const next = { ...cache, [aiKey]: { ...r, priceAt: price, market: usedMkt } };
       const keys = Object.keys(next).sort((a, b) => (next[b].at || 0) - (next[a].at || 0)).slice(0, 12); // giữ 12 bản gần nhất trên máy này
       const trimmed = Object.fromEntries(keys.map((k) => [k, next[k]]));
-      setCache(trimmed); ls.set("qws_mkt_ai", trimmed);
+      setCache(trimmed); ls.set(K.ai, trimmed);
       saveAnalysis(r);
     } catch (e) { setAiErr(e.message || String(e)); }
     setAiBusy(false);
   };
-  const analyses = useMemo(() => (Array.isArray(settings.coinAnalyses) ? settings.coinAnalyses : []).slice().sort((a, b) => b.at - a.at), [settings.coinAnalyses]);
+  const analyses = useMemo(() => (Array.isArray(settings.coinAnalyses) ? settings.coinAnalyses : []).filter((r) => (r.market === "mt5") === fx).sort((a, b) => b.at - a.at), [settings.coinAnalyses, fx]); // bản Coin và bản Forex chung 1 kho cloud, tách theo nguồn
   const openAnalysis = (r) => {
     const base = (r.symbol || "").replace(/USDT$/, "");
     if (!base) return;
-    if (!watch.includes(base)) { const nw = [...extraWatch, base].slice(-12); setExtraWatch(nw); ls.set("qws_mkt_watch", nw); }
-    setSym(base); if (TF[r.tf]) setTf(r.tf); if (MARKETS[r.market]) setMkt(r.market);
+    if (!watch.includes(base)) { const nw = [...extraWatch, base].slice(-12); setExtraWatch(nw); ls.set(K.watch, nw); }
+    setSym(base); if (TF[r.tf]) setTf(r.tf); if (!fx && COIN_MARKETS.includes(r.market)) setMkt(r.market);
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch { /* bỏ qua */ }
   };
 
@@ -562,7 +590,7 @@ export default function CoinMarket({ active = true }) {
         <div className="flex items-center gap-2">
           <div className="flex w-36 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 sm:w-52">
             <Search size={14} className="shrink-0 text-slate-400" />
-            <input value={q} onChange={(e) => { setQ(e.target.value); setQErr(""); setQNote(""); }} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder="Mã coin + Enter" className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
+            <input value={q} onChange={(e) => { setQ(e.target.value); setQErr(""); setQNote(""); }} onKeyDown={(e) => { if (e.key === "Enter") pickSym(q); }} placeholder={fx ? "Mã MT5 + Enter (XAUUSD…)" : "Mã coin + Enter"} className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
             {qBusy && <Loader2 size={13} className="shrink-0 animate-spin text-slate-400" />}
           </div>
           <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
@@ -578,6 +606,8 @@ export default function CoinMarket({ active = true }) {
         {qNote && <div className="mt-1.5 text-[12px] font-semibold text-amber-600">{qNote}</div>}
       </Card>
 
+      {fx && <Mt5FeedBar feed={feed} />}
+
       <CoinSignal sym={sym} tf={tf} market={usedMkt} summary={s} stale={stale} active={active} />
 
       <div className="grid gap-3 xl:grid-cols-3">
@@ -586,15 +616,16 @@ export default function CoinMarket({ active = true }) {
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-extrabold text-slate-400">{sym}/USDT{multi ? ` · ${TF[tf].label} (ô đang chọn)` : ""}</span>
+                <span className="text-[12px] font-extrabold text-slate-400">{fx ? sym : `${sym}/USDT`}{multi ? ` · ${TF[tf].label} (ô đang chọn)` : ""}</span>
+                {fx ? <span className="rounded-md bg-slate-100 px-1.5 py-px text-[10.5px] font-extrabold text-indigo-600" title="Nguồn giá: MT5 trên máy bàn (IC Markets), cầu nối gửi lên 6 giây/lần">MT5 · IC Markets</span> : (
                 <div className="flex rounded-md bg-slate-100 p-0.5" title="Nguồn giá Binance (bot giao dịch trên Futures)">
-                  {Object.keys(MARKETS).map((m) => <button key={m} onClick={() => setMkt(m)} className={`rounded px-1.5 py-px text-[10.5px] font-extrabold ${mkt === m ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{MARKETS[m].label}</button>)}
-                </div>
-                {usedMkt !== mkt && <span className="text-[10.5px] font-semibold text-amber-600">chỉ có trên {MARKETS[usedMkt].label}</span>}
+                  {COIN_MARKETS.map((m) => <button key={m} onClick={() => setMkt(m)} className={`rounded px-1.5 py-px text-[10.5px] font-extrabold ${mkt === m ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{MARKETS[m].label}</button>)}
+                </div>)}
+                {!fx && usedMkt !== mkt && <span className="text-[10.5px] font-semibold text-amber-600">chỉ có trên {MARKETS[usedMkt].label}</span>}
               </div>
               <div className="flex items-baseline gap-2">
                 <span className={`text-2xl font-extrabold tabular-nums text-slate-900 transition-opacity ${stale ? "opacity-30" : ""}`}>{px(price)}</span>
-                {tick?.sym === sym && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{sPct(tick.chg)} <span className="font-semibold text-slate-400">24h</span></span>}
+                {tick?.sym === sym && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{sPct(tick.chg)} <span className="font-semibold text-slate-400">{fx ? "hôm nay" : "24h"}</span></span>}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -612,9 +643,9 @@ export default function CoinMarket({ active = true }) {
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
-              <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />} />
-              <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />
+              <ChartGrid onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
+              <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />} />
+              {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />}
             </div>
           ) : err ? (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>
@@ -624,9 +655,9 @@ export default function CoinMarket({ active = true }) {
               <CandleChart onEma={() => toggleEma(setTags)} candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className="h-[380px] w-full sm:h-[560px]" />
               <TagBar tags={tags} setTags={setTags} extra={<>
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}
-                <GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} />
+                <GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />
               </>} />
-              <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} />
+              {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} />}
             </div>
           )}
           {/* Lệnh bot demo trên biểu đồ (các cặp của bot × M5/M15) */}
@@ -750,8 +781,8 @@ export default function CoinMarket({ active = true }) {
 
       {/* Lịch sử phân tích AI (cloud, tự chấm) + cảnh báo giá (chủ) */}
       <div className="grid items-start gap-3 xl:grid-cols-3">
-        <AiHistory recs={analyses} active={active} sym={sym} onOpen={openAnalysis} className={isOwner ? "xl:col-span-2" : "xl:col-span-3"} />
-        {isOwner && <PriceAlerts active={active} pair={`${sym}USDT`} market={usedMkt} price={price} />}
+        <AiHistory recs={analyses} active={active} sym={sym} symKey={fx ? sym : `${sym}USDT`} onOpen={openAnalysis} className={isOwner && !fx ? "xl:col-span-2" : "xl:col-span-3"} />
+        {isOwner && !fx && <PriceAlerts active={active} pair={`${sym}USDT`} market={usedMkt} price={price} />}
       </div>
     </div>
   );

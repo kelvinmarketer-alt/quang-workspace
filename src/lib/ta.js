@@ -16,7 +16,9 @@ export const TF = {
 export const MARKETS = {
   futures: { label: "Futures", base: "https://fapi.binance.com/fapi/v1" },
   spot: { label: "Spot", base: "https://api.binance.com/api/v3" },
+  mt5: { label: "MT5", base: null }, // 09/11: Forex/CFD từ MT5 qua cầu nối (lib/mt5Source.js) — KHÔNG phải sàn Binance
 };
+export const COIN_MARKETS = ["futures", "spot"]; // nút chọn sàn ở thị trường Coin
 export const pairOf = (symbol) => (symbol || "").toUpperCase().replace(/USDT$/, "") + "USDT";
 
 const rp = (x) => (x == null || !isFinite(x) ? null : Number(Number(x).toPrecision(6)));
@@ -24,6 +26,7 @@ const rp = (x) => (x == null || !isFinite(x) ? null : Number(Number(x).toPrecisi
 // Nến Binance: [openTime, open, high, low, close, volume, closeTime, quoteVol, trades, takerBuyBase, ...]
 // opts: { market: "futures"|"spot", startTime, endTime } (ms). Mã không có trên sàn → lỗi có badSymbol = true.
 export async function fetchKlines(symbol, interval, limit = 300, opts = {}) {
+  if (opts.market === "mt5") return (await import("./mt5Source.js")).mt5Klines(String(symbol).toUpperCase(), interval, limit, opts);
   const pair = pairOf(symbol), m = MARKETS[opts.market] || MARKETS.spot;
   const q = `symbol=${pair}&interval=${interval}&limit=${limit}${opts.startTime != null ? `&startTime=${Math.floor(opts.startTime)}` : ""}${opts.endTime != null ? `&endTime=${Math.floor(opts.endTime)}` : ""}`;
   const r = await fetch(`${m.base}/klines?${q}`);
@@ -37,6 +40,7 @@ export async function fetchKlines(symbol, interval, limit = 300, opts = {}) {
 
 // Giá 24h (lastPrice, priceChangePercent, quoteVolume) — cùng định dạng ở Futures & Spot
 export async function fetchTicker24(symbol, market) {
+  if (market === "mt5") return (await import("./mt5Source.js")).mt5Ticker(String(symbol).toUpperCase());
   const r = await fetch(`${(MARKETS[market] || MARKETS.spot).base}/ticker/24hr?symbol=${pairOf(symbol)}`);
   if (!r.ok) return null;
   const t = await r.json();
@@ -45,6 +49,7 @@ export async function fetchTicker24(symbol, market) {
 
 // Mã có trên sàn không: true / false (400 = không có cặp) · lỗi mạng → ném lỗi
 export async function symbolExists(symbol, market) {
+  if (market === "mt5") return (await import("./mt5Source.js")).mt5Exists(String(symbol).toUpperCase());
   const r = await fetch(`${(MARKETS[market] || MARKETS.spot).base}/ticker/price?symbol=${pairOf(symbol)}`);
   if (r.ok) return true;
   if (r.status === 400) return false;
@@ -390,7 +395,7 @@ export function analyze(c) {
     ema: { e20: rp(e20[L - 1]), e50: rp(e50[L - 1]), e200: rp(e200[L - 1]), stack: e20[L - 1] && e50[L - 1] ? (e20[L - 1] > e50[L - 1] && (!e200[L - 1] || e50[L - 1] > e200[L - 1]) ? "tăng (EMA20>50>200)" : e20[L - 1] < e50[L - 1] && (!e200[L - 1] || e50[L - 1] < e200[L - 1]) ? "giảm (EMA20<50<200)" : "đan xen") : "chưa đủ dữ liệu" },
     momentum: { rsi: rp(r[L - 1]), rsi5ago: rp(r[L - 6]), macdHist: rp(m.hist[L - 1]), macdHistPrev: rp(m.hist[L - 2]), macdCross: crossAgo, divergence: divergence(sw, r) },
     volatility: { atr: rp(atrNow), atrPct: rp((atrNow / price) * 100) },
-    volume: { note: "nến cuối đang chạy; số liệu theo nến ĐÃ ĐÓNG gần nhất", lastClosed: rp(closed.volume), avg20: rp(avg20), relVolLastClosed: rp(closed.volume / (avg20 || 1)), trend10vs10: rp(recent10 / (prev10 || 1)), buyRatio20: rp(buy20 / (vol20 || 1)), upCandleVolShare20: rp(upVol / (vol20 || 1)), deltaLastClosed: rp(closed.buy - closed.sell), climax: closed.volume > avg20 * 2.5 },
+    volume: { note: "nến cuối đang chạy; số liệu theo nến ĐÃ ĐÓNG gần nhất", lastClosed: rp(closed.volume), avg20: rp(avg20), relVolLastClosed: rp(closed.volume / (avg20 || 1)), trend10vs10: rp(recent10 / (prev10 || 1)), buyRatio20: c[c.length - 1]?.nf ? null : rp(buy20 / (vol20 || 1)), upCandleVolShare20: rp(upVol / (vol20 || 1)), deltaLastClosed: closed.nf ? null : rp(closed.buy - closed.sell), climax: closed.volume > avg20 * 2.5 },
     structure: {
       trend: st.trend === 1 ? "tăng" : st.trend === -1 ? "giảm" : "chưa rõ",
       lastEvent: lastEv ? { kind: lastEv.kind, dir: lastEv.dir === "up" ? "phá lên" : "phá xuống", level: rp(lastEv.level), barsAgo: ago(lastEv.i), relVolAtBreak: rp(c[lastEv.i].volume / (avg20 || 1)) } : null,
@@ -445,5 +450,5 @@ export function htfContext(c) {
 
 // Nến gần nhất dạng gọn [o,h,l,c,v,buy%] để AI đọc price action
 export function compactCandles(c, n = 40) {
-  return c.slice(-n).map((x) => [rp(x.open), rp(x.high), rp(x.low), rp(x.close), rp(x.volume), x.volume ? Math.round((x.buy / x.volume) * 100) : null]);
+  return c.slice(-n).map((x) => [rp(x.open), rp(x.high), rp(x.low), rp(x.close), rp(x.volume), x.volume && !x.nf ? Math.round((x.buy / x.volume) * 100) : null]);
 }

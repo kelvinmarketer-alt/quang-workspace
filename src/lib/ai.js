@@ -395,22 +395,28 @@ uu_tien tối đa 6 việc.`;
 
 // Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
 // EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
-export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model }) {
+export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model, venue }) {
+  const fx = venue === "forex"; // 09/11: thị trường Forex/CFD từ MT5 (IC Markets) — khác crypto ở khối lượng, phiên giao dịch, spread
   const key = (apiKey || "").trim();
   const { PLAYBOOK_TEXT, SETUP_TYPES } = await import("./tradeKnowledge.js");
-  const sys = `Bạn là trader chuyên nghiệp phân tích crypto THEO ĐÚNG BỘ KIẾN THỨC/CHIẾN LƯỢC dưới đây (của chính người dùng — ưu tiên tuyệt đối hơn kiến thức chung). Mọi nhận định, setup, entry, SL, TP phải bám các quy tắc này.
+  const sys = `Bạn là trader chuyên nghiệp phân tích ${fx ? "Forex/CFD (vàng, chỉ số, tiền tệ, crypto CFD trên MT5)" : "crypto"} THEO ĐÚNG BỘ KIẾN THỨC/CHIẾN LƯỢC dưới đây (của chính người dùng — ưu tiên tuyệt đối hơn kiến thức chung). Mọi nhận định, setup, entry, SL, TP phải bám các quy tắc này.
 
 ===== BỘ KIẾN THỨC =====
 ${PLAYBOOK_TEXT}
 ===== HẾT BỘ KIẾN THỨC =====
 
-DỮ LIỆU (JSON, tính sẵn từ nến Binance; "ltf" = khung đang xem, "htf" = khung lớn hơn; nến cuối trong "candles" ĐANG CHẠY, các trường volume/vsa/sfp/patterns đã tính trên nến ĐÃ ĐÓNG):
+DỮ LIỆU (JSON, tính sẵn từ nến ${fx ? "MT5 (IC Markets)" : "Binance"}; "ltf" = khung đang xem, "htf" = khung lớn hơn; nến cuối trong "candles" ĐANG CHẠY, các trường volume/vsa/sfp/patterns đã tính trên nến ĐÃ ĐÓNG):
 - trendFilter: EMA200, độ dốc EMA89 (bps/5 nến), ADX/DI → bộ lọc xu hướng & sideway.
 - protected: Protected High/Low (major pivot 20/5) và đã bị thủng chưa.
 - keyVolume: nến volume lớn nhất 100 nến + các nến volume >2.5× TB (vùng, số lần retest, đã được BẢO VỆ chưa).
 - structure (swing HH/HL/LH/LL, BOS/CHoCH), orderBlocks, fvg, liquidity (equal highs/lows, đỉnh/đáy chưa quét), range100 (premium/discount).
 - sfp (kèm volRel & "valid"), sideway (hộp 20 nến, fakeout), volumeProfile (POC, HVN, LVN gần giá), vsa (nhãn VSA từng nến đã đóng), volumeDivergence, patterns, momentum, volume.
 
+${fx ? `LƯU Ý RIÊNG FOREX/CFD (bắt buộc tuân theo):
+- "volume" trong dữ liệu là TICK VOLUME (số lần giá nhảy), KHÔNG phải khối lượng khớp thật và KHÔNG có mua/bán chủ động (buyRatio/delta = null). Đọc VSA/Key Volume chỉ mang tính TƯƠNG ĐỐI (nến nhiều tick hơn bình thường), nêu rõ độ tin cậy thấp hơn crypto; không kết luận "dòng tiền lớn".
+- Cân nhắc phiên giao dịch (Á / Âu / Mỹ, giờ mở-đóng chợ), tin tức vĩ mô lớn và khoảng trống giá đầu tuần; spread nới rộng quanh giờ đóng cửa nên SL không đặt quá sát.
+- Số liệu giá theo đúng tick của sàn (vd XAUUSD 2 số lẻ, EURUSD 5 số lẻ): entry/SL/TP giữ đúng số chữ số thập phân.
+` : ""}
 YÊU CẦU:
 - Đánh giá đủ: bối cảnh khung lớn → xu hướng/bộ lọc → vùng (Key Volume/OB/SDz/HVN) → thanh khoản đã bị lấy chưa → tín hiệu VSA/nến xác nhận.
 - Chỉ đề xuất setup khi khớp 1 setup trong bộ kiến thức (setup_type thuộc: ${SETUP_TYPES.join(", ")}). Ghi rõ điều kiện KÍCH HOẠT còn phải chờ (trigger) — vì người dùng ưu tiên confirm entry, KHÔNG khuyến khích Limit chặn tàu.
@@ -430,7 +436,7 @@ Viết tiếng Việt ngắn gọn, đúng thuật ngữ. CHỈ trả JSON:
  "setups": [ { "setup_type": "...", "direction": "long" | "short", "label": "chính" | "phụ", "entry_zone": [number, number], "entry": number, "trigger": "điều kiện xác nhận cần thấy trước khi vào", "stop_loss": number, "take_profit": [number, number], "checklist": [ { "item": "...", "ok": true } ], "reason": "...", "invalidation": "...", "management": "dời BE/trailing/thoát sớm theo bộ kiến thức" } ],
  "wait_for": "...", "risk_note": "..."
 }`;
-  const payload = { symbol: symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
+  const payload = { symbol: fx ? symbol.toUpperCase() : symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
   const res = await chat({ model: model || "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(payload) }] }, key, "market");
   if (!res.ok) {
     let msg = res.status + "";

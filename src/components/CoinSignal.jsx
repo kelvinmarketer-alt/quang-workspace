@@ -187,7 +187,7 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
       <button onClick={toggle} className="flex w-full items-center gap-2 text-left">
         <Gauge size={16} className="shrink-0 text-cyan-500" />
         <span className="text-[13px] font-extrabold uppercase tracking-wide text-slate-800">Điểm kỹ thuật</span>
-        <span className="rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-700">{sym}/USDT · {tfLabel}</span>
+        <span className="rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-700">{market === "mt5" ? sym : `${sym}/USDT`} · {tfLabel}</span>
         {!open && <span className="text-[12px] font-extrabold" style={{ color }}>{word} {strength}%</span>}
         <span className="ml-auto hidden text-[11px] font-semibold text-slate-400 sm:inline">chỉ đọc chỉ báo — không phải tín hiệu bot</span>
         <ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
