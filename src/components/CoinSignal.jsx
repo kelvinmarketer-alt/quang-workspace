@@ -287,7 +287,7 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
             {vErr && <span className="text-rose-600">{vErr}</span>}
             <button onClick={runVerify} disabled={vBusy} className="ml-auto flex shrink-0 items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11.5px] font-bold text-violet-700 disabled:opacity-60">{vBusy ? <Loader2 size={12} className="animate-spin" /> : <FlaskConical size={12} />}{ver ? "Chạy lại" : "Kiểm chứng"}</button>
           </div>
-          <div className="text-[10.5px] text-slate-400">Chấm điểm tự động từ chỉ báo trên nến Binance, để đọc nhanh bối cảnh. Bot chỉ vào khi có setup (Thuận xu hướng / SFP / Breakout / SMC) + thuận D1 + vùng Key Volume. Không phải tư vấn đầu tư.</div>
+          <div className="text-[10.5px] text-slate-400">Chấm điểm tự động từ chỉ báo trên nến {market === "mt5" ? "MT5 (IC Markets, khối lượng = tick volume)" : "Binance"}, để đọc nhanh bối cảnh.{market === "mt5" ? " Nhãn \"bot\" chỉ là khung của bot Coin, EA MT5 không dùng điểm này." : " Bot chỉ vào khi có setup (Thuận xu hướng / SFP / Breakout / SMC) + thuận D1 + vùng Key Volume."} Không phải tư vấn đầu tư.</div>
         </div>
       )}
     </Card>
