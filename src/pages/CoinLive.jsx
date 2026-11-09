@@ -562,8 +562,8 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
     const src = follow ? demo : f;
     const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false, notifyPending: f.notifyPending !== false, notifyWeak: f.notifyWeak !== false };
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
-    if (!(v.maxOpen >= 1 && v.maxOpen <= 5)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–5" });
-    if (!(v.dailyStopPct >= 1 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 1–20%" });
+    if (!(v.maxOpen >= 1 && v.maxOpen <= 10)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–10" }); // 09/11: phương án D chạy tối đa 10 lệnh (trước giới hạn 1–5 khiến không lưu được cấu hình theo Demo)
+    if (!(v.dailyStopPct >= 0 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 0–20% (0 = không dừng ngày)" });
     if (!(v.maxLev >= 1 && v.maxLev <= 20)) return setMsg({ bad: true, t: "Đòn bẩy tối đa: 1–20x" });
     const hasNewKey = k.key.trim() && k.secret.trim();
     if ((k.key.trim() || k.secret.trim()) && !hasNewKey) return setMsg({ bad: true, t: "Cần điền đủ cả API Key và Secret Key" });
