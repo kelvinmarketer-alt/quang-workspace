@@ -408,6 +408,15 @@ describe("tab Hỏi đáp AI", () => {
     expect(L.libGet).toHaveBeenCalledWith("d2");
   });
 
+  it("AI nói 'kho chưa có' (không trích nguồn) → không bày tài liệu gần nghĩa ra như thể đã dùng", async () => {
+    L.libAsk.mockResolvedValue({ data: { answer: "Kho chưa có thông tin về điều này.", sources: [{ n: 1, doc_id: "d2", title: "Ghi chú quản lý kho", excerpt: "x", similarity: 0.2 }], usage: { cost_usd: 0.0001 } } });
+    await goChat();
+    await type("Hỏi điều không có");
+    expect(screen.getByText(/Kho chưa có thông tin/)).toBeTruthy();
+    expect(screen.getByText(/Không có tài liệu nào trong kho khớp/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Ghi chú quản lý kho/ })).toBeNull();
+  });
+
   it("chọn phạm vi một thư mục → chỉ gửi thư mục đó và thư mục con", async () => {
     await goChat();
     await act(async () => { fireEvent.change(screen.getByLabelText("Hỏi trong phạm vi"), { target: { value: "f:f1" } }); });

@@ -388,15 +388,20 @@ function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onInde
         ) : (
           <div key={m.id} className="max-w-[94%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 shadow-sm ring-1 ring-slate-100">
             <div className={MD_CLS} onClick={(e) => { const n = e.target.closest?.("[data-src]")?.dataset?.src; const s = (m.sources || []).find((x) => String(x.n) === n); if (s) onOpenDoc(s.doc_id); }} dangerouslySetInnerHTML={{ __html: renderAnswer(m.content, m.sources) }} />
-            {(m.sources || []).length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
-                {m.sources.map((s) => (
-                  <button key={s.doc_id} type="button" onClick={() => onOpenDoc(s.doc_id)} title={s.excerpt} className="flex max-w-full items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-left text-[11.5px] font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700">
-                    <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded bg-indigo-100 text-[10px] font-bold text-indigo-700">{s.n}</span><span className="truncate">{s.title}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {(() => {
+              // Chỉ hiện các nguồn mà câu trả lời THỰC SỰ trích dẫn ([n]); AI nói "kho chưa có" thì không bày tài liệu gần nghĩa ra gây hiểu nhầm
+              const cited = (m.sources || []).filter((s) => m.content.includes(`[${s.n}]`));
+              if (cited.length) return (
+                <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
+                  {cited.map((s) => (
+                    <button key={s.doc_id} type="button" onClick={() => onOpenDoc(s.doc_id)} title={s.excerpt} className="flex max-w-full items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-left text-[11.5px] font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700">
+                      <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded bg-indigo-100 text-[10px] font-bold text-indigo-700">{s.n}</span><span className="truncate">{s.title}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+              return (m.sources || []).length > 0 ? <div className="mt-2 border-t border-slate-100 pt-2 text-[11.5px] text-slate-400">Không có tài liệu nào trong kho khớp câu hỏi này.</div> : null;
+            })()}
             {m.usage?.cost_usd > 0 && <div className="mt-1.5 text-[10.5px] text-slate-400" title="Ước tính theo 25.000 đồng/đô la">{m.scope} · ≈ {Math.max(1, Math.round(m.usage.cost_usd * 25000))} đồng</div>}
           </div>
         ))}
