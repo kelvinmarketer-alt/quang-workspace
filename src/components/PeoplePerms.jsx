@@ -9,12 +9,12 @@ import { Card, SectionTitle } from "./ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { ask } from "./ConfirmDialog.jsx";
-import { FEATURES, FEATURE_HINT, COIN_SUBS, memberAccess, memberScope, SCOPE_BLOCKED, normBrand } from "../lib/permissions.js";
+import { FEATURES, FEATURE_HINT, FEATURE_MAX, COIN_SUBS, memberAccess, memberScope, SCOPE_BLOCKED, normBrand } from "../lib/permissions.js";
 import { OFFICE_AGENTS, OFFICE_URL, STAFF_FLAGS, loadOfficeMembers, saveOfficeMember, deleteOfficeMember, loadOfficeStaff, saveOfficeStaff, deleteOfficeStaff, loadOfficeBrandsLite } from "../lib/office.js";
 
 const OPTS = [["none", "Không", "bg-slate-200 text-slate-600"], ["view", "Xem", "bg-sky-500 text-white"], ["edit", "Sửa", "bg-emerald-500 text-white"]];
 const accBadge = (v) => (v === "edit" ? "bg-emerald-500 text-white" : v === "view" ? "bg-sky-500 text-white" : "bg-slate-100 text-slate-400");
-export const allAccess = (val) => ({ ...Object.fromEntries(FEATURES.map(([k]) => [k, val])), ...Object.fromEntries(COIN_SUBS.map(([k, , , opts]) => [k, opts.includes(val) ? val : val === "none" ? "none" : "view"])) });
+export const allAccess = (val) => ({ ...Object.fromEntries(FEATURES.map(([k]) => [k, (FEATURE_MAX[k] || ["none", "view", "edit"]).includes(val) ? val : val === "none" ? "none" : "view"])), ...Object.fromEntries(COIN_SUBS.map(([k, , , opts]) => [k, opts.includes(val) ? val : val === "none" ? "none" : "view"])) });
 const ROLES = [
   ["none", "Không dùng", "Không vào được Văn phòng AI"],
   ["staff", "Nhân viên dự án", "Chỉ checklist, kế hoạch, chỉ tiêu của dự án trong phạm vi (phần B). Không giao việc cho AI, không thấy chi phí"],
@@ -53,7 +53,7 @@ export function AccessGrid({ access, onSet, scoped }) {
             <div className="text-[13px] font-bold text-slate-700">{l}</div>
             <div className="text-[11px] leading-snug text-slate-400">{scoped && SCOPE_BLOCKED.includes(k) ? "Không cấp được khi đã giới hạn phạm vi dự án (sổ thu chi toàn công ty)" : FEATURE_HINT[k]}</div>
           </div>
-          {scoped && SCOPE_BLOCKED.includes(k) ? <span className="text-[11px] font-bold text-slate-400">Không</span> : <Seg value={access[k] || "none"} opts={OPTS} onChange={(v) => onSet(k, v)} />}
+          {scoped && SCOPE_BLOCKED.includes(k) ? <span className="text-[11px] font-bold text-slate-400">Không</span> : <Seg value={access[k] || "none"} opts={FEATURE_MAX[k] ? OPTS.filter(([v]) => FEATURE_MAX[k].includes(v)) : OPTS} onChange={(v) => onSet(k, v)} />}
         </div>
       ))}
     </div>

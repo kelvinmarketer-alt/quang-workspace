@@ -114,13 +114,13 @@ function SpecialRow({ icon: Icon, label, count, active, onClick, onDropDoc }) {
 }
 
 // ───────────── Thẻ tài liệu ─────────────
-function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete }) {
+function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete, readOnly }) {
   const k = KINDS[d.kind] || KINDS.txt;
   const Icon = d.kind === "html" ? FileCode2 : FileText;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   return (
     <div
-      role="button" tabIndex={0} draggable
+      role="button" tabIndex={0} draggable={!readOnly}
       onDragStart={(e) => { e.dataTransfer.setData("text/qws-doc", d.id); e.dataTransfer.effectAllowed = "move"; }}
       onClick={onOpen} onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
       className="card flex cursor-pointer flex-col gap-2 p-4 transition hover:-translate-y-0.5 hover:shadow-md"
@@ -146,9 +146,9 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
         </div>
       )}
       <div className="mt-auto flex justify-end gap-1 pt-1">
-        <button type="button" onClick={stop(onEdit)} title="Sửa thông tin / chuyển thư mục" aria-label={`Sửa ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil size={15} /></button>
+        {!readOnly && <button type="button" onClick={stop(onEdit)} title="Sửa thông tin / chuyển thư mục" aria-label={`Sửa ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil size={15} /></button>}
         <button type="button" onClick={stop(onDownload)} title="Tải file gốc về máy" aria-label={`Tải ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Download size={15} /></button>
-        <button type="button" onClick={stop(onDelete)} title="Xoá tài liệu" aria-label={`Xoá ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+        {!readOnly && <button type="button" onClick={stop(onDelete)} title="Xoá tài liệu" aria-label={`Xoá ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
       </div>
     </div>
   );
@@ -157,7 +157,7 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
 // ───────────── Khung đọc ─────────────
 // File HTML có thể chứa mã chạy → mở trong khung CÁCH LY: có allow-scripts (để biểu đồ trong báo cáo chạy) nhưng
 // KHÔNG có allow-same-origin → mã trong file không đọc được đăng nhập / dữ liệu khách / tài chính của app.
-function Reader({ id, folders, onClose, onEdit, onDownload, onAsk }) {
+function Reader({ id, folders, onClose, onEdit, onDownload, onAsk, readOnly }) {
   const [doc, setDoc] = useState(null), [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
@@ -180,8 +180,8 @@ function Reader({ id, folders, onClose, onEdit, onDownload, onAsk }) {
           {doc && <div className="truncate text-[11px] text-slate-400">{path || "Chưa phân loại"} · {(KINDS[doc.kind] || KINDS.txt).label} · {fmtSize(doc.size_bytes)}</div>}
         </div>
         {doc && <>
-          <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-2 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>
-          <button type="button" onClick={() => onEdit(doc.id)} className="hidden items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:flex"><Pencil size={14} /> Sửa</button>
+          {!readOnly && <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-2 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>}
+          {!readOnly && <button type="button" onClick={() => onEdit(doc.id)} className="hidden items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:flex"><Pencil size={14} /> Sửa</button>}
           <button type="button" onClick={() => onDownload(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Download size={14} /> <span className="hidden sm:inline">Tải về</span></button>
         </>}
       </div>
@@ -452,6 +452,7 @@ function ChatPanel({ docs, folders, customers = [], scope, setScope, onOpenDoc, 
 // ───────────── Trang chính ─────────────
 export default function LibraryPage() {
   const data = useData() || {};
+  const readOnly = !!data.ownerId && !data.isOwner; // thành viên được cấp quyền: CHỈ XEM (không tải lên / sửa / xoá / Hỏi đáp AI)
   const [sp, setSp] = useSearchParams();
   const customerList = data.customerList || [];
   const say = (text) => data.setToast && data.setToast({ text });
@@ -506,7 +507,7 @@ export default function LibraryPage() {
   const toggle = (id) => setExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Ý HAY HÔM NAY: 1 ý áp dụng được rút từ 1 đoạn tài liệu, cố định theo ngày (cùng ý với thông báo 7h sáng); bấm "Đổi ý khác" để xem ý khác. Nhớ trong ngày để không gọi AI lại mỗi lần mở trang.
   const [idea, setIdea] = useState(null), [ideaBusy, setIdeaBusy] = useState(false), [ideaN, setIdeaN] = useState(0), [ideaTick, setIdeaTick] = useState(0);
-  const hasIndexed = docs.some((d) => d.indexed_at);
+  const hasIndexed = !readOnly && docs.some((d) => d.indexed_at);
   useEffect(() => {
     if (state !== "ok" || !hasIndexed) return undefined;
     const day = todayISO(), seed = ideaN ? `${day}#${ideaN}` : day, key = `qws_lib_idea:${seed}`;
@@ -562,6 +563,7 @@ export default function LibraryPage() {
   };
 
   const upload = async (fileList, targetFolder) => {
+    if (readOnly) return;
     const list = [...fileList];
     if (!list.length) return;
     const folder = targetFolder === undefined ? realFolder : targetFolder;
@@ -616,7 +618,7 @@ export default function LibraryPage() {
 
   // Kéo file từ máy vào trang để tải lên
   const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
-  const dragProps = {
+  const dragProps = readOnly ? {} : {
     onDragEnter: (e) => { if (hasFiles(e)) { e.preventDefault(); setDragOver(true); } },
     onDragOver: (e) => { if (hasFiles(e)) e.preventDefault(); },
     onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); },
@@ -639,10 +641,10 @@ export default function LibraryPage() {
           <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"><LibraryIcon size={22} /></div>
           <div>
             <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Kho tài liệu</h1>
-            <div className="text-[12px] text-slate-400">{state === "ok" ? `${docs.length} tài liệu · ${folders.length} thư mục · ${fmtSize(totalBytes)}` : "Báo cáo và kiến thức học tập của bạn"}</div>
+            <div className="text-[12px] text-slate-400">{state === "ok" ? `${readOnly ? "Chỉ xem · " : ""}${docs.length} tài liệu · ${folders.length} thư mục · ${fmtSize(totalBytes)}` : "Báo cáo và kiến thức học tập của bạn"}</div>
           </div>
         </div>
-        {state === "ok" && (
+        {state === "ok" && !readOnly && (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setFolderModal({ mode: "new", parentId: realFolder })} className={`${headerBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}><FolderPlus size={16} /> Thư mục mới</button>
             <button type="button" onClick={() => setPasteOpen(true)} className={`${headerBtn} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`}><FilePlus2 size={16} /> Dán nội dung</button>
@@ -659,7 +661,7 @@ export default function LibraryPage() {
           <button type="button" onClick={() => setAiErr("")} aria-label="Đóng thông báo" className="shrink-0 rounded-lg p-0.5 text-amber-600 hover:bg-amber-100"><X size={15} /></button>
         </div>
       )}
-      {state === "ok" && (
+      {state === "ok" && !readOnly && (
         <div role="tablist" aria-label="Chế độ" className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
           {[["docs", "Tài liệu", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${view === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
@@ -668,7 +670,7 @@ export default function LibraryPage() {
           ))}
         </div>
       )}
-      {state === "ok" && view === "chat" && (
+      {state === "ok" && !readOnly && view === "chat" && (
         <ChatPanel docs={docs} folders={folders} customers={customerList} scope={scope} setScope={setScope} indexing={indexing} onIndex={indexDocs} onOpenDoc={(id) => setReader(id)} />
       )}
       {notice && !busy && (
@@ -702,7 +704,7 @@ export default function LibraryPage() {
           <button type="button" onClick={() => { setState("loading"); load(); }} className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
       )}
 
-      {state === "ok" && view === "docs" && hasIndexed && !ideaGone && (idea || ideaBusy) && (
+      {state === "ok" && !readOnly && view === "docs" && hasIndexed && !ideaGone && (idea || ideaBusy) && (
         <div className="card flex items-start gap-3 !p-4" aria-label="Ý hay hôm nay">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-500"><Lightbulb size={20} /></div>
           <div className="min-w-0 flex-1">
@@ -732,12 +734,12 @@ export default function LibraryPage() {
             <Card className="!p-2.5 lg:sticky lg:top-4">
               <div className="space-y-0.5">
                 <SpecialRow icon={Layers} label="Tất cả tài liệu" count={docs.length} active={folderId === "all" && !searching} onClick={() => { setQuery(""); setFolderId("all"); }} />
-                <SpecialRow icon={Inbox} label="Chưa phân loại" count={counts.none} active={folderId === "none" && !searching} onClick={() => { setQuery(""); setFolderId("none"); }} onDropDoc={(id) => moveDoc(id, null)} />
+                <SpecialRow icon={Inbox} label="Chưa phân loại" count={counts.none} active={folderId === "none" && !searching} onClick={() => { setQuery(""); setFolderId("none"); }} onDropDoc={readOnly ? undefined : (id) => moveDoc(id, null)} />
               </div>
               <div className="my-2 flex items-center justify-between px-2"><span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Thư mục</span>
-                <button type="button" onClick={() => setFolderModal({ mode: "new", parentId: null })} aria-label="Thêm thư mục gốc" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><FolderPlus size={15} /></button></div>
-              {tree.length === 0 ? <p className="px-2 pb-2 text-[12px] leading-snug text-slate-400">Chưa có thư mục. Bấm nút bên trên để tạo thư mục đầu tiên, vd "Quản lý nhà hàng", "SEO", "Báo cáo ads".</p>
-                : <div className="space-y-0.5">{tree.map((n) => <TreeNode key={n.id} node={n} depth={0} selected={searching ? null : folderId} onSelect={(id) => { setQuery(""); setFolderId(id); }} expanded={expanded} toggle={toggle} counts={counts} onDropDoc={moveDoc} />)}</div>}
+                {!readOnly && <button type="button" onClick={() => setFolderModal({ mode: "new", parentId: null })} aria-label="Thêm thư mục gốc" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><FolderPlus size={15} /></button>}</div>
+              {tree.length === 0 ? <p className="px-2 pb-2 text-[12px] leading-snug text-slate-400">{readOnly ? "Chưa có thư mục." : "Chưa có thư mục. Bấm nút bên trên để tạo thư mục đầu tiên, vd \"Quản lý nhà hàng\", \"SEO\", \"Báo cáo ads\"."}</p>
+                : <div className="space-y-0.5">{tree.map((n) => <TreeNode key={n.id} node={n} depth={0} selected={searching ? null : folderId} onSelect={(id) => { setQuery(""); setFolderId(id); }} expanded={expanded} toggle={toggle} counts={counts} onDropDoc={readOnly ? () => {} : moveDoc} />)}</div>}
             </Card>
           </aside>
 
@@ -770,7 +772,7 @@ export default function LibraryPage() {
                 {searching && <span className="flex items-center gap-1"><ChevronRight size={13} className="text-slate-300" /><span className="font-extrabold text-slate-800">{locLabel}</span></span>}
                 <span className="ml-1 text-slate-400">· {visible.length} tài liệu</span>
               </div>
-              {current && !searching && (
+              {current && !searching && !readOnly && (
                 <div className="flex flex-wrap gap-1.5">
                   <button type="button" onClick={() => { setScope({ type: "folder", id: current.id }); setView("chat"); }} className="flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[12px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={13} /> Hỏi AI trong thư mục</button>
                   <button type="button" onClick={() => setFolderModal({ mode: "new", parentId: current.id })} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-50"><FolderPlus size={13} /> Thư mục con</button>
@@ -788,9 +790,9 @@ export default function LibraryPage() {
                 {searching ? (
                   <><div className="mt-3 text-[15px] font-extrabold text-slate-800">Không tìm thấy "{query.trim()}"</div><div className="mt-1 text-[13px] text-slate-500">Thử từ khoá ngắn hơn. Tìm không phân biệt hoa thường và dấu tiếng Việt.</div></>
                 ) : docs.length === 0 ? (
-                  <><div className="mt-3 text-[15px] font-extrabold text-slate-800">Kho đang trống</div>
+                  <><div className="mt-3 text-[15px] font-extrabold text-slate-800">{readOnly ? "Chưa có tài liệu nào dành cho bạn" : "Kho đang trống"}</div>
                     <div className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-slate-500">Tải file báo cáo HTML, ghi chú Markdown hoặc văn bản vào đây — bấm "Tải file lên" hoặc kéo thả file vào trang. Tạo thư mục để nhóm theo từng mảng kiến thức.</div>
-                    <button type="button" onClick={() => fileRef.current?.click()} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2.5 text-[13px] font-bold text-white"><Upload size={15} /> Tải file đầu tiên</button></>
+                    {!readOnly && <button type="button" onClick={() => fileRef.current?.click()} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2.5 text-[13px] font-bold text-white"><Upload size={15} /> Tải file đầu tiên</button>}</>
                 ) : (
                   <><div className="mt-3 text-[15px] font-extrabold text-slate-800">Thư mục này chưa có tài liệu</div><div className="mt-1 text-[13px] text-slate-500">Tải file lên, hoặc kéo tài liệu từ thư mục khác sang.</div></>
                 )}
@@ -800,17 +802,17 @@ export default function LibraryPage() {
                 {visible.map((d) => (
                   <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null} customerName={d.customer_id ? custName.get(d.customer_id) || null : null}
                     folderName={folderId === "all" || searching || folderId === "none" ? (d.folder_id ? folderById.get(d.folder_id)?.name : null) : null}
-                    onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
+                    readOnly={readOnly} onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
                     onDownload={async () => { const r = await libGet(d.id); if (r.data) downloadDoc(r.data); else say("Không tải được file"); }} />
                 ))}
               </div>
             )}
-            <p className="text-center text-[11px] text-slate-400">Kéo thẻ tài liệu thả vào thư mục bên trái để chuyển nhanh (máy tính). Tối đa {fmtSize(MAX_FILE_BYTES)} mỗi file. PDF sẽ hỗ trợ ở bước sau.</p>
+            {!readOnly && <p className="text-center text-[11px] text-slate-400">Kéo thẻ tài liệu thả vào thư mục bên trái để chuyển nhanh (máy tính). Tối đa {fmtSize(MAX_FILE_BYTES)} mỗi file. PDF sẽ hỗ trợ ở bước sau.</p>}
           </section>
         </div>
       )}
 
-      {reader && <Reader id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
+      {reader && <Reader readOnly={readOnly} id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
       {editing && <EditDocModal id={editing} folders={folders} onClose={() => setEditing(null)} onSaved={(row) => { upsertDoc(row); if (!row.indexed_at) indexDocs([row.id]); }} />}
       {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} defaultCustomer={customerF !== "all" && customerF !== "none" ? customerF : null} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); indexDocs([r.id]); }} />}
       {folderModal && (

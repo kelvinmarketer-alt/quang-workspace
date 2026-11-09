@@ -53,6 +53,15 @@ describe("phân quyền", () => {
     expect(a.coinLive).toBe("none");
     expect(a.coinMarket).toBe("view");
   });
+  it("Kho tài liệu: mặc định không; chỉ cấp tối đa Xem (hồ sơ lỡ để Sửa bị hạ); có quyền thì module hiện", async () => {
+    const { ROUTE_FEATURE, FEATURES, ALL_KEYS } = await import("../src/lib/permissions.js");
+    expect(memberAccess({ email: "nv@x.com", access: { dashboard: "view" } }).library).toBe("none");
+    expect(memberAccess({ email: "nv@x.com", access: { library: "view" } }).library).toBe("view");
+    expect(memberAccess({ email: "nv@x.com", access: { library: "edit" } }).library).toBe("view");
+    expect(ROUTE_FEATURE["/kho-tai-lieu"]).toBe("library");
+    expect(FEATURES.some(([k]) => k === "library")).toBe(true);
+    expect(ALL_KEYS).toContain("library");
+  });
 });
 
 describe("nhãn biểu đồ Coin (05/11)", async () => {

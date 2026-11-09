@@ -8,7 +8,7 @@ import fs from "node:fs";
 import { makeData } from "./fixture.js";
 import { todayISO } from "../src/lib/format.js";
 
-vi.mock("../src/lib/store.jsx", () => ({ useData: () => makeData(), DataProvider: ({ children }) => children }));
+vi.mock("../src/lib/store.jsx", () => ({ useData: () => makeData(globalThis.__libOver || {}), DataProvider: ({ children }) => children }));
 vi.mock("../src/lib/library.js", async (importOriginal) => {
   const real = await importOriginal();
   return {
@@ -165,6 +165,23 @@ const sleep = (ms) => act(async () => { await new Promise((ok) => setTimeout(ok,
 const cardTitles = () => [...document.querySelectorAll(".card .line-clamp-2.font-extrabold")].map((n) => n.textContent);
 
 describe("trang Kho tài liệu", () => {
+  it("thành viên được cấp quyền: chỉ XEM — không có nút tải lên / sửa / xoá / Hỏi AI, thẻ không kéo được", async () => {
+    globalThis.__libOver = { isOwner: false, ownerId: "u1" };
+    try {
+      await mount();
+      expect(screen.getByText(/Chỉ xem · 4 tài liệu/)).toBeTruthy();
+      expect(cardTitles().length).toBe(4);
+      expect(screen.queryByText("Tải file lên")).toBeNull();
+      expect(screen.queryByText("Dán nội dung")).toBeNull();
+      expect(screen.queryByText("Thư mục mới")).toBeNull();
+      expect(screen.queryByText("Hỏi đáp AI")).toBeNull();
+      expect(screen.queryByLabelText(/^Sửa /)).toBeNull();
+      expect(screen.queryByLabelText(/^Xoá /)).toBeNull();
+      expect(document.querySelector('[draggable="true"]')).toBeNull();
+      expect(errors).toEqual([]);
+    } finally { delete globalThis.__libOver; }
+  });
+
   it("hiện tổng số, thư mục và đủ thẻ tài liệu", async () => {
     await mount();
     expect(screen.getByText(/4 tài liệu · 3 thư mục/)).toBeTruthy();

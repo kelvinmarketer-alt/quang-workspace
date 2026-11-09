@@ -67,7 +67,7 @@ const NAV = [
   { to: "/website", label: "Hiệu quả Website", icon: Globe, feat: "web", group: "biz" },
   { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, feat: "fanpage", group: "biz" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
-  { to: "/kho-tai-lieu", label: "Kho tài liệu", icon: Library, ownerOnly: true, group: "me" },
+  { to: "/kho-tai-lieu", label: "Kho tài liệu", icon: Library, feat: "library", group: "me" },
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "sys" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
 ];

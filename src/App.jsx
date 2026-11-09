@@ -34,7 +34,7 @@ function firstAllowed(perms) {
 }
 
 export default function App() {
-  const { perms = [], isOwner, ownerId } = useData();
+  const { perms = [] } = useData();
   const { pathname } = useLocation();
   // Chặn theo quyền: trang có feature mà mình không được cấp → chuyển về trang đầu tiên được phép.
   const g = (path, el) => {
@@ -65,8 +65,8 @@ export default function App() {
         <Route path="/website" element={g("/website", <Web />)} />
         <Route path="/fanpage" element={g("/fanpage", <Fanpage />)} />
         <Route path="/tai-khoan" element={<Vault />} />
-        {/* 09/11: Kho tài liệu — CHỈ CHỦ (dữ liệu nằm bảng riêng, RLS chỉ chính chủ) */}
-        <Route path="/kho-tai-lieu" element={isOwner || !ownerId ? <Library /> : <Navigate to={firstAllowed(perms)} replace />} />
+        {/* 09/11: Kho tài liệu — chủ toàn quyền; thành viên cấp ở Cài đặt → phân quyền (CHỈ XEM; RLS: supabase/SETUP-LIBRARY-MEMBERS.sql) */}
+        <Route path="/kho-tai-lieu" element={g("/kho-tai-lieu", <Library />)} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
       </Suspense>

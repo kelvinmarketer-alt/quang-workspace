@@ -10,6 +10,7 @@ export const FEATURES = [
   ["ketoan", "Kế toán & Chi phí"],
   ["coin", "Đầu tư Coin"],
   ["tasks", "Công việc & Lịch"],
+  ["library", "Kho tài liệu"],
 ];
 // Mô tả ngắn từng quyền (hiện ở Cài đặt → Người dùng & phân quyền)
 export const FEATURE_HINT = {
@@ -22,7 +23,10 @@ export const FEATURE_HINT = {
   ketoan: "Doanh thu, công nợ, chi phí vận hành, quỹ & dòng tiền",
   coin: "Chọn riêng từng tab bên dưới",
   tasks: "Công việc, lịch âm/dương, giỗ, sinh nhật",
+  library: "Đọc / tải báo cáo, tài liệu trong kho (chỉ xem — không tải lên, sửa, xoá, không dùng Hỏi đáp AI). Giới hạn phạm vi dự án thì chỉ thấy tài liệu gắn khách được giao",
 };
+// Mức tối đa cấp được cho từng quyền (mặc định không giới hạn). Kho tài liệu: thành viên chỉ XEM (09/11).
+export const FEATURE_MAX = { library: ["none", "view"] };
 // Quyền TỪNG TAB của Đầu tư Coin (21/10): chủ chọn ai được xem danh mục & vốn, ai chỉ xem Demo / Bot thật.
 // [key, nhãn, mô tả, các mức cho phép]. Demo + Bot thật CHỈ XEM (điều khiển bot luôn chỉ chủ).
 // 01/11 sếp chốt: THÀNH VIÊN KHÔNG XEM TIỀN COIN — "Đầu tư (ví, tiền nạp, lãi/lỗ)" + "Bot thật" chỉ chủ, không cấp được.
@@ -54,6 +58,7 @@ export const ROUTE_FEATURE = {
   "/fanpage": "fanpage",
   "/quy": "ketoan",
   "/quy-thong-ke": "ketoan",
+  "/kho-tai-lieu": "library",
 };
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];
@@ -80,6 +85,7 @@ export function memberAccess(member) {
   // Quyền mới tách ra sau: chưa đặt thì kế thừa từ quyền cũ tương ứng (Tài nguyên ← Khách & Dự án); Website/Fanpage mặc định không
   if (a.resources == null) a.resources = a.customers || "none";
   for (const [k] of FEATURES) if (a[k] == null) a[k] = "none";
+  if (a.library === "edit") a.library = "view"; // kho tài liệu: thành viên chỉ xem, hồ sơ lỡ để "Sửa" vẫn bị hạ
   // Tab Coin chưa đặt riêng → kế thừa quyền cũ: Thị trường + Demo theo "coin"; danh mục & vốn, Bot thật mặc định KHÔNG (trước đây chỉ chủ)
   if (a.coinMarket == null) a.coinMarket = a.coin !== "none" ? "view" : "none";
   if (a.coinDemo == null) a.coinDemo = a.coin !== "none" ? "view" : "none";
