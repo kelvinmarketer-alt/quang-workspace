@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "./lib/auth.jsx";
 import { DataProvider } from "./lib/store.jsx";
 import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
+import SharedDoc, { sharedToken } from "./pages/SharedDoc.jsx";
 import "./index.css";
 import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
 import { initMotion } from "./lib/motion.js";
@@ -31,9 +32,12 @@ function Gate() {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <Gate />
-      </AuthProvider>
+      {/* 09/11: link chia sẻ tài liệu /xem/<mã> — mở KHÔNG cần đăng nhập, không nạp dữ liệu workspace */}
+      {sharedToken() ? <SharedDoc token={sharedToken()} /> : (
+        <AuthProvider>
+          <Gate />
+        </AuthProvider>
+      )}
     </BrowserRouter>
   </React.StrictMode>
 );

@@ -317,6 +317,24 @@ export const libAddFolder = (row) => supabase.from("qws_lib_folders").insert(row
 export const libUpdateFolder = (id, patch) => supabase.from("qws_lib_folders").update(patch).eq("id", id).select("id,parent_id,name,color,created_at").single();
 export const libDeleteFolder = (id) => supabase.from("qws_lib_folders").delete().eq("id", id);
 
+// ───────────── Chia sẻ bằng link online (SETUP-LIBRARY-SHARE.sql) ─────────────
+// Link /xem/<mã> mở KHÔNG cần đăng nhập, chỉ đọc đúng 1 tài liệu. Mã 43 ký tự ngẫu nhiên; tắt chia sẻ = xoá dòng = hết hiệu lực ngay.
+const SHARE_COLS = "id,doc_id,token,expires_at,views,last_view_at,created_at";
+export const SHARE_EXPIRY = [["never", "Không hết hạn", null], ["7", "7 ngày", 7], ["30", "30 ngày", 30]];
+export function newShareToken() {
+  const b = new Uint8Array(32);
+  (globalThis.crypto || window.crypto).getRandomValues(b);
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+export const shareExpiresAt = (days, now = Date.now()) => (days ? new Date(now + days * 86400000).toISOString() : null);
+export const shareExpired = (sh, now = Date.now()) => !!sh?.expires_at && new Date(sh.expires_at).getTime() <= now;
+export const shareUrl = (token, origin = typeof window !== "undefined" ? window.location.origin : "") => `${origin}/xem/${token}`;
+export const libShares = () => supabase.from("qws_lib_shares").select(SHARE_COLS);
+export const libShareCreate = (docId, days) => supabase.from("qws_lib_shares").insert({ doc_id: docId, token: newShareToken(), expires_at: shareExpiresAt(days) }).select(SHARE_COLS).single();
+export const libShareSetExpiry = (id, days) => supabase.from("qws_lib_shares").update({ expires_at: shareExpiresAt(days) }).eq("id", id).select(SHARE_COLS).single();
+export const libShareRevoke = (id) => supabase.from("qws_lib_shares").delete().eq("id", id);
+export const libSharedGet = (token) => supabase.rpc("qws_lib_shared_get", { p_token: token });
+
 // Chuẩn bị 1 file tải lên → hàng sẵn sàng ghi DB (hoặc báo lỗi bằng tiếng Việt)
 export async function prepareFile(file, folderId) {
   const kind = detectKind(file.name, file.type);

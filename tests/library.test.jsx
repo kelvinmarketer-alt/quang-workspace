@@ -15,6 +15,7 @@ vi.mock("../src/lib/library.js", async (importOriginal) => {
     ...real,
     libLoad: vi.fn(), libGet: vi.fn(), libSearch: vi.fn(), libAddDoc: vi.fn(), libUpdateDoc: vi.fn(),
     libDeleteDoc: vi.fn(), libAddFolder: vi.fn(), libUpdateFolder: vi.fn(), libDeleteFolder: vi.fn(), libIndex: vi.fn(), libAsk: vi.fn(), libByCustomer: vi.fn(), libIdea: vi.fn(),
+    libShares: vi.fn(), libShareCreate: vi.fn(), libShareSetExpiry: vi.fn(), libShareRevoke: vi.fn(), libSharedGet: vi.fn(),
   };
 });
 import * as L from "../src/lib/library.js";
@@ -148,6 +149,7 @@ beforeEach(() => {
   localStorage.clear();
   L.libIdea.mockResolvedValue({ data: { idea: null }, error: undefined });
   L.libSearch.mockResolvedValue({ data: [], error: null });
+  L.libShares.mockResolvedValue({ data: [], error: null });
   L.libIndex.mockImplementation(async (ids) => ({ data: { results: ids.map((id) => ({ doc_id: id, ok: true, chunks: 3 })) } }));
   L.libAsk.mockResolvedValue({ data: { answer: "Kiểm kê mỗi tuần [1]. Hao hụt quá 3% phải giải trình [2].", sources: [{ n: 1, doc_id: "d2", title: "Ghi chú quản lý kho", excerpt: "kiểm kê", similarity: 0.8 }, { n: 2, doc_id: "d1", title: "Báo cáo tháng 10", excerpt: "hao hụt", similarity: 0.7 }], usage: { cost_usd: 0.0012 } } });
   L.libGet.mockImplementation(async (id) => ({ data: { ...DOCS.find((d) => d.id === id), content: "<h1>Xin chào</h1><script>window.parent.document.cookie</script>", plain: "Xin chào" }, error: null }));
@@ -675,5 +677,76 @@ describe("ý hay mỗi ngày", () => {
     await sleep(30);
     expect(L.libIdea).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("Ý hay hôm nay")).toBeNull();
+  });
+});
+
+
+// ───────────── Chia sẻ bằng link online (09/11) ─────────────
+describe("chia sẻ tài liệu bằng link", () => {
+  it("hàm thuần: mã 43 ký tự an toàn cho URL, không trùng; hạn dùng; link /xem/<mã>", () => {
+    const a = L.newShareToken(), b = L.newShareToken();
+    expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(a).not.toBe(b);
+    const now = Date.UTC(2026, 10, 9);
+    expect(L.shareExpiresAt(null, now)).toBe(null);
+    expect(L.shareExpiresAt(7, now)).toBe(new Date(now + 7 * 86400000).toISOString());
+    expect(L.shareExpired({ expires_at: new Date(now - 1000).toISOString() }, now)).toBe(true);
+    expect(L.shareExpired({ expires_at: new Date(now + 1000).toISOString() }, now)).toBe(false);
+    expect(L.shareExpired({ expires_at: null }, now)).toBe(false);
+    expect(L.shareUrl("abc", "https://boss.2bkin.io.vn")).toBe("https://boss.2bkin.io.vn/xem/abc");
+  });
+
+  it("chủ: bấm Chia sẻ → chọn hạn → tạo link, hiện link /xem/… + nút sao chép; tắt chia sẻ gọi xoá", async () => {
+    const TOK = "T".repeat(43);
+    L.libShares.mockResolvedValue({ data: [], error: null });
+    L.libShareCreate.mockResolvedValue({ data: { id: "s1", doc_id: "d1", token: TOK, expires_at: null, views: 0, last_view_at: null }, error: null });
+    L.libShareRevoke.mockResolvedValue({ error: null });
+    await mount();
+    await act(async () => { fireEvent.click(screen.getAllByLabelText(/^Chia sẻ /)[0]); });
+    expect(screen.getByText("Tạo link chia sẻ")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByText("Tạo link chia sẻ")); });
+    expect(L.libShareCreate).toHaveBeenCalledTimes(1);
+    const input = document.getElementById("lib-share-url");
+    expect(input.value).toBe(`${window.location.origin}/xem/${TOK}`);
+    expect(screen.getByText("Sao chép")).toBeTruthy();
+    expect(screen.getByText(/0 lượt mở/)).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("chưa chạy SQL chia sẻ → báo cách cài, không sập", async () => {
+    L.libShares.mockResolvedValue({ data: null, error: { code: "42P01", message: "relation does not exist" } });
+    L.libShareCreate.mockResolvedValue({ data: null, error: { code: "42P01", message: "relation does not exist" } });
+    await mount();
+    await act(async () => { fireEvent.click(screen.getAllByLabelText(/^Chia sẻ /)[0]); });
+    await act(async () => { fireEvent.click(screen.getByText("Tạo link chia sẻ")); });
+    expect(screen.getByText(/SETUP-LIBRARY-SHARE\.sql/)).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("trang công khai /xem/<mã>: có tài liệu → khung cách ly (không allow-same-origin); mã sai/hết hạn → báo không dùng được", async () => {
+    const { default: Shared, sharedToken } = await import("../src/pages/SharedDoc.jsx");
+    const TOK = "A".repeat(40);
+    expect(sharedToken(`/xem/${TOK}`)).toBe(TOK);
+    expect(sharedToken("/xem/ngan")).toBe(null);
+    expect(sharedToken("/kho-tai-lieu")).toBe(null);
+    L.libSharedGet.mockResolvedValue({ data: [{ title: "Báo cáo chia sẻ", kind: "md", content: "# Xin chào", updated_at: "2026-11-09T01:00:00Z" }], error: null });
+    let r; await act(async () => { r = render(<Shared token={TOK} />); });
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 20)); });
+    expect(screen.getByText("Báo cáo chia sẻ")).toBeTruthy();
+    const f = document.querySelector("iframe");
+    expect(f.getAttribute("sandbox")).toContain("allow-scripts");
+    expect(f.getAttribute("sandbox")).not.toContain("allow-same-origin");
+    expect(f.getAttribute("srcdoc")).toContain("Xin chào");
+    r.unmount(); cleanup();
+    L.libSharedGet.mockResolvedValue({ data: [], error: null });
+    await act(async () => { render(<Shared token={TOK} />); });
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 20)); });
+    expect(screen.getByText(/Link này không còn dùng được/)).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("thành viên chỉ xem: không có nút Chia sẻ", async () => {
+    globalThis.__libOver = { isOwner: false, ownerId: "u1" };
+    try { await mount(); expect(screen.queryByLabelText(/^Chia sẻ /)).toBeNull(); } finally { delete globalThis.__libOver; }
   });
 });

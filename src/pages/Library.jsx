@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Folder, FolderPlus, FilePlus2, Upload, Search, X, ChevronRight, ChevronDown, FileText, FileCode2, Trash2, Pencil, Download,
-  Loader2, Library as LibraryIcon, Inbox, Layers, AlertTriangle, RefreshCw, Tag, Sparkles, Send, MessageSquare, Users, Lightbulb,
+  Loader2, Library as LibraryIcon, Inbox, Link2, Copy, Check, Layers, AlertTriangle, RefreshCw, Tag, Sparkles, Send, MessageSquare, Users, Lightbulb,
 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -12,6 +12,7 @@ import {
   frameDoc, tidySnippet, parseTags, filterDocs, sortDocs, extractTitle, toPlain, isMissingTable, prepareFile, downloadDoc,
   libLoad, libGet, libSearch, libAddDoc, libUpdateDoc, libDeleteDoc, libAddFolder, libUpdateFolder, libDeleteFolder,
   libIndex, libAsk, libIdea, renderAnswer, unindexedDocs,
+  SHARE_EXPIRY, shareUrl, shareExpired, libShares, libShareCreate, libShareSetExpiry, libShareRevoke,
 } from "../lib/library.js";
 import { todayISO } from "../lib/format.js";
 
@@ -114,7 +115,7 @@ function SpecialRow({ icon: Icon, label, count, active, onClick, onDropDoc }) {
 }
 
 // ───────────── Thẻ tài liệu ─────────────
-function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete, readOnly }) {
+function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete, onShare, shared, readOnly }) {
   const k = KINDS[d.kind] || KINDS.txt;
   const Icon = d.kind === "html" ? FileCode2 : FileText;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
@@ -146,6 +147,7 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
         </div>
       )}
       <div className="mt-auto flex justify-end gap-1 pt-1">
+        {!readOnly && <button type="button" onClick={stop(onShare)} title={shared ? "Đang chia sẻ bằng link — bấm để quản lý" : "Chia sẻ bằng link online"} aria-label={`Chia sẻ ${d.title}`} className={`rounded-lg p-1.5 hover:bg-indigo-50 ${shared ? "text-indigo-600" : "text-slate-400 hover:text-indigo-600"}`}><Link2 size={15} /></button>}
         {!readOnly && <button type="button" onClick={stop(onEdit)} title="Sửa thông tin / chuyển thư mục" aria-label={`Sửa ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Pencil size={15} /></button>}
         <button type="button" onClick={stop(onDownload)} title="Tải file gốc về máy" aria-label={`Tải ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><Download size={15} /></button>
         {!readOnly && <button type="button" onClick={stop(onDelete)} title="Xoá tài liệu" aria-label={`Xoá ${d.title}`} className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
@@ -157,7 +159,7 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
 // ───────────── Khung đọc ─────────────
 // File HTML có thể chứa mã chạy → mở trong khung CÁCH LY: có allow-scripts (để biểu đồ trong báo cáo chạy) nhưng
 // KHÔNG có allow-same-origin → mã trong file không đọc được đăng nhập / dữ liệu khách / tài chính của app.
-function Reader({ id, folders, onClose, onEdit, onDownload, onAsk, readOnly }) {
+function Reader({ id, folders, onClose, onEdit, onDownload, onAsk, onShare, readOnly }) {
   const [doc, setDoc] = useState(null), [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
@@ -181,6 +183,7 @@ function Reader({ id, folders, onClose, onEdit, onDownload, onAsk, readOnly }) {
         </div>
         {doc && <>
           {!readOnly && <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-2 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>}
+          {!readOnly && <button type="button" onClick={() => onShare(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Link2 size={14} /> <span className="hidden sm:inline">Chia sẻ</span></button>}
           {!readOnly && <button type="button" onClick={() => onEdit(doc.id)} className="hidden items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:flex"><Pencil size={14} /> Sửa</button>}
           <button type="button" onClick={() => onDownload(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Download size={14} /> <span className="hidden sm:inline">Tải về</span></button>
         </>}
@@ -329,6 +332,63 @@ const loadChat = () => { try { const v = JSON.parse(localStorage.getItem(CHAT_KE
 const MD_CLS = "text-[14px] leading-relaxed text-slate-700 [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_h1]:text-[15px] [&_h2]:text-[15px] [&_h3]:text-[14px] [&_h1]:font-extrabold [&_h2]:font-extrabold [&_h3]:font-bold [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_a]:text-indigo-600 [&_a]:underline [&_table]:text-[12px] [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_th]:border [&_th]:border-slate-200 [&_th]:px-2";
 const SUGGEST = ["Tóm tắt các ý chính trong phạm vi này", "Có tài liệu nào nói về chi phí và cách tiết kiệm không?", "Liệt kê các bước quan trọng cần làm theo tài liệu"];
 
+// ───────────── Chia sẻ tài liệu bằng link online ─────────────
+function ShareModal({ doc, share, onClose, onChanged }) {
+  const [days, setDays] = useState("never"), [busy, setBusy] = useState(false), [err, setErr] = useState(""), [copied, setCopied] = useState(false);
+  const daysOf = (k) => (SHARE_EXPIRY.find(([x]) => x === k) || [])[2] ?? null;
+  const expired = shareExpired(share), url = share ? shareUrl(share.token) : "";
+  const curKey = share?.expires_at ? "keep" : "never"; // đã đặt hạn: hiện ngày hết hạn, chọn lại để gia hạn
+  const fail = (e) => setErr(isMissingTable(e) ? "Chưa cài chia sẻ link: mở Supabase → SQL Editor → chạy file supabase/SETUP-LIBRARY-SHARE.sql một lần rồi thử lại." : e?.message || "Có lỗi, thử lại");
+  const create = async () => { setBusy(true); setErr(""); const r = await libShareCreate(doc.id, daysOf(days)); setBusy(false); if (r.error) return fail(r.error); onChanged(r.data); };
+  const setExpiry = async (k) => { setBusy(true); setErr(""); const r = await libShareSetExpiry(share.id, daysOf(k)); setBusy(false); if (r.error) return fail(r.error); onChanged(r.data); };
+  const revoke = async () => {
+    if (!(await ask(`Tắt chia sẻ "${doc.title}"?\nLink hiện tại hết hiệu lực ngay, ai đang giữ link sẽ không mở được nữa. Bật lại sẽ tạo link MỚI.`, { ok: "Tắt chia sẻ", danger: true }))) return;
+    setBusy(true); setErr(""); const r = await libShareRevoke(share.id); setBusy(false); if (r.error) return fail(r.error); onChanged(null);
+  };
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); } catch { const el = document.getElementById("lib-share-url"); el?.select(); try { document.execCommand("copy"); } catch { /* bỏ qua */ } }
+    setCopied(true); setTimeout(() => setCopied(false), 1800);
+  };
+  return (
+    <Modal title="Chia sẻ bằng link online" onClose={onClose}>
+      <div className="space-y-3 text-[13px]">
+        <div className="truncate rounded-xl bg-slate-50 px-3 py-2 font-bold text-slate-700">{doc.title}</div>
+        {!share ? <>
+          <p className="leading-relaxed text-slate-500">Tạo một link để người khác <b>đọc</b> tài liệu này trên điện thoại hoặc máy tính, <b>không cần đăng nhập</b>. Họ chỉ xem được đúng tài liệu này, không sửa được và không thấy phần còn lại của kho.</p>
+          <div>
+            <label className={labelCls} htmlFor="lib-share-days">Thời hạn link</label>
+            <select id="lib-share-days" className={inputCls} value={days} onChange={(e) => setDays(e.target.value)}>{SHARE_EXPIRY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+          </div>
+          <button type="button" onClick={create} disabled={busy} className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-2.5 font-bold text-white disabled:opacity-60">{busy ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />} Tạo link chia sẻ</button>
+        </> : <>
+          {expired && <div className="rounded-xl bg-amber-50 px-3 py-2 font-semibold text-amber-800">Link đã hết hạn — người nhận không mở được. Chọn lại thời hạn bên dưới để dùng tiếp.</div>}
+          <div>
+            <label className={labelCls} htmlFor="lib-share-url">Link (ai có link đều đọc được)</label>
+            <div className="flex gap-2">
+              <input id="lib-share-url" readOnly value={url} onFocus={(e) => e.target.select()} className={`${inputCls} min-w-0 flex-1 font-mono text-[12px]`} />
+              <button type="button" onClick={copy} className="flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 font-bold text-white">{copied ? <><Check size={14} /> Đã chép</> : <><Copy size={14} /> Sao chép</>}</button>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-500">
+            <span>{share.views || 0} lượt mở{share.last_view_at ? ` · gần nhất ${fmtDate(share.last_view_at)}` : ""}</span>
+            <span>{share.expires_at ? `${expired ? "Đã hết hạn" : "Hết hạn"} ${fmtDate(share.expires_at)}` : "Không hết hạn"}</span>
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="lib-share-exp">Đổi thời hạn (tính từ hôm nay)</label>
+            <select id="lib-share-exp" className={inputCls} value={curKey} disabled={busy} onChange={(e) => e.target.value !== "keep" && setExpiry(e.target.value)}>
+              {share.expires_at && <option value="keep">Giữ nguyên ({expired ? "đã hết hạn" : `đến ${fmtDate(share.expires_at)}`})</option>}
+              {SHARE_EXPIRY.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </div>
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-[12px] leading-relaxed text-slate-500">Nếu tài liệu có số điện thoại, tài khoản hoặc số liệu khách thì chỉ gửi link cho đúng người cần. Sửa tài liệu trong kho thì link tự cập nhật nội dung mới.</p>
+          <button type="button" onClick={revoke} disabled={busy} className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 px-4 py-2.5 font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-60"><Trash2 size={14} /> Tắt chia sẻ (link hết hiệu lực ngay)</button>
+        </>}
+        {err && <div className="rounded-xl bg-rose-50 px-3 py-2 font-semibold text-rose-600">{err}</div>}
+      </div>
+    </Modal>
+  );
+}
+
 function ChatPanel({ docs, folders, customers = [], scope, setScope, onOpenDoc, indexing, onIndex }) {
   const [msgs, setMsgs] = useState(loadChat);
   const [q, setQ] = useState(""), [busy, setBusy] = useState(false), [model, setModel] = useState("gpt-4o-mini");
@@ -463,6 +523,7 @@ export default function LibraryPage() {
   const [reader, setReader] = useState(null), [editing, setEditing] = useState(null);
   const [folderModal, setFolderModal] = useState(null), [pasteOpen, setPasteOpen] = useState(false);
   const [busy, setBusy] = useState(null), [notice, setNotice] = useState(null), [dragOver, setDragOver] = useState(false);
+  const [shares, setShares] = useState(() => new Map()), [shareDoc, setShareDoc] = useState(null); // chia sẻ link: mã tài liệu → dòng chia sẻ
   const [expanded, setExpanded] = useState(() => new Set());
   const [customerF, setCustomerF] = useState(() => sp.get("khach") || "all"); // lọc theo khách (mở từ thẻ khách: ?khach=<mã>)
   const [view, setView] = useState("docs"), [scope, setScope] = useState({ type: "all" }), [indexing, setIndexing] = useState(0), [aiErr, setAiErr] = useState("");
@@ -474,6 +535,10 @@ export default function LibraryPage() {
     setFolders(r.folders); setDocs(r.docs); setState("ok");
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { // chưa cài bảng chia sẻ thì bỏ qua (nút Chia sẻ sẽ báo cách cài khi bấm)
+    if (readOnly) return;
+    libShares().then((r) => { if (!r.error && r.data) setShares(new Map(r.data.map((x) => [x.doc_id, x]))); });
+  }, [readOnly]);
 
   // Tìm trong NỘI DUNG (máy chủ, bỏ dấu) — chạy sau khi ngừng gõ 0,35 giây
   useEffect(() => {
@@ -802,7 +867,7 @@ export default function LibraryPage() {
                 {visible.map((d) => (
                   <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null} customerName={d.customer_id ? custName.get(d.customer_id) || null : null}
                     folderName={folderId === "all" || searching || folderId === "none" ? (d.folder_id ? folderById.get(d.folder_id)?.name : null) : null}
-                    readOnly={readOnly} onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
+                    readOnly={readOnly} shared={shares.has(d.id) && !shareExpired(shares.get(d.id))} onShare={() => setShareDoc(d)} onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
                     onDownload={async () => { const r = await libGet(d.id); if (r.data) downloadDoc(r.data); else say("Không tải được file"); }} />
                 ))}
               </div>
@@ -812,7 +877,8 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {reader && <Reader readOnly={readOnly} id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
+      {reader && <Reader onShare={(doc) => setShareDoc(doc)} readOnly={readOnly} id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
+      {shareDoc && !readOnly && <ShareModal doc={shareDoc} share={shares.get(shareDoc.id) || null} onClose={() => setShareDoc(null)} onChanged={(row) => setShares((p) => { const n = new Map(p); if (row) n.set(shareDoc.id, row); else n.delete(shareDoc.id); return n; })} />}
       {editing && <EditDocModal id={editing} folders={folders} onClose={() => setEditing(null)} onSaved={(row) => { upsertDoc(row); if (!row.indexed_at) indexDocs([row.id]); }} />}
       {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} defaultCustomer={customerF !== "all" && customerF !== "none" ? customerF : null} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); indexDocs([r.id]); }} />}
       {folderModal && (
