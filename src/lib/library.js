@@ -248,11 +248,15 @@ blockquote{margin:1em 0;padding:2px 16px;border-left:4px solid #a5b4fc;backgroun
 ul,ol{padding-left:1.4em}li{margin:.25em 0}pre.txt{white-space:pre-wrap;word-break:break-word;font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:none;color:#1e293b;padding:0}`;
 
 // Nội dung đưa vào khung đọc (iframe cách ly). HTML giữ nguyên; Markdown/văn bản bọc kiểu đọc sạch.
+// Mục lục trong tài liệu (<a href="#muc">): trong iframe srcdoc, href="#x" bị hiểu theo địa chỉ của app → mở cả app (đòi đăng nhập).
+// Chặn click và tự cuộn tới đúng mục ngay trong tài liệu.
+const ANCHOR_JS = `<script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";if(h.charAt(0)!=="#")return;e.preventDefault();var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=id?(document.getElementById(id)||document.getElementsByName(id)[0]):null;if(t)t.scrollIntoView({behavior:"smooth",block:"start"});else if(!id)window.scrollTo({top:0,behavior:"smooth"})},true);<\/script>`;
+const withAnchors = (h) => (/<\/body>/i.test(h) ? h.replace(/<\/body>(?![\s\S]*<\/body>)/i, ANCHOR_JS + "</body>") : h + ANCHOR_JS);
 export function frameDoc(kind, content) {
   const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
-  if (kind === "html") return /<meta[^>]+charset/i.test(content) ? content : head + content;
-  if (kind === "md") return `<!doctype html><html lang="vi"><head>${head}<style>${READER_CSS}</style></head><body><div class="doc">${renderMarkdown(content)}</div></body></html>`;
-  return `<!doctype html><html lang="vi"><head>${head}<style>${READER_CSS}</style></head><body><div class="doc"><pre class="txt">${escHtml(content)}</pre></div></body></html>`;
+  if (kind === "html") return withAnchors(/<meta[^>]+charset/i.test(content) ? content : head + content);
+  if (kind === "md") return withAnchors(`<!doctype html><html lang="vi"><head>${head}<style>${READER_CSS}</style></head><body><div class="doc">${renderMarkdown(content)}</div></body></html>`);
+  return withAnchors(`<!doctype html><html lang="vi"><head>${head}<style>${READER_CSS}</style></head><body><div class="doc"><pre class="txt">${escHtml(content)}</pre></div></body></html>`);
 }
 
 // Cắt đoạn trích cho gọn: bỏ chữ dở ở 2 đầu, thêm "…"
