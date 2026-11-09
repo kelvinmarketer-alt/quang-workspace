@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Folder, FolderPlus, FilePlus2, Upload, Search, X, ChevronRight, ChevronDown, FileText, FileCode2, Trash2, Pencil, Download,
-  Loader2, Library as LibraryIcon, Inbox, Layers, AlertTriangle, RefreshCw, Tag,
+  Loader2, Library as LibraryIcon, Inbox, Layers, AlertTriangle, RefreshCw, Tag, Sparkles, Send, MessageSquare,
 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -10,6 +10,7 @@ import {
   KINDS, FOLDER_COLORS, FOLDER_COLOR_KEYS, MAX_FILE_BYTES, fold, fmtSize, fmtDate, buildTree, flattenTree, folderPath, descendantIds, countDocs,
   frameDoc, tidySnippet, parseTags, filterDocs, sortDocs, extractTitle, toPlain, isMissingTable, prepareFile, downloadDoc,
   libLoad, libGet, libSearch, libAddDoc, libUpdateDoc, libDeleteDoc, libAddFolder, libUpdateFolder, libDeleteFolder,
+  libIndex, libAsk, renderAnswer, unindexedDocs,
 } from "../lib/library.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-300";
@@ -110,6 +111,7 @@ function DocCard({ d, folderName, snippet, onOpen, onEdit, onDownload, onDelete 
           <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-400">
             <Badge tone={k.tone}>{k.label}</Badge>
             <span>{fmtSize(d.size_bytes)}</span><span>·</span><span>{fmtDate(d.updated_at || d.created_at)}</span>
+            {!d.indexed_at && <span title="Chưa nạp vào hỏi đáp AI — vào tab Hỏi đáp để nạp" className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 font-bold text-amber-600"><Sparkles size={10} />chưa nạp AI</span>}
           </div>
         </div>
       </div>
@@ -133,7 +135,7 @@ function DocCard({ d, folderName, snippet, onOpen, onEdit, onDownload, onDelete 
 // ───────────── Khung đọc ─────────────
 // File HTML có thể chứa mã chạy → mở trong khung CÁCH LY: có allow-scripts (để biểu đồ trong báo cáo chạy) nhưng
 // KHÔNG có allow-same-origin → mã trong file không đọc được đăng nhập / dữ liệu khách / tài chính của app.
-function Reader({ id, folders, onClose, onEdit, onDownload }) {
+function Reader({ id, folders, onClose, onEdit, onDownload, onAsk }) {
   const [doc, setDoc] = useState(null), [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
@@ -156,6 +158,7 @@ function Reader({ id, folders, onClose, onEdit, onDownload }) {
           {doc && <div className="truncate text-[11px] text-slate-400">{path || "Chưa phân loại"} · {(KINDS[doc.kind] || KINDS.txt).label} · {fmtSize(doc.size_bytes)}</div>}
         </div>
         {doc && <>
+          <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-2 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>
           <button type="button" onClick={() => onEdit(doc.id)} className="hidden items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:flex"><Pencil size={14} /> Sửa</button>
           <button type="button" onClick={() => onDownload(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Download size={14} /> <span className="hidden sm:inline">Tải về</span></button>
         </>}
@@ -296,6 +299,121 @@ function FolderModal({ mode, folder, parentId, folders, onClose, onSaved }) {
   );
 }
 
+// ───────────── Hỏi đáp AI trên kho ─────────────
+const CHAT_KEY = "qws_lib_chat_v1";
+const loadChat = () => { try { const v = JSON.parse(localStorage.getItem(CHAT_KEY) || "[]"); return Array.isArray(v) ? v.slice(-30) : []; } catch { return []; } };
+const MD_CLS = "text-[14px] leading-relaxed text-slate-700 [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_h1]:text-[15px] [&_h2]:text-[15px] [&_h3]:text-[14px] [&_h1]:font-extrabold [&_h2]:font-extrabold [&_h3]:font-bold [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_a]:text-indigo-600 [&_a]:underline [&_table]:text-[12px] [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_th]:border [&_th]:border-slate-200 [&_th]:px-2";
+const SUGGEST = ["Tóm tắt các ý chính trong phạm vi này", "Có tài liệu nào nói về chi phí và cách tiết kiệm không?", "Liệt kê các bước quan trọng cần làm theo tài liệu"];
+
+function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onIndex }) {
+  const [msgs, setMsgs] = useState(loadChat);
+  const [q, setQ] = useState(""), [busy, setBusy] = useState(false), [model, setModel] = useState("gpt-4o-mini");
+  const endRef = useRef(null);
+  useEffect(() => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-30))); } catch { /* chế độ riêng tư */ } }, [msgs]);
+  useEffect(() => { endRef.current?.scrollIntoView?.({ block: "end" }); }, [msgs, busy]);
+
+  const info = useMemo(() => {
+    if (scope.type === "doc") { const d = docs.find((x) => x.id === scope.id); return { label: d ? `Tài liệu: ${d.title}` : "Tài liệu", docId: scope.id, list: d ? [d] : [] }; }
+    if (scope.type === "folder") {
+      const ids = descendantIds(folders, scope.id), f = folders.find((x) => x.id === scope.id);
+      return { label: f ? `Thư mục: ${f.name}` : "Thư mục", folderIds: [...ids], list: docs.filter((d) => d.folder_id && ids.has(d.folder_id)) };
+    }
+    return { label: "Cả kho", list: docs };
+  }, [scope, docs, folders]);
+  const pendingInScope = unindexedDocs(info.list), pendingAll = unindexedDocs(docs);
+  const scopeValue = scope.type === "folder" ? `f:${scope.id}` : scope.type === "doc" ? `d:${scope.id}` : "all";
+  const onScope = (v) => setScope(v === "all" ? { type: "all" } : v.startsWith("f:") ? { type: "folder", id: v.slice(2) } : { type: "doc", id: v.slice(2) });
+  const flat = useMemo(() => flattenTree(folders), [folders]);
+
+  const send = async (text) => {
+    const question = String(text ?? q).trim();
+    if (!question || busy) return;
+    const history = msgs.filter((m) => m.role === "user" || m.role === "assistant").slice(-6).map((m) => ({ role: m.role, content: m.content }));
+    setMsgs((p) => [...p, { id: `u${Date.now()}`, role: "user", content: question }]);
+    setQ(""); setBusy(true);
+    const r = await libAsk({ question, history, folderIds: info.folderIds, docId: info.docId, model });
+    setBusy(false);
+    setMsgs((p) => [...p, r.error ? { id: `e${Date.now()}`, role: "error", content: r.error }
+      : { id: `a${Date.now()}`, role: "assistant", content: r.data.answer || "(Không có câu trả lời)", sources: r.data.sources || [], usage: r.data.usage, scope: info.label }]);
+  };
+  const clear = async () => { if (await ask("Xoá cuộc trò chuyện này?\nChỉ xoá lịch sử chat trên máy này, tài liệu trong kho không bị ảnh hưởng.", { ok: "Xoá chat", danger: true })) setMsgs([]); };
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1 basis-56">
+          <label htmlFor="chat-scope" className={labelCls}>Hỏi trong phạm vi</label>
+          <select id="chat-scope" className={inputCls} value={scopeValue} onChange={(e) => onScope(e.target.value)}>
+            <option value="all">Cả kho ({docs.length} tài liệu)</option>
+            {flat.map((f) => <option key={f.id} value={`f:${f.id}`}>{"  ".repeat(f.depth)}{f.depth ? "└ " : ""}{f.name}</option>)}
+            {scope.type === "doc" && <option value={`d:${scope.id}`}>{info.label}</option>}
+          </select>
+        </div>
+        <div className="w-full sm:w-60">
+          <label htmlFor="chat-model" className={labelCls}>Độ chính xác</label>
+          <select id="chat-model" className={inputCls} value={model} onChange={(e) => setModel(e.target.value)}>
+            <option value="gpt-4o-mini">Nhanh, rẻ (gpt-4o-mini)</option>
+            <option value="gpt-4.1">Kỹ hơn, đắt hơn (gpt-4.1)</option>
+          </select>
+        </div>
+        {msgs.length > 0 && <button type="button" onClick={clear} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-500 hover:bg-slate-50"><Trash2 size={14} /> Xoá chat</button>}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[12.5px] text-slate-600">
+        <Sparkles size={14} className="shrink-0 text-indigo-500" />
+        <span className="min-w-0 flex-1">
+          Đã nạp <b>{docs.length - pendingAll.length}/{docs.length}</b> tài liệu vào hỏi đáp
+          {pendingInScope.length > 0 && pendingInScope.length !== pendingAll.length ? ` · ${pendingInScope.length} chưa nạp trong phạm vi này` : ""}.
+          {" "}Tài liệu chưa nạp thì AI không đọc được.
+        </span>
+        {indexing > 0 ? <span className="flex items-center gap-1.5 font-bold text-indigo-600"><Loader2 size={13} className="animate-spin" /> Đang nạp {indexing}…</span>
+          : pendingAll.length > 0 && <button type="button" onClick={() => onIndex(pendingAll.map((d) => d.id))} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-indigo-700">Nạp {pendingAll.length} tài liệu</button>}
+      </div>
+
+      <div className="max-h-[56vh] min-h-[220px] space-y-3 overflow-y-auto rounded-xl bg-slate-50/60 p-3" aria-live="polite">
+        {msgs.length === 0 && !busy && (
+          <div className="grid place-items-center py-6 text-center">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-500"><MessageSquare size={22} /></div>
+            <div className="mt-2 text-[15px] font-extrabold text-slate-800">Hỏi gì về kho tài liệu của bạn</div>
+            <div className="mt-1 max-w-sm text-[12.5px] leading-snug text-slate-500">AI chỉ trả lời dựa trên tài liệu đã nạp, kèm số nguồn bấm vào mở đúng tài liệu. Chọn phạm vi ở trên để hỏi riêng một thư mục.</div>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {SUGGEST.map((s) => <button key={s} type="button" onClick={() => send(s)} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600">{s}</button>)}
+            </div>
+          </div>
+        )}
+        {msgs.map((m) => m.role === "user" ? (
+          <div key={m.id} className="flex justify-end"><div className="max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-[14px] text-white">{m.content}</div></div>
+        ) : m.role === "error" ? (
+          <div key={m.id} className="rounded-2xl bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-600">{m.content}</div>
+        ) : (
+          <div key={m.id} className="max-w-[94%] rounded-2xl rounded-bl-md bg-white px-3.5 py-2.5 shadow-sm ring-1 ring-slate-100">
+            <div className={MD_CLS} onClick={(e) => { const n = e.target.closest?.("[data-src]")?.dataset?.src; const s = (m.sources || []).find((x) => String(x.n) === n); if (s) onOpenDoc(s.doc_id); }} dangerouslySetInnerHTML={{ __html: renderAnswer(m.content, m.sources) }} />
+            {(m.sources || []).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
+                {m.sources.map((s) => (
+                  <button key={s.doc_id} type="button" onClick={() => onOpenDoc(s.doc_id)} title={s.excerpt} className="flex max-w-full items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 text-left text-[11.5px] font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700">
+                    <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded bg-indigo-100 text-[10px] font-bold text-indigo-700">{s.n}</span><span className="truncate">{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {m.usage?.cost_usd > 0 && <div className="mt-1.5 text-[10.5px] text-slate-400" title="Ước tính theo 25.000 đồng/đô la">{m.scope} · ≈ {Math.max(1, Math.round(m.usage.cost_usd * 25000))} đồng</div>}
+          </div>
+        ))}
+        {busy && <div className="flex items-center gap-2 text-[13px] text-slate-500"><Loader2 size={15} className="animate-spin text-indigo-500" /> Đang tìm trong kho và soạn câu trả lời…</div>}
+        <div ref={endRef} />
+      </div>
+
+      <div className="flex items-end gap-2">
+        <textarea value={q} rows={2} onChange={(e) => setQ(e.target.value)} aria-label="Câu hỏi"
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder={`Hỏi về ${info.label.toLowerCase()}… (Enter để gửi, Shift+Enter xuống dòng)`} className={`${inputCls} min-h-[44px] flex-1 resize-none`} maxLength={2000} />
+        <button type="button" onClick={() => send()} disabled={busy || !q.trim()} aria-label="Gửi câu hỏi" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 text-white disabled:opacity-40"><Send size={18} /></button>
+      </div>
+    </Card>
+  );
+}
+
 // ───────────── Trang chính ─────────────
 export default function LibraryPage() {
   const data = useData() || {};
@@ -308,6 +426,7 @@ export default function LibraryPage() {
   const [folderModal, setFolderModal] = useState(null), [pasteOpen, setPasteOpen] = useState(false);
   const [busy, setBusy] = useState(null), [notice, setNotice] = useState(null), [dragOver, setDragOver] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set());
+  const [view, setView] = useState("docs"), [scope, setScope] = useState({ type: "all" }), [indexing, setIndexing] = useState(0), [aiErr, setAiErr] = useState("");
   const fileRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -349,12 +468,31 @@ export default function LibraryPage() {
   const toggle = (id) => setExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const upsertDoc = (row) => setDocs((p) => [row, ...p.filter((x) => x.id !== row.id)]);
 
+  // Nạp tài liệu vào hỏi đáp AI (cắt đoạn + tạo vector ở máy chủ). Chạy nền sau khi tải lên / sửa nội dung; lỗi hiện ở banner, không chặn việc khác.
+  const indexDocs = async (ids) => {
+    const list = [...new Set(ids)];
+    if (!list.length) return;
+    setAiErr(""); setIndexing((n) => n + list.length);
+    let ok = 0; const errs = [];
+    for (let i = 0; i < list.length; i += 3) {
+      const r = await libIndex(list.slice(i, i + 3));
+      if (r.error) { errs.push(r.error); break; }
+      for (const x of r.data.results || []) {
+        if (x.ok) { ok++; setDocs((p) => p.map((d) => (d.id === x.doc_id ? { ...d, indexed_at: new Date().toISOString() } : d))); }
+        else errs.push(x.error || "lỗi không rõ");
+      }
+    }
+    setIndexing((n) => Math.max(0, n - list.length));
+    if (errs.length) setAiErr(`Chưa nạp được vào hỏi đáp AI: ${[...new Set(errs)].join("; ")}`);
+    else if (ok) say(`Đã nạp ${ok} tài liệu vào hỏi đáp AI`);
+  };
+
   const upload = async (fileList, targetFolder) => {
     const list = [...fileList];
     if (!list.length) return;
     const folder = targetFolder === undefined ? realFolder : targetFolder;
     const known = [...docs];
-    let ok = 0; const skipped = [], failed = [];
+    let ok = 0; const skipped = [], failed = [], addedIds = [];
     for (let k = 0; k < list.length; k++) {
       const file = list[k];
       setBusy(`Đang tải ${k + 1}/${list.length}: ${file.name}`);
@@ -364,11 +502,12 @@ export default function LibraryPage() {
         if (known.some((d) => d.source === file.name && d.size_bytes === file.size && (d.folder_id || null) === (folder || null))) { skipped.push(file.name); continue; }
         const r = await libAddDoc(p.row);
         if (r.error) { failed.push(`${file.name} — ${r.error.message}`); continue; }
-        ok++; known.push(r.data); upsertDoc(r.data);
+        ok++; known.push(r.data); upsertDoc(r.data); addedIds.push(r.data.id);
       } catch (e) { failed.push(`${file.name} — ${e?.message || e}`); }
     }
     setBusy(null);
     setNotice({ ok, skipped, failed });
+    if (addedIds.length) indexDocs(addedIds);
     if (ok) say(`Đã thêm ${ok} tài liệu`);
   };
 
@@ -440,6 +579,24 @@ export default function LibraryPage() {
       </div>
 
       {busy && <div className="flex items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-[13px] font-semibold text-indigo-700"><Loader2 size={16} className="animate-spin" /> {busy}</div>}
+      {aiErr && (
+        <div className="flex items-start gap-3 rounded-xl bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" /><div className="min-w-0 flex-1">{aiErr}</div>
+          <button type="button" onClick={() => setAiErr("")} aria-label="Đóng thông báo" className="shrink-0 rounded-lg p-0.5 text-amber-600 hover:bg-amber-100"><X size={15} /></button>
+        </div>
+      )}
+      {state === "ok" && (
+        <div role="tablist" aria-label="Chế độ" className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
+          {[["docs", "Tài liệu", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
+            <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${view === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+              <I size={14} /> {l}{k === "chat" && indexing > 0 ? <Loader2 size={12} className="animate-spin" /> : null}
+            </button>
+          ))}
+        </div>
+      )}
+      {state === "ok" && view === "chat" && (
+        <ChatPanel docs={docs} folders={folders} scope={scope} setScope={setScope} indexing={indexing} onIndex={indexDocs} onOpenDoc={(id) => setReader(id)} />
+      )}
       {notice && !busy && (
         <div className="flex items-start gap-3 rounded-xl bg-white p-3.5 text-[13px] shadow-sm ring-1 ring-slate-100">
           <div className="min-w-0 flex-1 space-y-1">
@@ -471,7 +628,7 @@ export default function LibraryPage() {
           <button type="button" onClick={() => { setState("loading"); load(); }} className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
       )}
 
-      {state === "ok" && (
+      {state === "ok" && view === "docs" && (
         <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
           {/* Thư mục: điện thoại = ô chọn, máy tính = cây */}
           <div className="lg:hidden">
@@ -519,7 +676,8 @@ export default function LibraryPage() {
                 <span className="ml-1 text-slate-400">· {visible.length} tài liệu</span>
               </div>
               {current && !searching && (
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => { setScope({ type: "folder", id: current.id }); setView("chat"); }} className="flex items-center gap-1 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[12px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={13} /> Hỏi AI trong thư mục</button>
                   <button type="button" onClick={() => setFolderModal({ mode: "new", parentId: current.id })} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-50"><FolderPlus size={13} /> Thư mục con</button>
                   <button type="button" onClick={() => setFolderModal({ mode: "edit", folder: current })} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-50"><Pencil size={13} /> Sửa</button>
                   <button type="button" onClick={() => removeFolder(current)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-rose-600 hover:bg-rose-50"><Trash2 size={13} /> Xoá</button>
@@ -557,9 +715,9 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {reader && <Reader id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} />}
-      {editing && <EditDocModal id={editing} folders={folders} onClose={() => setEditing(null)} onSaved={upsertDoc} />}
-      {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); }} />}
+      {reader && <Reader id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
+      {editing && <EditDocModal id={editing} folders={folders} onClose={() => setEditing(null)} onSaved={(row) => { upsertDoc(row); if (!row.indexed_at) indexDocs([row.id]); }} />}
+      {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); indexDocs([r.id]); }} />}
       {folderModal && (
         <FolderModal mode={folderModal.mode} folder={folderModal.folder} parentId={folderModal.parentId} folders={folders} onClose={() => setFolderModal(null)}
           onSaved={(f) => { setFolders((p) => [...p.filter((x) => x.id !== f.id), f]); if (folderModal.mode === "new") { setFolderId(f.id); setQuery(""); } }} />

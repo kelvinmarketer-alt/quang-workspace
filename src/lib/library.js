@@ -292,7 +292,7 @@ export function sortDocs(list, sort) {
 
 // ───────────────────────── Gọi cơ sở dữ liệu ─────────────────────────
 
-const LIST_COLS = "id,folder_id,title,kind,size_bytes,tags,note,source,excerpt,created_at,updated_at";
+const LIST_COLS = "id,folder_id,title,kind,size_bytes,tags,note,source,excerpt,created_at,updated_at,indexed_at";
 
 // Bảng chưa tạo (chưa chạy SETUP-LIBRARY.sql)?
 export const isMissingTable = (error) => !!error && (/PGRST20[0-9]|42P01/.test(String(error.code || "")) || /does not exist|schema cache|Could not find the (table|function)/i.test(String(error.message || "")));
@@ -333,4 +333,34 @@ export function downloadDoc(doc) {
   a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// ───────────────────────── Hỏi đáp bằng AI (hàm máy chủ qws-lib) ─────────────────────────
+// Cần chạy SETUP-LIBRARY-AI.sql và cài hàm supabase/functions/qws-lib. Khoá OpenAI nằm ở máy chủ, trình duyệt không thấy.
+
+async function callLib(body) {
+  try {
+    const { data, error } = await supabase.functions.invoke("qws-lib", { body });
+    if (!error && data && !data.error) return { data };
+    let msg = data?.error;
+    if (error) { try { msg = (await error.context?.json?.())?.error || msg; } catch { /* bỏ qua */ } }
+    const notDeployed = error && (error.context?.status === 404 || /Failed to send|FunctionsFetchError/i.test(`${error.name} ${error.message}`));
+    return { error: notDeployed ? "Hàm hỏi đáp (qws-lib) chưa được cài trên máy chủ." : msg || error?.message || "Lỗi hỏi đáp" };
+  } catch (e) { return { error: String(e?.message || e) }; }
+}
+
+// Nạp tài liệu vào hỏi đáp (tối đa 5 tài liệu mỗi lần gọi) → { data: { results: [{ doc_id, ok, chunks, error }] } }
+export const libIndex = (docIds) => callLib({ mode: "index", doc_ids: docIds });
+// Hỏi: folderIds = chỉ tìm trong các thư mục này; docId = chỉ 1 tài liệu → { data: { answer, sources, usage } }
+export const libAsk = ({ question, history, folderIds, docId, model }) =>
+  callLib({ mode: "ask", question, history, folder_ids: folderIds || undefined, doc_id: docId || undefined, model });
+
+export const unindexedDocs = (docs) => docs.filter((d) => !d.indexed_at);
+
+// Câu trả lời của AI → HTML an toàn (Markdown đã escape) + số nguồn [1] thành nút bấm mở tài liệu
+export function renderAnswer(text, sources = []) {
+  const known = new Set(sources.map((s) => s.n));
+  return renderMarkdown(text).replace(/\[(\d{1,2})\]/g, (m, n) => (known.has(Number(n))
+    ? `<button type="button" data-src="${n}" class="mx-0.5 inline-grid h-[18px] min-w-[18px] place-items-center rounded-md bg-indigo-100 px-1 align-text-top text-[11px] font-bold text-indigo-700 hover:bg-indigo-200">${n}</button>`
+    : m));
 }

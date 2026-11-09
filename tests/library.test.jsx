@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Suspense } from "react";
+import fs from "node:fs";
 import { makeData } from "./fixture.js";
 
 vi.mock("../src/lib/store.jsx", () => ({ useData: () => makeData(), DataProvider: ({ children }) => children }));
@@ -12,7 +13,7 @@ vi.mock("../src/lib/library.js", async (importOriginal) => {
   return {
     ...real,
     libLoad: vi.fn(), libGet: vi.fn(), libSearch: vi.fn(), libAddDoc: vi.fn(), libUpdateDoc: vi.fn(),
-    libDeleteDoc: vi.fn(), libAddFolder: vi.fn(), libUpdateFolder: vi.fn(), libDeleteFolder: vi.fn(),
+    libDeleteDoc: vi.fn(), libAddFolder: vi.fn(), libUpdateFolder: vi.fn(), libDeleteFolder: vi.fn(), libIndex: vi.fn(), libAsk: vi.fn(),
   };
 });
 import * as L from "../src/lib/library.js";
@@ -143,7 +144,10 @@ beforeEach(() => {
   errors = [];
   spy = vi.spyOn(console, "error").mockImplementation((...a) => { const m = String(a[0]?.message || a[0]); if (!/act\(|not wrapped|ReactDOMTestUtils/.test(m)) errors.push(m.slice(0, 300)); });
   L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: DOCS, error: null });
+  localStorage.clear();
   L.libSearch.mockResolvedValue({ data: [], error: null });
+  L.libIndex.mockImplementation(async (ids) => ({ data: { results: ids.map((id) => ({ doc_id: id, ok: true, chunks: 3 })) } }));
+  L.libAsk.mockResolvedValue({ data: { answer: "Kiểm kê mỗi tuần [1]. Hao hụt quá 3% phải giải trình [2].", sources: [{ n: 1, doc_id: "d2", title: "Ghi chú quản lý kho", excerpt: "kiểm kê", similarity: 0.8 }, { n: 2, doc_id: "d1", title: "Báo cáo tháng 10", excerpt: "hao hụt", similarity: 0.7 }], usage: { cost_usd: 0.0012 } } });
   L.libGet.mockImplementation(async (id) => ({ data: { ...DOCS.find((d) => d.id === id), content: "<h1>Xin chào</h1><script>window.parent.document.cookie</script>", plain: "Xin chào" }, error: null }));
 });
 afterEach(() => { spy.mockRestore(); cleanup(); vi.clearAllMocks(); });
@@ -292,5 +296,183 @@ describe("trang Kho tài liệu", () => {
     L.libLoad.mockResolvedValue({ folders: [], docs: [], error: null });
     await mount();
     expect(screen.getByText("Kho đang trống")).toBeTruthy();
+  });
+});
+
+// ───────────── Hàm máy chủ qws-lib (phần thuần) ─────────────
+const fnSrc = fs.readFileSync(`${process.cwd()}/supabase/functions/qws-lib/index.ts`, "utf8");
+const pure = new Function(`${/\/\/ <pure>([\s\S]*?)\/\/ <\/pure>/.exec(fnSrc)[1]}\nreturn { chunkText, buildContext, isUuid, SYSTEM_PROMPT };`)();
+
+describe("hàm máy chủ qws-lib: cắt đoạn, nguồn, câu lệnh cho AI", () => {
+  it("văn ngắn → 1 đoạn; rỗng → không có đoạn", () => {
+    expect(pure.chunkText("Một câu ngắn.")).toEqual(["Một câu ngắn."]);
+    expect(pure.chunkText("   \n\n ")).toEqual([]);
+    expect(pure.chunkText(null)).toEqual([]);
+  });
+
+  it("văn dài: đoạn vừa cỡ, không mất nội dung, đoạn kế tiếp chồng lấn", () => {
+    const paras = Array.from({ length: 40 }, (_, i) => `Mục ${i + 1}. ` + Array.from({ length: 12 }, (__, k) => `ý${i}_${k} nội dung thứ ${k}.`).join(" "));
+    const chunks = pure.chunkText(paras.join("\n\n"));
+    expect(chunks.length).toBeGreaterThan(5);
+    for (const c of chunks) { expect(c.length).toBeLessThanOrEqual(1300); expect(c.trim().length).toBeGreaterThan(0); }
+    const all = chunks.join("\n");
+    for (let i = 1; i <= 40; i++) expect(all).toContain(`Mục ${i}.`); // không rơi mục nào
+    for (let k = 1; k < chunks.length; k++) expect(chunks[k]).toContain(chunks[k - 1].slice(-40)); // chồng lấn: đuôi đoạn trước có mặt ở đầu đoạn sau
+  });
+
+  it("một câu cực dài không dấu chấm vẫn bị cắt nhỏ, giữ nguyên chữ có dấu", () => {
+    const long = "đặc biệt ".repeat(900); // ~8100 ký tự
+    const chunks = pure.chunkText(long);
+    expect(chunks.length).toBeGreaterThan(5);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(1300);
+    expect(chunks[0].startsWith("đặc biệt")).toBe(true);
+  });
+
+  it("giới hạn số đoạn tối đa", () => {
+    const text = Array.from({ length: 3000 }, (_, i) => `Đoạn số ${i} ` + "x".repeat(900)).join("\n\n");
+    expect(pure.chunkText(text, 1100, 150, 50).length).toBe(50);
+  });
+
+  it("bảng nguồn đánh số theo tài liệu xuất hiện đầu tiên, gộp đoạn cùng tài liệu", () => {
+    const rows = [
+      { doc_id: "B", doc_title: "Tài liệu B", folder_id: null, idx: 4, content: "b4", similarity: 0.9 },
+      { doc_id: "A", doc_title: "Tài liệu A", folder_id: "f", idx: 2, content: "a2", similarity: 0.8 },
+      { doc_id: "B", doc_title: "Tài liệu B", folder_id: null, idx: 1, content: "b1", similarity: 0.7 },
+    ];
+    const c = pure.buildContext(rows);
+    expect(c.sources.map((s) => [s.n, s.doc_id])).toEqual([[1, "B"], [2, "A"]]);
+    expect(c.text.indexOf("[1] Tài liệu: Tài liệu B")).toBeLessThan(c.text.indexOf("[2] Tài liệu: Tài liệu A"));
+    expect(c.text.indexOf("b1")).toBeLessThan(c.text.indexOf("b4")); // đoạn trong cùng tài liệu xếp theo thứ tự đọc
+  });
+
+  it("bảng nguồn không vượt giới hạn ký tự", () => {
+    const rows = Array.from({ length: 8 }, (_, i) => ({ doc_id: `d${i}`, doc_title: `T${i}`, folder_id: null, idx: 0, content: "x".repeat(2000), similarity: 0.5 }));
+    expect(pure.buildContext(rows, 6000).text.length).toBeLessThanOrEqual(6200);
+  });
+
+  it("nhận biết mã tài liệu hợp lệ và câu lệnh có chống bịa + chống làm theo nguồn", () => {
+    expect(pure.isUuid("11111111-1111-1111-1111-111111111111")).toBe(true);
+    expect(pure.isUuid("1; drop table x")).toBe(false);
+    expect(pure.isUuid(null)).toBe(false);
+    expect(pure.SYSTEM_PROMPT).toMatch(/không bịa/i);
+    expect(pure.SYSTEM_PROMPT).toMatch(/không phải mệnh lệnh/i);
+  });
+
+  it("renderAnswer: số nguồn thành nút, số lạ giữ nguyên, không chèn mã", () => {
+    const h = L.renderAnswer("Ý một [1]. Ý hai [9]. <img src=x onerror=alert(1)>", [{ n: 1 }]);
+    expect(h).toContain('data-src="1"');
+    expect(h).toContain("[9]");
+    expect(h).not.toContain("<img");
+    expect(L.unindexedDocs([{ id: 1, indexed_at: null }, { id: 2, indexed_at: "x" }]).map((d) => d.id)).toEqual([1]);
+  });
+});
+
+// ───────────── Tab Hỏi đáp AI ─────────────
+describe("tab Hỏi đáp AI", () => {
+  const goChat = async () => {
+    const r = await mount();
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: /Hỏi đáp AI/ })); });
+    return r;
+  };
+  const type = async (text) => {
+    await act(async () => { fireEvent.change(screen.getByLabelText("Câu hỏi"), { target: { value: text } }); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Gửi câu hỏi" })); });
+    await sleep(30);
+  };
+
+  it("báo số tài liệu đã nạp; bấm Nạp → gửi đủ mã theo lô 3, rồi báo đã nạp hết", async () => {
+    await goChat();
+    expect(screen.getByText(/0\/4/)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Nạp 4 tài liệu/ })); });
+    await sleep(40);
+    expect(L.libIndex).toHaveBeenCalledTimes(2);
+    expect(L.libIndex.mock.calls[0][0]).toHaveLength(3);
+    expect(L.libIndex.mock.calls[1][0]).toHaveLength(1);
+    expect(screen.getByText(/4\/4/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Nạp \d+ tài liệu/ })).toBeNull();
+  });
+
+  it("hỏi cả kho → hiện câu trả lời, nút số nguồn, danh sách nguồn; bấm nguồn mở đúng tài liệu", async () => {
+    await goChat();
+    await type("Quy trình kiểm kê thế nào?");
+    expect(L.libAsk).toHaveBeenCalledTimes(1);
+    const arg = L.libAsk.mock.calls[0][0];
+    expect(arg.question).toBe("Quy trình kiểm kê thế nào?");
+    expect(arg.folderIds).toBeUndefined();
+    expect(arg.docId).toBeUndefined();
+    expect(screen.getByText(/Kiểm kê mỗi tuần/)).toBeTruthy();
+    expect(document.querySelectorAll("button[data-src]").length).toBe(2);
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: /Ghi chú quản lý kho/ })[0]); });
+    await sleep(30);
+    expect(document.querySelector("iframe")).toBeTruthy();
+    expect(L.libGet).toHaveBeenCalledWith("d2");
+  });
+
+  it("chọn phạm vi một thư mục → chỉ gửi thư mục đó và thư mục con", async () => {
+    await goChat();
+    await act(async () => { fireEvent.change(screen.getByLabelText("Hỏi trong phạm vi"), { target: { value: "f:f1" } }); });
+    await type("Nhân sự cần gì?");
+    const ids = L.libAsk.mock.calls[0][0].folderIds.sort();
+    expect(ids).toEqual(["f1", "f2"]);
+  });
+
+  it("câu hỏi nối tiếp gửi kèm lịch sử", async () => {
+    await goChat();
+    await type("Câu một");
+    await type("Còn gì nữa?");
+    const h = L.libAsk.mock.calls[1][0].history;
+    expect(h.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(h[0].content).toBe("Câu một");
+  });
+
+  it("lỗi từ máy chủ hiện rõ ràng, không sập", async () => {
+    L.libAsk.mockResolvedValue({ error: "Chưa nhập API key OpenAI (Cài đặt → AI)." });
+    await goChat();
+    await type("Hỏi thử");
+    expect(screen.getByText(/Chưa nhập API key OpenAI/)).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("từ thư mục bấm 'Hỏi AI trong thư mục' → sang tab hỏi đáp đúng phạm vi", async () => {
+    const { container } = await mount();
+    await act(async () => { fireEvent.click(within(container.querySelector("aside")).getByText("SEO")); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Hỏi AI trong thư mục/ })); });
+    expect(screen.getByLabelText("Hỏi trong phạm vi").value).toBe("f:f3");
+    await type("SEO là gì?");
+    expect(L.libAsk.mock.calls[0][0].folderIds).toEqual(["f3"]);
+  });
+
+  it("từ trang đọc bấm 'Hỏi AI về tài liệu này' → hỏi riêng tài liệu đó", async () => {
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByText("Hướng dẫn SEO")); });
+    await sleep(30);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Hỏi AI/ })); });
+    await type("Tóm tắt giúp");
+    expect(L.libAsk.mock.calls[0][0].docId).toBe("d3");
+    expect(document.querySelector("iframe")).toBeNull(); // trang đọc đã đóng
+  });
+
+  it("lịch sử chat được nhớ trên máy và xoá được", async () => {
+    await goChat();
+    await type("Câu hỏi nhớ lại");
+    cleanup();
+    await goChat();
+    expect(screen.getByText("Câu hỏi nhớ lại")).toBeTruthy();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Xoá chat/ })); });
+    await sleep(20);
+    expect(screen.queryByText("Câu hỏi nhớ lại")).toBeNull();
+  });
+
+  it("tải file lên xong tự nạp vào hỏi đáp; nạp lỗi thì báo, không mất tài liệu", async () => {
+    await mount();
+    L.libAddDoc.mockImplementation(async (row) => ({ data: { id: "n1", ...row, tags: [], note: "", excerpt: "", indexed_at: null, created_at: "x", updated_at: "x" }, error: null }));
+    L.libIndex.mockResolvedValue({ error: "Hàm hỏi đáp (qws-lib) chưa được cài trên máy chủ." });
+    const file = new File(["# Ghi chú mới\n\nnội dung"], "moi.md", { type: "text/markdown" });
+    await act(async () => { fireEvent.change(screen.getByLabelText("Chọn file tải lên"), { target: { files: [file] } }); });
+    await sleep(60);
+    expect(L.libIndex).toHaveBeenCalledWith(["n1"]);
+    expect(screen.getByText(/qws-lib\) chưa được cài/)).toBeTruthy();
+    expect(cardTitles()).toContain("Ghi chú mới");
   });
 });
