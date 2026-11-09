@@ -85,7 +85,7 @@ const navKey = (n) => n.key || n.to || n.href;
 const HUBS = [
   { id: "report", label: "Báo cáo", icon: BarChart3, group: "biz", tabs: [["/bao-cao", "Tổng hợp", BarChart3], ["/quang-cao", "Quảng cáo", Megaphone], ["/website", "Website", Globe], ["/fanpage", "Fanpage", ThumbsUp]] },
   // 09/11: Kho tài liệu + Tài khoản & Thẻ → 1 mục "Kho" (Tài khoản & Thẻ vẫn chỉ chủ; thành viên chỉ có Kho tài liệu thì không hiện thanh tab)
-  { id: "store", label: "Kho", icon: Library, group: "me", tabs: [["/kho-tai-lieu", "Tài liệu", Library], ["/tai-khoan", "Tài khoản & Thẻ", KeyRound]] },
+  { id: "store", label: "Kho", icon: Library, group: "me", tabs: [["/kho-tai-lieu", "Kho tài liệu", Library], ["/tai-khoan", "Tài khoản & Thẻ", KeyRound]] },
   { id: "cust", label: "Khách & Dự án", icon: Users, group: "biz", tabs: [["/khach-hang", "Khách & dự án", Users], ["/tai-nguyen", "Tài nguyên", FolderOpen]], also: ["/du-an", "/don-hang"] },
 ];
 const inPath = (path, t) => path === t || path.startsWith(t + "/");

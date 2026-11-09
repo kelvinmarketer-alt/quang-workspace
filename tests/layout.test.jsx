@@ -26,7 +26,7 @@ describe("menu gộp Kho", () => {
     expect(links.filter((h) => h === "/kho-tai-lieu").length).toBeGreaterThan(0);
     expect(links).not.toContain("/tai-khoan"); // gộp: không còn mục riêng ở menu bên (chỉ còn trong thanh tab)
     expect(screen.getAllByRole("link", { name: /Tài khoản & Thẻ/ }).length).toBe(1); // nằm trong thanh tab
-    expect(screen.getAllByRole("link", { name: /^Tài liệu$/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /^Kho tài liệu$/ }).length).toBeGreaterThan(0);
   });
 
   it("thành viên chỉ có Kho tài liệu: không thấy tab Tài khoản & Thẻ (chỉ chủ)", async () => {

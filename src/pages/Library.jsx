@@ -694,7 +694,7 @@ export default function LibraryPage() {
   const locLabel = searching ? "Kết quả tìm trong tất cả thư mục" : folderId === "none" ? "Chưa phân loại" : current ? current.name : "Tất cả tài liệu";
 
   return (
-    <div className="relative space-y-4 sm:space-y-5" {...dragProps}>
+    <div className="bento relative space-y-4 p-3 sm:space-y-5 sm:p-5" {...dragProps}>
       {dragOver && (
         <div className="pointer-events-none fixed inset-3 z-[65] grid place-items-center rounded-3xl border-4 border-dashed border-indigo-400 bg-indigo-50/90">
           <div className="text-center"><Upload className="mx-auto text-indigo-500" size={36} /><div className="mt-2 text-lg font-extrabold text-indigo-700">Thả file để thêm vào kho</div><div className="text-sm text-indigo-500">Vào: {current ? current.name : "Chưa phân loại"}</div></div>
@@ -728,7 +728,7 @@ export default function LibraryPage() {
       )}
       {state === "ok" && !readOnly && (
         <div role="tablist" aria-label="Chế độ" className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
-          {[["docs", "Tài liệu", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
+          {[["docs", "Duyệt kho", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
             <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${view === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
               <I size={14} /> {l}{k === "chat" && indexing > 0 ? <Loader2 size={12} className="animate-spin" /> : null}
             </button>
