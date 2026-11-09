@@ -702,12 +702,21 @@ export default function LibraryPage() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white shadow-lg shadow-indigo-500/25"><LibraryIcon size={22} /></div>
           <div>
             <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Kho tài liệu</h1>
             <div className="text-[12px] text-slate-400">{state === "ok" ? `${readOnly ? "Chỉ xem · " : ""}${docs.length} tài liệu · ${folders.length} thư mục · ${fmtSize(totalBytes)}` : "Báo cáo và kiến thức học tập của bạn"}</div>
           </div>
+          {state === "ok" && !readOnly && (
+            <div role="tablist" aria-label="Chế độ" className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:ml-3">
+          {[["docs", "Duyệt kho", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
+            <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${view === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+              <I size={14} /> {l}{k === "chat" && indexing > 0 ? <Loader2 size={12} className="animate-spin" /> : null}
+            </button>
+          ))}
+        </div>
+          )}
         </div>
         {state === "ok" && !readOnly && (
           <div className="flex flex-wrap gap-2">
@@ -724,15 +733,6 @@ export default function LibraryPage() {
         <div className="flex items-start gap-3 rounded-xl bg-amber-50 px-4 py-2.5 text-[13px] text-amber-800">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" /><div className="min-w-0 flex-1">{aiErr}</div>
           <button type="button" onClick={() => setAiErr("")} aria-label="Đóng thông báo" className="shrink-0 rounded-lg p-0.5 text-amber-600 hover:bg-amber-100"><X size={15} /></button>
-        </div>
-      )}
-      {state === "ok" && !readOnly && (
-        <div role="tablist" aria-label="Chế độ" className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100">
-          {[["docs", "Duyệt kho", FileText], ["chat", "Hỏi đáp AI", Sparkles]].map(([k, l, I]) => (
-            <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-bold transition ${view === k ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
-              <I size={14} /> {l}{k === "chat" && indexing > 0 ? <Loader2 size={12} className="animate-spin" /> : null}
-            </button>
-          ))}
         </div>
       )}
       {state === "ok" && !readOnly && view === "chat" && (
