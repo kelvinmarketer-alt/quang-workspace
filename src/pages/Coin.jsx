@@ -101,7 +101,7 @@ function SubSwitch({ value, onChange, items }) {
 // 09/11: gộp "Demo tự động" + "Bot thật" → tab "Trade COIN" (công tắc Demo | Bot thật bên trong); "EA MT5" → "Trade Forex".
 // Khoá cũ (bot / live / mt5) vẫn dùng được trong link thông báo + nhớ tab → tự đổi sang tab mới.
 const COIN_TABS = ["overview", "invest", "market", "trade", "forex"];
-const LEGACY = { bot: { tab: "trade", sub: "bot" }, live: { tab: "trade", sub: "live" }, mt5: { tab: "forex" } };
+const LEGACY = { bot: { tab: "trade", sub: "bot" }, live: { tab: "trade", sub: "live" }, mt5: { tab: "forex" }, fxmarket: { tab: "market", msub: "forex" } }; // fxmarket = link thông báo cảnh báo giá Forex
 const route = (t) => (COIN_TABS.includes(t) ? { tab: t } : LEGACY[t] || null);
 // Tab "Tổng quan" (chỉ chủ): tài sản + bot thật + demo + cảnh báo giá trong 1 màn hình
 const CoinOverview = lazy(() => import("./CoinOverview.jsx"));
@@ -157,9 +157,9 @@ export default function Coin() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState(first.tab);
   const [sub, setSub] = useState(() => { if (first.sub) return first.sub; try { return localStorage.getItem("qws_trade_sub") === "live" ? "live" : "bot"; } catch { return "bot"; } });
-  const [mSub, setMSub] = useState(() => { try { return localStorage.getItem("qws_market_sub") === "forex" ? "forex" : "coin"; } catch { return "coin"; } });
+  const [mSub, setMSub] = useState(() => { if (first.msub) return first.msub; try { return localStorage.getItem("qws_market_sub") === "forex" ? "forex" : "coin"; } catch { return "coin"; } });
   // Tab đã mở thì GIỮ mounted (ẩn bằng class hidden) → Demo tự động/Thị trường không phải tính lại khi quay lại
-  const [seen, setSeen] = useState(() => ({ [first.tab]: true, ...(first.tab === "trade" ? { [first.sub || "bot"]: true } : {}) }));
+  const [seen, setSeen] = useState(() => ({ [first.tab]: true, ...(first.tab === "trade" ? { [first.sub || "bot"]: true } : {}), ...(first.msub ? { ["m_" + first.msub]: true } : {}) }));
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* bỏ qua */ } };
   const pickSub = (v) => { setSub(v); setSeen((x) => (x[v] ? x : { ...x, [v]: true })); lsSet("qws_trade_sub", v); };
   const pickMSub = (v) => { setMSub(v); setSeen((x) => (x["m_" + v] ? x : { ...x, ["m_" + v]: true })); lsSet("qws_market_sub", v); };
@@ -167,6 +167,7 @@ export default function Coin() {
     const r = route(t); if (!r) return;
     setTab(r.tab); setSeen((x) => (x[r.tab] ? x : { ...x, [r.tab]: true })); lsSet("qws_coin_tab", r.tab);
     if (r.sub) pickSub(r.sub);
+    if (r.msub) pickMSub(r.msub);
   };
   // Đang ở trang Coin mà bấm link ?tab=… → chuyển tab, rồi xoá tham số để lần bấm sau (cùng link) vẫn ăn
   useEffect(() => {

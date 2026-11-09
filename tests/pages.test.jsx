@@ -165,7 +165,7 @@ describe("Coin · Trade COIN / Trade Forex (09/11)", () => {
 });
 
 describe("Thị trường Forex · có dữ liệu MT5 (09/11)", () => {
-  it("hiện giá + nến + AI, không có Futures/Spot, dòng tiền lớn, cảnh báo giá Binance; không sập", async () => {
+  it("hiện giá + nến + AI + cảnh báo giá; không có Futures/Spot, dòng tiền lớn; không sập", async () => {
     vi.resetModules();
     const T0 = 1_700_000_000;
     const bars = Array.from({ length: 320 }, (_, i) => { const o = 2600 + Math.sin(i / 7) * 30, c = 2600 + Math.sin((i + 1) / 7) * 30; return { time: T0 + i * 3600, open: o, high: Math.max(o, c) + 4, low: Math.min(o, c) - 4, close: c, volume: 200 + i, buy: 100 + i / 2, sell: 100 + i / 2, nf: true }; });
@@ -184,7 +184,7 @@ describe("Thị trường Forex · có dữ liệu MT5 (09/11)", () => {
     expect(t).toMatch(/MT5 đang gửi giá/);
     expect(t).toMatch(/XAUUSD/);
     expect(t).not.toMatch(/Dòng tiền lớn/);
-    expect(t).not.toMatch(/Cảnh báo giá/);
+    expect(t).toMatch(/Cảnh báo giá/); // 09/11: Forex có cảnh báo giá riêng (qua Worker + cầu nối MT5)
     expect(screen.queryByRole("button", { name: "Futures" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Spot" })).toBeNull();
     expect(screen.getAllByRole("button", { name: /Phân tích/ }).length).toBeGreaterThan(0);
@@ -194,5 +194,35 @@ describe("Thị trường Forex · có dữ liệu MT5 (09/11)", () => {
     expect(JSON.parse(localStorage.getItem("qws_fx_grid")).cells[0].sym).toBe("XAUUSD"); // lưới Forex tách khỏi lưới Coin
     expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
     vi.doUnmock("../src/lib/mt5Source.js");
+  });
+});
+
+describe("Cảnh báo giá Forex (09/11)", () => {
+  it("tab Forex chỉ hiện cảnh báo market=mt5, tab Coin chỉ hiện cảnh báo Binance; link ?tab=fxmarket mở Thị trường → Forex", async () => {
+    vi.resetModules();
+    const T0 = 1_700_000_000;
+    const bars = Array.from({ length: 320 }, (_, i) => { const o = 2600 + Math.sin(i / 7) * 30, c = 2600 + Math.sin((i + 1) / 7) * 30; return { time: T0 + i * 3600, open: o, high: Math.max(o, c) + 4, low: Math.min(o, c) - 4, close: c, volume: 200 + i, buy: 100, sell: 100, nf: true }; });
+    const q = { ts: Date.now(), live: true, ok: ["XAUUSD"], missing: [], q: { XAUUSD: { bid: 2650.12, ask: 2650.4, digits: 2, f: { "4h": [bars[319].time, 1, 2, 0.5, 1.5, 9], "1d": [T0, 2600, 2660, 2590, 2650, 1] } } } };
+    vi.doMock("../src/lib/mt5Source.js", async (orig) => ({ ...(await orig()), mt5Klines: async () => bars, mt5Ticker: async () => ({ price: 2650.12, chg: 1.9, vol: 0 }), subscribeQuotes: (cb) => { cb(q); return () => {}; }, useMt5Feed: () => ({ q, err: null, loaded: true, ts: q.ts, online: true, ok: q.ok, missing: [] }), useMt5Live: () => {} }));
+    vi.doMock("../src/lib/coinShared.js", async (orig) => ({ ...(await orig()), mergeCmd: async () => ({ error: null }) }));
+    const rows = { command: { priceAlerts: [{ id: "a1", symbol: "XAUUSD", market: "mt5", op: ">=", price: 2700, createdAt: 1 }, { id: "a2", symbol: "BTCUSDT", market: "futures", op: ">=", price: 99999, createdAt: 2 }] } };
+    vi.doMock("../src/lib/supabase.js", async () => {
+      const mk = (id) => ({ data: rows[id] ? { data: rows[id] } : null, error: null });
+      const chain = () => { const p = Promise.resolve({ data: null, error: null }); const c = new Proxy(() => {}, { get: (_, k) => (k === "then" ? p.then.bind(p) : k === "eq" ? (_c, id) => ({ maybeSingle: async () => mk(id), then: (f) => Promise.resolve(mk(id)).then(f) }) : () => c), apply: () => c }); return c; };
+      return { WORKSPACE_TABLE: "qws_workspaces", supabase: { from: () => chain(), rpc: () => chain(), functions: { invoke: async () => ({ data: {}, error: null }) }, auth: { getUser: async () => ({ data: { user: { id: "u1" } } }), getSession: async () => ({ data: { session: null } }), onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) }, channel: () => ({ on() { return this; }, subscribe() { return this; } }), removeChannel() {} } };
+    });
+    localStorage.removeItem("qws_coin_tab"); localStorage.removeItem("qws_market_sub");
+    const C = (await import("../src/pages/Coin.jsx")).default;
+    const { errors } = await mount(<C />, "/coin?tab=fxmarket");
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 120)); });
+    expect(localStorage.getItem("qws_coin_tab")).toBe("market");
+    expect(localStorage.getItem("qws_market_sub")).toBe("forex");
+    const txt = document.body.textContent;
+    expect(txt).toMatch(/XAUUSD/);
+    expect(txt).toMatch(/Cảnh báo giá · 1 đang chờ/); // 2 cảnh báo trên cloud, tab Forex chỉ đếm cảnh báo MT5
+    expect(txt).toMatch(/XAUUSD ≥ 2\.700/);
+    expect(txt).not.toMatch(/BTC ≥ 99\.999/);
+    expect(errors.filter((m) => m !== "Value is null")).toEqual([]);
+    vi.doUnmock("../src/lib/mt5Source.js"); vi.doUnmock("../src/lib/coinShared.js"); vi.doUnmock("../src/lib/supabase.js");
   });
 });

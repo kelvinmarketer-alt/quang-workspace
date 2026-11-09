@@ -166,9 +166,9 @@ export default function CoinOverview({ active, go }) {
 
         {/* Cảnh báo giá */}
         <Card className="!p-3 sm:!p-4">
-          <Head icon={BellRing} title="Cảnh báo giá" onOpen={() => go("market")} badge={<Badge tone={alerts.length ? "amber" : "slate"}>{alerts.length} đang chờ</Badge>} />
+          <Head icon={BellRing} title="Cảnh báo giá" onOpen={() => go(alerts[0]?.market === "mt5" ? "fxmarket" : "market")} badge={<Badge tone={alerts.length ? "amber" : "slate"}>{alerts.length} đang chờ</Badge>} />
           {alerts.length ? <div className="divide-y divide-slate-100">{alerts.slice(0, 4).map((a, i) => (
-            <div key={a.id || i} className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]"><span className="truncate font-bold text-slate-700">{String(a.symbol || "").replace(/USDT$/, "")} <span className="font-semibold text-slate-400">{a.market === "spot" ? "Spot" : "Futures"}</span></span><span className="shrink-0 tabular-nums text-slate-600">{a.op === "<=" || a.op === "≤" || a.op === "<" ? "≤" : "≥"} {fmtPx(a.price)}</span></div>
+            <div key={a.id || i} className="flex items-baseline justify-between gap-2 py-1 text-[12.5px]"><span className="truncate font-bold text-slate-700">{String(a.symbol || "").replace(/USDT$/, "")} <span className="font-semibold text-slate-400">{a.market === "mt5" ? "MT5" : a.market === "spot" ? "Spot" : "Futures"}</span></span><span className="shrink-0 tabular-nums text-slate-600">{a.op === "<=" || a.op === "≤" || a.op === "<" ? "≤" : "≥"} {fmtPx(a.price)}</span></div>
           ))}{alerts.length > 4 && <div className="py-1 text-[11.5px] text-slate-400">+{alerts.length - 4} cảnh báo khác</div>}</div>
             : <div className="py-3 text-[12px] leading-snug text-slate-400">Chưa đặt cảnh báo nào. Vào <b>Thị trường</b> để đặt mức giá muốn được báo về điện thoại (máy chủ kiểm tra 5 phút/lần).</div>}
           <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11.5px] text-slate-500"><Target size={13} className="shrink-0 text-indigo-500" /> Mục tiêu: tối thiểu {MONTH_TARGET} lệnh/tháng cho cả Demo và bot.</div>

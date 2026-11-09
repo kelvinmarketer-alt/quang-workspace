@@ -239,7 +239,7 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
 
 // Cảnh báo giá (chỉ chủ): lưu ở Supabase qws_live_bot, dòng 'command' → data.priceAlerts. Máy chủ (Worker Cloudflare qws-monitor) kiểm tra 5 phút/lần và gửi thông báo đẩy.
 // Ghi: LUÔN đọc lại dòng command mới nhất rồi ghi gộp {...data, priceAlerts} → không mất khoá/cấu hình/stop của bot thật.
-function PriceAlerts({ active, pair, market, price }) {
+function PriceAlerts({ active, pair, market, price, fx = false }) {
   const [alerts, setAlerts] = useState(null);
   const [err, setErr] = useState(""), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false);
   const [op, setOp] = useState(">="), [opTouched, setOpTouched] = useState(false), [val, setVal] = useState(""), [note, setNote] = useState("");
@@ -289,7 +289,7 @@ function PriceAlerts({ active, pair, market, price }) {
   };
   const same = num > 0 && price && Math.abs(num - price) < 1e-9;
   const already = num > 0 && price && !same && (op === ">=" ? price >= num : price <= num);
-  const sorted = (alerts || []).slice().sort((a, b) => (!a.firedAt === !b.firedAt ? (b.createdAt || 0) - (a.createdAt || 0) : a.firedAt ? 1 : -1));
+  const sorted = (alerts || []).filter((a) => a && (a.market === "mt5") === fx).sort((a, b) => (!a.firedAt === !b.firedAt ? (b.createdAt || 0) - (a.createdAt || 0) : a.firedAt ? 1 : -1));
   const nActive = sorted.filter((a) => !a.firedAt).length;
   return (
     <Card className="!p-3">
@@ -327,7 +327,7 @@ function PriceAlerts({ active, pair, market, price }) {
           </ul>
         )}
         <div className="mt-2 text-[10.5px] leading-snug text-slate-400">
-          Máy chủ kiểm tra <b>5 phút/lần</b> rồi gửi <b>thông báo đẩy</b> — cần bật ở Cài đặt → Thông báo đẩy.{" "}
+          Máy chủ kiểm tra <b>5 phút/lần</b> rồi gửi <b>thông báo đẩy</b> — cần bật ở Cài đặt → Thông báo đẩy.{fx ? " Giá lấy từ cầu nối MT5 (kể cả cú chạm trong nến M5 vừa qua); cầu nối tắt hoặc chợ đóng cửa thì không báo." : ""}{" "}
           {push === true ? <span className="font-semibold text-emerald-600">Máy này đã bật ✓</span> : push === false ? <span className="font-semibold text-amber-600">Máy này chưa bật.</span> : null}
         </div>
       </>)}
@@ -781,8 +781,8 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
 
       {/* Lịch sử phân tích AI (cloud, tự chấm) + cảnh báo giá (chủ) */}
       <div className="grid items-start gap-3 xl:grid-cols-3">
-        <AiHistory recs={analyses} active={active} sym={sym} symKey={fx ? sym : `${sym}USDT`} onOpen={openAnalysis} className={isOwner && !fx ? "xl:col-span-2" : "xl:col-span-3"} />
-        {isOwner && !fx && <PriceAlerts active={active} pair={`${sym}USDT`} market={usedMkt} price={price} />}
+        <AiHistory recs={analyses} active={active} sym={sym} symKey={fx ? sym : `${sym}USDT`} onOpen={openAnalysis} className={isOwner ? "xl:col-span-2" : "xl:col-span-3"} />
+        {isOwner && <PriceAlerts active={active} pair={fx ? sym : `${sym}USDT`} market={usedMkt} price={price} fx={fx} />}
       </div>
     </div>
   );
