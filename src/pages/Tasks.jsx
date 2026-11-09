@@ -6,6 +6,8 @@ import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
 import MessageImportModal from "../components/MessageImport.jsx";
+import ConflictNotice from "../components/ConflictNotice.jsx";
+import { DUR_OPTIONS, DEFAULT_DUR } from "../lib/schedule.js";
 import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { parseQuickTask, dayLabel } from "../lib/quickTask.js";
 import { usePomo, startPomo, stopPomo, dayCount } from "../lib/pomodoro.js";
@@ -13,7 +15,7 @@ import { usePomo, startPomo, stopPomo, dayCount } from "../lib/pomodoro.js";
 // Ô thêm việc 1 dòng (01/11 sếp duyệt): gõ câu → Enter. Dán nhiều dòng = nhiều việc. Không ghi ngày → hôm nay.
 const QUICK = [[" hôm nay", "Hôm nay"], [" mai", "Mai"], [" thứ 2", "Thứ 2"], [" !cao", "Gấp"], [" ~1", "1 🍅"], [" ~2", "2 🍅"]];
 function QuickAdd({ onAdd, onDetail, focusKey }) {
-  const { customerList = [] } = useData();
+  const { customerList = [], tasks: allTasks = [] } = useData();
   const custs = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
   const [v, setV] = useState("");
   const ref = useRef(null);
@@ -38,6 +40,10 @@ function QuickAdd({ onAdd, onDetail, focusKey }) {
         <button type="button" onClick={() => { onDetail(v ? toTask(p) : {}); setV(""); }} title="Mở form chi tiết" className="hidden h-9 w-9 shrink-0 place-items-center sm:grid rounded-xl text-slate-400 hover:bg-white hover:text-slate-700"><SlidersHorizontal size={16} /></button>
         <button type="button" onClick={submit} disabled={!p.title} className="shrink-0 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-3.5 py-2 text-sm font-bold text-white disabled:opacity-40">Thêm</button>
       </div>
+      {p.time && p.title && !v.includes("\n") && (
+        <ConflictNotice className="mt-2" tasks={allTasks} date={p.date || todayISO()} time={p.time} dur={DEFAULT_DUR} pickLabel="Thêm lúc"
+          onPick={(t) => { onAdd(toTask({ ...p, time: t })); setV(""); ref.current?.focus(); }} />
+      )}
       <div className="mt-2 flex min-h-[24px] flex-wrap items-center gap-1.5">
         {v.trim() ? <>
           {p.title && <Chip c="bg-slate-100 text-slate-700">{p.title}</Chip>}
@@ -59,9 +65,9 @@ const PRIO_ORDER = { high: 0, med: 1, low: 2 };
 // initial = task cũ → form SỬA (điền sẵn); không có → form THÊM
 function TaskModal({ initial, onClose, onSave }) {
   const editing = !!initial?.id;
-  const { customerList = [] } = useData();
+  const { customerList = [], tasks: allTasks = [] } = useData();
   const custs = [...customerList].filter((c) => c.active !== false || c.id === initial?.customerId).sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "", ...(initial.est ? { est: initial.est } : {}) } : {}) }));
+  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", dur: DEFAULT_DUR, priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "", dur: initial.dur || DEFAULT_DUR, ...(initial.est ? { est: initial.est } : {}) } : {}) }));
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
@@ -85,6 +91,17 @@ function TaskModal({ initial, onClose, onSave }) {
             <input type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2" />
           </label>
         </div>
+        {f.time && (
+          <div className="mb-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="font-semibold text-slate-600">Kéo dài</span>
+              <select aria-label="Thời lượng" value={f.dur} onChange={(e) => setF({ ...f, dur: Number(e.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+                {DUR_OPTIONS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+              </select>
+            </label>
+            <ConflictNotice tasks={allTasks} date={f.date} time={f.time} dur={Number(f.dur) || DEFAULT_DUR} excludeId={initial?.id} onPick={(t) => setF({ ...f, time: t })} />
+          </div>
+        )}
         <div className="mb-3 flex gap-2">
           {Object.entries(PRIO).map(([v, [tone, l]]) => (
             <button key={v} onClick={() => setF({ ...f, priority: v })} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-bold ${f.priority === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
@@ -102,7 +119,7 @@ function TaskModal({ initial, onClose, onSave }) {
           <span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
           <textarea value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} rows={2} className="w-full rounded-xl border border-slate-200 px-3 py-2" placeholder="Chi tiết (tuỳ chọn)" />
         </label>
-        <button onClick={() => { if (f.title.trim()) { onSave({ ...f, title: f.title.trim(), customerId: f.customerId || null }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{editing ? "Lưu thay đổi" : "Lưu việc"}</button>
+        <button onClick={() => { if (f.title.trim()) { const { dur, ...rest } = f; onSave({ ...rest, ...(f.time ? { dur: Number(dur) || DEFAULT_DUR } : {}), title: f.title.trim(), customerId: f.customerId || null }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{editing ? "Lưu thay đổi" : "Lưu việc"}</button>
       </div>
     </div>
   );

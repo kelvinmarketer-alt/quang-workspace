@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { X, Sparkles, ClipboardPaste, Loader2, ArrowLeft, CalendarClock, Wallet, Check } from "lucide-react";
 import { DateField, MoneyInput } from "./ui.jsx";
+import ConflictNotice from "./ConflictNotice.jsx";
 import { guardClose, markDirty } from "./ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadMessage } from "../lib/ai.js";
@@ -12,7 +13,7 @@ const labelCls = "mb-1 block text-[11px] font-bold text-slate-400";
 const EXAMPLE = "Anh ơi tuần sau thứ 4 em chuyển đợt 2 là 8 triệu nhé. Thứ 6 mình họp duyệt giao diện lúc 3 giờ chiều, anh nhớ gửi em bản demo trước nha.";
 
 export default function MessageImportModal({ onClose }) {
-  const { customerList = [], projects = [], addTask, addInstallment, settings, canEdit, setToast } = useData();
+  const { customerList = [], projects = [], tasks: existingTasks = [], addTask, addInstallment, settings, canEdit, setToast } = useData();
   const customers = useMemo(() => customerList.filter((c) => c.active !== false), [customerList]);
   const canPay = typeof canEdit === "function" ? !!canEdit("customers") : true;
   const [text, setText] = useState(""), [phase, setPhase] = useState("input"), [items, setItems] = useState([]), [err, setErr] = useState("");
@@ -103,6 +104,12 @@ export default function MessageImportModal({ onClose }) {
                         <div className="sm:col-span-1"><label className={labelCls}>Ưu tiên</label><select aria-label="Ưu tiên" className={inputCls} value={x.priority} onChange={(e) => update(x.id, { priority: e.target.value })}><option value="high">Gấp</option><option value="med">Thường</option><option value="low">Không vội</option></select></div>
                         <div className="sm:col-span-2"><label className={labelCls}>Khách</label>
                           <select aria-label="Khách" className={inputCls} value={x.customerId} onChange={(e) => update(x.id, { customerId: e.target.value })}><option value="">(không gắn khách)</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+                        {x.include && x.time && x.date && (
+                          <div className="sm:col-span-6">
+                            <ConflictNotice date={x.date} time={x.time} excludeId={x.id} onPick={(t) => update(x.id, { time: t })}
+                              tasks={[...existingTasks, ...items.filter((o) => o.id !== x.id && o.include && o.type === "task" && o.time && o.date).map((o) => ({ id: o.id, title: o.title, date: o.date, time: o.time, status: "todo" }))]} />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="grid gap-2 sm:grid-cols-6">

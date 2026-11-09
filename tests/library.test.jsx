@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Suspense } from "react";
 import fs from "node:fs";
 import { makeData } from "./fixture.js";
+import { todayISO } from "../src/lib/format.js";
 
 vi.mock("../src/lib/store.jsx", () => ({ useData: () => makeData(), DataProvider: ({ children }) => children }));
 vi.mock("../src/lib/library.js", async (importOriginal) => {
@@ -13,7 +14,7 @@ vi.mock("../src/lib/library.js", async (importOriginal) => {
   return {
     ...real,
     libLoad: vi.fn(), libGet: vi.fn(), libSearch: vi.fn(), libAddDoc: vi.fn(), libUpdateDoc: vi.fn(),
-    libDeleteDoc: vi.fn(), libAddFolder: vi.fn(), libUpdateFolder: vi.fn(), libDeleteFolder: vi.fn(), libIndex: vi.fn(), libAsk: vi.fn(),
+    libDeleteDoc: vi.fn(), libAddFolder: vi.fn(), libUpdateFolder: vi.fn(), libDeleteFolder: vi.fn(), libIndex: vi.fn(), libAsk: vi.fn(), libByCustomer: vi.fn(), libIdea: vi.fn(),
   };
 });
 import * as L from "../src/lib/library.js";
@@ -135,9 +136,9 @@ const FOLDERS = [
   { id: "f3", parent_id: null, name: "SEO", color: "amber" },
 ];
 const DOCS = [
-  { id: "d1", folder_id: "f1", title: "Báo cáo tháng 10", kind: "html", size_bytes: 2048, tags: ["báo cáo"], note: "", source: "bc10.html", excerpt: "Doanh thu tăng", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-05T00:00:00Z" },
+  { id: "d1", folder_id: "f1", customer_id: "c1", project_id: "p1", title: "Báo cáo tháng 10", kind: "html", size_bytes: 2048, tags: ["báo cáo"], note: "", source: "bc10.html", excerpt: "Doanh thu tăng", created_at: "2026-11-01T00:00:00Z", updated_at: "2026-11-05T00:00:00Z" },
   { id: "d2", folder_id: "f2", title: "Ghi chú quản lý kho", kind: "md", size_bytes: 500, tags: [], note: "", source: "kho.md", excerpt: "", created_at: "2026-11-02T00:00:00Z", updated_at: "2026-11-04T00:00:00Z" },
-  { id: "d3", folder_id: "f3", title: "Hướng dẫn SEO", kind: "txt", size_bytes: 900, tags: [], note: "", source: "seo.txt", excerpt: "", created_at: "2026-11-03T00:00:00Z", updated_at: "2026-11-03T00:00:00Z" },
+  { id: "d3", folder_id: "f3", customer_id: "c2", project_id: null, title: "Hướng dẫn SEO", kind: "txt", size_bytes: 900, tags: [], note: "", source: "seo.txt", excerpt: "", created_at: "2026-11-03T00:00:00Z", updated_at: "2026-11-03T00:00:00Z" },
   { id: "d4", folder_id: null, title: "Ý tưởng rời rạc", kind: "md", size_bytes: 300, tags: [], note: "", source: null, excerpt: "", created_at: "2026-11-04T00:00:00Z", updated_at: "2026-11-02T00:00:00Z" },
 ];
 beforeEach(() => {
@@ -145,6 +146,7 @@ beforeEach(() => {
   spy = vi.spyOn(console, "error").mockImplementation((...a) => { const m = String(a[0]?.message || a[0]); if (!/act\(|not wrapped|ReactDOMTestUtils/.test(m)) errors.push(m.slice(0, 300)); });
   L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: DOCS, error: null });
   localStorage.clear();
+  L.libIdea.mockResolvedValue({ data: { idea: null }, error: undefined });
   L.libSearch.mockResolvedValue({ data: [], error: null });
   L.libIndex.mockImplementation(async (ids) => ({ data: { results: ids.map((id) => ({ doc_id: id, ok: true, chunks: 3 })) } }));
   L.libAsk.mockResolvedValue({ data: { answer: "Kiểm kê mỗi tuần [1]. Hao hụt quá 3% phải giải trình [2].", sources: [{ n: 1, doc_id: "d2", title: "Ghi chú quản lý kho", excerpt: "kiểm kê", similarity: 0.8 }, { n: 2, doc_id: "d1", title: "Báo cáo tháng 10", excerpt: "hao hụt", similarity: 0.7 }], usage: { cost_usd: 0.0012 } } });
@@ -152,10 +154,10 @@ beforeEach(() => {
 });
 afterEach(() => { spy.mockRestore(); cleanup(); vi.clearAllMocks(); });
 
-async function mount() {
+async function mount(path = "/kho-tai-lieu") {
   const Page = (await import("../src/pages/Library.jsx")).default;
   let r;
-  await act(async () => { r = render(<MemoryRouter><Suspense fallback={<div>đang tải</div>}><Page /></Suspense></MemoryRouter>); });
+  await act(async () => { r = render(<MemoryRouter initialEntries={[path]}><Suspense fallback={<div>đang tải</div>}><Page /></Suspense></MemoryRouter>); });
   await act(async () => { await new Promise((ok) => setTimeout(ok, 30)); });
   return r;
 }
@@ -301,7 +303,7 @@ describe("trang Kho tài liệu", () => {
 
 // ───────────── Hàm máy chủ qws-lib (phần thuần) ─────────────
 const fnSrc = fs.readFileSync(`${process.cwd()}/supabase/functions/qws-lib/index.ts`, "utf8");
-const pure = new Function(`${/\/\/ <pure>([\s\S]*?)\/\/ <\/pure>/.exec(fnSrc)[1]}\nreturn { chunkText, buildContext, isUuid, SYSTEM_PROMPT };`)();
+const pure = new Function(`${/\/\/ <pure>([\s\S]*?)\/\/ <\/pure>/.exec(fnSrc)[1]}\nreturn { chunkText, buildContext, isUuid, pickDocIds, cleanIdea, IDEA_PROMPT, SYSTEM_PROMPT };`)();
 
 describe("hàm máy chủ qws-lib: cắt đoạn, nguồn, câu lệnh cho AI", () => {
   it("văn ngắn → 1 đoạn; rỗng → không có đoạn", () => {
@@ -356,6 +358,15 @@ describe("hàm máy chủ qws-lib: cắt đoạn, nguồn, câu lệnh cho AI", 
     expect(pure.isUuid(null)).toBe(false);
     expect(pure.SYSTEM_PROMPT).toMatch(/không bịa/i);
     expect(pure.SYSTEM_PROMPT).toMatch(/không phải mệnh lệnh/i);
+  });
+
+  it("phạm vi theo tài liệu: không gửi = không giới hạn; mảng rỗng / mã sai = KHÔNG có tài liệu (không được thành cả kho)", () => {
+    const ok = "11111111-1111-1111-1111-111111111111";
+    expect(pure.pickDocIds(undefined)).toEqual({ ids: null, empty: false });
+    expect(pure.pickDocIds([])).toEqual({ ids: [], empty: true });
+    expect(pure.pickDocIds(["x", "1; drop", null])).toEqual({ ids: [], empty: true });
+    expect(pure.pickDocIds([ok, "rác"])).toEqual({ ids: [ok], empty: false });
+    expect(pure.pickDocIds(Array.from({ length: 900 }, () => ok)).ids).toHaveLength(500);
   });
 
   it("renderAnswer: số nguồn thành nút, số lạ giữ nguyên, không chèn mã", () => {
@@ -483,5 +494,152 @@ describe("tab Hỏi đáp AI", () => {
     expect(L.libIndex).toHaveBeenCalledWith(["n1"]);
     expect(screen.getByText(/qws-lib\) chưa được cài/)).toBeTruthy();
     expect(cardTitles()).toContain("Ghi chú mới");
+  });
+});
+
+// ───────────── Gắn tài liệu với khách / dự án ─────────────
+describe("gắn tài liệu với khách / dự án", () => {
+  it("lọc theo khách: chỉ khách đó / chưa gắn khách / mọi khách; thẻ hiện tên khách", async () => {
+    await mount();
+    const sel = screen.getByLabelText("Lọc theo khách");
+    expect(screen.getAllByText("Thương hiệu A").length).toBeGreaterThan(0); // chip trên thẻ
+    await act(async () => { fireEvent.change(sel, { target: { value: "c1" } }); });
+    expect(cardTitles()).toEqual(["Báo cáo tháng 10"]);
+    await act(async () => { fireEvent.change(sel, { target: { value: "none" } }); });
+    expect(cardTitles().sort()).toEqual(["Ghi chú quản lý kho", "Ý tưởng rời rạc"].sort());
+    await act(async () => { fireEvent.change(sel, { target: { value: "all" } }); });
+    expect(cardTitles()).toHaveLength(4);
+  });
+
+  it("hàm lọc: kết hợp với tìm kiếm và thư mục", () => {
+    const folders = [{ id: "f1", parent_id: null }];
+    const docs = [{ id: "1", title: "Báo cáo", folder_id: "f1", customer_id: "c1" }, { id: "2", title: "Báo cáo", folder_id: "f1", customer_id: "c2" }, { id: "3", title: "Báo cáo", folder_id: null, customer_id: null }];
+    expect(L.filterDocs(docs, { folderId: "all", folders, query: "bao cao", customerId: "c2" }).map((d) => d.id)).toEqual(["2"]);
+    expect(L.filterDocs(docs, { folderId: "f1", folders, query: "", customerId: "c1" }).map((d) => d.id)).toEqual(["1"]);
+    expect(L.filterDocs(docs, { folderId: "all", folders, query: "", customerId: "none" }).map((d) => d.id)).toEqual(["3"]);
+    expect(L.filterDocs(docs, { folderId: "all", folders, query: "" }).length).toBe(3);
+  });
+
+  it("sửa tài liệu: chọn khách → danh sách dự án của khách đó → lưu đúng; bỏ khách thì bỏ luôn dự án", async () => {
+    await mount();
+    L.libUpdateDoc.mockImplementation(async (id, patch) => ({ data: { ...DOCS.find((d) => d.id === id), ...patch }, error: null }));
+    await act(async () => { fireEvent.click(screen.getByLabelText("Sửa Ghi chú quản lý kho")); });
+    await sleep(30);
+    const cust = screen.getByLabelText(/Thuộc khách/), proj = screen.getByLabelText("Dự án");
+    expect(proj.disabled).toBe(true);
+    await act(async () => { fireEvent.change(cust, { target: { value: "c2" } }); });
+    const names = [...proj.options].map((o) => o.textContent);
+    expect(names).toEqual(expect.arrayContaining(["ADS B", "Lương B"]));
+    expect(names).not.toContain("Web A"); // dự án của khách khác không lẫn vào
+    await act(async () => { fireEvent.change(proj, { target: { value: "p2" } }); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Lưu" })); });
+    await sleep(30);
+    expect(L.libUpdateDoc.mock.calls[0][1]).toMatchObject({ customer_id: "c2", project_id: "p2" });
+    // mở lại, bỏ khách → dự án cũng bị bỏ
+    cleanup();
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByLabelText("Sửa Báo cáo tháng 10")); });
+    await sleep(30);
+    await act(async () => { fireEvent.change(screen.getByLabelText(/Thuộc khách/), { target: { value: "" } }); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Lưu" })); });
+    await sleep(30);
+    expect(L.libUpdateDoc.mock.calls.at(-1)[1]).toMatchObject({ customer_id: null, project_id: null });
+  });
+
+  it("đang lọc 1 khách mà tải file lên → tài liệu mới gắn luôn khách đó", async () => {
+    await mount();
+    L.libAddDoc.mockImplementation(async (row) => ({ data: { id: "n9", ...row, tags: [], note: "", excerpt: "", indexed_at: null, created_at: "x", updated_at: "x" }, error: null }));
+    await act(async () => { fireEvent.change(screen.getByLabelText("Lọc theo khách"), { target: { value: "c2" } }); });
+    const file = new File(["# Biên bản họp\n\nnội dung"], "hop.md", { type: "text/markdown" });
+    await act(async () => { fireEvent.change(screen.getByLabelText("Chọn file tải lên"), { target: { files: [file] } }); });
+    await sleep(60);
+    expect(L.libAddDoc.mock.calls.at(-1)[0]).toMatchObject({ title: "Biên bản họp", customer_id: "c2" });
+  });
+
+  it("mở từ thẻ khách: ?khach=<mã> lọc sẵn; ?doc=<mã> mở thẳng tài liệu", async () => {
+    await mount("/kho-tai-lieu?khach=c2");
+    expect(screen.getByLabelText("Lọc theo khách").value).toBe("c2");
+    expect(cardTitles()).toEqual(["Hướng dẫn SEO"]);
+    cleanup();
+    await mount("/kho-tai-lieu?doc=d1");
+    await sleep(40);
+    expect(document.querySelector("iframe")).toBeTruthy();
+    expect(L.libGet).toHaveBeenCalledWith("d1");
+  });
+
+  it("hỏi AI theo khách: phạm vi 'Theo khách' chỉ gửi mã các tài liệu của khách đó", async () => {
+    await mount();
+    await act(async () => { fireEvent.click(screen.getByRole("tab", { name: /Hỏi đáp AI/ })); });
+    const scope = screen.getByLabelText("Hỏi trong phạm vi");
+    expect([...scope.options].map((o) => o.textContent)).toEqual(expect.arrayContaining(["Khách: Thương hiệu A (1)", "Khách: Thương hiệu B (1)"]));
+    await act(async () => { fireEvent.change(scope, { target: { value: "k:c1" } }); });
+    await act(async () => { fireEvent.change(screen.getByLabelText("Câu hỏi"), { target: { value: "Tóm tắt báo cáo đã gửi" } }); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Gửi câu hỏi" })); });
+    await sleep(30);
+    expect(L.libAsk.mock.calls[0][0]).toMatchObject({ docIds: ["d1"], folderIds: undefined });
+  });
+
+  it("thẻ khách: liệt kê tài liệu đã gắn, có link mở thẳng; chủ mới thấy", async () => {
+    L.libByCustomer.mockResolvedValue({ data: [{ id: "d1", title: "Báo cáo tháng 10", kind: "html", updated_at: "x" }, { id: "d9", title: "Hợp đồng", kind: "md", updated_at: "x" }], error: null });
+    const C = (await import("../src/components/CustomerDocs.jsx")).default;
+    await act(async () => { render(<MemoryRouter><C customerId="c1" /></MemoryRouter>); });
+    await sleep(20);
+    expect(L.libByCustomer).toHaveBeenCalledWith("c1");
+    expect(screen.getByText(/Tài liệu trong kho \(2\)/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Báo cáo tháng 10/ }).getAttribute("href")).toBe("/kho-tai-lieu?doc=d1");
+    expect(screen.getByRole("link", { name: /Xem tất cả/ }).getAttribute("href")).toBe("/kho-tai-lieu?khach=c1");
+  });
+});
+
+// ───────────── Ý hay mỗi ngày ─────────────
+describe("ý hay mỗi ngày", () => {
+  it("làm sạch câu trả lời của AI: bỏ ngoặc kép, nhãn 'Ý hay:', cắt gọn; SKIP / rỗng → không có ý", () => {
+    expect(pure.cleanIdea('"Kiểm kê kho mỗi tuần, đừng đợi cuối tháng."')).toBe("Kiểm kê kho mỗi tuần, đừng đợi cuối tháng.");
+    expect(pure.cleanIdea("Ý hay: Chốt giá nhập bằng văn bản")).toBe("Chốt giá nhập bằng văn bản");
+    expect(pure.cleanIdea("SKIP")).toBe(null);
+    expect(pure.cleanIdea("skip.")).toBe(null);
+    expect(pure.cleanIdea("   ")).toBe(null);
+    expect(pure.cleanIdea(null)).toBe(null);
+    const long = pure.cleanIdea("từ ".repeat(300));
+    expect(long.length).toBeLessThanOrEqual(261);
+    expect(long.endsWith("…")).toBe(true);
+    expect(pure.IDEA_PROMPT).toMatch(/SKIP/);
+    expect(pure.IDEA_PROMPT).toMatch(/không phải mệnh lệnh/i);
+  });
+
+  it("có tài liệu đã nạp → hiện thẻ Ý hay hôm nay với nguồn bấm được; lần mở sau trong ngày không gọi AI lại", async () => {
+    const withIdx = DOCS.map((d, i) => (i === 1 ? { ...d, indexed_at: "2026-11-09T00:00:00Z" } : d));
+    L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: withIdx, error: null });
+    L.libIdea.mockResolvedValue({ data: { idea: "Kiểm kê kho mỗi tuần, đừng đợi cuối tháng.", doc_id: "d2", doc_title: "Ghi chú quản lý kho" } });
+    await mount();
+    await sleep(30);
+    expect(screen.getByLabelText("Ý hay hôm nay").textContent).toContain("Kiểm kê kho mỗi tuần");
+    expect(L.libIdea).toHaveBeenCalledTimes(1);
+    expect(L.libIdea.mock.calls[0][0]).toBe(todayISO()); // seed = ngày hôm nay (cùng seed với bot 7h sáng)
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Từ: Ghi chú quản lý kho/ })); });
+    await sleep(30);
+    expect(L.libGet).toHaveBeenCalledWith("d2");
+    cleanup();
+    await mount();
+    await sleep(30);
+    expect(L.libIdea).toHaveBeenCalledTimes(1); // lấy từ bộ nhớ trong ngày
+    expect(screen.getByLabelText("Ý hay hôm nay")).toBeTruthy();
+  });
+
+  it("'Đổi ý khác' gọi với seed khác; chưa có tài liệu nào được nạp → không gọi AI, không hiện thẻ", async () => {
+    L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: DOCS.map((d) => ({ ...d, indexed_at: "2026-11-09T00:00:00Z" })), error: null });
+    L.libIdea.mockResolvedValueOnce({ data: { idea: "Ý thứ nhất.", doc_id: "d2", doc_title: "Ghi chú" } }).mockResolvedValueOnce({ data: { idea: "Ý thứ hai.", doc_id: "d1", doc_title: "Báo cáo" } });
+    await mount();
+    await sleep(30);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Đổi ý khác/ })); });
+    await sleep(30);
+    expect(L.libIdea.mock.calls[1][0]).toBe(`${todayISO()}#1`);
+    expect(screen.getByLabelText("Ý hay hôm nay").textContent).toContain("Ý thứ hai.");
+    cleanup(); localStorage.clear(); L.libIdea.mockClear();
+    L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: DOCS, error: null }); // không tài liệu nào có indexed_at
+    await mount();
+    await sleep(30);
+    expect(L.libIdea).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Ý hay hôm nay")).toBeNull();
   });
 });

@@ -270,7 +270,7 @@ export function parseTags(s) {
 }
 
 // Lọc + sắp xếp danh sách tài liệu (thuần, dễ kiểm thử)
-export function filterDocs(docs, { folderId, folders, query, hits }) {
+export function filterDocs(docs, { folderId, folders, query, hits, customerId }) {
   let list = docs;
   const q = fold(query).trim();
   if (q.length >= 2) {
@@ -278,6 +278,8 @@ export function filterDocs(docs, { folderId, folders, query, hits }) {
     list = docs.filter((d) => hits?.has(d.id) || fold([d.title, (d.tags || []).join(" "), d.note, d.source].join(" ")).includes(q));
   } else if (folderId === "none") list = docs.filter((d) => !d.folder_id);
   else if (folderId && folderId !== "all") { const ids = descendantIds(folders, folderId); list = docs.filter((d) => d.folder_id && ids.has(d.folder_id)); }
+  // Bộ lọc theo khách áp dụng cả khi đang tìm: "all" / rỗng = mọi khách · "none" = chưa gắn khách · còn lại = mã khách
+  if (customerId && customerId !== "all") list = customerId === "none" ? list.filter((d) => !d.customer_id) : list.filter((d) => d.customer_id === customerId);
   return list;
 }
 
@@ -292,7 +294,7 @@ export function sortDocs(list, sort) {
 
 // ───────────────────────── Gọi cơ sở dữ liệu ─────────────────────────
 
-const LIST_COLS = "id,folder_id,title,kind,size_bytes,tags,note,source,excerpt,created_at,updated_at,indexed_at";
+const LIST_COLS = "id,folder_id,title,kind,size_bytes,tags,note,source,excerpt,created_at,updated_at,indexed_at,customer_id,project_id";
 
 // Bảng chưa tạo (chưa chạy SETUP-LIBRARY.sql)?
 export const isMissingTable = (error) => !!error && (/PGRST20[0-9]|42P01/.test(String(error.code || "")) || /does not exist|schema cache|Could not find the (table|function)/i.test(String(error.message || "")));
@@ -304,6 +306,8 @@ export const libLoad = async () => {
   ]);
   return { folders: f.data || [], docs: d.data || [], error: f.error || d.error || null };
 };
+// Tài liệu gắn với 1 khách (hiện ở thẻ khách trong Khách & Dự án)
+export const libByCustomer = (customerId) => supabase.from("qws_lib_docs").select("id,title,kind,updated_at").eq("customer_id", customerId).order("updated_at", { ascending: false }).limit(50);
 export const libGet = (id) => supabase.from("qws_lib_docs").select("*").eq("id", id).maybeSingle();
 export const libSearch = (q) => supabase.rpc("qws_lib_search", { q });
 export const libAddDoc = (row) => supabase.from("qws_lib_docs").insert(row).select(LIST_COLS).single();
@@ -352,8 +356,11 @@ async function callLib(body) {
 // Nạp tài liệu vào hỏi đáp (tối đa 5 tài liệu mỗi lần gọi) → { data: { results: [{ doc_id, ok, chunks, error }] } }
 export const libIndex = (docIds) => callLib({ mode: "index", doc_ids: docIds });
 // Hỏi: folderIds = chỉ tìm trong các thư mục này; docId = chỉ 1 tài liệu → { data: { answer, sources, usage } }
-export const libAsk = ({ question, history, folderIds, docId, model }) =>
-  callLib({ mode: "ask", question, history, folder_ids: folderIds || undefined, doc_id: docId || undefined, model });
+export const libAsk = ({ question, history, folderIds, docId, docIds, model }) =>
+  callLib({ mode: "ask", question, history, folder_ids: folderIds || undefined, doc_id: docId || undefined, doc_ids: docIds || undefined, model });
+
+// Ý hay mỗi ngày: seed = ngày (hôm nay) để app và thông báo 7h sáng ra cùng 1 ý; thêm "#n" để đổi ý khác → { data: { idea, doc_id, doc_title } } (idea = null nếu chưa có gì để rút)
+export const libIdea = (seed) => callLib({ mode: "idea", seed });
 
 export const unindexedDocs = (docs) => docs.filter((d) => !d.indexed_at);
 

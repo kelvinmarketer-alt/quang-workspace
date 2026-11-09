@@ -5,6 +5,7 @@ import { generateCalendarEvents } from "./events.js";
 import { solarToLunar } from "./lunar.js";
 import { allInstallments, fmtMoney } from "./selectors.js";
 import { supabase } from "./supabase.js";
+import { durOf } from "./schedule.js";
 
 export const ICAL_DEFAULTS = { family: true, holidays: true, tasks: true, receivables: true, amounts: false };
 export const ICAL_GROUPS = [
@@ -101,7 +102,7 @@ export function buildIcs({ tasks = [], family = [], projects = [], customers = [
       const cust = t.customerId && custName.get(t.customerId);
       const desc = [cust ? `Khách: ${cust}` : "", t.note || ""].filter(Boolean).join("\n");
       body.push(...vevent({
-        uid: `task-${t.id || hash(t.title + t.date)}`, stamp, summary: (t.priority === "high" ? "[Gấp] " : "") + t.title, desc, date: t.date, time,
+        uid: `task-${t.id || hash(t.title + t.date)}`, stamp, summary: (t.priority === "high" ? "[Gấp] " : "") + t.title, desc, date: t.date, time, durMin: durOf(t),
         alarms: timed ? ["-PT15M"] : ["PT9H"],
       }));
       counts.tasks++;

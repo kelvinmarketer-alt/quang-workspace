@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Folder, FolderPlus, FilePlus2, Upload, Search, X, ChevronRight, ChevronDown, FileText, FileCode2, Trash2, Pencil, Download,
-  Loader2, Library as LibraryIcon, Inbox, Layers, AlertTriangle, RefreshCw, Tag, Sparkles, Send, MessageSquare,
+  Loader2, Library as LibraryIcon, Inbox, Layers, AlertTriangle, RefreshCw, Tag, Sparkles, Send, MessageSquare, Users, Lightbulb,
 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -10,8 +11,9 @@ import {
   KINDS, FOLDER_COLORS, FOLDER_COLOR_KEYS, MAX_FILE_BYTES, fold, fmtSize, fmtDate, buildTree, flattenTree, folderPath, descendantIds, countDocs,
   frameDoc, tidySnippet, parseTags, filterDocs, sortDocs, extractTitle, toPlain, isMissingTable, prepareFile, downloadDoc,
   libLoad, libGet, libSearch, libAddDoc, libUpdateDoc, libDeleteDoc, libAddFolder, libUpdateFolder, libDeleteFolder,
-  libIndex, libAsk, renderAnswer, unindexedDocs,
+  libIndex, libAsk, libIdea, renderAnswer, unindexedDocs,
 } from "../lib/library.js";
+import { todayISO } from "../lib/format.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-300";
 const labelCls = "mb-1 block text-[12px] font-bold text-slate-500";
@@ -42,6 +44,25 @@ function FolderSelect({ folders, value, onChange, exclude, noneLabel = "Chưa ph
       <option value="">{noneLabel}</option>
       {flat.map((f) => <option key={f.id} value={f.id}>{"  ".repeat(f.depth)}{f.depth ? "└ " : ""}{f.name}</option>)}
     </select>
+  );
+}
+
+// Chọn khách + dự án của khách đó (dự án chỉ hiện khi đã chọn khách). value = { customer_id, project_id }.
+function LinkSelects({ value, onChange }) {
+  const { customerList = [], projects = [] } = useData() || {};
+  const custs = useMemo(() => [...customerList].filter((c) => c.active !== false || c.id === value.customer_id).sort((a, b) => String(a.name).localeCompare(String(b.name), "vi")), [customerList, value.customer_id]);
+  const projs = useMemo(() => projects.filter((p) => value.customer_id && p.customerId === value.customer_id), [projects, value.customer_id]);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div><label className={labelCls} htmlFor="link-cust">Thuộc khách <span className="font-medium text-slate-400">(tuỳ chọn)</span></label>
+        <select id="link-cust" className={inputCls} value={value.customer_id || ""} onChange={(e) => onChange({ customer_id: e.target.value || null, project_id: null })}>
+          <option value="">(không gắn khách)</option>{custs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select></div>
+      <div><label className={labelCls} htmlFor="link-proj">Dự án</label>
+        <select id="link-proj" className={inputCls} value={value.project_id || ""} disabled={!value.customer_id} onChange={(e) => onChange({ ...value, project_id: e.target.value || null })}>
+          <option value="">{value.customer_id ? "(cả khách, không riêng dự án)" : "(chọn khách trước)"}</option>{projs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select></div>
+    </div>
   );
 }
 
@@ -93,7 +114,7 @@ function SpecialRow({ icon: Icon, label, count, active, onClick, onDropDoc }) {
 }
 
 // ───────────── Thẻ tài liệu ─────────────
-function DocCard({ d, folderName, snippet, onOpen, onEdit, onDownload, onDelete }) {
+function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete }) {
   const k = KINDS[d.kind] || KINDS.txt;
   const Icon = d.kind === "html" ? FileCode2 : FileText;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
@@ -117,8 +138,9 @@ function DocCard({ d, folderName, snippet, onOpen, onEdit, onDownload, onDelete 
       </div>
       {snippet ? <p className="line-clamp-3 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] leading-snug text-slate-600">{tidySnippet(snippet)}</p>
         : d.excerpt ? <p className="line-clamp-2 text-[12px] leading-snug text-slate-500">{d.excerpt}</p> : null}
-      {(folderName || (d.tags || []).length > 0) && (
+      {(folderName || customerName || (d.tags || []).length > 0) && (
         <div className="flex flex-wrap gap-1.5">
+          {customerName && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-600"><Users size={11} />{customerName}</span>}
           {folderName && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500"><Folder size={11} />{folderName}</span>}
           {(d.tags || []).map((t) => <span key={t} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-600"><Tag size={10} />{t}</span>)}
         </div>
@@ -173,14 +195,14 @@ function Reader({ id, folders, onClose, onEdit, onDownload, onAsk }) {
 // ───────────── Sửa thông tin tài liệu ─────────────
 function EditDocModal({ id, folders, onClose, onSaved }) {
   const [doc, setDoc] = useState(null), [err, setErr] = useState(""), [saving, setSaving] = useState(false);
-  const [f, setF] = useState({ title: "", folder_id: null, tags: "", note: "", content: "" });
+  const [f, setF] = useState({ title: "", folder_id: null, tags: "", note: "", content: "", customer_id: null, project_id: null });
   useEffect(() => {
     let alive = true;
     libGet(id).then((r) => {
       if (!alive) return;
       if (r.error || !r.data) { setErr(r.error?.message || "Không tìm thấy tài liệu"); return; }
       setDoc(r.data);
-      setF({ title: r.data.title, folder_id: r.data.folder_id, tags: (r.data.tags || []).join(", "), note: r.data.note || "", content: r.data.content || "" });
+      setF({ title: r.data.title, folder_id: r.data.folder_id, tags: (r.data.tags || []).join(", "), note: r.data.note || "", content: r.data.content || "", customer_id: r.data.customer_id || null, project_id: r.data.project_id || null });
     });
     return () => { alive = false; };
   }, [id]);
@@ -190,7 +212,7 @@ function EditDocModal({ id, folders, onClose, onSaved }) {
     const title = f.title.trim();
     if (!title) { setErr("Tên tài liệu không được để trống"); return; }
     setSaving(true); setErr("");
-    const patch = { title, folder_id: f.folder_id || null, tags: parseTags(f.tags), note: f.note.trim() };
+    const patch = { title, folder_id: f.folder_id || null, tags: parseTags(f.tags), note: f.note.trim(), customer_id: f.customer_id || null, project_id: f.customer_id ? f.project_id || null : null };
     if (editable && f.content !== doc.content) {
       if (new Blob([f.content]).size > MAX_FILE_BYTES) { setSaving(false); setErr("Nội dung quá lớn"); return; }
       patch.content = f.content; patch.plain = toPlain(doc.kind, f.content); patch.size_bytes = new Blob([f.content]).size;
@@ -206,6 +228,7 @@ function EditDocModal({ id, folders, onClose, onSaved }) {
         <div className="space-y-3">
           <div><label className={labelCls}>Tên tài liệu</label><input className={inputCls} value={f.title} onChange={(e) => set("title")(e.target.value)} maxLength={200} /></div>
           <div><label className={labelCls}>Thư mục</label><FolderSelect folders={folders} value={f.folder_id} onChange={set("folder_id")} /></div>
+          <LinkSelects value={{ customer_id: f.customer_id, project_id: f.project_id }} onChange={(v) => setF((p) => ({ ...p, ...v }))} />
           <div><label className={labelCls}>Nhãn (cách nhau bằng dấu phẩy)</label><input className={inputCls} value={f.tags} onChange={(e) => set("tags")(e.target.value)} placeholder="vd: kế toán, báo cáo tháng, excel" /></div>
           <div><label className={labelCls}>Ghi chú</label><textarea rows={2} className={inputCls} value={f.note} onChange={(e) => set("note")(e.target.value)} placeholder="Tóm tắt 1 dòng: tài liệu này dùng để làm gì?" /></div>
           {editable && <div><label className={labelCls}>Nội dung ({KINDS[doc.kind].label})</label><textarea rows={12} className={`${inputCls} font-mono text-[12px]`} value={f.content} onChange={(e) => set("content")(e.target.value)} /></div>}
@@ -221,8 +244,8 @@ function EditDocModal({ id, folders, onClose, onSaved }) {
 }
 
 // ───────────── Tạo ghi chú / dán nội dung ─────────────
-function PasteModal({ folders, defaultFolder, onClose, onCreated }) {
-  const [f, setF] = useState({ title: "", kind: "md", content: "", folder_id: defaultFolder || null });
+function PasteModal({ folders, defaultFolder, defaultCustomer, onClose, onCreated }) {
+  const [f, setF] = useState({ title: "", kind: "md", content: "", folder_id: defaultFolder || null, customer_id: defaultCustomer || null, project_id: null });
   const [err, setErr] = useState(""), [saving, setSaving] = useState(false);
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const save = async () => {
@@ -231,7 +254,7 @@ function PasteModal({ folders, defaultFolder, onClose, onCreated }) {
     const size = new Blob([content]).size;
     if (size > MAX_FILE_BYTES) { setErr(`Quá lớn (${fmtSize(size)})`); return; }
     setSaving(true); setErr("");
-    const r = await libAddDoc({ title: f.title.trim() || extractTitle(f.kind, content, "Ghi chú mới"), kind: f.kind, content, plain: toPlain(f.kind, content), size_bytes: size, source: null, folder_id: f.folder_id || null });
+    const r = await libAddDoc({ title: f.title.trim() || extractTitle(f.kind, content, "Ghi chú mới"), kind: f.kind, content, plain: toPlain(f.kind, content), size_bytes: size, source: null, folder_id: f.folder_id || null, customer_id: f.customer_id || null, project_id: f.customer_id ? f.project_id || null : null });
     setSaving(false);
     if (r.error) { setErr(r.error.message); return; }
     onCreated(r.data); onClose();
@@ -248,6 +271,7 @@ function PasteModal({ folders, defaultFolder, onClose, onCreated }) {
           </div>
         </div>
         <div><label className={labelCls}>Thư mục</label><FolderSelect folders={folders} value={f.folder_id} onChange={set("folder_id")} /></div>
+        <LinkSelects value={{ customer_id: f.customer_id, project_id: f.project_id }} onChange={(v) => setF((p) => ({ ...p, ...v }))} />
         <div><label className={labelCls}>Nội dung</label><textarea rows={12} autoFocus className={`${inputCls} font-mono text-[12px]`} value={f.content} onChange={(e) => set("content")(e.target.value)} placeholder="Dán hoặc gõ nội dung vào đây…" /></div>
         {err && <div className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] text-rose-600">{err}</div>}
         <div className="flex gap-2">
@@ -305,7 +329,7 @@ const loadChat = () => { try { const v = JSON.parse(localStorage.getItem(CHAT_KE
 const MD_CLS = "text-[14px] leading-relaxed text-slate-700 [&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_h1]:text-[15px] [&_h2]:text-[15px] [&_h3]:text-[14px] [&_h1]:font-extrabold [&_h2]:font-extrabold [&_h3]:font-bold [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_a]:text-indigo-600 [&_a]:underline [&_table]:text-[12px] [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_th]:border [&_th]:border-slate-200 [&_th]:px-2";
 const SUGGEST = ["Tóm tắt các ý chính trong phạm vi này", "Có tài liệu nào nói về chi phí và cách tiết kiệm không?", "Liệt kê các bước quan trọng cần làm theo tài liệu"];
 
-function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onIndex }) {
+function ChatPanel({ docs, folders, customers = [], scope, setScope, onOpenDoc, indexing, onIndex }) {
   const [msgs, setMsgs] = useState(loadChat);
   const [q, setQ] = useState(""), [busy, setBusy] = useState(false), [model, setModel] = useState("gpt-4o-mini");
   const endRef = useRef(null);
@@ -318,11 +342,16 @@ function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onInde
       const ids = descendantIds(folders, scope.id), f = folders.find((x) => x.id === scope.id);
       return { label: f ? `Thư mục: ${f.name}` : "Thư mục", folderIds: [...ids], list: docs.filter((d) => d.folder_id && ids.has(d.folder_id)) };
     }
+    if (scope.type === "customer") {
+      const list = docs.filter((d) => d.customer_id === scope.id), c = customers.find((x) => x.id === scope.id);
+      return { label: c ? `Khách: ${c.name}` : "Khách", docIds: list.map((d) => d.id), list };
+    }
     return { label: "Cả kho", list: docs };
-  }, [scope, docs, folders]);
+  }, [scope, docs, folders, customers]);
   const pendingInScope = unindexedDocs(info.list), pendingAll = unindexedDocs(docs);
-  const scopeValue = scope.type === "folder" ? `f:${scope.id}` : scope.type === "doc" ? `d:${scope.id}` : "all";
-  const onScope = (v) => setScope(v === "all" ? { type: "all" } : v.startsWith("f:") ? { type: "folder", id: v.slice(2) } : { type: "doc", id: v.slice(2) });
+  const scopeValue = scope.type === "folder" ? `f:${scope.id}` : scope.type === "doc" ? `d:${scope.id}` : scope.type === "customer" ? `k:${scope.id}` : "all";
+  const onScope = (v) => setScope(v === "all" ? { type: "all" } : v.startsWith("f:") ? { type: "folder", id: v.slice(2) } : v.startsWith("k:") ? { type: "customer", id: v.slice(2) } : { type: "doc", id: v.slice(2) });
+  const custWithDocs = useMemo(() => customers.filter((c) => docs.some((d) => d.customer_id === c.id)), [customers, docs]);
   const flat = useMemo(() => flattenTree(folders), [folders]);
 
   const send = async (text) => {
@@ -331,7 +360,7 @@ function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onInde
     const history = msgs.filter((m) => m.role === "user" || m.role === "assistant").slice(-6).map((m) => ({ role: m.role, content: m.content }));
     setMsgs((p) => [...p, { id: `u${Date.now()}`, role: "user", content: question }]);
     setQ(""); setBusy(true);
-    const r = await libAsk({ question, history, folderIds: info.folderIds, docId: info.docId, model });
+    const r = await libAsk({ question, history, folderIds: info.folderIds, docId: info.docId, docIds: info.docIds, model });
     setBusy(false);
     setMsgs((p) => [...p, r.error ? { id: `e${Date.now()}`, role: "error", content: r.error }
       : { id: `a${Date.now()}`, role: "assistant", content: r.data.answer || "(Không có câu trả lời)", sources: r.data.sources || [], usage: r.data.usage, scope: info.label }]);
@@ -346,6 +375,7 @@ function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onInde
           <select id="chat-scope" className={inputCls} value={scopeValue} onChange={(e) => onScope(e.target.value)}>
             <option value="all">Cả kho ({docs.length} tài liệu)</option>
             {flat.map((f) => <option key={f.id} value={`f:${f.id}`}>{"  ".repeat(f.depth)}{f.depth ? "└ " : ""}{f.name}</option>)}
+            {custWithDocs.length > 0 && <optgroup label="Theo khách">{custWithDocs.map((c) => <option key={c.id} value={`k:${c.id}`}>Khách: {c.name} ({docs.filter((d) => d.customer_id === c.id).length})</option>)}</optgroup>}
             {scope.type === "doc" && <option value={`d:${scope.id}`}>{info.label}</option>}
           </select>
         </div>
@@ -422,6 +452,8 @@ function ChatPanel({ docs, folders, scope, setScope, onOpenDoc, indexing, onInde
 // ───────────── Trang chính ─────────────
 export default function LibraryPage() {
   const data = useData() || {};
+  const [sp, setSp] = useSearchParams();
+  const customerList = data.customerList || [];
   const say = (text) => data.setToast && data.setToast({ text });
   const [folders, setFolders] = useState([]), [docs, setDocs] = useState([]);
   const [state, setState] = useState("loading"), [errMsg, setErrMsg] = useState("");
@@ -431,6 +463,7 @@ export default function LibraryPage() {
   const [folderModal, setFolderModal] = useState(null), [pasteOpen, setPasteOpen] = useState(false);
   const [busy, setBusy] = useState(null), [notice, setNotice] = useState(null), [dragOver, setDragOver] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set());
+  const [customerF, setCustomerF] = useState(() => sp.get("khach") || "all"); // lọc theo khách (mở từ thẻ khách: ?khach=<mã>)
   const [view, setView] = useState("docs"), [scope, setScope] = useState({ type: "all" }), [indexing, setIndexing] = useState(0), [aiErr, setAiErr] = useState("");
   const fileRef = useRef(null);
 
@@ -464,13 +497,41 @@ export default function LibraryPage() {
   const counts = useMemo(() => countDocs(folders, docs), [folders, docs]);
   const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
   const searching = fold(query).trim().length >= 2;
-  const visible = useMemo(() => sortDocs(filterDocs(docs, { folderId, folders, query, hits }), sort), [docs, folderId, folders, query, hits, sort]);
+  const visible = useMemo(() => sortDocs(filterDocs(docs, { folderId, folders, query, hits, customerId: customerF }), sort), [docs, folderId, folders, query, hits, sort, customerF]);
   const current = folderById.get(folderId) || null;
   const path = current ? folderPath(folders, current.id) : [];
   const totalBytes = useMemo(() => docs.reduce((s, d) => s + (d.size_bytes || 0), 0), [docs]);
   const realFolder = current ? current.id : null;
 
   const toggle = (id) => setExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // Ý HAY HÔM NAY: 1 ý áp dụng được rút từ 1 đoạn tài liệu, cố định theo ngày (cùng ý với thông báo 7h sáng); bấm "Đổi ý khác" để xem ý khác. Nhớ trong ngày để không gọi AI lại mỗi lần mở trang.
+  const [idea, setIdea] = useState(null), [ideaBusy, setIdeaBusy] = useState(false), [ideaN, setIdeaN] = useState(0);
+  const hasIndexed = docs.some((d) => d.indexed_at);
+  useEffect(() => {
+    if (state !== "ok" || !hasIndexed) return undefined;
+    const day = todayISO(), seed = ideaN ? `${day}#${ideaN}` : day, key = `qws_lib_idea:${seed}`;
+    try { const c = JSON.parse(localStorage.getItem(key) || "null"); if (c?.idea) { setIdea(c); return undefined; } } catch { /* bỏ qua */ }
+    let alive = true;
+    setIdeaBusy(true);
+    libIdea(seed).then((r) => {
+      if (!alive) return;
+      setIdeaBusy(false);
+      if (r.data?.idea) { setIdea(r.data); try { localStorage.setItem(key, JSON.stringify(r.data)); } catch { /* bỏ qua */ } }
+    });
+    return () => { alive = false; };
+  }, [state, hasIndexed, ideaN]);
+  const custName = useMemo(() => new Map(customerList.map((c) => [c.id, c.name])), [customerList]);
+  const custOptions = useMemo(() => { // chỉ khách đang có tài liệu (và khách đang được lọc), xếp theo tên
+    const ids = new Set(docs.map((d) => d.customer_id).filter(Boolean));
+    if (customerF !== "all" && customerF !== "none") ids.add(customerF);
+    return [...ids].map((id) => ({ id, name: custName.get(id) || "(khách đã xoá)" })).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  }, [docs, customerF, custName]);
+  // Mở thẳng 1 tài liệu từ link (?doc=<mã>) — dùng ở thẻ khách trong Khách & Dự án
+  useEffect(() => {
+    const id = sp.get("doc");
+    if (id) { setReader(id); const n = new URLSearchParams(sp); n.delete("doc"); setSp(n, { replace: true }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const upsertDoc = (row) => setDocs((p) => [row, ...p.filter((x) => x.id !== row.id)]);
 
   // Nạp tài liệu vào hỏi đáp AI (cắt đoạn + tạo vector ở máy chủ). Chạy nền sau khi tải lên / sửa nội dung; lỗi hiện ở banner, không chặn việc khác.
@@ -505,7 +566,7 @@ export default function LibraryPage() {
         const p = await prepareFile(file, folder);
         if (p.error) { failed.push(`${file.name} — ${p.error}`); continue; }
         if (known.some((d) => d.source === file.name && d.size_bytes === file.size && (d.folder_id || null) === (folder || null))) { skipped.push(file.name); continue; }
-        const r = await libAddDoc(p.row);
+        const r = await libAddDoc(customerF !== "all" && customerF !== "none" ? { ...p.row, customer_id: customerF } : p.row); // đang lọc theo 1 khách → tài liệu mới gắn luôn khách đó
         if (r.error) { failed.push(`${file.name} — ${r.error.message}`); continue; }
         ok++; known.push(r.data); upsertDoc(r.data); addedIds.push(r.data.id);
       } catch (e) { failed.push(`${file.name} — ${e?.message || e}`); }
@@ -600,7 +661,7 @@ export default function LibraryPage() {
         </div>
       )}
       {state === "ok" && view === "chat" && (
-        <ChatPanel docs={docs} folders={folders} scope={scope} setScope={setScope} indexing={indexing} onIndex={indexDocs} onOpenDoc={(id) => setReader(id)} />
+        <ChatPanel docs={docs} folders={folders} customers={customerList} scope={scope} setScope={setScope} indexing={indexing} onIndex={indexDocs} onOpenDoc={(id) => setReader(id)} />
       )}
       {notice && !busy && (
         <div className="flex items-start gap-3 rounded-xl bg-white p-3.5 text-[13px] shadow-sm ring-1 ring-slate-100">
@@ -633,6 +694,21 @@ export default function LibraryPage() {
           <button type="button" onClick={() => { setState("loading"); load(); }} className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
       )}
 
+      {state === "ok" && view === "docs" && (idea || ideaBusy) && (
+        <div className="card flex items-start gap-3 !p-4" aria-label="Ý hay hôm nay">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-500"><Lightbulb size={20} /></div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Ý hay hôm nay</div>
+            {idea ? <>
+              <p className="mt-0.5 text-[14.5px] font-semibold leading-snug text-slate-800">{idea.idea}</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+                {idea.doc_id && <button type="button" onClick={() => setReader(idea.doc_id)} className="max-w-full truncate font-semibold text-indigo-600 hover:underline">Từ: {idea.doc_title}</button>}
+                <button type="button" onClick={() => setIdeaN((n) => n + 1)} disabled={ideaBusy} className="flex items-center gap-1 font-semibold text-slate-400 hover:text-slate-700 disabled:opacity-50"><RefreshCw size={12} className={ideaBusy ? "animate-spin" : ""} /> Đổi ý khác</button>
+              </div>
+            </> : <div className="mt-1.5 h-4 w-3/4 animate-pulse rounded bg-slate-100" />}
+          </div>
+        </div>
+      )}
       {state === "ok" && view === "docs" && (
         <div className="grid gap-4 lg:grid-cols-[250px_minmax(0,1fr)]">
           {/* Thư mục: điện thoại = ô chọn, máy tính = cây */}
@@ -664,6 +740,12 @@ export default function LibraryPage() {
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên, nhãn hoặc nội dung…" aria-label="Tìm tài liệu" className={`${inputCls} pl-9 pr-9`} />
                 {query && <button type="button" onClick={() => setQuery("")} aria-label="Xoá ô tìm" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={14} /></button>}
               </div>
+              {(custOptions.length > 0 || customerList.length > 0) && (
+                <select aria-label="Lọc theo khách" value={customerF} onChange={(e) => setCustomerF(e.target.value)} className={`${inputCls} sm:w-48`}>
+                  <option value="all">Mọi khách</option><option value="none">Chưa gắn khách</option>
+                  {custOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
               <select aria-label="Sắp xếp" value={sort} onChange={(e) => setSort(e.target.value)} className={`${inputCls} sm:w-44`}>
                 <option value="new">Mới cập nhật</option><option value="old">Cũ nhất</option><option value="name">Tên A → Z</option><option value="size">Dung lượng lớn</option>
               </select>
@@ -708,7 +790,7 @@ export default function LibraryPage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {visible.map((d) => (
-                  <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null}
+                  <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null} customerName={d.customer_id ? custName.get(d.customer_id) || null : null}
                     folderName={folderId === "all" || searching || folderId === "none" ? (d.folder_id ? folderById.get(d.folder_id)?.name : null) : null}
                     onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
                     onDownload={async () => { const r = await libGet(d.id); if (r.data) downloadDoc(r.data); else say("Không tải được file"); }} />
@@ -722,7 +804,7 @@ export default function LibraryPage() {
 
       {reader && <Reader id={reader} folders={folders} onClose={() => setReader(null)} onEdit={(id) => { setReader(null); setEditing(id); }} onDownload={downloadDoc} onAsk={(d) => { setReader(null); setScope({ type: "doc", id: d.id }); setView("chat"); }} />}
       {editing && <EditDocModal id={editing} folders={folders} onClose={() => setEditing(null)} onSaved={(row) => { upsertDoc(row); if (!row.indexed_at) indexDocs([row.id]); }} />}
-      {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); indexDocs([r.id]); }} />}
+      {pasteOpen && <PasteModal folders={folders} defaultFolder={realFolder} defaultCustomer={customerF !== "all" && customerF !== "none" ? customerF : null} onClose={() => setPasteOpen(false)} onCreated={(r) => { upsertDoc(r); say("Đã tạo tài liệu"); indexDocs([r.id]); }} />}
       {folderModal && (
         <FolderModal mode={folderModal.mode} folder={folderModal.folder} parentId={folderModal.parentId} folders={folders} onClose={() => setFolderModal(null)}
           onSaved={(f) => { setFolders((p) => [...p.filter((x) => x.id !== f.id), f]); if (folderModal.mode === "new") { setFolderId(f.id); setQuery(""); } }} />

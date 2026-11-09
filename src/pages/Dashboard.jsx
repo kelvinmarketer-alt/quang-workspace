@@ -16,6 +16,7 @@ import { useReportData, buildBrandRows, missingMeasure } from "../lib/reports.js
 import { MeasureList } from "../components/MeasureAlerts.jsx";
 import TodayPanel, { useToday } from "../components/today/TodayPanel.jsx";
 import { BrandAvatar } from "../components/ReportKit.jsx";
+import YearProgress from "../components/YearProgress.jsx";
 
 const KLBL = { ads: "Quảng cáo", web: "Website", fp: "Fanpage", seo: "SEO" };
 const TLBL = { g: "đạt chỉ tiêu", w: "theo dõi", b: "dưới chỉ tiêu", n: "không chạy kênh này" };
@@ -194,6 +195,8 @@ export default function Dashboard() {
       </div>
 
       {more && <TodayPanel />}
+
+      <YearProgress />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
         <div className={`card p-4 md:col-span-2 ${coinOk ? "lg:col-span-5" : "lg:col-span-8"}`}>
