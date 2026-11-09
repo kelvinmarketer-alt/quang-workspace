@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library,
 } from "lucide-react";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
@@ -66,6 +66,7 @@ const NAV = [
   { to: "/website", label: "Hiệu quả Website", icon: Globe, feat: "web", group: "biz" },
   { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, feat: "fanpage", group: "biz" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
+  { to: "/kho-tai-lieu", label: "Kho tài liệu", icon: Library, ownerOnly: true, group: "me" },
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "sys" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
 ];
@@ -73,7 +74,7 @@ const NAV = [
 const NAV_GROUPS = [
   { id: "biz", label: "Kinh doanh", order: ["/", "/bao-cao", "/khach-hang"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
-  { id: "me", label: "Cá nhân", order: ["/cong-viec", "/tai-khoan"] },
+  { id: "me", label: "Cá nhân", order: ["/cong-viec", "/kho-tai-lieu", "/tai-khoan"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
 ];
 const navKey = (n) => n.key || n.to || n.href;

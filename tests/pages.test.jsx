@@ -43,6 +43,7 @@ const PAGES = [
   ["Website", () => import("../src/pages/Web.jsx"), "/website"],
   ["Fanpage", () => import("../src/pages/Fanpage.jsx"), "/fanpage"],
   ["Cài đặt", () => import("../src/pages/Settings.jsx"), "/cai-dat"],
+  ["Kho tài liệu", () => import("../src/pages/Library.jsx"), "/kho-tai-lieu"],
 ];
 
 describe("mở từng trang không lỗi", () => {

@@ -17,6 +17,7 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Web = lazy(() => import("./pages/Web.jsx"));
 const Fanpage = lazy(() => import("./pages/Fanpage.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
+const Library = lazy(() => import("./pages/Library.jsx"));
 
 const PageLoading = () => (
   <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>
@@ -33,7 +34,7 @@ function firstAllowed(perms) {
 }
 
 export default function App() {
-  const { perms = [] } = useData();
+  const { perms = [], isOwner, ownerId } = useData();
   const { pathname } = useLocation();
   // Chặn theo quyền: trang có feature mà mình không được cấp → chuyển về trang đầu tiên được phép.
   const g = (path, el) => {
@@ -64,6 +65,8 @@ export default function App() {
         <Route path="/website" element={g("/website", <Web />)} />
         <Route path="/fanpage" element={g("/fanpage", <Fanpage />)} />
         <Route path="/tai-khoan" element={<Vault />} />
+        {/* 09/11: Kho tài liệu — CHỈ CHỦ (dữ liệu nằm bảng riêng, RLS chỉ chính chủ) */}
+        <Route path="/kho-tai-lieu" element={isOwner || !ownerId ? <Library /> : <Navigate to={firstAllowed(perms)} replace />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
       </Suspense>
