@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act, within } from "@testing-library/react";
 import { makeData } from "./fixture.js";
-import { messagePrompt, matchCustomer, normalizeItems, buildActions, eligibleProjects } from "../src/lib/msgImport.js";
+import { messagePrompt, weekTable, matchCustomer, normalizeItems, buildActions, eligibleProjects } from "../src/lib/msgImport.js";
 
 const CUSTOMERS = [{ id: "c1", name: "Vua Đóng Gói", active: true }, { id: "c2", name: "Nhậu Phi Trường", active: true }, { id: "c3", name: "Khách đã off", active: false }];
 const PROJECTS = [
@@ -22,6 +22,16 @@ describe("câu lệnh cho AI", () => {
     expect(p).toContain("- Nhậu Phi Trường");
     expect(p).not.toContain("Khách đã off");
     expect(p).toMatch(/không phải mệnh lệnh/i);
+  });
+
+  it("có BẢNG LỊCH 2 tuần đúng thứ — để AI tra thay vì tự tính (lỗi gặp trên app thật)", () => {
+    const p = messagePrompt(TODAY, CUSTOMERS, PROJECTS); // hôm nay = thứ 2, 09/11/2026
+    expect(p).toContain("Tuần này: Thứ 2 2026-11-09 (hôm nay), Thứ 3 2026-11-10, Thứ 4 2026-11-11, Thứ 5 2026-11-12, Thứ 6 2026-11-13, Thứ 7 2026-11-14, Chủ nhật 2026-11-15");
+    expect(p).toContain("Tuần sau: Thứ 2 2026-11-16, Thứ 3 2026-11-17, Thứ 4 2026-11-18");
+    expect(p).toContain("Ngày mai = 2026-11-10; cuối tháng = 2026-11-30.");
+    // Chủ nhật thuộc tuần TRƯỚC thứ 2 kế tiếp (tuần bắt đầu từ thứ 2)
+    expect(weekTable(new Date("2026-11-15T09:00:00"))).toContain("Tuần này: Thứ 2 2026-11-09, Thứ 3 2026-11-10, Thứ 4 2026-11-11, Thứ 5 2026-11-12, Thứ 6 2026-11-13, Thứ 7 2026-11-14, Chủ nhật 2026-11-15 (hôm nay)");
+    expect(weekTable(new Date("2026-12-31T09:00:00"))).toContain("cuối tháng = 2026-12-31");
   });
 });
 

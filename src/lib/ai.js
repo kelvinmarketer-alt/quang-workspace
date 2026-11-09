@@ -100,7 +100,7 @@ export async function aiReadMessage({ text, customers = [], projects = [], apiKe
   const msg = String(text || "").trim();
   if (!msg) throw new Error("Chưa có tin nhắn để đọc.");
   const body = {
-    model: model || "gpt-4o-mini",
+    model: model || "gpt-4.1-mini", // 09/11: gpt-4o-mini bỏ sót yêu cầu + tính sai ngày khi thử thật; gpt-4.1-mini bám câu lệnh tốt hơn, vẫn rất rẻ (vài đồng / lần)
     messages: [{ role: "system", content: messagePrompt(today, customers, projects) }, { role: "user", content: msg.slice(0, 6000) }],
     response_format: { type: "json_object" },
     temperature: 0,
