@@ -1,6 +1,7 @@
 // Gọi OpenAI API (client-side) để bóc tách dữ liệu từ ảnh / đoạn chat
 // thành khách hàng + dự án + đợt thu. Key/model truyền vào từ store.settings.
 import { supabase } from "./supabase.js";
+import { messagePrompt } from "./msgImport.js";
 
 // Gọi OpenAI QUA MÁY CHỦ (edge fn qws-ai): key nằm ở kho riêng của chủ, trình duyệt không thấy; có ghi chi phí.
 // Máy chủ chưa bật (chưa deploy) → chủ còn key trong máy thì gọi thẳng như cũ.
@@ -92,6 +93,28 @@ export async function aiImport({ text, imageDataUrl, apiKey, model }) {
     customers: Array.isArray(parsed.customers) ? parsed.customers : [],
     projects: Array.isArray(parsed.projects) ? parsed.projects : [],
   };
+}
+
+// Đọc TIN NHẮN khách (dán vào) → các mục thô { type: "task" | "payment", ... } (09/11). Xử lý/làm sạch ở lib/msgImport.js.
+export async function aiReadMessage({ text, customers = [], projects = [], apiKey, model, today = new Date() }) {
+  const msg = String(text || "").trim();
+  if (!msg) throw new Error("Chưa có tin nhắn để đọc.");
+  const body = {
+    model: model || "gpt-4o-mini",
+    messages: [{ role: "system", content: messagePrompt(today, customers, projects) }, { role: "user", content: msg.slice(0, 6000) }],
+    response_format: { type: "json_object" },
+    temperature: 0,
+  };
+  const res = await chat(body, (apiKey || "").trim(), "message");
+  if (!res.ok) {
+    let m = res.status + "";
+    try { const e = await res.json(); m = e.error?.message || JSON.stringify(e); } catch { /* bỏ qua */ }
+    throw new Error(m);
+  }
+  const data = await res.json();
+  let parsed;
+  try { parsed = JSON.parse(data.choices?.[0]?.message?.content || "{}"); } catch { throw new Error("Không đọc được kết quả từ AI."); }
+  return Array.isArray(parsed.items) ? parsed.items : [];
 }
 
 // Đọc ảnh chụp màn hình chứa CÁC LINK / TÀI NGUYÊN online -> { resources: [{title,url,type}] } bằng OpenAI Vision.

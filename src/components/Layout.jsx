@@ -6,6 +6,7 @@ import {
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
 const CommandPalette = lazy(() => import("./CommandPalette.jsx"));
+const IcalSync = lazy(() => import("./IcalSync.jsx")); // 09/11: đẩy lịch sang link đăng ký (chỉ chủ đã bật)
 const PomodoroPill = lazy(() => import("./PomodoroPill.jsx"));
 const KBD_HINT = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl K";
 import { lunarInfo } from "../lib/lunar.js";
@@ -623,7 +624,7 @@ export default function Layout({ children }) {
         <main className="qws-full w-full"><PushPrompt /><HubTabs items={navItems} />{children}</main>
       </div>
       <BottomBar items={navItems} onMenu={() => setOpen(true)} />
-      <Suspense fallback={null}><PomodoroPill /><CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} /></Suspense>
+      <Suspense fallback={null}><PomodoroPill /><CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} /><IcalSync /></Suspense>
     </div>
   );
 }

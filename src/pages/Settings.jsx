@@ -11,6 +11,7 @@ import AiUsage from "../components/AiUsage.jsx";
 import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendTest } from "../lib/push.js";
 import { ask } from "../components/ConfirmDialog.jsx";
 import PeoplePerms from "../components/PeoplePerms.jsx";
+import IcalSettings from "../components/IcalSettings.jsx";
 
 // Phân quyền người dùng: src/components/PeoplePerms.jsx (hồ sơ quyền tập trung — module · phạm vi dự án · vai trò Văn phòng AI)
 
@@ -167,6 +168,7 @@ export default function Settings() {
       {cur === "connect" && isOwner && <>
         <AiImport />
         <AiUsage />
+        <IcalSettings />
         {/* 01/11: kết nối quản trị THEO THƯƠNG HIỆU (Khách & Dự án → thẻ khách → Kết nối đo lường). Ở đây chỉ còn danh sách tổng (nâng cao) + script Google Ads */}
         <details className="card group !p-0">
           <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-extrabold text-slate-800">

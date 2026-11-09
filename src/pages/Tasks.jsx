@@ -1,10 +1,11 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft } from "lucide-react";
+import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft, Sparkles } from "lucide-react";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
+import MessageImportModal from "../components/MessageImport.jsx";
 import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { parseQuickTask, dayLabel } from "../lib/quickTask.js";
 import { usePomo, startPomo, stopPomo, dayCount } from "../lib/pomodoro.js";
@@ -112,6 +113,7 @@ function TaskBoard() {
   const custName = (id) => customerList.find((c) => c.id === id)?.name;
   const canW = canEdit ? canEdit("tasks") : true; // tài khoản phụ chỉ có quyền Xem → ẩn nút ghi
   const [modal, setModal] = useState(null); // null | {} (thêm) | task (sửa)
+  const [msgOpen, setMsgOpen] = useState(false); // 09/11: dán tin nhắn khách → việc / hẹn / khoản thu
   const [filter, setFilter] = useState("all");
   const [hi, setHi] = useState(null); // việc đang được làm nổi (mở từ ô tìm kiếm)
   const [sp, setSp] = useSearchParams();
@@ -166,9 +168,14 @@ function TaskBoard() {
           </div>
           <div className="text-sm font-semibold text-slate-400">{done}/{tasks.length} hoàn thành · hôm nay <span className="text-rose-500">🍅 {dayCount()}</span> = {Math.floor(dayCount() * 25 / 60)}h{String(dayCount() * 25 % 60).padStart(2, "0")} tập trung</div>
           {canW ? (
-            <button onClick={() => setModal({})} className="ml-auto flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
-              <SlidersHorizontal size={15} /> Form chi tiết
-            </button>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button onClick={() => setMsgOpen(true)} className="flex items-center gap-2 rounded-xl bg-indigo-50 px-3 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100">
+                <Sparkles size={15} /> Dán tin nhắn khách
+              </button>
+              <button onClick={() => setModal({})} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+                <SlidersHorizontal size={15} /> Form chi tiết
+              </button>
+            </div>
           ) : (
             <span className="ml-auto shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>
           )}
@@ -217,6 +224,7 @@ function TaskBoard() {
         })}
       </div>
 
+      {msgOpen && <MessageImportModal onClose={() => setMsgOpen(false)} />}
       {modal && <TaskModal initial={modal.id || modal.title ? modal : null} onClose={() => setModal(null)} onSave={(data) => (modal.id ? updateTask(modal.id, data) : addTask(data))} />}
     </div>
   );
