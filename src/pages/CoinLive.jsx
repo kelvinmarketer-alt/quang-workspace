@@ -53,11 +53,39 @@ function useBotLog() {
   return (what, reason = "") => setSettings({ paperBotLog: [{ at: Date.now(), by: myEmail || "", what: `Bot thật: ${what}`, src: "bot", ...(reason ? { reason: String(reason).slice(0, 200) } : {}) }, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
 }
 
+// Giá hiện tại của các cặp đang có lệnh chờ / vị thế: WebSocket Binance Futures (miniTicker), gom cập nhật 1 lần/giây.
+// Bot báo trạng thái mỗi ~30 giây nên giá phải lấy trực tiếp từ sàn để nhảy theo thời gian thực.
+function useLivePx(syms, enabled) {
+  const [px, setPx] = useState({}), [on, setOn] = useState(false);
+  const key = syms.join(",");
+  useEffect(() => {
+    if (!enabled || !key) { setOn(false); return undefined; }
+    const list = key.split(","), buf = {}; let dirty = false, ws = null, stop = false, retry = 0, timer = null;
+    const connect = () => {
+      ws = new WebSocket(`wss://fstream.binance.com/market/stream?streams=${list.map((x) => `${x.toLowerCase()}@miniTicker`).join("/")}`);
+      ws.onopen = () => { retry = 0; setOn(true); };
+      ws.onmessage = (m) => { try { const d = JSON.parse(m.data)?.data; if (d?.s && +d.c > 0) { buf[d.s] = +d.c; dirty = true; } } catch { /* bỏ qua gói lỗi */ } };
+      ws.onclose = () => { setOn(false); if (!stop) timer = setTimeout(connect, Math.min(30000, 2000 * 2 ** retry++)); };
+      ws.onerror = () => { try { ws.close(); } catch { /* đã đóng */ } };
+    };
+    connect();
+    const tick = setInterval(() => {
+      if (!dirty) return; dirty = false;
+      setPx((o) => { const n = { ...o }; for (const k of Object.keys(buf)) { const v = buf[k], c = o[k]; n[k] = { c: v, dir: c && v !== c.c ? (v > c.c ? 1 : -1) : c?.dir || 0 }; } return n; });
+    }, 1000);
+    const vis = () => { if (!document.hidden && ws && ws.readyState > 1) { clearTimeout(timer); retry = 0; connect(); } };
+    document.addEventListener("visibilitychange", vis);
+    return () => { stop = true; clearTimeout(timer); clearInterval(tick); document.removeEventListener("visibilitychange", vis); try { ws?.close(); } catch { /* đã đóng */ } };
+  }, [enabled, key]);
+  return { px, on };
+}
+
 export default function CoinLive({ active }) {
   const { settings = {}, isOwner } = useData(); // thành viên có quyền "Bot thật": CHỈ XEM — mọi nút điều khiển chỉ chủ
   const logBot = useBotLog();
   const session = settings.paperBot || null;
   const [st, setSt] = useState(null), [cmd, setCmd] = useState(null), [hist, setHist] = useState(null), [err, setErr] = useState(""), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false);
+  const { px: livePx, on: pxOn } = useLivePx(Object.keys(st?.active || {}), active && !!st);
   const [slow, setSlow] = useState(false), [note, setNote] = useState(null), [closing, setClosing] = useState(false), [closeTxt, setCloseTxt] = useState("");
   const load = async () => {
     try {
@@ -216,10 +244,10 @@ export default function CoinLive({ active }) {
       </div>
 
       <Card className="!p-3">
-        <Title>Lệnh chờ & vị thế ({act.length})</Title>
+        <Title right={pxOn && act.length ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh chờ & vị thế ({act.length})</Title>
         {act.length ? <div className="space-y-1.5">{act.map((a) => (
           <div key={a.sym} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
-            <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge><span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span>{a.stage === "open" && st.posPnl?.[a.sym] && <b className={`tabular-nums ${tone(st.posPnl[a.sym].uPnl)}`}>{fmtUsdSigned(st.posPnl[a.sym].uPnl)}</b>}</div>
+            <div className="flex items-center gap-2">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge>{livePx[a.sym] && <span className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 font-extrabold tabular-nums ${livePx[a.sym].dir > 0 ? "bg-emerald-50 text-emerald-700" : livePx[a.sym].dir < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-700"}`} title="Giá hiện tại trên sàn (Binance Futures), cập nhật mỗi giây">Giá {fmtPx(livePx[a.sym].c)}{livePx[a.sym].dir !== 0 && <span className="text-[10px]">{livePx[a.sym].dir > 0 ? "▲" : "▼"}</span>}{pxOn && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}</span>}<span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span>{a.stage === "open" && st.posPnl?.[a.sym] && <b className={`tabular-nums ${tone(st.posPnl[a.sym].uPnl)}`}>{fmtUsdSigned(st.posPnl[a.sym].uPnl)}</b>}</div>
             <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">Cắt lỗ {fmtPx(a.sl)}</span><span className="text-emerald-600">{a.sw3 ? `Chốt 1/3 ${fmtPx(a.tp)}${a.partDone ? " ✓" : ""}` : `Chốt lời ${fmtPx(a.tp)}`}</span><span>Khối lượng {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400">huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
             {a.sw3 && a.stage === "open" && (() => { const g = sw3Targets(a.lim, a.side, a.dist); return g && <div className="mt-1 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums"><span className="text-emerald-600"><Term k="tpExp">Chốt lời kỳ vọng</Term> <b>{fmtPx(g.avg)}</b> (+{SW3_TP.avgR.toLocaleString("vi-VN")}R)</span><span className="text-teal-600"><Term k="tpFar" align="right" /> {fmtPx(g.far)} (+{SW3_TP.farR.toLocaleString("vi-VN")}R)</span></div>; })()}
             {a.sw3 && a.stage === "open" && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt mức chốt lời cố định — cắt lỗ trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm cắt lỗ.</div>}
