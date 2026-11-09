@@ -505,7 +505,7 @@ export default function LibraryPage() {
 
   const toggle = (id) => setExpanded((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   // Ý HAY HÔM NAY: 1 ý áp dụng được rút từ 1 đoạn tài liệu, cố định theo ngày (cùng ý với thông báo 7h sáng); bấm "Đổi ý khác" để xem ý khác. Nhớ trong ngày để không gọi AI lại mỗi lần mở trang.
-  const [idea, setIdea] = useState(null), [ideaBusy, setIdeaBusy] = useState(false), [ideaN, setIdeaN] = useState(0);
+  const [idea, setIdea] = useState(null), [ideaBusy, setIdeaBusy] = useState(false), [ideaN, setIdeaN] = useState(0), [ideaTick, setIdeaTick] = useState(0);
   const hasIndexed = docs.some((d) => d.indexed_at);
   useEffect(() => {
     if (state !== "ok" || !hasIndexed) return undefined;
@@ -519,7 +519,15 @@ export default function LibraryPage() {
       if (r.data?.idea) { setIdea(r.data); try { localStorage.setItem(key, JSON.stringify(r.data)); } catch { /* bỏ qua */ } }
     });
     return () => { alive = false; };
-  }, [state, hasIndexed, ideaN]);
+  }, [state, hasIndexed, ideaN, ideaTick]);
+  // Tài liệu nguồn của ý đang hiện đã bị xoá → bỏ ý đó (cả bản nhớ trong ngày) và lấy ý khác từ các tài liệu còn lại. Tìm thử trên app thật: thẻ vẫn hiện "Từ: <tài liệu đã xoá>".
+  const ideaGone = !!idea && state === "ok" && !docs.some((d) => d.id === idea.doc_id);
+  useEffect(() => {
+    if (!ideaGone) return;
+    const day = todayISO();
+    try { localStorage.removeItem(`qws_lib_idea:${ideaN ? `${day}#${ideaN}` : day}`); } catch { /* bỏ qua */ }
+    setIdea(null); setIdeaTick((t) => t + 1);
+  }, [ideaGone]); // eslint-disable-line react-hooks/exhaustive-deps
   const custName = useMemo(() => new Map(customerList.map((c) => [c.id, c.name])), [customerList]);
   const custOptions = useMemo(() => { // chỉ khách đang có tài liệu (và khách đang được lọc), xếp theo tên
     const ids = new Set(docs.map((d) => d.customer_id).filter(Boolean));
@@ -694,7 +702,7 @@ export default function LibraryPage() {
           <button type="button" onClick={() => { setState("loading"); load(); }} className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 font-bold text-white"><RefreshCw size={14} /> Thử lại</button></div></Card>
       )}
 
-      {state === "ok" && view === "docs" && (idea || ideaBusy) && (
+      {state === "ok" && view === "docs" && hasIndexed && !ideaGone && (idea || ideaBusy) && (
         <div className="card flex items-start gap-3 !p-4" aria-label="Ý hay hôm nay">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-500"><Lightbulb size={20} /></div>
           <div className="min-w-0 flex-1">

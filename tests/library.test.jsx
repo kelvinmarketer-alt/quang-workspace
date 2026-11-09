@@ -626,6 +626,23 @@ describe("ý hay mỗi ngày", () => {
     expect(screen.getByLabelText("Ý hay hôm nay")).toBeTruthy();
   });
 
+  it("xoá tài liệu nguồn của ý đang hiện → bỏ ý đó và bản nhớ trong ngày, lấy ý khác (lỗi thấy trên app thật)", async () => {
+    const withIdx = DOCS.map((d) => ({ ...d, indexed_at: "2026-11-09T00:00:00Z" }));
+    L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: withIdx, error: null });
+    L.libIdea.mockResolvedValueOnce({ data: { idea: "Ý từ tài liệu sắp xoá.", doc_id: "d3", doc_title: "Hướng dẫn SEO" } }).mockResolvedValueOnce({ data: { idea: "Ý từ tài liệu còn lại.", doc_id: "d2", doc_title: "Ghi chú quản lý kho" } });
+    await mount();
+    await sleep(30);
+    expect(screen.getByLabelText("Ý hay hôm nay").textContent).toContain("Ý từ tài liệu sắp xoá.");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    L.libDeleteDoc.mockResolvedValue({ error: null });
+    await act(async () => { fireEvent.click(screen.getByLabelText("Xoá Hướng dẫn SEO")); });
+    await sleep(60);
+    const card = screen.getByLabelText("Ý hay hôm nay");
+    expect(card.textContent).not.toContain("sắp xoá");
+    expect(card.textContent).toContain("Ý từ tài liệu còn lại.");
+    expect(localStorage.getItem(`qws_lib_idea:${todayISO()}`)).toContain("còn lại"); // bản nhớ là ý mới, không phải ý của tài liệu đã xoá
+  });
+
   it("'Đổi ý khác' gọi với seed khác; chưa có tài liệu nào được nạp → không gọi AI, không hiện thẻ", async () => {
     L.libLoad.mockResolvedValue({ folders: FOLDERS, docs: DOCS.map((d) => ({ ...d, indexed_at: "2026-11-09T00:00:00Z" })), error: null });
     L.libIdea.mockResolvedValueOnce({ data: { idea: "Ý thứ nhất.", doc_id: "d2", doc_title: "Ghi chú" } }).mockResolvedValueOnce({ data: { idea: "Ý thứ hai.", doc_id: "d1", doc_title: "Báo cáo" } });
