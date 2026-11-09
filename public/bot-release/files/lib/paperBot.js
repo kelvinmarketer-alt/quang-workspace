@@ -770,11 +770,12 @@ async function runSW3(session, onProgress) {
     // D: lệnh chờ cách giá đóng limAtr ATR, chờ wBars nến M15; không khớp → vào giá mở nến H4 kế (thị trường). Sau đó quản lý trên nến M15,
     // dời SL theo đáy/đỉnh 20 nến H4 đã đóng tính tới lúc đóng nến M15 đang xét (y như bộ kiểm thử bt10/sw.mjs).
     let hP = 0; const hAt = (t) => { while (hP + 1 < n && K[hP + 1][0] + step <= t) hP++; while (hP > 0 && K[hP][0] + step > t) hP--; return K[hP][0] + step <= t ? hP : -1; };
-    const simLim = (i, side) => {
+    const simLim = (i, side, onlyFill = false) => {
       const T = K[i][0] + step, A = atr[i], lp = C[i] - side * P.limAtr * A, risk = P.stopAtr * A;
       let k0 = 0; { let lo = 0, hi = KM15.length; while (lo < hi) { const m = (lo + hi) >> 1; if (KM15[m][0] < T) lo = m + 1; else hi = m; } k0 = lo; }
       let e = -1, en = 0, mk = false;
       for (let k = k0; k < Math.min(k0 + wBars, KM15.length); k++) { const b = KM15[k]; if (side === 1 ? b[3] <= lp : b[2] >= lp) { e = k; en = side === 1 ? Math.min(lp, b[1]) : Math.max(lp, b[1]); mk = true; break; } }
+      if (e < 0 && onlyFill) return null; // nến tín hiệu vừa đóng, chưa chạm điểm vào → vẫn là lệnh chờ
       if (e < 0) { e = k0 + wBars; en = e < KM15.length ? KM15[e][1] : i + 2 < n ? O[i + 2] : C[Math.min(i + 1, n - 1)]; } // hết 4 giờ → vào thị trường
       const entryAt = e < KM15.length ? KM15[e][0] : T + wBars * M15, feeIn = (mk ? maker : taker) * en, p1 = en + side * P.partR * risk;
       let stop = en - side * risk, half = false, booked = 0, pFee = 0, mfe = 0, mae = 0;
@@ -790,6 +791,13 @@ async function runSW3(session, onProgress) {
       }
       return { entryAt, exitAt: null, en, mk, risk, p1, stop, half, feeR: (feeIn + pFee) / risk, mfe, mae, open: true };
     };
+    const limTrade = (base, why3, i, side, m) => { // lệnh D từ kết quả simLim (dùng cho cả nến cũ lẫn nến tín hiệu vừa đóng đã chạm điểm vào)
+      const last = C[n - 1], fundR = (fund[coin] ? fund[coin](m.entryAt, m.open ? until : m.exitAt) : 0) * side * m.en / m.risk;
+      const tr = { ...base, why3: `${why3} · ${m.mk ? "khớp lệnh chờ M15" : "không hồi → vào thị trường sau 4 giờ"}`, fill: m.mk ? "lim" : "mkt", entryAt: m.entryAt, entry: m.en, sl: m.en - side * m.risk, curSl: m.stop, tp: m.p1, risk: m.risk, rr: P.partR, beAtR: 0, part: m.half ? P.partR : 0, pf: PF, be: m.half,
+        exitAt: m.exitAt, exit: m.open ? null : m.px, reason: m.open ? "Đang mở" : sw3Reason({ entry: m.en, side, risk: m.risk, part: m.half }, m.stop), r: m.open ? null : m.gross - fundR, fundR, feeR: m.feeR + fundR, mfe: m.mfe, mae: m.mae, last, lastBarAt: K[n - 1][0] };
+      tr.uR = m.open ? uRof(tr.part, tr.entry, last, side, tr.risk, tr.feeR, PF) : null;
+      return tr;
+    };
     let occ = -1, nSig = 0, realTo = -Infinity; // realTo: lệnh thật (D) của mã đang mở tới lúc nào — mỗi mã 1 lệnh
     for (let i = 300; i < n; i++) {
       if (i <= occ) continue;
@@ -803,6 +811,10 @@ async function runSW3(session, onProgress) {
       if (live) nSig++;
       if (i === n - 1) { // nến tín hiệu VỪA đóng → SW3: vào lệnh thị trường ở nến kế · D: lệnh chờ 0,25 ATR, hết 4 giờ thì vào thị trường (bot thật làm y vậy)
         const risk = P.stopAtr * atr[i];
+        if (live && !fail && P.entry === "lim" && K[i][0] + step >= realTo) { // 09/11: giá đã chạm điểm vào (nến M15 sau khi đóng nến H4) → ghi lệnh Demo NGAY, không đợi nến H4 kế (trước đây testnet có lệnh còn Demo chỉ hiện "lệnh chờ" tới 4 giờ)
+          const m = simLim(i, side, true);
+          if (m) { realTo = m.open ? Infinity : m.exitAt; trades.push(limTrade(base, why3, i, side, m)); break; }
+        }
         if (live && !fail && P.entry === "lim") { const lp = C[i] - side * P.limAtr * atr[i], fb = K[i][0] + step + (P.limH || 4) * 3600000; pending.push({ ...base, market: false, limEntry: true, lim: lp, risk, sl: lp - side * risk, tp: lp + side * P.partR * risk, partR: P.partR, partFrac: PF, fallbackAt: fb, until: fb + 3600000 }); }
         else if (live && !fail) pending.push({ ...base, market: true, lim: C[i], risk, sl: C[i] - side * risk, tp: C[i] + side * P.partR * risk, partR: P.partR, partFrac: PF, until: K[i][0] + 2 * step });
         else if (live) { bump(failKey(fail)); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: fail }); }
@@ -815,11 +827,7 @@ async function runSW3(session, onProgress) {
       if (lim) { // D: lệnh thật vào bằng lệnh chờ M15 (khác lệnh bóng dùng để tính nhịp)
         if (K[i][0] + step < realTo) { bump("đang có lệnh mã này"); skipLog.push({ t: K[i][0], coin, tf: "4h", setup: "SW3", side, why: "đang có lệnh mã này" }); continue; }
         const m = simLim(i, side); realTo = m.open ? Infinity : m.exitAt;
-        const fundR = (fund[coin] ? fund[coin](m.entryAt, m.open ? until : m.exitAt) : 0) * side * m.en / m.risk;
-        const tr = { ...base, why3: `${why3} · ${m.mk ? "khớp lệnh chờ M15" : "không hồi → vào thị trường sau 4 giờ"}`, fill: m.mk ? "lim" : "mkt", entryAt: m.entryAt, entry: m.en, sl: m.en - side * m.risk, curSl: m.stop, tp: m.p1, risk: m.risk, rr: P.partR, beAtR: 0, part: m.half ? P.partR : 0, pf: PF, be: m.half,
-          exitAt: m.exitAt, exit: m.open ? null : m.px, reason: m.open ? "Đang mở" : sw3Reason({ entry: m.en, side, risk: m.risk, part: m.half }, m.stop), r: m.open ? null : m.gross - fundR, fundR, feeR: m.feeR + fundR, mfe: m.mfe, mae: m.mae, last, lastBarAt: K[n - 1][0] };
-        tr.uR = m.open ? uRof(tr.part, tr.entry, last, side, tr.risk, tr.feeR, PF) : null;
-        trades.push(tr); continue;
+        trades.push(limTrade(base, why3, i, side, m)); continue;
       }
       const toT = t.open ? until : K[t.x][0] + step, fundR = (fund[coin] ? fund[coin](K[t.e][0], toT) : 0) * side * t.en / t.risk;
       const r = t.open ? null : t.gross - fundR;
