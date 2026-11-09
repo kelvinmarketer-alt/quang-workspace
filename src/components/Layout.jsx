@@ -486,8 +486,23 @@ function BottomBar({ items, onMenu }) {
   const list = BAR.map((k) => merged.find((n) => navKey(n) === k)).filter(Boolean).slice(0, 4);
   const short = { "/": "Tổng quan", "/bao-cao": "Báo cáo", "/khach-hang": "Khách", "/ke-toan": "Kế toán" };
   const loc = useLocation();
+  // 09/11: iPhone — mở bàn phím / bảng chọn (ô chọn, ô gõ) xong, thanh menu dưới bị "kẹt" lơ lửng giữa màn hình. Ẩn thanh khi đang chọn/gõ,
+  // đóng xong thì nhích trang 1px để trình duyệt tính lại khung nhìn.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const edit = (el) => !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+    let t;
+    const on = (e) => { clearTimeout(t); if (edit(e.target)) setTyping(true); };
+    const off = (e) => {
+      if (!edit(e.target)) return;
+      clearTimeout(t);
+      t = setTimeout(() => { if (edit(document.activeElement)) return; setTyping(false); const y = window.scrollY; window.scrollTo(window.scrollX, y + 1); window.scrollTo(window.scrollX, y); }, 250);
+    };
+    document.addEventListener("focusin", on); document.addEventListener("focusout", off);
+    return () => { clearTimeout(t); document.removeEventListener("focusin", on); document.removeEventListener("focusout", off); };
+  }, []);
   return (
-    <nav aria-label="Menu nhanh" className="no-print fixed inset-x-0 bottom-0 z-30 flex justify-around rounded-t-3xl bg-slate-900 px-2 pt-1.5 lg:hidden" style={{ paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))" }}>
+    <nav aria-label="Menu nhanh" className={`no-print fixed inset-x-0 bottom-0 z-30 ${typing ? "hidden" : "flex"} justify-around rounded-t-3xl bg-slate-900 px-2 pt-1.5 lg:hidden`} style={{ paddingBottom: "calc(6px + env(safe-area-inset-bottom, 0px))" }}>
       {list.map((n) => (
         <NavLink key={navKey(n)} to={n.to} end={n.end} className={({ isActive }) => `flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10.5px] font-semibold ${isActive || n.match?.some((t) => inPath(loc.pathname, t)) ? "rail-active bg-indigo-400/25 text-white" : "text-slate-400"}`}>
           <n.icon size={20} />{short[navKey(n)] || n.label}

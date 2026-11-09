@@ -167,8 +167,42 @@ async function todayPnl() {
   return rows.filter((r) => ["REALIZED_PNL", "COMMISSION", "FUNDING_FEE"].includes(r.incomeType)).reduce((s, r) => s + Number(r.income), 0);
 }
 
+// 09/11: sửa lệnh phương án D đã lỡ đặt bằng luật cũ (place()) — không có cờ sw3, TP = NaN → báo "Lỗi đặt SL/TP … triggerPrice"
+//  · lệnh chờ chưa khớp: huỷ + bỏ dấu "đã xử lý" → lần quét sau đặt lại ĐÚNG (SW3-D, rủi ro riêng theo mã)
+//  · đã khớp (một phần) / đang mở: chuyển tại chỗ thành lệnh SW3-D (SL 2 ATR giữ nguyên, đặt lại SL + chốt 1/3)
+async function fixLegacyD(posMap) {
+  for (const [symbol, a] of Object.entries(S.active)) {
+    if (a.sw3 || a.test || a.tf !== "4h" || !a.signalAt || DRY) continue;
+    try {
+      const amt = Math.abs(posMap[symbol] || 0);
+      const o = a.stage === "entry" ? await ex.order(symbol, a.entryCid).catch(() => null) : null;
+      if (a.stage === "entry" && !(Number(o?.executedQty) > 0) && !amt) {
+        await ex.cancel(symbol, a.entryCid).catch(() => {});
+        delete S.active[symbol]; delete S.handled[a.id];
+        log(`🔧 ${a.coin} lệnh chờ đặt nhầm luật cũ → huỷ, đặt lại đúng phương án D`); journal({ ev: "skip", why: "đặt lại đúng phương án D", id: a.id, coin: a.coin, tf: a.tf, setup: a.setup, side: a.side });
+        continue;
+      }
+      const info = await ex.symbolInfo(symbol), cs = cfg.sw || {}, partR = cs.partR ?? 0.75, partFrac = cs.partFrac ?? 1 / 3;
+      let k = 1;
+      if (MODE === "testnet") { const [t, m] = await Promise.all([ex.markPrice(symbol), fetch(`${MAIN}/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json())]); k = Number(t.markPrice) / Number(m.markPrice); if (!(k > 0.9 && k < 1.1)) k = 1; }
+      const dist = Math.abs(a.lim - a.sl), fb = a.until - 3600000;
+      Object.assign(a, { sw3: true, limEntry: true, setup: "SW3", k, dist, partR, partFrac, tp: ex.roundTo(a.lim + a.side * partR * dist, info.tick), fallbackAt: fb, entryBarAt: a.signalAt + TFS["4h"].ms, slSeq: 0 });
+      log(`🔧 ${a.coin} chuyển sang luật phương án D tại chỗ (SL ${a.sl}, chốt 1/3 ${a.tp})`);
+      if (a.stage === "open" && amt > 0) {
+        await ex.cancelAll(symbol).catch(() => {});
+        for (const x of await ex.openAlgo(symbol)) await ex.cancelAlgo(x.algoId).catch(() => {});
+        a.filledQty = amt; a.q1 = ex.roundTo(amt * partFrac, info.step, "floor"); a.partDone = false; a.riskUsd = amt * dist;
+        await protectSW3(symbol, a);
+        note(`🔧 Sửa lệnh ${dirStr(a.side)} ${a.coin} H4`, `Đã đặt lại SL ${px(a.sl)} + chốt 1/3 ở ${px(a.tp)} theo đúng phương án D · ${modeLbl(a.mode)}`, `qws-bot-fix-${a.id}`);
+      }
+      save();
+    } catch (e) { log(`Lỗi sửa lệnh cũ ${symbol}:`, e.message); }
+  }
+}
+
 // ---------- 1) Quản lý lệnh đang chờ / vị thế đang mở ----------
 async function manage(posMap) {
+  await fixLegacyD(posMap);
   for (const [symbol, a] of Object.entries(S.active)) {
     try {
       const amt = posMap[symbol] || 0;
@@ -273,7 +307,7 @@ async function scan(posMap, halted) {
     if (p.blocked) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label}: ${p.blocked} (giống Demo)`); journal({ ev: "skip", why: p.blocked, ...p, tags: undefined }); continue; }
     const why = (S.active[symbol] || posMap[symbol] ? `đã có lệnh/vị thế ${p.coin}` : Object.keys(S.active).length >= MAX_OPEN ? `đủ ${MAX_OPEN} lệnh` : null);
     if (why) { log(`· Bỏ tín hiệu ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"}: ${why}`); journal({ ev: "skip", why, ...p, tags: undefined }); continue; }
-    try { await (p.market ? placeSW3(p, symbol) : place(p, symbol)); } catch (e) { log(`Lỗi đặt lệnh ${p.coin}:`, e.message); journal({ ev: "error", msg: e.message, ...p }); note(`⚠ Lỗi đặt lệnh ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}`, `${e.message} · ${modeLbl()}`, `qws-bot-err-${p.id}`); }
+    try { await (p.market || p.limEntry ? placeSW3(p, symbol) : place(p, symbol)); } catch (e) { log(`Lỗi đặt lệnh ${p.coin}:`, e.message); journal({ ev: "error", msg: e.message, ...p }); note(`⚠ Lỗi đặt lệnh ${p.coin} ${TFS[p.tf].label} ${dirStr(p.side)}`, `${e.message} · ${modeLbl()}`, `qws-bot-err-${p.id}`); }
   }
   if (!halted && cfg.strategy === "sw3" && appCfg.followOpen !== false) await followDemoOpen(raw, posMap);
   // dọn danh sách đã xử lý (> 2 ngày)
