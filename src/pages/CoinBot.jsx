@@ -788,8 +788,8 @@ export default function CoinBot({ active: visible = true }) {
           <div className="mt-2 grid grid-cols-3 items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-2 sm:flex sm:flex-wrap sm:gap-x-4">
             <span className="col-span-3 flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><span className={`h-2 w-2 rounded-full ${st[0]}`} /><Radio size={12} /> {st[1]}</span>
             {cfg.coins.map((c) => { const s = shown.current[c], fresh = s && Date.now() - s.at < 1500; return (
-              <span key={c} className={`truncate whitespace-nowrap rounded-md px-1.5 py-0.5 text-[12px] font-extrabold tabular-nums sm:text-[12.5px] transition-colors duration-500 ${fresh ? (s.dir > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") : "text-slate-800"}`}>
-                <span className="mr-1 text-[10.5px] font-bold text-slate-400">{c}</span>{s ? px(s.c) : "…"}{s?.dir ? <span className={s.dir > 0 ? "text-emerald-500" : "text-rose-500"}>{s.dir > 0 ? " ▲" : " ▼"}</span> : null}
+              <span key={c} className={`whitespace-nowrap rounded-md px-1 py-0.5 text-[11.5px] font-extrabold tabular-nums sm:px-1.5 sm:text-[12.5px] transition-colors duration-500 ${fresh ? (s.dir > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") : "text-slate-800"}`}>
+                <span className="mr-1 text-[10px] font-bold text-slate-400 sm:text-[10.5px]">{c}</span>{s ? px(s.c) : "…"}{s?.dir ? <span className={`hidden sm:inline ${s.dir > 0 ? "text-emerald-500" : "text-rose-500"}`}>{s.dir > 0 ? " ▲" : " ▼"}</span> : null}
               </span>
             ); })}
           </div>
