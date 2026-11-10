@@ -462,17 +462,17 @@ function LiveResults({ hist, st, session }) {
       )}
       <div className="divide-y divide-slate-100">{shown.slice(0, showN).map((t, i) => (
         <div key={`${t.id || i}-${t.exitAt || ""}`} className="px-1 py-2">
-          <div className="flex items-center gap-2 text-[12.5px]">
-            {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TF[t.tf] || t.tf}</span><span className="min-w-0 truncate text-slate-500">{setupName(t.setup)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[12.5px] sm:gap-2">
+            {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TF[t.tf] || t.tf}</span><span className="hidden min-w-0 truncate text-slate-500 sm:inline">{setupName(t.setup)}</span>
             {t.exitAt == null && <span className="shrink-0 rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
             <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${tone(t.r)}`}>{fmtR(t.r)}</span>
-            <span className={`w-[84px] shrink-0 text-right font-extrabold tabular-nums ${tone(t.pnl)}`}>{t.pnl == null ? "—" : fmtUsdSigned(t.pnl)}</span>
+            <span className={`shrink-0 text-right sm:w-[84px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{t.pnl == null ? "—" : fmtUsdSigned(t.pnl)}</span>
           </div>
-          <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
+          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] tabular-nums text-slate-500">
             <span>{dt(t.entryAt)} · {fmtPx(t.entry)} → {t.exit != null ? fmtPx(t.exit) : "…"}</span>
-            <span className="text-rose-500">Cắt lỗ {fmtPx(t.sl)}</span><span className="text-emerald-600">{t.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} {fmtPx(t.tp)}</span>
+            <span className="hidden text-rose-500 sm:inline">Cắt lỗ {fmtPx(t.sl)}</span><span className="hidden text-emerald-600 sm:inline">{t.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} {fmtPx(t.tp)}</span>
             {(t.reason || t.exitAt) && <span>{viReason(t.reason) || "Đóng"}{t.exitAt ? ` · ${dt(t.exitAt)}` : ""}</span>}
-            {t.riskUsd != null && <span className="text-slate-400">rủi ro {fmtUsd(t.riskUsd)}</span>}
+            {t.riskUsd != null && <span className="hidden text-slate-400 sm:inline">rủi ro {fmtUsd(t.riskUsd)}</span>}
           </div>
         </div>
       ))}</div>

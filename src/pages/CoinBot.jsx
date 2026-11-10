@@ -998,19 +998,19 @@ export default function CoinBot({ active: visible = true }) {
           )}
           <div className="divide-y divide-slate-100">{taken.slice(0, showN).map((t) => { const R = t.r ?? t.uR, dim = t.status === "skip" || t.status === "reject"; return (
             <button key={t.id} onClick={() => showOnChart(t)} className={`block w-full px-1 py-2 text-left hover:bg-slate-50 ${t.liveExit ? "bg-amber-50/60" : ""} ${focus?.id === t.id ? "bg-indigo-50/70" : ""}`}>
-              <div className="flex items-center gap-2 text-[12.5px]">
-                {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TFS[t.tf].label}</span><span className="truncate text-slate-500">{setupName(t.setup)}</span>
-                {t.status === "open" && <span className="rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
+              <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[12.5px] sm:gap-2">
+                {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TFS[t.tf].label}</span><span className="hidden min-w-0 truncate text-slate-500 sm:inline">{setupName(t.setup)}</span>
+                {t.status === "open" && <span className="shrink-0 rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
                 {t.reducedRisk && t.status !== "skip" && t.status !== "reject" && <span className="shrink-0 rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">rủi ro {fmtNum(cfg.streakRiskPct, 2, 0)}%</span>}
                 <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${dim ? "text-slate-400" : tone(R)}`}>{rr(R)}</span>
-                <span className={`w-[72px] shrink-0 text-right font-extrabold tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
+                <span className={`shrink-0 text-right font-extrabold sm:w-[72px] tabular-nums ${dim ? "text-slate-300" : tone(t.pnl)}`}>{dim ? "—" : usd(t.pnl)}</span>
               </div>
-              <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums text-slate-500">
-                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="text-rose-500">Cắt lỗ {px(t.sl)}</span><span className="text-emerald-600">{tpLbl(t)} {px(t.tp)}</span>
+              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] tabular-nums text-slate-500">
+                <span>{dt(t.entryAt)} · vào {px(t.entry)}</span><span className="hidden text-rose-500 sm:inline">Cắt lỗ {px(t.sl)}</span><span className="hidden text-emerald-600 sm:inline">{tpLbl(t)} {px(t.tp)}</span>
                 <span>{t.status === "skip" ? `bỏ: ${t.why}` : t.status === "reject" ? `loại: ${t.why} · nếu vào: ${viReason(t.reason)}` : t.exitAt ? `${viReason(t.reason)} @ ${px(t.exit)} · ${dt(t.exitAt)}${t.liveExit ? " (realtime)" : ""}` : `giá ${px(t.last)}`}</span>
               </div>
-              {t.why3 && <div className="mt-0.5 text-[11px] leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3} · <span className="font-semibold text-indigo-500">bấm để xem vì sao vào / vì sao đóng</span></div>}
-              {t.lesson && <div className="mt-0.5 text-[11px] leading-snug text-rose-700/80">Rút kinh nghiệm: {t.lesson}</div>}
+              {t.why3 && <div className="mt-0.5 hidden text-[11px] sm:block leading-snug text-slate-400">Tiêu chí lúc vào: {t.why3} · <span className="font-semibold text-indigo-500">bấm để xem vì sao vào / vì sao đóng</span></div>}
+              {t.lesson && <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-rose-700/80 sm:line-clamp-none">Rút kinh nghiệm: {t.lesson}</div>}
             </button>
           ); })}</div>
           {!taken.length && <div className="py-6 text-center text-[12px] text-slate-400">Chưa có lệnh nào.</div>}
