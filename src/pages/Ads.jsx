@@ -242,7 +242,7 @@ function AlertsPanel({ tick }) {
   const nHot = groups.filter((g) => g.hot).length;
   return (
     <Card>
-      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="hidden text-[11px] text-slate-400 sm:inline">(đã đẩy thông báo về app)</span><span className="ml-auto whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">{groups.length} tài khoản · {list.length} lần{nHot ? ` · ${nHot} cần xử lý` : ""}</span></div>
+      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="whitespace-nowrap text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="hidden text-[11px] text-slate-400 sm:inline">(đã đẩy thông báo về app)</span><span className="ml-auto whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">{groups.length} <span className="sm:hidden">TK</span><span className="hidden sm:inline">tài khoản · {list.length} lần</span>{nHot ? ` · ${nHot} cần xử lý` : ""}</span></div>
       <div className="space-y-1">{(all ? groups : groups.slice(0, 4)).map((g) => { const open = openG === g.name, x = g.items[0]; return (
         <div key={g.name} className={`rounded-xl px-2.5 py-1.5 ${g.hot ? "bg-rose-50/70" : "bg-slate-50"}`}>
           <button type="button" onClick={() => setOpenG(open ? null : g.name)} disabled={g.items.length < 2} className="flex w-full items-start gap-2 text-left text-xs">

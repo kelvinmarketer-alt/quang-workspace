@@ -514,11 +514,11 @@ function DebtPanel() {
                           <div className="contents sm:block sm:shrink-0 sm:text-right">
                             <div className="shrink-0 text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
                             {/* điện thoại: 2 nút xuống dòng riêng, chữ thông tin không bị cắt */}
-                            {canW && <div className="flex w-full justify-end gap-1.5 sm:mt-1 sm:w-auto">
-                              {lateDays(x) > 0 && <button onClick={() => remind(x)} className="rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title="Chép tin nhắn nhắc thanh toán để dán vào Zalo">Chép tin nhắc</button>}
-                              {lateDays(x) > 0 && <button onClick={() => updateInstallment(x.projectId, x.id, { snooze: !x.snooze })} className="rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title={x.snooze ? "Đưa lại vào danh sách cần thu hôm nay" : "Không nhắc ở Tổng quan nữa — công nợ vẫn giữ nguyên"}>{x.snooze ? "Nhắc lại" : "Tạm gác"}</button>}
-                              <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
-                              <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu một phần…</button>
+                            {canW && <div className="flex w-full flex-wrap justify-end gap-1.5 sm:mt-1 sm:w-auto">
+                              {lateDays(x) > 0 && <button onClick={() => remind(x)} className="whitespace-nowrap rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title="Chép tin nhắn nhắc thanh toán để dán vào Zalo">Chép tin nhắc</button>}
+                              {lateDays(x) > 0 && <button onClick={() => updateInstallment(x.projectId, x.id, { snooze: !x.snooze })} className="whitespace-nowrap rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title={x.snooze ? "Đưa lại vào danh sách cần thu hôm nay" : "Không nhắc ở Tổng quan nữa — công nợ vẫn giữ nguyên"}>{x.snooze ? "Nhắc lại" : "Tạm gác"}</button>}
+                              <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 whitespace-nowrap rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
+                              <button onClick={() => setCollect(x)} className="whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu một phần…</button>
                             </div>}
                           </div>
                         </div>

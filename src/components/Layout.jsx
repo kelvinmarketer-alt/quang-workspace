@@ -562,9 +562,10 @@ export default function Layout({ children }) {
     return () => window.removeEventListener("keydown", h);
   }, [navTo]);
   const li = lunarInfo(new Date());
-  const title = hubOf(loc.pathname)?.label || NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
+  const title0 = hubOf(loc.pathname)?.label || NAV.find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to) && n.to !== "/"))?.label
     || EXTRA_TITLES[loc.pathname]
     || (loc.pathname === "/" ? "Tổng quan" : "");
+  const title = title0 === "Công việc & Lịch" && navItems.some((n) => n.to === "/cong-viec" && n.label === "Lịch") ? "Lịch" : title0; // 10/11: chưa dùng Công việc → tiêu đề "Lịch"
 
   // 10/11: ô tìm kiếm ⌘K — chưa gõ thì hiện đúng các mục menu đã gộp; gõ chữ thì vẫn tìm được trang con, kèm tên mục cha
   const paletteMenu = useMemo(() => mergeHubs(navItems), [navItems]);
