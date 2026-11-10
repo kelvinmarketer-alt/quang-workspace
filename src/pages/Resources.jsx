@@ -137,6 +137,8 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
           <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Tài khoản</span><input value={f.username || ""} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} placeholder="Đăng nhập (nếu có)" autoComplete="off" /></label>
           <label className="block min-w-0 text-sm"><span className="mb-1 block font-semibold text-slate-600">Mật khẩu</span><input value={f.password || ""} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} placeholder="Mật khẩu (nếu có)" autoComplete="off" /></label>
         </div>
+        {/* 10/11: mật khẩu ở Tài nguyên không khoá PIN → nhắc nơi lưu an toàn hơn */}
+        <div className="-mt-1.5 mb-3 text-[11px] leading-snug text-slate-400">Mật khẩu ở đây <b>không khoá PIN</b>, nhân viên có quyền sửa Tài nguyên xem được. Mật khẩu chỉ mình anh dùng nên lưu ở <b>Kho → Tài khoản &amp; Thẻ</b>.</div>
         <label className="mb-4 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Ghi chú</span><input value={f.note || ""} onChange={(e) => setF({ ...f, note: e.target.value })} className={inputCls} /></label>
         <button onClick={save} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg">Lưu</button>
       </div>

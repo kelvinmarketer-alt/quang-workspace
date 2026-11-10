@@ -412,7 +412,17 @@ function PinBar({ hasPin, setVaultPin, lockVault }) {
 }
 
 export default function Vault() {
-  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId, vaultLocked, vaultHasPin, vaultPrivate, unlockVault, setVaultPin, removeVaultPin, lockVault } = useData();
+  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId, vaultLocked, vaultHasPin, vaultPrivate, unlockVault, setVaultPin, removeVaultPin, lockVault, resources = [], updateResource, customerList = [], setToast } = useData();
+  // 10/11: mật khẩu đang nằm ở Tài nguyên (không khoá PIN) → chủ bấm 1 lần để chuyển về đây. Tài nguyên giữ lại link + tên đăng nhập, bỏ mật khẩu.
+  const resPass = isOwner ? resources.filter((r) => (r.password || "").trim()) : [];
+  const moveResPass = async () => {
+    if (!resPass.length || !updateResource) return;
+    if (!(await ask(`Chuyển ${resPass.length} mật khẩu từ Tài nguyên sang Tài khoản & Thẻ?\nSau khi chuyển: mật khẩu được khoá bằng PIN và CHỈ anh xem được — tài khoản phụ không còn thấy các mật khẩu này trong Tài nguyên (link và tên đăng nhập vẫn giữ).`))) return;
+    const cn = Object.fromEntries(customerList.map((c) => [c.id, c.name]));
+    addVaultItems(resPass.map((r) => ({ type: "app", title: [r.title || "Tài khoản", cn[r.customerId]].filter(Boolean).join(" · "), username: r.username || "", password: r.password, url: r.url || "", note: [r.note, "Chuyển từ Tài nguyên"].filter(Boolean).join(" · ") })));
+    resPass.forEach((r) => updateResource(r.id, { password: "" }));
+    setToast?.({ text: `Đã chuyển ${resPass.length} mật khẩu sang Tài khoản & Thẻ`, at: Date.now() });
+  };
   const canW = isOwner || !ownerId; // ghi = chủ (store đã chặn owner-only)
   const [tab, setTab] = useState("all");
   const [q, setQ] = useState("");
@@ -459,6 +469,12 @@ export default function Vault() {
       </div>
 
       {vaultPrivate && <PinBar hasPin={vaultHasPin} setVaultPin={setVaultPin} lockVault={lockVault} />}
+      {resPass.length > 0 && vaultHasPin && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-[12.5px] text-indigo-800">
+          <span className="min-w-0 flex-1"><b>{resPass.length} mật khẩu đang lưu ở Tài nguyên</b> — không khoá PIN, tài khoản phụ có quyền sửa Tài nguyên xem được.</span>
+          <button type="button" onClick={moveResPass} className="shrink-0 rounded-xl bg-indigo-600 px-3 py-2 text-[12.5px] font-bold text-white hover:bg-indigo-700">Chuyển về đây</button>
+        </div>
+      )}
       {/* 01/11: chưa đặt PIN → khoá cả kho (không xem / thêm được) cho tới khi đặt xong */}
       {vaultPrivate && !vaultHasPin ? <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Đặt PIN ở trên để mở kho. Các mục đang có sẽ được mã hoá ngay khi lưu PIN.</div> : <>
 
