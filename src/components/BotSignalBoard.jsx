@@ -106,11 +106,12 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
                           <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "MUA" : "BÁN"}</span>
                           <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{plan.market && !t ? "VÀO NGAY" : label}</span>
                           <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
-                          <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums">
+                          {t && <b className={`ml-auto tabular-nums sm:hidden ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b>}
+                          <span className="flex w-full flex-wrap gap-x-3 tabular-nums sm:ml-auto sm:w-auto">
                             <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
                             <span className="text-rose-600">Cắt lỗ <b>{fmtPx(plan.sl)}</b></span>
                             <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} <b>{fmtPx(plan.tp)}</b></span>
-                            {t ? <b className={plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
+                            {t ? <b className={`hidden sm:inline ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
                           </span>
                         </> : <>
                           <Clock size={12} className="shrink-0 text-slate-400" />

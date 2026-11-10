@@ -640,9 +640,9 @@ export default function Web() {
       )}
       {(<>
         {sites?.length > 0 && <WebAnswer sites={sites} sums={sums} sk={sk} tot={tot} />}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick], ["Người dùng", tot.users, tot.pUsers, Users], ["Chuyển đổi", tot.conv, tot.pConv, Target]].map(([l, c, p, I]) => (
-            <div key={l} className="card px-3 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><I size={11} className="shrink-0" /> <span className="leading-tight">{l}<span className="hidden sm:inline"> · tất cả web</span></span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+            <div key={l} className="card min-w-0 px-2.5 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400 sm:tracking-wide"><I size={11} className="hidden shrink-0 sm:block" /> <span className="truncate leading-tight">{l}<span className="hidden sm:inline"> · tất cả web</span></span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
           ))}
         </div>
         {!sites ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : sites.length === 0 ? (

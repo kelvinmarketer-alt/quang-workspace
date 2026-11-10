@@ -173,7 +173,7 @@ export default function Settings() {
         <details className="card group !p-0">
           <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-extrabold text-slate-800">
             <Plug size={16} className="text-indigo-500" /> Tất cả tài khoản quảng cáo (nâng cao)
-            <span className="ml-auto text-[11.5px] font-medium text-slate-400 group-open:hidden">Gắn / thêm kết nối theo thương hiệu: Khách & Dự án → thẻ khách → Kết nối đo lường</span>
+            <span className="ml-auto hidden text-[11.5px] font-medium text-slate-400 group-open:hidden sm:inline">Gắn / thêm kết nối theo thương hiệu: Khách & Dự án → thẻ khách → Kết nối đo lường</span>
           </summary>
           <div className="border-t border-slate-100 p-1"><AdsAccounts /></div>
         </details>

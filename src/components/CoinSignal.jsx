@@ -184,13 +184,13 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
 
   return (
     <Card className={`!p-3 sm:!p-4 transition-opacity ${stale ? "opacity-40" : ""}`}>
-      <button onClick={toggle} className="flex w-full items-center gap-2 text-left">
+      <button onClick={toggle} className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-left">
         <Gauge size={16} className="shrink-0 text-cyan-500" />
-        <span className="text-[13px] font-extrabold uppercase tracking-wide text-slate-800">Điểm kỹ thuật</span>
-        <span className="rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-700">{market === "mt5" ? sym : `${sym}/USDT`} · {tfLabel}</span>
-        {!open && <span className="text-[12px] font-extrabold" style={{ color }}>{word} {strength}%</span>}
+        <span className="whitespace-nowrap text-[13px] font-extrabold uppercase tracking-wide text-slate-800">Điểm kỹ thuật</span>
+        <span className="whitespace-nowrap rounded-md border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[10.5px] font-bold text-cyan-700">{market === "mt5" ? sym : `${sym}/USDT`} · {tfLabel}</span>
+        {!open && <span className="order-last w-full whitespace-nowrap pl-6 text-[12px] font-extrabold sm:order-none sm:w-auto sm:pl-0" style={{ color }}>{word} {strength}%</span>}
         <span className="ml-auto hidden text-[11px] font-semibold text-slate-400 sm:inline">chỉ đọc chỉ báo — không phải tín hiệu bot</span>
-        <ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition sm:ml-0 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="mt-3 space-y-3">

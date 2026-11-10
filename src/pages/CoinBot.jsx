@@ -762,8 +762,8 @@ export default function CoinBot({ active: visible = true }) {
               : <button onClick={stop} className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-[12px] font-bold text-white"><Square size={12} /> Dừng</button>}
           </div>
         </div>
-        <div className="mt-1 text-[11.5px] text-slate-500">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join("/")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => { setEditTfs([...cfg.tfs]); setEditCoins((v) => (v ? null : [...cfg.coins])); }} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa ▴" : "Thêm/sửa cặp & khung ▾"}</button></>}
+        <div className="mt-1 text-[11.5px] text-slate-500 [overflow-wrap:anywhere]">
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => { setEditTfs([...cfg.tfs]); setEditCoins((v) => (v ? null : [...cfg.coins])); }} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa ▴" : "Thêm/sửa cặp & khung ▾"}</button></>}
           {editCoins && (
             <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
               <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Cặp bot giao dịch (Demo + bot thật)</div>
@@ -785,10 +785,10 @@ export default function CoinBot({ active: visible = true }) {
           {res && busy && <span className="text-slate-400"> · đang hiện kết quả lúc {dt(res.at)}</span>}
         </div>
         {active && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-2">
-            <span className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><span className={`h-2 w-2 rounded-full ${st[0]}`} /><Radio size={12} /> {st[1]}</span>
+          <div className="mt-2 grid grid-cols-3 items-center gap-x-2 gap-y-1 border-t border-slate-100 pt-2 sm:flex sm:flex-wrap sm:gap-x-4">
+            <span className="col-span-3 flex items-center gap-1.5 text-[11px] font-bold text-slate-500"><span className={`h-2 w-2 rounded-full ${st[0]}`} /><Radio size={12} /> {st[1]}</span>
             {cfg.coins.map((c) => { const s = shown.current[c], fresh = s && Date.now() - s.at < 1500; return (
-              <span key={c} className={`rounded-md px-1.5 py-0.5 text-[12.5px] font-extrabold tabular-nums transition-colors duration-500 ${fresh ? (s.dir > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") : "text-slate-800"}`}>
+              <span key={c} className={`truncate whitespace-nowrap rounded-md px-1.5 py-0.5 text-[12px] font-extrabold tabular-nums sm:text-[12.5px] transition-colors duration-500 ${fresh ? (s.dir > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700") : "text-slate-800"}`}>
                 <span className="mr-1 text-[10.5px] font-bold text-slate-400">{c}</span>{s ? px(s.c) : "…"}{s?.dir ? <span className={s.dir > 0 ? "text-emerald-500" : "text-rose-500"}>{s.dir > 0 ? " ▲" : " ▼"}</span> : null}
               </span>
             ); })}
@@ -906,11 +906,14 @@ export default function CoinBot({ active: visible = true }) {
           <Card className="!p-3">
             <Title>Lệnh chờ đang đặt ({res.pending.length}) · khớp khi giá xuyên qua, hết hạn thì huỷ</Title>
             <div className="space-y-1">{res.pending.map((p) => { const cur = live.current[`px|${p.coin}`], d = cur ? ((cur - p.lim) / p.lim) * 100 * p.side : null; return (
-              <div key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
-                {side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="text-slate-500">{setupName(p.setup)}</span>
-                <span className="tabular-nums">Chờ ở <b>{px(p.lim)}</b> · cắt lỗ {px(p.sl)}</span>
-                {d != null && <span className="tabular-nums text-slate-500">giá {px(cur)} · còn cách {fmtNum(Math.max(0, d), 2, 2)}%</span>}
-                <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+              <div key={p.id} className="rounded-lg bg-amber-50/70 px-2.5 py-1.5 text-[12px]">
+                <div className="flex min-w-0 items-center gap-2 whitespace-nowrap">{side(p.side)}<b>{p.coin} {TFS[p.tf].label}</b><span className="min-w-0 truncate text-slate-500">{setupName(p.setup)}</span><span className="ml-auto shrink-0 tabular-nums">Chờ ở <b>{px(p.lim)}</b></span></div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 tabular-nums text-[11.5px] text-slate-500">
+                  {d != null && <span className="rounded-md bg-white px-1.5 font-bold text-slate-800">Giá {px(cur)}</span>}
+                  {d != null && <span>còn cách {fmtNum(Math.max(0, d), 2, 2)}%</span>}
+                  <span className="text-rose-500">Cắt lỗ {px(p.sl)}</span>
+                  <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+                </div>
               </div>
             ); })}</div>
           </Card>
