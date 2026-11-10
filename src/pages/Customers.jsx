@@ -202,7 +202,7 @@ export default function Customers() {
 
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
-      <Card>
+      <Card className="relative z-20">{/* 10/11: menu "Thêm ▾" phải nổi trên thẻ khách bên dưới */}
         {/* MOBILE: dòng 1 = tiêu đề; dòng 2 = 1 hàng nút gọn; dòng 3 = ô tìm full width. DESKTOP giữ bố cục cũ. */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-full min-w-0 sm:mr-auto sm:w-auto">
