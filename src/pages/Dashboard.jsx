@@ -97,16 +97,22 @@ export default function Dashboard() {
   const week = useMemo(() => { const d = new Date(now); const k = (d.getDay() + 6) % 7; d.setDate(d.getDate() - k); return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return x; }); }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
   const li = lunarInfo(now);
 
+  const [adsTodo, adsTodoAt] = useMemo(() => {
+    try { const o = JSON.parse(localStorage.getItem("qws_ads_todo") || "null"); if (o && o.u === myEmail && Date.now() - o.at < 86400000 && Array.isArray(o.items)) return [o.items, new Date(o.at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })]; } catch { /* bỏ qua */ }
+    return [[], ""];
+  }, [myEmail]);
   const repUnsent = health.filter((r) => !(settings.reportLog || {})[r.id]?.[today.slice(0, 7)]).length;
   const recvN = T.has("customers") ? T.receivables.length : 0, taskN = T.has("tasks") ? T.dueTasks.length : 0, renewN = T.has("ketoan") ? T.renewals.length : 0;
   const headline = [isOwner && attention.length ? `${attention.length} thương hiệu cần chú ý` : null, recvN ? `${recvN} khoản cần thu` : null, taskN ? `${taskN} việc ${T.overdueCount ? `(${T.overdueCount} quá hạn)` : "hôm nay"}` : null].filter(Boolean).join(", ") || "Hôm nay không có gì gấp";
   const urgent = [
     ...(T.has("tasks") ? T.dueTasks.slice(0, 2).map((t) => ({ k: "t" + t.id, to: "/cong-viec", tone: t.date < today ? "bg-rose-500" : "bg-emerald-500", title: t.title, sub: t.date < today ? `Quá hạn · ${fmtDateVI(t.date)}` : "Việc hôm nay" })) : []),
     ...(T.has("customers") ? T.receivables.slice(0, 2).map((x) => ({ k: "r" + x.projectId + x.id, to: "/khach-hang", tone: "bg-rose-500", title: `Thu ${x.customerName || "khách lẻ"} · ${formatShort(x.debt)}`, sub: `${x.projectName} · hạn ${fmtDateVI(x.date)}` })) : []),
+    // 11/11: việc theo chiến dịch quảng cáo — lấy từ lần mở trang Quảng cáo gần nhất (trong 24 giờ), không tải Meta ở đây
+    ...(isOwner ? adsTodo.slice(0, 2).map((x, i) => ({ k: "a" + i, to: "/quang-cao", tone: "bg-sky-500", title: x.t, sub: `${x.s} · số lúc ${adsTodoAt}` })) : []),
     // 10/11: từ ngày 25, còn thương hiệu chưa gửi báo cáo tháng → nhắc 1 dòng
     ...(isOwner && repUnsent > 0 && now.getDate() >= 25 ? [{ k: "rep", to: "/bao-cao", tone: "bg-amber-400", title: `Báo cáo tháng ${now.getMonth() + 1}: còn ${repUnsent} thương hiệu chưa gửi`, sub: "Mở Báo cáo → bấm thương hiệu để soạn & đánh dấu" }] : []),
     ...(isOwner ? attention.slice(0, 2).map((r) => ({ k: "b" + r.id, to: `/bao-cao/${r.id}`, tone: "bg-amber-400", title: `${r.name}: ${["ads", "web", "fp", "seo"].filter((k) => r.cells[k].t === "b").map((k) => ({ ads: "quảng cáo", web: "website", fp: "fanpage", seo: "SEO" })[k]).join(", ") || "nhiều việc trễ"} dưới chỉ tiêu`, sub: "Mở báo cáo thương hiệu" })) : []),
-  ].slice(0, 4);
+  ].slice(0, 6);
   const coinOk = perms.includes("coinDemo") && !!settings.paperBot;
 
   return (
