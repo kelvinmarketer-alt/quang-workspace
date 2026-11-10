@@ -48,6 +48,10 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* 10/11: thư viện biểu đồ (recharts) có 1 thẻ ẩn đo chữ nằm ở mép trái trang; chữ dài làm cả trang trượt ngang trên điện thoại → chặn trượt ngang cấp trang. */
+html { overflow-x: hidden; }
+@supports (overflow-x: clip) { html { overflow-x: clip; } }
+
 /* Chặn iOS tự phóng to khi focus ô nhập (font < 16px sẽ bị zoom). Ép ≥16px trên mobile. */
 @media (max-width: 640px) {
   input:not([type="checkbox"]):not([type="radio"]),
