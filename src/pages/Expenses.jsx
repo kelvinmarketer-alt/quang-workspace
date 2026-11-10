@@ -26,7 +26,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa chi phí" : "Thêm chi phí"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên khoản chi *</span>
           <input value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus className={inputCls + errCls(miss.name)} placeholder="VD: ChatGPT Plus, Canva Pro, Hosting…" />
@@ -89,7 +89,7 @@ function ExpenseModal({ initial, onClose, onSave, onChangePlan }) {
 // Thêm NHIỀU chi phí cùng lúc (nhập 1 loạt → lưu 1 lần)
 function ExpenseBatchModal({ onClose, onSave }) {
   const blank = () => ({ key: "e" + Math.random().toString(36).slice(2, 8), name: "", category: EXPENSE_CATEGORIES[0], amount: "", recurring: "monthly", date: todayISO() });
-  const [rows, setRows] = useState([blank(), blank(), blank()]);
+  const [rows, setRows] = useState([blank()]); // 10/11: mở 1 dòng (trước 3 dòng trống làm popup dài trên điện thoại), cần thêm bấm "+ Thêm dòng";
   const setRow = (key, patch) => setRows((p) => p.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = () => setRows((p) => [...p, blank()]);
   const delRow = (key) => setRows((p) => (p.length > 1 ? p.filter((r) => r.key !== key) : p));
@@ -101,7 +101,7 @@ function ExpenseBatchModal({ onClose, onSave }) {
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <div><h3 className="text-lg font-extrabold">Thêm nhiều chi phí</h3><p className="mt-0.5 text-xs text-slate-400">Nhập một loạt rồi lưu 1 lần</p></div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
           {rows.map((r, i) => (

@@ -11,7 +11,7 @@ import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
-import { fmtUsd, fmtPx, fmtNum } from "../lib/format.js";
+import { fmtUsd, fmtPx, fmtNum, timeLeft } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE, SW3D_DEFAULT, SW3D_MANAGE } from "../lib/paperBot.js";
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
@@ -912,7 +912,7 @@ export default function CoinBot({ active: visible = true }) {
                   {d != null && <span className="rounded-md bg-white px-1.5 font-bold text-slate-800">Giá {px(cur)}</span>}
                   {d != null && <span>còn cách {fmtNum(Math.max(0, d), 2, 2)}%</span>}
                   <span className="text-rose-500">Cắt lỗ {px(p.sl)}</span>
-                  <span className="ml-auto text-[11px] text-slate-400">huỷ lúc {dt(p.until)}</span>
+                  <span className="ml-auto text-[11px] text-slate-400"><b className="font-bold text-amber-600">{timeLeft(p.until)}</b> · huỷ lúc {dt(p.until)}</span>
                 </div>
               </div>
             ); })}</div>

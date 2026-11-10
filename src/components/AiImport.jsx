@@ -222,7 +222,7 @@ export function AiImportBox({ mode = "project", onApply, keyHint = true }) {
           {imgData && (
             <div className="relative inline-block">
               <img src={imgData} alt="preview" className="max-h-44 rounded-xl border border-slate-200" />
-              <button onClick={() => setImgData(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
+              <button aria-label="Đóng" title="Đóng" onClick={() => setImgData(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
             </div>
           )}
           <textarea value={imgNote} onChange={(e) => setImgNote(e.target.value)} rows={2} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Ghi chú thêm cho AI (vd: khách Cao JBL, ADS tháng 6)…" />
@@ -272,7 +272,7 @@ export function AiImportModal({ mode = "project", projectId, onClose }) {
       <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> {mode === "installment" ? "Thêm đợt bằng AI" : "Thêm dự án bằng AI"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <AiImportBox mode={mode} onApply={apply} />
       </div>

@@ -77,3 +77,15 @@ export const fmtUsd = (v, d = 2) => (v == null || !isFinite(Number(v)) ? "—" :
 export const fmtUsdSigned = (v, d = 2) => (v == null || !isFinite(Number(v)) ? "—" : `${Number(v) >= 0 ? "+" : "-"}$${Math.abs(Number(v)).toLocaleString("vi-VN", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
 export const fmtPx = (v) => { if (v == null || !isFinite(Number(v))) return "—"; const n = Number(v), a = Math.abs(n); return n.toLocaleString("vi-VN", { maximumFractionDigits: a >= 1000 ? 1 : a >= 10 ? 2 : a >= 1 ? 4 : 6 }); };
 export const fmtQty = (v) => (v == null || !isFinite(Number(v)) ? "—" : Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 8 }));
+
+// 10/11: thời gian còn lại tới mốc (ms) — "còn 2 giờ 15 phút", "còn 12 phút", "sắp huỷ" (lệnh chờ hết hạn)
+export function timeLeft(until, now = Date.now()) {
+  const m = Math.floor((Number(until) - now) / 60000);
+  if (!Number.isFinite(m)) return "";
+  if (m < 1) return "sắp hết hạn";
+  if (m < 60) return `còn ${m} phút`;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h < 24) return `còn ${h} giờ${r ? ` ${r} phút` : ""}`;
+  const d = Math.floor(h / 24), rh = h % 24;
+  return `còn ${d} ngày${rh ? ` ${rh} giờ` : ""}`;
+}

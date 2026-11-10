@@ -74,7 +74,7 @@ function TaskModal({ initial, onClose, onSave }) {
       <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{editing ? "Sửa công việc" : "Thêm công việc"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm">
           <span className="mb-1 block font-semibold text-slate-600">Tên việc</span>

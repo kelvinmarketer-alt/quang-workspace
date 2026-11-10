@@ -602,7 +602,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
             {watch.map((w) => (
               <span key={w} className={`flex shrink-0 items-center rounded-lg text-[12px] font-bold ${w === sym ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-amber-100"}`}>
                 <button onClick={() => setSym(w)} className="px-2.5 py-1">{w}</button>
-                {extraWatch.includes(w) && w !== sym && <button onClick={() => removeWatch(w)} className="-ml-1 pr-1.5 text-slate-400 hover:text-rose-600"><X size={11} /></button>}
+                {extraWatch.includes(w) && w !== sym && <button aria-label="Đóng" title="Đóng" onClick={() => removeWatch(w)} className="-ml-1 pr-1.5 text-slate-400 hover:text-rose-600"><X size={11} /></button>}
               </span>
             ))}
           </div>

@@ -43,7 +43,7 @@ function EventModal({ initial, onClose, onSave }) {
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{editing ? "Sửa sự kiện" : "Thêm sự kiện"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên sự kiện *</span>
           <input value={f.title} onChange={(e) => set("title", e.target.value)} autoFocus className={inputCls} placeholder="VD: Giỗ ông nội / Gia hạn hosting" /></label>
@@ -111,7 +111,7 @@ function ImportModal({ onClose, onImport }) {
       <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Nhập sự kiện từ Google Sheet</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <p className="mb-3 text-xs text-slate-400">Mở Sheet lịch âm → bôi đen các dòng (gồm cả tiêu đề) → copy → dán vào đây. Cột: Bật, Tên, Phân loại, Lặp, Ngày, Tháng, Âm/Dương, Năm gốc, Nhắc trước, Ghi chú.</p>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} className={`${inputCls} font-mono text-xs`} placeholder={"TRUE\tGiỗ ông nội\tgiỗ\tHằng năm\t9\t4\tÂm\t1992\t7,3,1,0\t"} autoFocus />

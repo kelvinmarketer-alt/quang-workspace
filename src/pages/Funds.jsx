@@ -84,7 +84,7 @@ function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
       <div className="relative flex max-h-[92vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">Danh mục chi tiêu</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
           {(cats || []).length === 0 && <div className="py-6 text-center text-sm text-slate-400">Chưa có danh mục. Thêm bên dưới.</div>}
@@ -93,7 +93,7 @@ function SpendCatManager({ cats, onAdd, onUpdate, onDelete, onClose }) {
               <div className="flex items-center gap-2">
                 <button onClick={() => onUpdate(c.id, { color: next(c.color) })} title="Bấm để đổi màu" className={`h-6 w-6 shrink-0 rounded-full ${TONE_BG[c.color] || "bg-slate-400"}`} />
                 <input value={c.name} onChange={(e) => onUpdate(c.id, { name: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold" />
-                <button onClick={async () => { if (await ask(`Xoá danh mục "${c.name}"?`)) onDelete(c.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                <button aria-label="Xoá" title="Xoá" onClick={async () => { if (await ask(`Xoá danh mục "${c.name}"?`)) onDelete(c.id); }} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
               <input value={c.note || ""} onChange={(e) => onUpdate(c.id, { note: e.target.value })} placeholder="Ghi chú: gồm những khoản gì…" className="mt-1.5 w-full rounded-lg border border-slate-100 bg-slate-50 px-2 py-1 text-[11px] text-slate-500" />
             </div>
@@ -123,7 +123,7 @@ function FundModal({ initial, onClose, onSave }) {
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa quỹ" : "Thêm quỹ"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên quỹ *</span>
           <input value={f.name} onChange={(e) => set("name", e.target.value)} autoFocus className={inputCls} placeholder="VD: Đầu tư, Du lịch, Dự phòng…" /></label>
@@ -162,7 +162,7 @@ function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
       <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">{isIn ? "Nạp vào" : "Chi tiêu từ"} quỹ {fund.name}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-4">
           {rows.map((r, i) => (
@@ -170,7 +170,7 @@ function TxModal({ fund, type, cats, onManage, onClose, onSave }) {
               <div className="flex items-center gap-2">
                 <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} autoFocus={i === 0} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-bold" placeholder="Số tiền *" />
                 <input type="date" value={r.date} onChange={(e) => setRow(r.key, { date: e.target.value })} className="shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-xs" />
-                {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+                {rows.length > 1 && <button aria-label="Xoá" title="Xoá" onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <input value={r.note} onChange={(e) => setRow(r.key, { note: e.target.value })} className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs" placeholder={isIn ? "Nguồn tiền…" : "Chi cho việc gì…"} />
@@ -214,7 +214,7 @@ function TxEditModal({ tx, fund, cats, onManage, onClose, onSave }) {
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Sửa giao dịch{fund ? ` · ${fund.name}` : ""}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         {isXfer ? (
           <div className="mb-3 flex items-start gap-2 rounded-xl bg-indigo-50 p-3 text-xs font-semibold text-indigo-700">
@@ -265,7 +265,7 @@ function TransferModal({ funds, initialFrom, onClose, onSave }) {
       <div className="relative flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-5 pb-4">
           <h3 className="text-lg font-extrabold">Chuyển tiền giữa quỹ</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <div className="mb-2 grid grid-cols-2 gap-3">
@@ -284,7 +284,7 @@ function TransferModal({ funds, initialFrom, onClose, onSave }) {
                     {dests.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </select>
                   <MoneyInput value={r.amount} onChange={(v) => setRow(r.key, { amount: v })} className="w-32 shrink-0 rounded-lg border border-slate-200 px-2.5 py-1.5 text-right text-sm font-bold" placeholder="Số tiền" />
-                  {rows.length > 1 && <button onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
+                  {rows.length > 1 && <button aria-label="Xoá" title="Xoá" onClick={() => delRow(r.key)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>}
                 </div>
                 <input value={r.note} onChange={(e) => setRow(r.key, { note: e.target.value })} className="mt-2 w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs" placeholder="Ghi chú (tuỳ chọn)" />
               </div>
@@ -319,7 +319,7 @@ function ScheduleModal({ initial, funds, onClose, onSave }) {
       <div className="relative w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa lịch chuyển" : "Lịch chuyển định kỳ"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="mb-3 grid grid-cols-2 gap-3">
           <label className="block text-sm"><span className="mb-1 block font-semibold text-slate-600">Từ quỹ</span>
@@ -374,7 +374,7 @@ function AllocateModal({ funds, defaultAmount, onClose, onSave }) {
       <div className="relative w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="mb-1 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Phân bổ từ Quỹ công ty</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <p className="mb-4 text-xs text-slate-400">Chia lợi nhuận gộp trong <b>Quỹ công ty</b> ra các quỹ. Quỹ công ty còn lại: <b className="text-indigo-600">{formatShort(defaultAmount || 0)}</b></p>
         <div className="mb-4 grid grid-cols-2 gap-3">
@@ -454,7 +454,7 @@ function ExpenseImageModal({ fund, apiKey, aiReady, model, cats, onManage, onClo
             <h3 className="flex items-center gap-2 text-lg font-extrabold"><Camera size={18} className="text-indigo-500" /> Ghi giao dịch từ ảnh · {fund.name}</h3>
             <p className="mt-0.5 text-xs text-slate-400">AI tự đọc số tiền + phân biệt <b className="text-emerald-600">Nạp (+)</b> / <b className="text-rose-600">Chi (−)</b>. Bạn chỉnh lại rồi ghi 1 loạt.</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
 
         {!hasKey && (
@@ -518,7 +518,7 @@ function ExpenseImageModal({ fund, apiKey, aiReady, model, cats, onManage, onClo
                     )}
                   </div>
                 </div>
-                <button onClick={() => remove(it.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                <button aria-label="Xoá" title="Xoá" onClick={() => remove(it.id)} className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
               </div>
             ))}
           </div>
@@ -593,7 +593,7 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div className={`relative bg-gradient-to-br p-5 text-white ${TONE_GRAD[fund.color] || TONE_GRAD.indigo}`}>
-          <button onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/80 hover:bg-white/20"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="absolute right-3 top-3 rounded-lg p-1.5 text-white/80 hover:bg-white/20"><X size={18} /></button>
           <div className="flex items-center gap-2 text-sm font-semibold text-white/90"><PiggyBank size={16} /> {fund.name} · {fund.percent || 0}%</div>
           <div className="mt-1 text-3xl font-extrabold">{formatVND(bal)}</div>
           {fund.note && <div className="mt-0.5 text-xs text-white/80">{fund.note}</div>}
@@ -844,8 +844,8 @@ function FundsMain() {
             {personalWithBal.map((f) => (
               <div key={f.id} className="card group relative flex flex-col p-4">
                 <span className="absolute right-3 top-3 z-10 flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                  <button onClick={() => setFundModal(f)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
-                  <button onClick={async () => { if (await ask(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                  <button aria-label="Sửa" title="Sửa" onClick={() => setFundModal(f)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                  <button aria-label="Xoá" title="Xoá" onClick={async () => { if (await ask(`Xoá quỹ "${f.name}" và toàn bộ giao dịch của quỹ?`)) deleteFund(f.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                 </span>
                 <button onClick={() => setDetailId(f.id)} className="flex flex-col text-left">
                   <div className="flex items-center gap-2.5">
@@ -904,8 +904,8 @@ function FundsMain() {
                   </div>
                   <span className="flex shrink-0 items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
                     <button onClick={() => updateFundSchedule(sc.id, { active: off })} title={off ? "Bật lại" : "Tạm tắt"} className={`rounded-lg p-2 sm:p-1.5 ${off ? "text-slate-400 hover:bg-emerald-50 hover:text-emerald-600" : "text-emerald-500 hover:bg-emerald-50"}`}><Power size={15} /></button>
-                    <button onClick={() => setSchedModal(sc)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
-                    <button onClick={async () => { if (await ask("Xoá lịch chuyển này?")) deleteFundSchedule(sc.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
+                    <button aria-label="Sửa" title="Sửa" onClick={() => setSchedModal(sc)} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={15} /></button>
+                    <button aria-label="Xoá" title="Xoá" onClick={async () => { if (await ask("Xoá lịch chuyển này?")) deleteFundSchedule(sc.id); }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={15} /></button>
                   </span>
                 </div>
               );
@@ -1104,7 +1104,7 @@ function FundsMain() {
   );
 }
 
-const FUND_TABS = [["funds", "Quỹ & Dòng tiền", PiggyBank], ["stats", "Thống kê chi tiêu", BarChart3]];
+const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["stats", "Chi tiêu", BarChart3]];
 
 const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
 // 01/11: Quỹ gộp thành tab "Dòng tiền" trong Kế toán — thanh chuyển Quỹ / Thống kê chi tiêu dạng viên nhỏ cùng kiểu app

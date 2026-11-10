@@ -6,6 +6,7 @@ import {
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
 const CommandPalette = lazy(() => import("./CommandPalette.jsx"));
+const OpenElsewhere = lazy(() => import("./OpenElsewhere.jsx"));
 const IcalSync = lazy(() => import("./IcalSync.jsx")); // 09/11: đẩy lịch sang link đăng ký (chỉ chủ đã bật)
 const PomodoroPill = lazy(() => import("./PomodoroPill.jsx"));
 const KBD_HINT = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl K";
@@ -562,6 +563,9 @@ export default function Layout({ children }) {
     || EXTRA_TITLES[loc.pathname]
     || (loc.pathname === "/" ? "Tổng quan" : "");
 
+  // 10/11: ô tìm kiếm ⌘K — chưa gõ thì hiện đúng các mục menu đã gộp; gõ chữ thì vẫn tìm được trang con, kèm tên mục cha
+  const paletteMenu = useMemo(() => mergeHubs(navItems), [navItems]);
+  const paletteHub = useMemo(() => Object.fromEntries(navItems.filter((n) => n.to).map((n) => { const h = n.to !== "/" && hubOf(n.to); return [n.to, h && h.tabs[0][0] !== n.to ? h.label : ""]; })), [navItems]);
   return (
     <div className="aurora min-h-screen">
       {/* Sidebar desktop */}
@@ -593,7 +597,7 @@ export default function Layout({ children }) {
           <div className="absolute inset-y-0 left-0 flex w-72 flex-col bg-white/95 backdrop-blur-xl">
             <div className="flex items-center justify-between pr-3 pt-5">
               <Brand />
-              <button onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+              <button aria-label="Đóng" title="Đóng" onClick={() => setOpen(false)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100">
                 <X size={20} />
               </button>
             </div>
@@ -623,10 +627,10 @@ export default function Layout({ children }) {
           </div>
         </header>
 
-        <main className="qws-full w-full"><PushPrompt /><HubTabs items={navItems} />{children}</main>
+        <main className="qws-full w-full"><PushPrompt /><Suspense fallback={null}><OpenElsewhere /></Suspense><HubTabs items={navItems} />{children}</main>
       </div>
       <BottomBar items={navItems} onMenu={() => setOpen(true)} />
-      <Suspense fallback={null}><PomodoroPill /><CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} /><IcalSync /></Suspense>
+      <Suspense fallback={null}><PomodoroPill /><CommandPalette open={paletteOpen} setOpen={setPaletteOpen} navItems={navItems} menuItems={paletteMenu} hubLabel={paletteHub} /><IcalSync /></Suspense>
     </div>
   );
 }

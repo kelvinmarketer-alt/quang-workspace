@@ -41,7 +41,7 @@ function CustomerModal({ initial, onClose, onSave }) {
       <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial.id ? "Sửa khách hàng" : "Thêm khách hàng"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
 
         {/* Logo */}
@@ -91,7 +91,7 @@ function BulkAddModal({ onClose, onSave }) {
       <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">Thêm khách hàng số lượng lớn</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <p className="mb-3 text-xs text-slate-400">Mỗi dòng 1 khách, theo định dạng <b>Tên, SĐT, Zalo</b> (SĐT/Zalo tuỳ chọn). Dán từ Excel cũng được.</p>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} className={`${inputCls} font-mono text-sm`} placeholder={"Anh Nam, 0901234567\nChị Hoa, 0912345678\nVua Đóng Gói"} autoFocus />
@@ -209,15 +209,13 @@ export default function Customers() {
             <div className="text-sm font-bold text-slate-800">{counts.active} khách · {projects.length} dự án</div>
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
-          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
-          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", active: true })} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
-          {/* MOBILE: Chọn + Hàng loạt nằm cùng hàng nút */}
+          {canW && <AddMenu onOne={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", active: true })} onBulk={() => setBulk(true)} onAi={() => setAiOpen(true)} />}
+          {/* MOBILE: Chọn nằm cùng hàng nút */}
           {canW && rows.length > 0 && (
             <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
               {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
             </button>
           )}
-          {canW && <button onClick={() => setBulk(true)} className={`${rows.length > 0 ? "" : "ml-auto "}flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden`}><ListPlus size={16} className="hidden min-[400px]:block" /> Hàng loạt</button>}
           {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>}
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -230,7 +228,6 @@ export default function Customers() {
               {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
             </button>
           )}
-          {canW && <button onClick={() => setBulk(true)} className="hidden items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 sm:flex"><ListPlus size={16} /> Hàng loạt</button>}
         </div>
         {/* MOBILE: dropdown lọc */}
         <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
@@ -350,6 +347,33 @@ export default function Customers() {
           onDelete={() => deleteProject(drawerProject.id)}
           addInstallment={addInstallment} updateInstallment={updateInstallment} deleteInstallment={deleteInstallment}
         />
+      )}
+    </div>
+  );
+}
+
+// 10/11: 3 nút thêm (AI · Thêm · Hàng loạt) gộp thành 1 nút "Thêm ▾"
+function AddMenu({ onOne, onBulk, onAi }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", off); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", off); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const pick = (f) => () => { setOpen(false); f(); };
+  const item = "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50";
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" className="flex items-center gap-1 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span><ChevronDown size={14} className={`transition ${open ? "rotate-180" : ""}`} /></button>
+      {open && (
+        <div role="menu" className="absolute left-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-slate-200 bg-white p-1 shadow-xl">
+          <button role="menuitem" onClick={pick(onOne)} className={item}><Plus size={16} className="mt-0.5 shrink-0 text-indigo-500" /><span><span className="block text-sm font-bold text-slate-800">Thêm 1 khách</span><span className="block text-[11px] text-slate-400">Điền tên, SĐT, Zalo…</span></span></button>
+          <button role="menuitem" onClick={pick(onBulk)} className={item}><ListPlus size={16} className="mt-0.5 shrink-0 text-slate-500" /><span><span className="block text-sm font-bold text-slate-800">Nhập hàng loạt</span><span className="block text-[11px] text-slate-400">Dán danh sách nhiều khách</span></span></button>
+          <button role="menuitem" onClick={pick(onAi)} className={item}><Sparkles size={16} className="mt-0.5 shrink-0 text-violet-500" /><span><span className="block text-sm font-bold text-slate-800">Nhập bằng AI</span><span className="block text-[11px] text-slate-400">Từ tin nhắn hoặc ảnh chụp</span></span></button>
+        </div>
       )}
     </div>
   );

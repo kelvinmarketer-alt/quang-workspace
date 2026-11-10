@@ -150,8 +150,8 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
             </button>
             {canW && (
               <>
-                <button onClick={() => onEdit(item)} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-indigo-600"><Pencil size={14} /></button>
-                <button onClick={async () => { if (await ask(`Xoá "${item.title || t.label}"?`)) onDelete(item.id); }} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-rose-600"><Trash2 size={14} /></button>
+                <button aria-label="Sửa" title="Sửa" onClick={() => onEdit(item)} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-indigo-600"><Pencil size={14} /></button>
+                <button aria-label="Xoá" title="Xoá" onClick={async () => { if (await ask(`Xoá "${item.title || t.label}"?`)) onDelete(item.id); }} className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:text-rose-600"><Trash2 size={14} /></button>
               </>
             )}
           </div>
@@ -176,7 +176,7 @@ function VaultBatchModal({ startType = "app", onClose, onSave }) {
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="text-lg font-extrabold">Thêm hàng loạt</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {rows.map((r, idx) => {
@@ -193,7 +193,7 @@ function VaultBatchModal({ startType = "app", onClose, onSave }) {
                     );
                   })}
                   <span className="ml-auto text-[11px] font-bold text-slate-300">#{idx + 1}</span>
-                  {rows.length > 1 && <button onClick={() => delRow(r._k)} className="rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>}
+                  {rows.length > 1 && <button aria-label="Xoá" title="Xoá" onClick={() => delRow(r._k)} className="rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={14} /></button>}
                 </div>
                 <input value={r.title} onChange={(e) => setRow(r._k, { title: e.target.value })} className={`${inputCls} mb-2 font-semibold`} placeholder={r.type === "app" ? "Tên gọi * (Facebook, Gmail…)" : r.type === "card" ? "Tên gọi * (Visa Techcombank…)" : "Tên gọi * (Vietcombank, Momo…)"} />
                 <div className="grid grid-cols-2 gap-2">
@@ -249,7 +249,7 @@ function VaultAiModal({ onClose, onAdd }) {
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> Thêm bằng AI (đọc ảnh)</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {!hasKey && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><SettingsIcon size={15} className="shrink-0" /> Chưa có API key OpenAI — vào <b>Cài đặt</b> để nhập trước.</div>}
@@ -266,7 +266,7 @@ function VaultAiModal({ onClose, onAdd }) {
           {img && (
             <div className="relative inline-block">
               <img src={img} alt="preview" className="max-h-44 rounded-xl border border-slate-200" />
-              <button onClick={() => setImg(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
+              <button aria-label="Đóng" title="Đóng" onClick={() => setImg(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
             </div>
           )}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Ghi chú cho AI (tuỳ chọn)…" />
@@ -285,7 +285,7 @@ function VaultAiModal({ onClose, onAdd }) {
                       {TYPE_KEYS.map((k) => { const Ty = TYPES[k]; const on = r.type === k; return (
                         <button key={k} onClick={() => setItem(i, { type: k })} className={`flex items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-bold ${on ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-500"}`}><Ty.icon size={12} /> {Ty.label}</button>
                       ); })}
-                      <button onClick={() => removeItem(i)} className="ml-auto shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+                      <button aria-label="Xoá" title="Xoá" onClick={() => removeItem(i)} className="ml-auto shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
                     </div>
                     <input value={r.title || ""} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Tên gọi" className={`${cell} font-semibold`} />
                     <div className="grid grid-cols-2 gap-1.5">
@@ -319,7 +319,7 @@ function VaultModal({ initial, onClose, onSave }) {
       <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa mục" : "Thêm mục"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         {/* Chọn loại */}
         <div className="mb-4 grid grid-cols-3 gap-2">
@@ -490,7 +490,7 @@ export default function Vault() {
       <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
         <Search size={16} className="text-slate-400" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm theo tên, tài khoản, ngân hàng…" className="w-full text-sm text-slate-700 outline-none placeholder:text-slate-400" />
-        {q && <button onClick={() => setQ("")} className="text-slate-400 hover:text-slate-600"><X size={15} /></button>}
+        {q && <button aria-label="Đóng" title="Đóng" onClick={() => setQ("")} className="text-slate-400 hover:text-slate-600"><X size={15} /></button>}
       </div>
 
       {/* Danh sách */}

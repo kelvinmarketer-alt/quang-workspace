@@ -40,7 +40,7 @@ function isTypingTarget(el) {
 }
 
 // navItems: các mục menu ĐÃ lọc quyền (Layout truyền vào) — {to|href, label, icon}
-export default function CommandPalette({ open, setOpen, navItems = [] }) {
+export default function CommandPalette({ open, setOpen, navItems = [], menuItems, hubLabel = {} }) {
   const data = useData();
   const { perms = [], isOwner } = data;
   const nav = useNavigate();
@@ -107,11 +107,11 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
     const custName = (id) => (data.customerList || []).find((c) => c.id === id)?.name || "";
 
     // Trang
-    const pages = navItems.filter((n) => match(n.label));
+    const pages = tokens.length ? navItems.filter((n) => match(n.label, hubLabel[n.to])) : (menuItems || navItems);
     if (pages.length)
       out.push({ label: "Trang", items: (tokens.length ? take(pages, (n) => n.label) : pages).map((n) => ({
         key: "nav:" + (n.to || n.href), icon: n.icon, title: n.label,
-        sub: n.href ? "Mở tab mới" : "",
+        sub: n.href ? "Mở tab mới" : tokens.length && hubLabel[n.to] ? `Trong ${hubLabel[n.to]}` : "",
         ext: !!n.href,
         run: n.href ? () => window.open(n.href, "_blank", "noopener") : go(n.to),
       })) });
@@ -211,7 +211,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
         })) });
     }
     return out;
-  }, [open, q, navItems, perms, isOwner, data.customerList, data.projects, data.resources, data.tasks, data.family, data.expenses, data.vault, nav, ext, canWeb, canFb]);
+  }, [open, q, navItems, menuItems, hubLabel, perms, isOwner, data.customerList, data.projects, data.resources, data.tasks, data.family, data.expenses, data.vault, nav, ext, canWeb, canFb]);
 
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 

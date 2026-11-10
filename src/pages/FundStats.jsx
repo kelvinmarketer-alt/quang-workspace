@@ -111,7 +111,7 @@ function CategorizeModal({ rows, funds, cats, onAddCat, onSave, onClose }) {
             <h3 className="flex items-center gap-2 text-lg font-extrabold"><Tags size={18} className="text-indigo-500" /> Gắn danh mục hàng loạt</h3>
             <p className="mt-0.5 text-xs text-slate-400">{rows.length} khoản chưa phân loại · bấm <b>Gợi ý tự động</b> rồi chỉnh lại</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="space-y-2 border-b border-slate-100 p-3">
           <div className="flex flex-wrap items-center gap-2">

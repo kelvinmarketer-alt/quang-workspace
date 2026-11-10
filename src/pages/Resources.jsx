@@ -116,7 +116,7 @@ export function ResModal({ initial, customers, projects, onClose, onSave }) {
       <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{initial?.id ? "Sửa tài nguyên" : "Thêm tài nguyên"}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Link <span className="text-[11px] font-medium text-slate-400">(tuỳ chọn)</span></span><input value={f.url} onChange={(e) => onUrl(e.target.value)} autoFocus className={inputCls} placeholder="Dán link Drive / Figma / Sheet… (bỏ trống nếu chỉ lưu tài khoản)" /></label>
         <label className="mb-3 block text-sm"><span className="mb-1 block font-semibold text-slate-600">Tên gọi</span><input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={inputCls} placeholder={f.url ? guessTitle(f.url) : "VD: Tài khoản Canva / Hosting…"} /></label>
@@ -164,7 +164,7 @@ export function ResBatchModal({ customers, projects, preset = {}, onClose, onSav
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="text-lg font-extrabold">Thêm hàng loạt</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {!preset.projectId && (
@@ -237,7 +237,7 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
       <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 p-4">
           <h3 className="flex items-center gap-2 text-lg font-extrabold"><Sparkles size={18} className="text-indigo-500" /> Thêm bằng AI (đọc ảnh)</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {!hasKey && <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><SettingsIcon size={15} className="shrink-0" /> Chưa có API key OpenAI — vào <b>Cài đặt</b> để nhập trước.</div>}
@@ -264,7 +264,7 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
           {img && (
             <div className="relative inline-block">
               <img src={img} alt="preview" className="max-h-44 rounded-xl border border-slate-200" />
-              <button onClick={() => setImg(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
+              <button aria-label="Đóng" title="Đóng" onClick={() => setImg(null)} className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full bg-rose-500 text-white"><X size={14} /></button>
             </div>
           )}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className={`${inputCls}`} placeholder="Ghi chú cho AI (tuỳ chọn): vd 'toàn bộ tài liệu dự án web Cao JBL'…" />
@@ -284,7 +284,7 @@ export function ResAiModal({ customers, projects, preset = {}, onClose, onAdd })
                       <select value={r.type} onChange={(e) => setItem(i, { type: e.target.value })} className={`${cell} w-24`}>
                         {RES_TYPE_KEYS.map((k) => <option key={k} value={k}>{RES_TYPES[k].label}</option>)}
                       </select>
-                      <button onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+                      <button aria-label="Xoá" title="Xoá" onClick={() => removeItem(i)} className="shrink-0 rounded-lg p-1 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
                     </div>
                     <input value={r.url || ""} onChange={(e) => setItem(i, { url: e.target.value })} placeholder="Link đăng nhập / URL" className={`${cell} font-mono`} />
                     <div className="grid grid-cols-2 gap-1.5">

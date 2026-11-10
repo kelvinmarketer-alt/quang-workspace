@@ -77,7 +77,7 @@ function GoogleSection() {
             <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.customer_id, { active: e.target.checked })} />Đang dùng</label>
             <span className="text-[11px] text-slate-400">{String(a.customer_id).replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")} · {ago(a.last_sync)}</span>
             {a.policy_issues > 0 && <Badge tone="rose">{a.policy_issues} QC bị hạn chế</Badge>}
-            <button onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
+            <button aria-label="Xoá" title="Xoá" onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
           </div>
         ))}
         {!list.length && <div className="text-xs text-slate-400">Chưa có số liệu Google. Lấy script bên dưới, dán vào MCC 2BKIN và tài khoản VUADONGGOI.</div>}
@@ -166,7 +166,7 @@ export default function AdsAccounts() {
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => update(a.id, { services: e.target.checked })} />Gom theo dịch vụ TMV</label>
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.id, { active: e.target.checked })} />Đang dùng</label>
               <span className="text-[11px] text-slate-400">ID {a.id} · token {a.tokenTail || "—"}</span>
-              <button onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
+              <button aria-label="Xoá" title="Xoá" onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5">
               <KeyRound size={12} className="text-slate-300" />

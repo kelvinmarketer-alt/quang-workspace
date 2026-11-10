@@ -130,13 +130,13 @@ describe("thành viên · Thị trường Coin", () => {
 // ---- 09/11: Trade COIN (gộp Demo + Bot thật) · Trade Forex · Thị trường Forex ----
 describe("Coin · Trade COIN / Trade Forex (09/11)", () => {
   const stubNet = () => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
-  it("thanh tab: Trade COIN + Trade Forex, không còn Demo tự động / Bot thật / EA MT5 ở hàng trên", async () => {
+  it("thanh tab: Trade COIN, không còn Demo tự động / Bot thật / EA MT5 ở hàng trên; Trade Forex ẩn khi cầu nối MT5 chưa chạy (10/11)", async () => {
     stubNet(); localStorage.removeItem("qws_coin_tab");
     const C = (await import("../src/pages/Coin.jsx")).default;
     const { container } = await mount(<C />, "/coin");
     const tabs = [...container.querySelectorAll("button")].map((b) => b.textContent.trim());
     expect(tabs.some((t) => /Trade COIN/.test(t))).toBe(true);
-    expect(tabs.some((t) => /Trade Forex/.test(t))).toBe(true);
+    expect(tabs.some((t) => /Trade Forex/.test(t))).toBe(false); // test không có dữ liệu cầu nối MT5 → tab ẩn
     expect(tabs.some((t) => /^EA MT5$/.test(t))).toBe(false);
     vi.unstubAllGlobals();
   });

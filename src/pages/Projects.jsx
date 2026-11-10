@@ -140,7 +140,7 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
             <div key={i} className="flex items-center gap-2">
               <input value={c.label} onChange={(e) => setCost(i, "label", e.target.value)} placeholder="Tên khoản (hosting…)" className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
               <MoneyInput value={c.amount} onChange={(v) => setCost(i, "amount", v)} placeholder="0" className="w-28 shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-sm sm:w-32" />
-              <button type="button" onClick={() => delCost(i)} className="shrink-0 rounded-lg p-2 sm:p-1.5 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
+              <button aria-label="Xoá" title="Xoá" type="button" onClick={() => delCost(i)} className="shrink-0 rounded-lg p-2 sm:p-1.5 text-slate-300 hover:text-rose-600"><Trash2 size={15} /></button>
             </div>
           ))}
         </div>
@@ -186,7 +186,7 @@ function Modal({ title, onClose, children, wide }) {
       <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl sm:p-5 ${wide ? "max-w-2xl" : "max-w-md"}`}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-extrabold">{title}</h3>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
+          <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -349,9 +349,9 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
             <div className="text-sm text-slate-400">{project.customerName}</div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {canW && <button onClick={onEdit} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={16} /></button>}
-            {canW && <button onClick={async () => { if (await ask("Xoá dự án này?")) { onDelete(); onClose(); } }} className="rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>}
-            <button onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 sm:p-1.5"><X size={18} /></button>
+            {canW && <button aria-label="Sửa dự án" title="Sửa dự án" onClick={onEdit} className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 hover:text-indigo-600"><Pencil size={14} /> Sửa</button>}
+            {canW && <button aria-label="Xoá dự án" title="Xoá dự án" onClick={async () => { if (await ask("Xoá dự án này?")) { onDelete(); onClose(); } }} className="ml-2 rounded-lg p-2 sm:p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"><Trash2 size={16} /></button>}
+            <button aria-label="Đóng" title="Đóng" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 sm:p-1.5"><X size={18} /></button>
           </div>
         </div>
 
@@ -384,7 +384,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                     {canW && <>
                     <button title="Nhân bản (đổi ngày)" onClick={() => setInstModal({ dup: { ...instToForm(x), id: undefined, carried: false, date: addMonthISO(x.date) } })} className="-my-1 rounded p-2 text-slate-300 hover:text-violet-600 sm:my-0 sm:p-1"><Copy size={13} /></button>
                     <button title="Sửa" onClick={() => setInstModal({ edit: instToForm(x) })} className="-my-1 rounded p-2 text-slate-300 hover:text-indigo-600 sm:my-0 sm:p-1"><Pencil size={13} /></button>
-                    <button title="Xoá" onClick={() => deleteInstallment(project.id, x.id)} className="-my-1 rounded p-2 text-slate-300 hover:text-rose-600 sm:my-0 sm:p-1"><Trash2 size={13} /></button>
+                    <button title="Xoá" onClick={async () => { if (await ask("Xoá đợt thu này?")) deleteInstallment(project.id, x.id); }} className="-my-1 rounded p-2 text-slate-300 hover:text-rose-600 sm:my-0 sm:p-1"><Trash2 size={13} /></button>
                     </>}
                   </div>
                 </div>
