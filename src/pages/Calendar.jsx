@@ -134,7 +134,7 @@ export default function Calendar() {
   const [selected, setSelected] = useState(isoOf(today));
   const [modal, setModal] = useState(null); // null | {} | event
   const [importOpen, setImportOpen] = useState(false);
-  const [win, setWin] = useState(90);
+  const [win, setWin] = useState(() => (typeof window !== "undefined" && window.innerWidth < 640 ? 30 : 90)); // 11/11: điện thoại mặc định 30 ngày cho danh sách ngắn
   const [gridOpen, setGridOpen] = useState(false);
   const [catF, setCatF] = useState("all");
   const [picked, setPicked] = useState(() => new Set());

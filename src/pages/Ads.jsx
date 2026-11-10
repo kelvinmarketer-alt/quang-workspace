@@ -589,7 +589,7 @@ function AdsAnswer({ diag, tot, group, live }) {
   const desc = [bad.slice(0, 2).map((x) => `${x.name}${x.verdict.reason ? `: ${x.verdict.reason}` : ""}`).join(" · "), good.length ? `${good.length} tài khoản trong mốc` : null].filter(Boolean).join(" — ");
   return <AnswerCard eyebrow={`Quảng cáo · nhóm ${group === "conv" ? "Chuyển đổi" : "Thương hiệu"}`} title={title} desc={desc} live={live ? "Tự làm mới 5 phút/lần" : null} />;
 }
-function AdsTodo({ diag, onPick }) {
+function AdsTodo({ diag, onPick, who = "" }) {
   const items = [];
   for (const x of diag?.accounts || []) {
     for (const c of x.cut || []) items.push({ w: (c.spend || 0) + 1e6, id: x.id, t: `${x.name}: giảm/tắt ${c.name}`, s: `${c.results ? vnd(c.cpr) + "/KQ" : "0 kết quả"} · đã tiêu ${vnd(c.spend)}`, tone: "bg-rose-50 text-rose-600" });
@@ -597,6 +597,9 @@ function AdsTodo({ diag, onPick }) {
     if (["bad", "burn"].includes(x.verdict?.key) && !(x.cut || []).length) items.push({ w: x.spend, id: x.id, t: `${x.name}: xem lại`, s: x.verdict.reason || x.verdict.label, tone: "bg-amber-50 text-amber-700" });
   }
   const top = items.sort((a, b) => b.w - a.w).slice(0, 3);
+  // 11/11: ghi lại để Tổng quan hiện chung trong "Việc của hôm nay" (không phải tải lại số Meta ở Tổng quan)
+  const sig = top.map((x) => x.t + x.s).join("|");
+  useEffect(() => { if (diag) lsSet("qws_ads_todo", JSON.stringify({ u: who, at: Date.now(), items: top.map((x) => ({ t: x.t, s: x.s })) })); /* eslint-disable-next-line */ }, [sig, !!diag, who]);
   if (!top.length) return null;
   return (
     <Card className="!p-4">
@@ -789,7 +792,7 @@ export default function Ads() {
           <AiReport r={ai.text} />
         </Card>
 
-        <AdsTodo diag={diag} onPick={setOpenAcc} />
+        <AdsTodo who={myEmail} diag={diag} onPick={setOpenAcc} />
         {view === "rank" ? <AdsRank diag={diag} group={group} onPick={setOpenAcc} /> : <Scorecard diag={diag} onWeek={() => setPeriod(makePeriod("7d"))} />}
 
         {loading && !data && <Card><div className="text-sm text-slate-400">Đang tải số liệu từ Meta…</div></Card>}
