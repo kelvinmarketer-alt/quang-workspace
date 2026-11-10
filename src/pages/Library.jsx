@@ -175,17 +175,17 @@ function Reader({ id, folders, onClose, onEdit, onDownload, onAsk, onShare, read
   const path = doc?.folder_id ? folderPath(folders, doc.folder_id).map((f) => f.name).join(" › ") : "";
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="Đọc tài liệu">
-      <div className="flex shrink-0 items-center gap-2 border-b border-slate-100 bg-white px-3 py-2.5 sm:px-5">
-        <button type="button" onClick={onClose} className="flex shrink-0 items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-200"><X size={15} /> Đóng</button>
+      <div className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 bg-white px-3 sm:gap-2 py-2.5 sm:px-5">
+        <button type="button" onClick={onClose} aria-label="Đóng" className="flex shrink-0 items-center gap-1 rounded-xl bg-slate-100 px-2.5 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-200 sm:px-3"><X size={15} /> <span className="hidden sm:inline">Đóng</span></button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-extrabold text-slate-800">{doc?.title || "Đang mở…"}</div>
           {doc && <div className="truncate text-[11px] text-slate-400">{path || "Chưa phân loại"} · {(KINDS[doc.kind] || KINDS.txt).label} · {fmtSize(doc.size_bytes)}</div>}
         </div>
         {doc && <>
-          {!readOnly && <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 rounded-xl bg-indigo-50 px-3 py-2 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>}
-          {!readOnly && <button type="button" onClick={() => onShare(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Link2 size={14} /> <span className="hidden sm:inline">Chia sẻ</span></button>}
+          {!readOnly && <button type="button" onClick={() => onAsk(doc)} className="flex items-center gap-1 shrink-0 rounded-xl bg-indigo-50 px-2.5 py-2 sm:px-3 text-[13px] font-bold text-indigo-700 hover:bg-indigo-100"><Sparkles size={14} /> <span className="hidden sm:inline">Hỏi AI về tài liệu này</span><span className="sm:hidden">Hỏi AI</span></button>}
+          {!readOnly && <button type="button" onClick={() => onShare(doc)} className="flex items-center gap-1 shrink-0 rounded-xl border border-slate-200 px-2.5 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:px-3"><Link2 size={14} /> <span className="hidden sm:inline">Chia sẻ</span></button>}
           {!readOnly && <button type="button" onClick={() => onEdit(doc.id)} className="hidden items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:flex"><Pencil size={14} /> Sửa</button>}
-          <button type="button" onClick={() => onDownload(doc)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50"><Download size={14} /> <span className="hidden sm:inline">Tải về</span></button>
+          <button type="button" onClick={() => onDownload(doc)} className="flex items-center gap-1 shrink-0 rounded-xl border border-slate-200 px-2.5 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 sm:px-3"><Download size={14} /> <span className="hidden sm:inline">Tải về</span></button>
         </>}
       </div>
       {err ? <div className="grid flex-1 place-items-center p-6 text-sm text-rose-600">{err}</div>
@@ -275,7 +275,7 @@ function PasteModal({ folders, defaultFolder, defaultCustomer, onClose, onCreate
         </div>
         <div><label className={labelCls}>Thư mục</label><FolderSelect folders={folders} value={f.folder_id} onChange={set("folder_id")} /></div>
         <LinkSelects value={{ customer_id: f.customer_id, project_id: f.project_id }} onChange={(v) => setF((p) => ({ ...p, ...v }))} />
-        <div><label className={labelCls}>Nội dung</label><textarea rows={12} autoFocus className={`${inputCls} font-mono text-[12px]`} value={f.content} onChange={(e) => set("content")(e.target.value)} placeholder="Dán hoặc gõ nội dung vào đây…" /></div>
+        <div><label className={labelCls}>Nội dung</label><textarea rows={12} autoFocus className={`${inputCls} h-44 font-mono text-[12px] sm:h-auto`} value={f.content} onChange={(e) => set("content")(e.target.value)} placeholder="Dán hoặc gõ nội dung vào đây…" /></div>
         {err && <div className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] text-rose-600">{err}</div>}
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Huỷ</button>

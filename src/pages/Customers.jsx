@@ -209,15 +209,15 @@ export default function Customers() {
             <div className="text-sm font-bold text-slate-800">{counts.active} khách · {projects.length} dự án</div>
             <div className="truncate text-xs text-slate-400">Bấm vào khách để xổ danh sách dự án</div>
           </div>
-          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
-          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", active: true })} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
+          {canW && <button onClick={() => setAiOpen(true)} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-indigo-200 bg-indigo-50 px-2 py-2 text-xs font-bold text-indigo-600 hover:bg-indigo-100 sm:px-3 sm:text-sm"><Sparkles size={16} /> AI</button>}
+          {canW && <button onClick={() => setModal({ name: "", phone: "", zalo: "", email: "", address: "", logo: "", note: "", active: true })} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-2.5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 sm:px-3.5 sm:text-sm"><Plus size={16} /> Thêm<span className="hidden sm:inline"> khách</span></button>}
           {/* MOBILE: Chọn + Hàng loạt nằm cùng hàng nút */}
           {canW && rows.length > 0 && (
-            <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
+            <button onClick={toggleAll} className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden">
               {allPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />} Chọn
             </button>
           )}
-          {canW && <button onClick={() => setBulk(true)} className={`${rows.length > 0 ? "" : "ml-auto "}flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden`}><ListPlus size={16} /> Hàng loạt</button>}
+          {canW && <button onClick={() => setBulk(true)} className={`${rows.length > 0 ? "" : "ml-auto "}flex shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-slate-200 px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:hidden`}><ListPlus size={16} className="hidden min-[400px]:block" /> Hàng loạt</button>}
           {!canW && <span className="shrink-0 rounded-xl bg-sky-50 px-3 py-2 text-xs font-bold text-sky-600">Chỉ xem</span>}
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-2">

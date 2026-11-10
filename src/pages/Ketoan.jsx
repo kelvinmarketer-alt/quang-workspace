@@ -378,7 +378,7 @@ function CollectModal({ item, onClose, onSave, onDelete }) {
   const val = Math.min(remain, Math.max(0, num(amt)));
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={guardClose(onClose)} onInputCapture={markDirty}>
-      <div className="w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[92vh] w-full max-w-sm overflow-y-auto rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-2xl sm:pb-5" onClick={(e) => e.stopPropagation()}>
         <div className="text-base font-extrabold text-slate-900">Thu hồi công nợ</div>
         <div className="mt-0.5 truncate text-sm text-slate-500">{item.customerName} · {item.projectName} · {item.label}</div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-center">

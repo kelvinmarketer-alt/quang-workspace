@@ -26,9 +26,9 @@ export default function Combobox({ options, value, onChange, placeholder = "Tìm
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left text-sm">
-        <span className={selected ? "text-slate-800" : "text-slate-400"}>{selected ? selected.label : placeholder}</span>
-        <ChevronDown size={16} className="text-slate-400" />
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 text-left text-base sm:text-sm">
+        <span className={`min-w-0 truncate ${selected ? "text-slate-800" : "text-slate-400"}`}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={16} className="shrink-0 text-slate-400" />
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-slate-100 bg-white shadow-2xl">

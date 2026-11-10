@@ -250,7 +250,7 @@ export default function CommandPalette({ open, setOpen, navItems = [] }) {
             autoComplete="off"
             spellCheck={false}
           />
-          <button onClick={close} className="shrink-0 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 hover:text-slate-600">Esc</button>
+          <button onClick={close} className="shrink-0 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 hover:text-slate-600"><span className="sm:hidden">Đóng</span><span className="hidden sm:inline">Esc</span></button>
         </div>
         <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
           {flat.length === 0 && <div className="px-3 py-6 text-center text-sm text-slate-400">Không tìm thấy “{q}”.</div>}
