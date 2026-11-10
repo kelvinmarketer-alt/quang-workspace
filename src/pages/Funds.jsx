@@ -1032,13 +1032,13 @@ function FundsMain() {
               <input value={hQ} onChange={(e) => setHQ(e.target.value)} placeholder="Tìm ghi chú, tên quỹ…" className="w-full min-w-0 bg-transparent text-sm outline-none" />
               {hQ && <button onClick={() => setHQ("")} className="-m-1 shrink-0 rounded p-1 text-slate-400 hover:text-slate-600" title="Xoá tìm"><X size={14} /></button>}
             </div>
-            <select value={hAllYears ? "all" : "year"} onChange={(e) => setHAllYears(e.target.value === "all")} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
+            <select value={hAllYears ? "all" : "year"} onChange={(e) => setHAllYears(e.target.value === "all")} className="min-w-0 flex-1 basis-[40%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:basis-auto">
               <option value="year">Năm {year}</option><option value="all">Tất cả năm</option>
             </select>
-            <select value={hFund} onChange={(e) => setHFund(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
+            <select value={hFund} onChange={(e) => setHFund(e.target.value)} className="min-w-0 flex-1 basis-[40%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:basis-auto">
               <option value="">Mọi quỹ</option>{(funds || []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
-            <select value={hCat} onChange={(e) => setHCat(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
+            <select value={hCat} onChange={(e) => setHCat(e.target.value)} className="min-w-0 basis-full rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:basis-auto">
               <option value="">Mọi danh mục</option>{histCats.map((c) => <option key={c} value={c}>{c}</option>)}<option value="_none">Không danh mục</option>
             </select>
             {(histFiltered || hAllYears) && <button onClick={() => { setHQ(""); setHFund(""); setHCat(""); setHAllYears(false); }} className="text-xs font-bold text-indigo-500 hover:underline">Bỏ lọc</button>}
