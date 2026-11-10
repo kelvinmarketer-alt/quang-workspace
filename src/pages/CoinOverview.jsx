@@ -125,8 +125,8 @@ export default function CoinOverview({ active, go, noAssets = false }) { // noAs
           </div>
           <button onClick={() => go("invest")} className="flex shrink-0 items-center gap-1 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold hover:bg-white/10">Chi tiết <ChevronRight size={14} /></button>
         </div>
-      </>}
       </div>
+      </>}
 
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
         {/* Bot thật */}
