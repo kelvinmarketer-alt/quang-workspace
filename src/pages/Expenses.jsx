@@ -213,8 +213,8 @@ export default function Expenses() {
     <div className="space-y-4 sm:space-y-5">
       {/* Điện thoại (01/11): 3 số trên 1 hàng gọn (trước 3 ô xếp dọc chiếm hết màn đầu) */}
       <div className="grid grid-cols-3 gap-2 sm:hidden">
-        {[["Cố định / tháng", formatShort(burn), "text-rose-600"], ["Chi tháng này", formatShort(thisMonth), "text-amber-600"], ["Đang chi", `${activeCount} khoản`, "text-slate-800"]].map(([l, v, t]) => (
-          <div key={l} className="card min-w-0 p-3"><div className="text-[11px] font-bold uppercase leading-tight text-slate-400">{l}</div><div className={`mt-1 text-base font-extrabold tabular-nums ${t}`}>{v}</div></div>
+        {[["Cố định/tháng", formatShort(burn), "text-rose-600"], ["Chi tháng này", formatShort(thisMonth), "text-amber-600"], ["Đang chi", `${activeCount} khoản`, "text-slate-800"]].map(([l, v, t]) => (
+          <div key={l} className="card min-w-0 p-3"><div className="truncate text-[10px] font-bold uppercase leading-tight text-slate-400 sm:text-[11px]" title={l}>{l}</div><div className={`mt-1 text-base font-extrabold tabular-nums ${t}`}>{v}</div></div>
         ))}
       </div>
       <div className="hidden gap-4 sm:grid sm:grid-cols-3">

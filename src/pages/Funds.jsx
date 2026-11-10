@@ -812,10 +812,10 @@ function FundsMain() {
                   </div>
                 </div>
               )}
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-                <span className="text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
-                {opexTotal > 0 && <span className="text-indigo-200">− Chi phí vận hành: <b className="text-rose-200">{formatShort(opexTotal)}</b></span>}
-                <span className="text-indigo-200">Đã chuyển / chi ra: <b className="text-white">{formatShort(distributed)}</b></span>
+              <div className="mt-3 grid gap-y-1 text-xs sm:flex sm:flex-wrap sm:gap-x-5">
+                <span className="flex justify-between gap-3 text-indigo-200">LN gộp lũy kế: <b className="text-white">{formatShort(grossTotal)}</b></span>
+                {opexTotal > 0 && <span className="flex justify-between gap-3 text-indigo-200">− Chi phí vận hành: <b className="text-rose-200">{formatShort(opexTotal)}</b></span>}
+                <span className="flex justify-between gap-3 text-indigo-200">Đã chuyển / chi ra: <b className="text-white">{formatShort(distributed)}</b></span>
               </div>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -1032,13 +1032,13 @@ function FundsMain() {
               <input value={hQ} onChange={(e) => setHQ(e.target.value)} placeholder="Tìm ghi chú, tên quỹ…" className="w-full min-w-0 bg-transparent text-sm outline-none" />
               {hQ && <button onClick={() => setHQ("")} className="-m-1 shrink-0 rounded p-1 text-slate-400 hover:text-slate-600" title="Xoá tìm"><X size={14} /></button>}
             </div>
-            <select value={hAllYears ? "all" : "year"} onChange={(e) => setHAllYears(e.target.value === "all")} className="rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600">
+            <select value={hAllYears ? "all" : "year"} onChange={(e) => setHAllYears(e.target.value === "all")} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
               <option value="year">Năm {year}</option><option value="all">Tất cả năm</option>
             </select>
-            <select value={hFund} onChange={(e) => setHFund(e.target.value)} className="max-w-[45%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:max-w-none">
+            <select value={hFund} onChange={(e) => setHFund(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
               <option value="">Mọi quỹ</option>{(funds || []).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
-            <select value={hCat} onChange={(e) => setHCat(e.target.value)} className="max-w-[45%] rounded-xl border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-600 sm:max-w-none">
+            <select value={hCat} onChange={(e) => setHCat(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-600 sm:flex-none sm:px-2.5">
               <option value="">Mọi danh mục</option>{histCats.map((c) => <option key={c} value={c}>{c}</option>)}<option value="_none">Không danh mục</option>
             </select>
             {(histFiltered || hAllYears) && <button onClick={() => { setHQ(""); setHFund(""); setHCat(""); setHAllYears(false); }} className="text-xs font-bold text-indigo-500 hover:underline">Bỏ lọc</button>}
