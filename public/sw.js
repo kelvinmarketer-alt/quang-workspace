@@ -1,5 +1,5 @@
 /* Quang Workspace — Service Worker: Web Push nền + mở app khi MẤT MẠNG */
-const CACHE = "qws-shell-v1";
+const CACHE = "qws-shell-v2"; // v2 (11/11): xoá bộ đệm cũ có thể đã lưu nhầm HTML thay cho file JS
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil((async () => {
   for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
@@ -30,7 +30,9 @@ self.addEventListener("fetch", (event) => {
       const hit = await caches.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) {
+      // 11/11: ngay sau deploy, máy chủ có vài giây trả trang HTML (200) thay cho file /assets chưa kịp lan → KHÔNG lưu, nếu không app trắng trang mãi trên máy đó
+      const html = (res.headers.get("content-type") || "").includes("text/html");
+      if (res.ok && !html) {
         const c = await caches.open(CACHE);
         c.put(req, res.clone());
         const keys = await c.keys(); // giữ gọn: tối đa ~250 file, xoá file cũ nhất
