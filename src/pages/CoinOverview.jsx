@@ -31,7 +31,7 @@ const Head = ({ icon: I, title, badge, onOpen }) => (
   </div>
 );
 
-export default function CoinOverview({ active, go }) {
+export default function CoinOverview({ active, go, noAssets = false }) { // noAssets: nhúng trong tab Tổng quan đã có khối tài sản của Đầu tư (10/11)
   const { settings = {}, isOwner } = useData();
   const { bn, err } = useBinance(isOwner, active);
   const session = settings.paperBot || null;
@@ -104,6 +104,7 @@ export default function CoinOverview({ active, go }) {
   if (!isOwner) return null;
   return (
     <div className="space-y-3 sm:space-y-4">
+      {!noAssets && <>
       {/* Tài sản */}
       <div className="overflow-hidden rounded-none bg-gradient-to-br from-slate-900 to-amber-900/80 p-4 text-white shadow-xl sm:rounded-2xl sm:p-5">
         <div className="flex items-start justify-between gap-2">
@@ -124,6 +125,7 @@ export default function CoinOverview({ active, go }) {
           </div>
           <button onClick={() => go("invest")} className="flex shrink-0 items-center gap-1 rounded-xl border border-white/30 px-3 py-2 text-xs font-bold hover:bg-white/10">Chi tiết <ChevronRight size={14} /></button>
         </div>
+      </>}
       </div>
 
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">

@@ -79,7 +79,7 @@ function RiskRules({ live = false }) {
 export default function Coin() {
   const { isOwner, perms = [] } = useData();
   // Tab theo quyền (21/10): chủ thấy hết; thành viên thấy tab được cấp (Tổng quan Coin luôn chỉ chủ)
-  const allowTab = { overview: isOwner, invest: isOwner || perms.includes("coinInvest"), market: isOwner || perms.includes("coinMarket"), trade: isOwner || perms.includes("coinDemo") || perms.includes("coinLive"), forex: isOwner };
+  const allowTab = { overview: isOwner, invest: !isOwner && perms.includes("coinInvest"), /* 10/11: chủ — Đầu tư gộp vào Tổng quan; tài khoản phụ có quyền Đầu tư vẫn thấy tab riêng */ market: isOwner || perms.includes("coinMarket"), trade: isOwner || perms.includes("coinDemo") || perms.includes("coinLive"), forex: isOwner };
   const allowSub = { bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive") };
   // ?tab=live|bot|mt5|trade|forex|market|invest (vd link từ thông báo đẩy) → mở đúng tab; không có thì nhớ tab lần trước
   const [sp, setSp] = useSearchParams();
@@ -111,7 +111,7 @@ export default function Coin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTab]);
   // Tab không được phép (người khác / lúc chưa xác định chủ) → rơi về tab đầu tiên được xem
-  const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
+  const cur = allowTab[tab] ? tab : tab === "invest" && isOwner ? "overview" : COIN_TABS.find((k) => allowTab[k]) || "market";
   const subCur = allowSub[sub] ? sub : allowSub.bot ? "bot" : "live"; // công tắc Demo | Bot thật theo quyền
   // 10/11: cầu nối MT5 chưa chạy (không có dữ liệu trong 3 ngày) → ẩn tab Trade Forex + Thị trường Forex khỏi thanh tab.
   // Vẫn mở được bằng link ?tab=forex (vd để xem hướng dẫn cài); cầu nối chạy lại thì tab tự hiện.
@@ -140,7 +140,7 @@ export default function Coin() {
         ))}
       </div>
       </div>
-      {isOwner && (seen.overview || cur === "overview") && <div className={cur === "overview" ? "" : "hidden"}><Suspense fallback={fb}><CoinOverview active={cur === "overview"} go={pick} /></Suspense></div>}
+      {isOwner && (seen.overview || cur === "overview") && <div className={cur === "overview" ? "" : "hidden"}><Suspense fallback={fb}><CoinInvest active={cur === "overview"} slot={<CoinOverview active={cur === "overview"} go={pick} noAssets />} /></Suspense></div>}
       {allowTab.invest && (seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><Suspense fallback={fb}><CoinInvest active={cur === "invest"} /></Suspense></div>}
       {allowTab.market && (seen.market || cur === "market") && (
         <div className={cur === "market" ? "space-y-3" : "hidden"}>

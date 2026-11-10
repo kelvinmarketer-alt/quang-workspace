@@ -240,7 +240,7 @@ function CoinRow({ r, vnd, canW, onEdit, onDelete }) {
   );
 }
 
-export default function CoinInvest({ active = true }) {
+export default function CoinInvest({ active = true, slot = null }) { // slot: khối chen ngay dưới thẻ tài sản (tab Tổng quan gộp, 10/11)
   const { coins = [], addCoin, updateCoin, deleteCoin, canEdit, isOwner: isChu, perms = [], settings = {}, setSettings } = useData();
   // isOwner ở tab này = "được xem ví Binance & vốn": chủ, hoặc thành viên có quyền Đầu tư (danh mục & vốn). Sửa sổ nạp vẫn chỉ chủ (isChu).
   const isOwner = isChu || perms.includes("coinInvest");
@@ -434,6 +434,8 @@ export default function CoinInvest({ active = true }) {
         )}
         <div className="mt-3 text-[11px] text-amber-100/70">Giá cập nhật mỗi 15s{isOwner ? " · ví mỗi 5 phút" : ""} · tỉ giá {fmtNum(vnd, 0)} đ/$ (tự động)</div>
       </div>
+      {slot}
+      {slot && <div className="px-3 pt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400 sm:px-0">Danh mục &amp; lãi/lỗ chi tiết</div>}
 
       {/* Hàm qws-binance bản cũ → nhắc cập nhật (app vẫn chạy với dữ liệu cũ) */}
       {isOwner && bn && !isV2 && (

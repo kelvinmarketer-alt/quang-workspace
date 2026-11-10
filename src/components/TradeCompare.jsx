@@ -43,8 +43,14 @@ export default function TradeCompare({ active, go, canDemo, canLive }) {
   const bothOpen = demo && st;
   const gap = bothOpen ? dOpen - (nPos + nWait) : null;
 
-  return (
-    <div className="grid gap-2 rounded-none bg-white/70 p-2.5 shadow-sm sm:rounded-2xl sm:p-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+  return (<>
+    {/* 10/11: điện thoại — 1 dòng gọn (số đầy đủ đã có ở Tổng quan Coin); máy tính giữ dải 2 cột */}
+    <div className="flex items-center gap-2 whitespace-nowrap rounded-none bg-white/70 px-3 py-2 text-[12px] shadow-sm md:hidden">
+      <button onClick={() => go("bot")} disabled={!session} className="flex min-w-0 items-center gap-1 font-bold text-slate-600"><Bot size={13} className="shrink-0 text-emerald-500" /><span className="truncate">Demo <b className={`tabular-nums ${dEq != null ? tone(dEq - cfg.capital) : ""}`}>{dEq != null ? fmtUsd(dEq) : "…"}</b>{demo ? ` · ${dOpen} lệnh` : ""}</span></button>
+      {gap != null && <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10.5px] font-extrabold ${gap === 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{gap === 0 ? "khớp" : `lệch ${gap > 0 ? "+" : ""}${gap}`}</span>}
+      <button onClick={() => go("live")} disabled={!canLive} className="ml-auto flex min-w-0 items-center gap-1 font-bold text-slate-600"><Radio size={13} className="shrink-0 text-rose-500" /><span className="truncate">Thật {st ? <>{nPos}·{nWait} <b className={`tabular-nums ${tone(st.lastScan?.pnl)}`}>{st.lastScan?.pnl == null ? "" : fmtUsdSigned(st.lastScan.pnl)}</b></> : "…"}</span></button>
+    </div>
+    <div className="hidden gap-2 rounded-none bg-white/70 p-2.5 shadow-sm sm:rounded-2xl sm:p-3 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center">
       <button onClick={() => go("bot")} disabled={!session} className="rounded-xl px-2 py-1.5 text-left transition hover:bg-slate-50 disabled:opacity-50">
         <div className="mb-1 flex items-center gap-1.5 text-[12px] font-extrabold text-slate-700"><Bot size={14} className="text-emerald-500" /> Demo tự động</div>
         {session ? (
@@ -72,5 +78,5 @@ export default function TradeCompare({ active, go, canDemo, canLive }) {
         ) : <div className="text-[12px] text-slate-400">{canLive ? "Đang tải trạng thái bot…" : "Không có quyền xem."}</div>}
       </button>
     </div>
-  );
+  </>);
 }
