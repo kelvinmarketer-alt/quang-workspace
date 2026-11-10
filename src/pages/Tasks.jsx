@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft, Sparkles } from "lucide-react";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
+import { tasksOn } from "../lib/features.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import Calendar from "./Calendar.jsx";
 import MessageImportModal from "../components/MessageImport.jsx";
@@ -257,6 +258,16 @@ export default function Tasks({ initialTab = "tasks" }) {
   const [sp] = useSearchParams();
   const hasId = !!sp.get("id") || !!sp.get("quick");
   useEffect(() => { if (hasId) setTab("tasks"); }, [hasId]);
+  // 10/11: Công việc chưa dùng (0 việc) → chỉ hiện Lịch; bấm nút dưới cùng để dùng lại
+  const { tasks = [], settings = {}, setSettings, isOwner } = useData();
+  const [peek, setPeek] = useState(false);
+  const on = tasksOn(settings, tasks) || peek || hasId;
+  if (!on) return (
+    <div className="bento space-y-4 p-3 sm:p-5">
+      <Calendar />
+      <button type="button" onClick={() => (isOwner && setSettings ? setSettings({ showTasks: true }) : setPeek(true))} className="mx-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-bold text-slate-400 hover:bg-white hover:text-slate-600"><ListChecks size={14} /> Dùng thêm danh sách Công việc</button>
+    </div>
+  );
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
       <div className="flex">
@@ -269,6 +280,7 @@ export default function Tasks({ initialTab = "tasks" }) {
         </div>
       </div>
       {tab === "tasks" ? <TaskBoard /> : <Calendar />}
+      {tab === "tasks" && isOwner && setSettings && tasks.length === 0 && <button type="button" onClick={() => { setPeek(false); setSettings({ showTasks: false }); }} className="mx-auto flex items-center gap-1.5 rounded-xl px-3 py-2 text-[12.5px] font-bold text-slate-400 hover:bg-white hover:text-slate-600">Không dùng Công việc — chỉ giữ Lịch</button>}
     </div>
   );
 }

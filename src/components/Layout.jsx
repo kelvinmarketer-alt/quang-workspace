@@ -12,6 +12,7 @@ const PomodoroPill = lazy(() => import("./PomodoroPill.jsx"));
 const KBD_HINT = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || "") ? "⌘K" : "Ctrl K";
 import { lunarInfo } from "../lib/lunar.js";
 import { useData } from "../lib/store.jsx";
+import { tasksOn } from "../lib/features.js";
 import { useTheme, useSkin, SKINS } from "../lib/theme.js";
 import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
@@ -124,11 +125,13 @@ function HubTabs({ items }) {
 
 // Mục menu được phép thấy (quyền thành viên / chỉ chủ / văn phòng AI) — dùng chung cho sidebar + ô tìm kiếm
 function useNavItems() {
-  const { perms, isOwner } = useData();
+  const { perms, isOwner, settings, tasks } = useData();
   const officeOk = useOfficeAccess(isOwner);
+  const taskOn = tasksOn(settings, tasks);
   return useMemo(
-    () => NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner) && (!n.office || officeOk)),
-    [perms, isOwner, officeOk]
+    () => NAV.filter((n) => (!n.feat || (perms || []).includes(n.feat)) && (!n.ownerOnly || isOwner) && (!n.office || officeOk))
+      .map((n) => (n.to === "/cong-viec" && !taskOn ? { ...n, label: "Lịch", icon: CalendarDays } : n)), // 10/11: chưa dùng Công việc → mục menu chỉ còn "Lịch"
+    [perms, isOwner, officeOk, taskOn]
   );
 }
 

@@ -5,9 +5,10 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 const RevenueChart = lazy(() => import("../components/RevenueChart.jsx"));
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
-import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, Repeat, Activity, Coins, Loader2 } from "lucide-react";
+import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, CalendarDays, Repeat, Activity, Coins, Loader2 } from "lucide-react";
 import { Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
+import { tasksOn } from "../lib/features.js";
 import { projectsMonthly, projectYears, customerProjectSummary, totalDebt, debtToDate, allInstallments } from "../lib/selectors.js";
 import { MONTHS_VI, fmtDateVI, todayISO } from "../lib/format.js";
 import { generateCalendarEvents } from "../lib/events.js";
@@ -92,6 +93,7 @@ export default function Dashboard() {
     const tk = tasks.filter((t) => t.date && t.status !== "done" && t.date >= today).map((t) => ({ date: t.date, title: t.title, type: "task" }));
     return [...ev, ...tk].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   }, [tasks, family, today]); // eslint-disable-line react-hooks/exhaustive-deps
+  const week7 = useMemo(() => generateCalendarEvents(now, new Date(now.getTime() + 7 * 86400000), family).filter((e) => e.date >= today).length, [family, today]); // eslint-disable-line react-hooks/exhaustive-deps
   const week = useMemo(() => { const d = new Date(now); const k = (d.getDay() + 6) % 7; d.setDate(d.getDate() - k); return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return x; }); }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
   const li = lunarInfo(now);
 
@@ -124,7 +126,9 @@ export default function Dashboard() {
             <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px]">{headline}</h2>
             <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
               <MiniTile to="/khach-hang" icon={HandCoins} label="Cần thu" value={recvN ? formatShort(T.receivableTotal) : "0"} sub={recvN ? `${recvN} khoản` : "không có nợ tới hạn"} tone={recvN ? "text-rose-600" : "text-emerald-600"} />
-              <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
+              {tasksOn(settings, tasks)
+                ? <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
+                : <MiniTile to="/lich" icon={CalendarDays} label="Sự kiện" value={week7} sub="7 ngày tới" />}
               <MiniTile to="/chi-phi" icon={Repeat} label="Sắp gia hạn" value={renewN} sub="7 ngày tới" />
               {isOwner
                 ? <MiniTile to="/bao-cao" icon={Activity} label="Cần chú ý" value={rep.loading && !rep.data?.at ? "…" : rep.data?.errors?.length ? "?" : attention.length} sub={rep.data?.errors?.length ? "chưa lấy được số kênh — mở Báo cáo, Làm mới" : `${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
