@@ -218,18 +218,41 @@ function BalanceBox({ a, onChanged }) {
 function AlertsPanel({ tick }) {
   const [list, setList] = useState(null);
   const [all, setAll] = useState(false);
+  const [openG, setOpenG] = useState(null);
   const [err, setErr] = useState("");
   const [retry, setRetry] = useState(0);
   useEffect(() => { setErr(""); invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch((e) => setErr(e.message || String(e))); }, [tick, retry]);
+  // 10/11: gom theo tài khoản / thương hiệu (trước liệt kê rời 30+ dòng). Loại nặng (hết / sắp hết tiền, bị từ chối, lỗi) lên đầu.
+  const groups = useMemo(() => {
+    const m = new Map();
+    for (const x of list || []) {
+      const t = String(x.text || ""), i = t.indexOf(":");
+      const name = (i > 0 ? t.slice(0, i) : "Khác").replace(/^[^\p{L}\p{N}]+/u, "").trim() || "Khác";
+      const body = i > 0 ? t.slice(i + 1).trim() : t;
+      const hot = /giới hạn chi tiêu|hết tiền|hết ngân sách|từ chối|bị khoá|bị khóa|vô hiệu|lỗi thanh toán/i.test(t);
+      if (!m.has(name)) m.set(name, { name, items: [], hot: false });
+      const g = m.get(name); g.items.push({ ...x, body, hot }); g.hot = g.hot || hot;
+    }
+    return [...m.values()].map((g) => ({ ...g, items: g.items.sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at))) }))
+      .sort((a, b) => (b.hot - a.hot) || String(b.items[0].sent_at).localeCompare(String(a.items[0].sent_at)));
+  }, [list]);
   if (err && !list?.length) return <div className="px-3 sm:px-0"><Warn onRetry={() => setRetry((n) => n + 1)}>Không tải được cảnh báo 48 giờ qua: {err}</Warn></div>;
   if (!list?.length) return null;
+  const tm = (x) => new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const nHot = groups.filter((g) => g.hot).length;
   return (
     <Card>
-      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="hidden text-[11px] text-slate-400 sm:inline">(đã đẩy thông báo về app)</span><span className="ml-auto rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">{list.length}</span></div>
-      <div className="space-y-1">{(all ? list : list.slice(0, 3)).map((x) => (
-        <div key={x.key} className="flex gap-2 text-xs"><span className="shrink-0 text-slate-400">{new Date(x.sent_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span><span className="text-slate-700">{x.text}</span></div>
-      ))}</div>
-      {list.length > 3 && <button onClick={() => setAll((v) => !v)} className="mt-1.5 text-[12px] font-bold text-indigo-600">{all ? "Thu gọn" : `Xem thêm ${list.length - 3} cảnh báo`}</button>}
+      <div className="mb-2 flex items-center gap-2"><Bell size={16} className="text-rose-500" /><span className="text-sm font-extrabold">Cảnh báo 48 giờ qua</span><span className="hidden text-[11px] text-slate-400 sm:inline">(đã đẩy thông báo về app)</span><span className="ml-auto whitespace-nowrap rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">{groups.length} tài khoản · {list.length} lần{nHot ? ` · ${nHot} cần xử lý` : ""}</span></div>
+      <div className="space-y-1">{(all ? groups : groups.slice(0, 4)).map((g) => { const open = openG === g.name, x = g.items[0]; return (
+        <div key={g.name} className={`rounded-xl px-2.5 py-1.5 ${g.hot ? "bg-rose-50/70" : "bg-slate-50"}`}>
+          <button type="button" onClick={() => setOpenG(open ? null : g.name)} disabled={g.items.length < 2} className="flex w-full items-start gap-2 text-left text-xs">
+            <span className="min-w-0 flex-1"><b className={g.hot ? "text-rose-700" : "text-slate-800"}>{g.name}</b> <span className="text-slate-600">{x.body}</span></span>
+            <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400">{tm(x)}{g.items.length > 1 ? ` · +${g.items.length - 1}` : ""}</span>
+          </button>
+          {open && <div className="mt-1 space-y-0.5 border-t border-slate-200/70 pt-1">{g.items.slice(1).map((y) => <div key={y.key} className="flex gap-2 text-[11.5px]"><span className="shrink-0 text-slate-400">{tm(y)}</span><span className="text-slate-600">{y.body}</span></div>)}</div>}
+        </div>
+      ); })}</div>
+      {groups.length > 4 && <button onClick={() => setAll((v) => !v)} className="mt-1.5 text-[12px] font-bold text-indigo-600">{all ? "Thu gọn" : `Xem thêm ${groups.length - 4} tài khoản`}</button>}
       {err && <div className="mt-2"><Warn onRetry={() => setRetry((n) => n + 1)}>Không cập nhật được cảnh báo (đang hiện danh sách cũ): {err}</Warn></div>}
     </Card>
   );
@@ -615,9 +638,12 @@ function sumGroup(list) {
 const REPORT_CACHE = new Map();
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* bỏ qua */ } };
+// 10/11: nhớ bộ số quảng cáo gần nhất trên máy → mở trang là thấy số cũ ngay (mờ + "Đang tải…"), số mới về thì thay. Trước phải chờ Meta 6–10 giây mới có gì để xem.
+const LS_ADS = "qws_ads_last";
+const adsSaved = (u) => { try { const o = JSON.parse(lsGet(LS_ADS) || "null"); return o && o.key && o.v && o.u === u ? o : null; } catch { return null; } }; // u = email đang đăng nhập: không hiện số của tài khoản khác trên cùng máy
 
 export default function Ads() {
-  const { isOwner, ownerId, perms = [], settings = {}, adsResults = [] } = useData();
+  const { isOwner, ownerId, perms = [], settings = {}, adsResults = [], myEmail = "" } = useData();
   const canView = isOwner || (!!ownerId && perms.includes("ads")); // tài khoản phụ có quyền Quảng cáo: xem số liệu (máy chủ chỉ cho chế độ đọc)
   const [period, setPeriod] = usePeriod("today"); // nhớ chung với Website / Fanpage; chưa chọn bao giờ → Hôm nay
   const [compare, setCompare] = useState(true);
@@ -625,8 +651,8 @@ export default function Ads() {
   const setGroup = (g) => { setGroupS(g); lsSet("qws-ads-group", g); };
   const { since, until } = period;
   const rKey = `${since}|${until}|${compare}`;
-  const [data, setData] = useState(() => REPORT_CACHE.get(rKey)?.v || null);
-  const [dataKey, setDataKey] = useState(() => (REPORT_CACHE.get(rKey) ? rKey : "")); // kỳ của số đang hiện
+  const [data, setData] = useState(() => { const o = adsSaved(myEmail); if (o && o.key === rKey && !REPORT_CACHE.has(rKey)) REPORT_CACHE.set(rKey, { at: o.at || 0, v: o.v }); return REPORT_CACHE.get(rKey)?.v || o?.v || null; });
+  const [dataKey, setDataKey] = useState(() => (REPORT_CACHE.get(rKey) ? rKey : adsSaved(myEmail)?.key || "")); // kỳ của số đang hiện
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false); // tải ngầm
   const [err, setErr] = useState("");
@@ -650,6 +676,7 @@ export default function Ads() {
     try {
       const d = await invoke({ since, until, compare });
       REPORT_CACHE.set(key, { at: Date.now(), v: d });
+      lsSet(LS_ADS, JSON.stringify({ key, u: myEmail, at: Date.now(), v: d }));
       if (id === reqRef.current) { setData(d); setDataKey(key); setErr(""); }
     } catch (e) { if (id === reqRef.current && !silent) setErr(e.message || String(e)); }
     if (id === reqRef.current) { setLoading(false); setSyncing(false); }

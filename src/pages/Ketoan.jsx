@@ -412,8 +412,16 @@ function CollectModal({ item, onClose, onSave, onDelete }) {
 }
 
 function DebtPanel() {
-  const { projects, updateInstallment, canEdit } = useData();
+  const { projects, updateInstallment, canEdit, setToast } = useData();
   const canW = canEdit ? canEdit("ketoan") : true; // chỉ xem → ẩn nút Thu
+  // 10/11: nợ quá hạn — số ngày quá hạn, chép tin nhắc khách soạn sẵn, tạm gác nhắc (không đổi số công nợ)
+  const lateDays = (x) => (x.date && x.date < todayISO() ? Math.round((new Date(todayISO()) - new Date(x.date)) / 86400000) : 0);
+  const remind = async (x) => {
+    const text = `Chào anh/chị, em gửi nhắc khoản ${x.projectName}${x.label ? ` (${x.label})` : ""} còn ${formatVND(x.debt)} chưa thanh toán, hạn ${fmtDateVI(x.date)}. Anh/chị sắp xếp chuyển giúp em nhé. Em cảm ơn ạ!`;
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* trình duyệt chặn */ }
+    setToast?.({ text: ok ? "Đã chép tin nhắc — dán vào Zalo gửi khách" : "Không chép được, thử lại", at: Date.now() });
+  };
   const [collect, setCollect] = useState(null);
   const [q, setQ] = useState("");
   const [closed, setClosed] = useState(() => new Set());
@@ -501,12 +509,14 @@ function DebtPanel() {
                         <div key={x.id} className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 sm:flex-nowrap sm:gap-3 sm:px-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
-                            <div className="text-[11px] text-slate-400 sm:truncate">{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
+                            <div className="text-[11px] text-slate-400 sm:truncate">{lateDays(x) > 0 && <b className={`mr-1 rounded px-1 py-0.5 font-extrabold ${x.snooze ? "bg-slate-100 text-slate-500" : "bg-rose-100 text-rose-600"}`}>{x.snooze ? "đã gác nhắc" : `quá hạn ${lateDays(x)} ngày`}</b>}{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
                           </div>
                           <div className="contents sm:block sm:shrink-0 sm:text-right">
                             <div className="shrink-0 text-sm font-extrabold text-rose-600">{formatShort(x.debt)}</div>
                             {/* điện thoại: 2 nút xuống dòng riêng, chữ thông tin không bị cắt */}
                             {canW && <div className="flex w-full justify-end gap-1.5 sm:mt-1 sm:w-auto">
+                              {lateDays(x) > 0 && <button onClick={() => remind(x)} className="rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title="Chép tin nhắn nhắc thanh toán để dán vào Zalo">Chép tin nhắc</button>}
+                              {lateDays(x) > 0 && <button onClick={() => updateInstallment(x.projectId, x.id, { snooze: !x.snooze })} className="rounded-lg bg-slate-100 px-2 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 sm:py-1" title={x.snooze ? "Đưa lại vào danh sách cần thu hôm nay" : "Không nhắc ở Tổng quan nữa — công nợ vẫn giữ nguyên"}>{x.snooze ? "Nhắc lại" : "Tạm gác"}</button>}
                               <button onClick={async () => { if (await ask(`Thu đủ ${formatVND(x.debt)} của ${x.customerName}?`)) collectFull(x); }} className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2 py-2 text-[11px] font-bold sm:py-1 text-emerald-600 hover:bg-emerald-100"><Check size={12} /> Thu đủ</button>
                               <button onClick={() => setCollect(x)} className="rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold sm:py-1 text-white hover:bg-indigo-700">Thu một phần…</button>
                             </div>}

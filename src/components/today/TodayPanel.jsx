@@ -113,7 +113,7 @@ export function useToday() {
 
   // 3) CẦN THU: đợt đã tới ngày (≤ hôm nay) còn công nợ — allInstallments().debt = max(0, amount − collected)
   const receivables = useMemo(() => allInstallments(projects || [])
-    .filter((x) => x.date && x.date <= today && n(x.debt) > 0)
+    .filter((x) => x.date && x.date <= today && n(x.debt) > 0 && !x.snooze) // 10/11: đợt "tạm gác nhắc" không vào danh sách hôm nay (vẫn tính công nợ)
     .sort((a, b) => a.date.localeCompare(b.date)), [projects, today]);
   const receivableTotal = receivables.reduce((a, x) => a + n(x.debt), 0);
 
