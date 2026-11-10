@@ -135,6 +135,7 @@ export default function Calendar() {
   const [modal, setModal] = useState(null); // null | {} | event
   const [importOpen, setImportOpen] = useState(false);
   const [win, setWin] = useState(90);
+  const [gridOpen, setGridOpen] = useState(false);
   const [catF, setCatF] = useState("all");
   const [picked, setPicked] = useState(() => new Set());
 
@@ -176,7 +177,7 @@ export default function Calendar() {
   const myEvents = family.map(normEvent);
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       {/* Banner cần nhắc hôm nay */}
       {remindNow.length > 0 && (
         <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
@@ -192,7 +193,11 @@ export default function Calendar() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* 10/11: điện thoại — danh sách "Sự kiện sắp tới" lên trước, lưới tháng gập lại (trang dài hơn 4 màn hình) */}
+      <button type="button" onClick={() => setGridOpen((o) => !o)} aria-expanded={gridOpen} className="order-last flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-600 sm:hidden">
+        <ChevronRight size={16} className={`transition-transform ${gridOpen ? "rotate-90" : ""}`} /> {gridOpen ? "Ẩn lưới tháng" : `Xem lưới tháng ${month + 1}/${year} & âm lịch`}
+      </button>
+      <div className={`order-last grid-cols-1 gap-6 sm:order-none sm:grid lg:grid-cols-3 ${gridOpen ? "grid" : "hidden"}`}>
         <Card className="lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <div>

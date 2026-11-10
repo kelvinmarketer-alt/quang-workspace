@@ -282,12 +282,12 @@ export function AiImportModal({ mode = "project", projectId, onClose }) {
 
 /** Phần trong trang Cài đặt. */
 export default function AiImport() {
-  const { importParsed } = useData();
   return (
     <Card>
-      <SectionTitle action={<Sparkles size={18} className="text-indigo-500" />}>Nhập bằng AI (OpenAI)</SectionTitle>
+      <SectionTitle action={<Sparkles size={18} className="text-indigo-500" />}>Khoá AI (OpenAI)</SectionTitle>
       <AiKeyBar />
-      <div className="mt-4"><AiImportBox mode="project" onApply={importParsed} keyHint={false} /></div>
+      {/* 10/11: ô "Nhập bằng AI" bỏ khỏi Cài đặt — việc hằng ngày làm ở Khách & Dự án → Thêm ▾ → Nhập bằng AI */}
+      <div className="mt-2 text-[12px] text-slate-500">Muốn nhập dự án / đợt thu bằng AI: vào <b>Khách &amp; Dự án → Thêm → Nhập bằng AI</b>.</div>
     </Card>
   );
 }

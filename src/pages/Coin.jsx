@@ -8,7 +8,6 @@ import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "
 import { useBinance, useUsdVnd, depositInfo } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 import { cfgOf } from "../lib/paperBot.js";
-import { useTheme } from "../lib/theme.js";
 import { supabase } from "../lib/supabase.js";
 import TradeCompare from "../components/TradeCompare.jsx";
 const CoinInvest = lazy(() => import("./CoinInvest.jsx"));
@@ -111,9 +110,6 @@ export default function Coin() {
     const nx = new URLSearchParams(sp); nx.delete("tab"); setSp(nx, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qTab]);
-  // Giao diện Pro = giao diện tối TOÀN APP (21/10, lib/theme.js) — nút ở đây và ở thanh trên cùng là một
-  const [theme, setTheme] = useTheme(), pro = theme === "dark";
-  const setPro = (v) => setTheme(v ? "dark" : "light");
   // Tab không được phép (người khác / lúc chưa xác định chủ) → rơi về tab đầu tiên được xem
   const cur = allowTab[tab] ? tab : COIN_TABS.find((k) => allowTab[k]) || "market";
   const subCur = allowSub[sub] ? sub : allowSub.bot ? "bot" : "live"; // công tắc Demo | Bot thật theo quyền
@@ -143,9 +139,6 @@ export default function Coin() {
           </button>
         ))}
       </div>
-        <button onClick={() => setPro(!pro)} title={pro ? "Về giao diện thường" : "Giao diện Pro (nền tối kiểu sàn giao dịch)"} className={`hidden shrink-0 items-center gap-1.5 rounded-none px-3 text-[12px] font-extrabold shadow-sm transition sm:flex sm:rounded-2xl ${pro ? "pro-toggle-on" : "bg-white/70 text-slate-600 hover:text-slate-900"}`}>
-          {pro ? <Sun size={15} /> : <MonitorDot size={15} />}<span className="hidden sm:inline">{pro ? "Thường" : "Pro"}</span>
-        </button>
       </div>
       {isOwner && (seen.overview || cur === "overview") && <div className={cur === "overview" ? "" : "hidden"}><Suspense fallback={fb}><CoinOverview active={cur === "overview"} go={pick} /></Suspense></div>}
       {allowTab.invest && (seen.invest || cur === "invest") && <div className={cur === "invest" ? "" : "hidden"}><Suspense fallback={fb}><CoinInvest active={cur === "invest"} /></Suspense></div>}

@@ -59,6 +59,7 @@ export default function Dashboard() {
   const T = useToday();
   const [more, setMore] = useState(false);
   const [phoneMore, setPhoneMore] = useState(false);
+  const [phoneRest, setPhoneRest] = useState(false);
   const today = todayISO(), now = new Date(), curY = now.getFullYear(), curM = now.getMonth() + 1;
   const years = useMemo(() => { const ys = projectYears(projects); return ys.length ? ys : [curY]; }, [projects, curY]);
   // 01/11: mặc định NĂM NAY (trước lấy năm mới nhất có đợt → có đợt ghi trước sang năm sau là mở năm trống)
@@ -196,6 +197,11 @@ export default function Dashboard() {
 
       {more && <TodayPanel />}
 
+      {/* 10/11: điện thoại — Tiến độ năm, biểu đồ, Coin, phiếu thu gập lại (trang dài hơn 3 màn hình); máy tính giữ nguyên */}
+      <button type="button" onClick={() => setPhoneRest((o) => !o)} aria-expanded={phoneRest} className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white px-3 py-3 text-[13px] font-bold text-slate-600 ring-1 ring-slate-100 sm:hidden">
+        {phoneRest ? "Thu gọn" : "Xem tiến độ năm, biểu đồ doanh thu, phiếu thu"} <ChevronDown size={14} className={`transition ${phoneRest ? "rotate-180" : ""}`} />
+      </button>
+      <div className={`space-y-4 ${phoneRest ? "" : "hidden sm:block"}`}>
       <YearProgress />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
@@ -216,6 +222,7 @@ export default function Dashboard() {
             </div>))}
             {!recent.length && <div className="text-[13px] text-slate-400">Chưa có phiếu thu.</div>}</div>
         </div>
+      </div>
       </div>
     </div>
   );

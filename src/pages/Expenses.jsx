@@ -8,7 +8,7 @@ import { todayISO, fmtDateVI } from "../lib/format.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { "AI": "violet", "App": "indigo", "Khác": "slate" };
-const REC = { monthly: ["Hằng tháng", "rose"], yearly: ["Hằng năm", "amber"], once: ["1 lần", "slate"] };
+const REC = { monthly: ["Hằng tháng", "rose"], yearly: ["Hằng năm", "amber"], once: ["1 lần", "slate"], stopped: ["Đã dừng / hết hạn", "slate"] };
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 
@@ -162,10 +162,10 @@ export default function Expenses() {
   const counts = useMemo(() => { const c = {}; for (const e of expenses || []) c[e.category] = (c[e.category] || 0) + 1; return c; }, [expenses]);
 
   // Gom theo CHU KỲ (Hằng tháng → Hằng năm → 1 lần), mỗi nhóm có tổng burn/tháng
-  const REC_ORDER = ["monthly", "yearly", "once"];
+  const REC_ORDER = ["monthly", "yearly", "once", "stopped"]; // 10/11: khoản định kỳ đã dừng / hết hạn gom xuống nhóm cuối, mặc định gập
   const byRec = useMemo(() => {
     const map = new Map();
-    for (const e of rows) { const k = e.recurring || "monthly"; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
+    for (const e of rows) { const r = e.recurring || "monthly"; const k = r !== "once" && !isLive(e) ? "stopped" : r; if (!map.has(k)) map.set(k, []); map.get(k).push(e); }
     return REC_ORDER.filter((k) => map.has(k)).map((k) => { const items = map.get(k); return { rec: k, items, count: items.length, total: items.reduce((a, e) => a + num(e.amount), 0), burn: items.reduce((a, e) => a + (isLive(e) ? monthEquiv(e) : 0), 0) }; });
   }, [rows]);
   // Mặc định MỞ nhóm "Hằng tháng" (không có thì nhóm đầu tiên) để danh sách không trông trống; bấm chu kỳ để đóng/mở
