@@ -4,6 +4,7 @@ import { Card, SectionTitle } from "./ui.jsx";
 import { ask } from "./ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import ConnHint from "./ConnHint.jsx";
 import { ICAL_DEFAULTS, ICAL_GROUPS, buildIcs, newToken, icalUrl, icalWebcalUrl, icalGet, icalCreate, icalSave, icalDelete } from "../lib/ical.js";
 
 // Cài đặt (chỉ chủ): bật / tắt link lịch đăng ký, chọn nhóm hiện trên lịch, copy link, đổi link khi lỡ lộ.
@@ -79,6 +80,7 @@ export default function IcalSettings() {
   return (
     <Card>
       <SectionTitle action={<CalendarDays size={18} className="text-indigo-500" />}>Lịch trên điện thoại (iPhone / Google)</SectionTitle>
+      <ConnHint k="ical" className="-mt-3 mb-3" />
       {state === "loading" && <div className="grid place-items-center py-6"><Loader2 className="animate-spin text-indigo-500" /></div>}
 
       {state === "setup" && (

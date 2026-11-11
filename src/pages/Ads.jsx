@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell, CheckCircle2, XCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Info, ExternalLink, PlayCircle, Image as ImageIcon, Loader2 } from "lucide-react";
+import { RefreshCw, Megaphone, Target, Eye, Wallet, MessageCircle, ChevronDown, ChevronRight, AlertTriangle, Sparkles, Plus, Trash2, TrendingUp, TrendingDown, Bell, CheckCircle2, XCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Info, ExternalLink, PlayCircle, Image as ImageIcon, Loader2, KeyRound } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, StatCard, Badge, DateField, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -12,6 +12,8 @@ import { todayISO, fmtShort, fmtNum, fmtPct, downloadCSV } from "../lib/format.j
 import { RangePicker, usePeriod, makePeriod, useSort, sortRows, SortTh, CsvButton } from "./Web.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { AnswerCard, Leaderboard, SideDrawer, ViewToggle, loadView, saveView } from "../components/ReportKit.jsx";
+import { useNavigate } from "react-router-dom";
+import { loadHealth, saveHealth, updateHealth, tokenWarnings, classifyAdsError, agoVI, openSettingsSection } from "../lib/adsTokenHealth.js";
 
 // ---------- định dạng (kiểu Việt: dấu phẩy thập phân, giống Website / Fanpage) ----------
 const vnd = (v) => (v == null ? "—" : Math.round(v).toLocaleString("vi-VN") + "đ");
@@ -637,6 +639,44 @@ function sumGroup(list) {
   return s;
 }
 
+// 11/11: cảnh báo token TKQC Meta lỗi / hết hạn → dán token mới ở Cài đặt.
+// App không biết trước ngày hết hạn (token chỉ nằm ở máy chủ) → báo khi Facebook trả lỗi token, kèm lần cuối tải được số.
+function TokenBanner({ warns, officeErr, isOwner }) {
+  const nav = useNavigate();
+  if (!warns.length && !officeErr.length) return null;
+  const tok = warns.filter((w) => w.kind === "token");
+  return (
+    <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-[12.5px] text-rose-800">
+      <div className="flex flex-wrap items-start gap-2">
+        <KeyRound size={16} className="mt-0.5 shrink-0 text-rose-500" />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {warns.map((w) => (
+            <div key={w.id}>
+              <b>{w.kind === "token" ? `Token TKQC ${w.name} đã hết hạn / bị lỗi` : w.kind === "perm" ? `Token TKQC ${w.name} mất quyền xem tài khoản` : `TKQC ${w.name} tải lỗi ${agoVI(w.since) ? "từ " + agoVI(w.since) : ""}`}</b>
+              {" — "}{isOwner ? (w.kind === "other" ? "nếu lỗi kéo dài, vào Cài đặt dán token mới." : "vào Cài đặt dán token mới.") : "báo chủ dán token mới."}
+              <div className="mt-0.5 text-[11px] text-rose-600/80">
+                {w.expiredOn && <>Hết hạn ngày {w.expiredOn} · </>}
+                {w.lastOk ? `Lần cuối tải được số: ${agoVI(w.lastOk)}` : "Máy này chưa tải được số lần nào"}
+                <span className="block truncate" title={w.err}>Facebook báo: {w.err}</span>
+              </div>
+            </div>
+          ))}
+          {officeErr.map((o) => (
+            <div key={o.id}><b>Kết nối Facebook của Văn phòng AI lỗi token ({o.name})</b> — danh sách quảng cáo &amp; mục tiêu chiến dịch không tải được. {isOwner ? "Vào Cài đặt → Văn phòng AI để kết nối lại." : "Báo chủ kết nối lại."}</div>
+          ))}
+        </div>
+        {isOwner && (
+          <div className="flex w-full flex-wrap gap-1.5 sm:w-auto sm:flex-col">
+            {(warns.length > 0) && <button type="button" onClick={() => openSettingsSection(nav, "connect")} className="flex-1 rounded-xl bg-rose-600 px-3 py-2 text-[12px] font-bold text-white hover:bg-rose-700">{tok.length ? "Dán token mới" : "Mở Cài đặt"}</button>}
+            {officeErr.length > 0 && <button type="button" onClick={() => openSettingsSection(nav, "office")} className="flex-1 rounded-xl border border-rose-300 bg-white px-3 py-2 text-[12px] font-bold text-rose-700">Văn phòng AI</button>}
+          </div>
+        )}
+      </div>
+      {isOwner && warns.length > 0 && <div className="mt-1.5 pl-6 text-[11px] text-rose-600/80">Cài đặt → Kết nối &amp; AI → Tất cả tài khoản quảng cáo → ô "Đổi token" ở đúng tài khoản. Lưu ý: app không biết trước ngày hết hạn, chỉ báo khi Facebook đã từ chối token.</div>}
+    </div>
+  );
+}
+
 // Cache báo cáo chính trong bộ nhớ theo kỳ + so sánh: quay lại kỳ đã xem là hiện ngay; quá 5 phút thì hiện số cũ + tải lại ngầm
 const REPORT_CACHE = new Map();
 const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
@@ -721,6 +761,15 @@ export default function Ads() {
     return s;
   }, [data, group]);
 
+  // 11/11: sổ sức khoẻ token (nhớ trên máy) — cập nhật mỗi lần có số MỚI của đúng kỳ
+  const [health, setHealth] = useState(loadHealth);
+  useEffect(() => {
+    if (!data?.accounts || stale) return;
+    setHealth((h) => { const n = updateHealth(h, data.accounts); saveHealth(n); return n; });
+  }, [data, stale]);
+  const tokenWarns = useMemo(() => (data?.accounts && !stale ? tokenWarnings(health, data.accounts) : []), [health, data, stale]);
+  const officeTokErr = useMemo(() => Object.entries(goalErr).filter(([, m]) => classifyAdsError(m) === "token").map(([id]) => ({ id, name: (data?.accounts || []).find((a) => a.id === id)?.name || id })), [goalErr, data]);
+
   const diag = useMemo(() => (data ? diagnose(accounts, { targets: settings.adsTargets || {}, adsResults, since, until, goalBase }) : null), [allAccs, goalBase, group, settings.adsTargets, adsResults, since, until]);
 
   const aiKey = `${group}|${since}|${until}`;
@@ -752,6 +801,7 @@ export default function Ads() {
         {err && <div className="mt-2 rounded-xl bg-rose-50 p-2 text-xs text-rose-700">Lỗi tải số liệu: {err}</div>}
       </Card>
 
+      <TokenBanner warns={tokenWarns} officeErr={officeTokErr} isOwner={isOwner} />
       <AdsAnswer diag={diag} tot={tot} group={group} live={live} />
       <AlertsPanel tick={data?.updatedAt} />
 

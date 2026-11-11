@@ -5,7 +5,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 const RevenueChart = lazy(() => import("../components/RevenueChart.jsx"));
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
-import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, CalendarDays, Repeat, Activity, Coins, Loader2 } from "lucide-react";
+import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, CalendarDays, Repeat, Activity, Coins, Loader2, SlidersHorizontal } from "lucide-react";
 import { Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { tasksOn } from "../lib/features.js";
@@ -18,6 +18,8 @@ import { MeasureList } from "../components/MeasureAlerts.jsx";
 import TodayPanel, { useToday } from "../components/today/TodayPanel.jsx";
 import { BrandAvatar } from "../components/ReportKit.jsx";
 import YearProgress from "../components/YearProgress.jsx";
+import DashLayoutDialog from "../components/DashLayoutDialog.jsx";
+import { DASH_BLOCKS, DEFAULT_ORDER, PHONE_FIRST, normalizeLayout, isDefaultOrder, visibleBlocks, layoutFor, layoutPatch } from "../lib/dashLayout.js";
 
 const KLBL = { ads: "Quảng cáo", web: "Website", fp: "Fanpage", seo: "SEO" };
 const TLBL = { g: "đạt chỉ tiêu", w: "theo dõi", b: "dưới chỉ tiêu", n: "không chạy kênh này" };
@@ -54,7 +56,7 @@ function Kpi({ label, value, delta, deltaGood = true, sub, spark, color }) {
 }
 
 export default function Dashboard() {
-  const { tasks, family, projects, customerList, isOwner, perms = [], settings = {}, members = [], myEmail = "" } = useData();
+  const { tasks, family, projects, customerList, isOwner, perms = [], settings = {}, members = [], myEmail = "", setSettings, setToast } = useData();
   const myName = members.find((m) => (m.email || "").toLowerCase() === (myEmail || "").toLowerCase())?.name;
   const nav = useNavigate();
   const T = useToday();
@@ -115,128 +117,167 @@ export default function Dashboard() {
   ].slice(0, 6);
   const coinOk = perms.includes("coinDemo") && !!settings.paperBot;
 
-  return (
-    <div className="bento space-y-4 p-3 sm:p-5">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{isOwner ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
-        <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
-      </div>
+  // 11/11: Tuỳ chỉnh ô nào hiện + thứ tự (chủ lưu trong settings theo email; tài khoản phụ giữ ở trình duyệt này)
+  const localKey = `qws_dash_layout_${(myEmail || "").toLowerCase()}`;
+  const [localLayout, setLocalLayout] = useState(() => { try { return JSON.parse(localStorage.getItem(localKey) || "null"); } catch { return null; } });
+  const [customizing, setCustomizing] = useState(false);
+  const layout = isOwner ? layoutFor(settings, myEmail) : normalizeLayout(localLayout);
+  const avail = DEFAULT_ORDER.filter((id) => !(id === "coin" && !coinOk) && !(id === "year" && !isOwner));
+  const vis = visibleBlocks(layout, avail);
+  const dflt = isDefaultOrder(layout); // thứ tự mặc định → giữ nguyên cách xếp riêng cho máy tính bảng
+  const saveLayout = (l) => {
+    if (isOwner) setSettings?.(layoutPatch(settings, myEmail, l));
+    else { setLocalLayout(l); try { localStorage.setItem(localKey, JSON.stringify(l)); } catch { /* bỏ qua */ } }
+    setCustomizing(false);
+    setToast?.({ text: "Đã lưu bố cục Tổng quan", at: Date.now() });
+  };
+  const coinOn = vis.includes("coin");
+  const mdPair = dflt && vis.includes("week") && vis.includes("health"); // máy tính bảng: Tuần này | Sức khoẻ cạnh nhau
+  // Điện thoại: ô thứ PHONE_FIRST+1 trở đi gập vào nút "Xem thêm"
+  const cls = (id, md) => `${vis.indexOf(id) >= PHONE_FIRST && !phoneRest ? "max-sm:hidden" : ""} ${dflt ? md : ""}`;
+  const restNames = vis.slice(PHONE_FIRST).map((id) => (id === "health" && !isOwner ? "top khách" : (DASH_BLOCKS.find((b) => b.id === id)?.label || "").toLowerCase()));
 
-      {/* Máy tính bảng (md): 2 cột — câu trả lời + 4 số trải ngang, rồi lịch tuần | sức khoẻ thương hiệu (trước 1 cột dài 3–4 màn) */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-        {/* Việc của hôm nay */}
-        <div className="qws-answer card relative overflow-hidden p-4 sm:p-5 md:order-1 md:col-span-2 lg:order-none lg:col-span-8">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50 via-transparent to-transparent" />
-          <div className="relative">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Việc của hôm nay</span>
-              <button onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-[12.5px] font-bold text-white hover:bg-slate-700">{more ? "Thu gọn" : "Xem chi tiết hôm nay"} <ChevronDown size={14} className={more ? "rotate-180" : ""} /></button>
-            </div>
-            <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px]">{headline}</h2>
-            <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
-              <MiniTile to="/khach-hang" icon={HandCoins} label="Cần thu" value={recvN ? formatShort(T.receivableTotal) : "0"} sub={recvN ? `${recvN} khoản` : "không có nợ tới hạn"} tone={recvN ? "text-rose-600" : "text-emerald-600"} />
-              {tasksOn(settings, tasks)
-                ? <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
-                : <MiniTile to="/lich" icon={CalendarDays} label="Sự kiện" value={week7} sub="7 ngày tới" />}
-              <MiniTile to="/chi-phi" icon={Repeat} label="Sắp gia hạn" value={renewN} sub="7 ngày tới" />
-              {isOwner
-                ? <MiniTile to="/bao-cao" icon={Activity} label="Cần chú ý" value={rep.loading && !rep.data?.at ? "…" : rep.data?.errors?.length ? "?" : attention.length} sub={rep.data?.errors?.length ? "chưa lấy được số kênh — mở Báo cáo, Làm mới" : `${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
-                : <MiniTile to="/khach-hang" icon={Activity} label="Khách hàng" value={customerList.length} sub="đang quản lý" />}
-            </div>
-            {urgent.length > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (
-              <Link key={u.k} to={u.to} className="flex items-center gap-2.5 rounded-xl bg-white/70 px-3 py-2 ring-1 ring-slate-100 hover:ring-indigo-200">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${u.tone}`} /><div className="min-w-0"><div className="truncate text-[13px] font-semibold text-slate-800">{u.title}</div><div className="truncate text-[11.5px] text-slate-400">{u.sub}</div></div>
-              </Link>))}</div>}
+  const BLOCKS = {
+    // Việc của hôm nay
+    today: (c) => (
+      <div key="today" className={`qws-answer card relative overflow-hidden p-4 sm:p-5 md:col-span-2 lg:col-span-8 ${c}`}>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-indigo-50 via-transparent to-transparent" />
+        <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Việc của hôm nay</span>
+            <button onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-[12.5px] font-bold text-white hover:bg-slate-700">{more ? "Thu gọn" : "Xem chi tiết hôm nay"} <ChevronDown size={14} className={more ? "rotate-180" : ""} /></button>
           </div>
+          <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px]">{headline}</h2>
+          <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+            <MiniTile to="/khach-hang" icon={HandCoins} label="Cần thu" value={recvN ? formatShort(T.receivableTotal) : "0"} sub={recvN ? `${recvN} khoản` : "không có nợ tới hạn"} tone={recvN ? "text-rose-600" : "text-emerald-600"} />
+            {tasksOn(settings, tasks)
+              ? <MiniTile to="/cong-viec" icon={ListChecks} label="Việc" value={taskN} sub={T.overdueCount ? `${T.overdueCount} quá hạn` : "hôm nay"} tone={T.overdueCount ? "text-rose-600" : "text-slate-900"} />
+              : <MiniTile to="/lich" icon={CalendarDays} label="Sự kiện" value={week7} sub="7 ngày tới" />}
+            <MiniTile to="/chi-phi" icon={Repeat} label="Sắp gia hạn" value={renewN} sub="7 ngày tới" />
+            {isOwner
+              ? <MiniTile to="/bao-cao" icon={Activity} label="Cần chú ý" value={rep.loading && !rep.data?.at ? "…" : rep.data?.errors?.length ? "?" : attention.length} sub={rep.data?.errors?.length ? "chưa lấy được số kênh — mở Báo cáo, Làm mới" : `${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
+              : <MiniTile to="/khach-hang" icon={Activity} label="Khách hàng" value={customerList.length} sub="đang quản lý" />}
+          </div>
+          {urgent.length > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (
+            <Link key={u.k} to={u.to} className="flex items-center gap-2.5 rounded-xl bg-white/70 px-3 py-2 ring-1 ring-slate-100 hover:ring-indigo-200">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${u.tone}`} /><div className="min-w-0"><div className="truncate text-[13px] font-semibold text-slate-800">{u.title}</div><div className="truncate text-[11.5px] text-slate-400">{u.sub}</div></div>
+            </Link>))}</div>}
         </div>
-
-        {/* Cột phải: lịch tuần + sắp tới + thông báo */}
-        <div className="card p-4 md:order-3 lg:order-none lg:col-span-4 lg:row-span-3">
-          <div className="mb-3 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Tuần này</h3><Link to="/lich" className="-my-1.5 px-1 py-1.5 text-[12px] font-bold text-indigo-600">Lịch →</Link></div>
-          <div className="mb-4 grid grid-cols-7 gap-1 text-center">{week.map((d) => { const on = d.toDateString() === now.toDateString(), l = lunarInfo(d); return (
-            <div key={d.toISOString()} className={`rounded-xl py-1.5 ${on ? "bg-slate-900 text-white" : "text-slate-500"}`}>
-              <div className="text-[10.5px] font-semibold">{DOW[d.getDay()]}</div>
-              <div className={`text-base font-extrabold tabular-nums ${on ? "text-white" : "text-slate-800"}`}>{d.getDate()}</div>
-              <div className={`text-[9.5px] ${l.special ? "font-bold text-amber-500" : on ? "text-slate-300" : "text-slate-400"}`}>{l.day}/{l.month}</div>
-            </div>); })}</div>
-          <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Sắp tới</div>
-          <div className="space-y-1.5">{upcoming.map((e, i) => { const [tone, label] = TYPE_BADGE[e.type] || ["slate", ""]; const d = new Date(e.date); return (
-            <div key={i} className={`${i > 1 && !phoneMore ? "hidden sm:flex" : "flex"} items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2`}>
-              <div className="w-9 shrink-0 text-center leading-none"><div className="text-[9.5px] font-bold text-slate-400">{MONTHS_VI[d.getMonth()]}</div><div className="text-[15px] font-extrabold text-slate-700">{d.getDate()}</div></div>
-              <div className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-800">{e.title}</div>
-              {label && <Badge tone={tone}>{label}</Badge>}
-            </div>); })}
-            {!upcoming.length && <div className="text-[13px] text-slate-400">Không có sự kiện 30 ngày tới.</div>}</div>
-          {/* 01/11: điện thoại thu gọn — chỉ 2 sự kiện gần nhất, cảnh báo / thu tiền bấm mới mở (Tổng quan trước dài ~4 màn) */}
-          <button type="button" onClick={() => setPhoneMore((v) => !v)} className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-slate-50 py-2 text-[12.5px] font-bold text-slate-600 sm:hidden">
-            {phoneMore ? "Thu gọn" : `Xem thêm${upcoming.length > 2 ? ` ${upcoming.length - 2} sự kiện,` : ""} cảnh báo & thu tiền`} <ChevronDown size={14} className={`transition ${phoneMore ? "rotate-180" : ""}`} />
-          </button>
-          <div className={phoneMore ? "" : "hidden sm:block"}><Feed rows={health} recent={recent} isOwner={isOwner} miss={isOwner ? missingMeasure(rows, rep.data, settings.measureSkip || {}) : []} /></div>
-        </div>
-
-        {/* 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:order-2 md:col-span-2 md:grid-cols-4 lg:contents">
+      </div>
+    ),
+    // Cột phải: lịch tuần + sắp tới + thông báo (máy tính luôn nằm cột phải, cao 3 hàng)
+    week: (c) => (
+      <div key="week" className={`card p-4 ${mdPair ? "" : "md:col-span-2"} lg:col-span-4 lg:col-start-9 lg:row-span-3 ${c}`}>
+        <div className="mb-3 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Tuần này</h3><Link to="/lich" className="-my-1.5 px-1 py-1.5 text-[12px] font-bold text-indigo-600">Lịch →</Link></div>
+        <div className="mb-4 grid grid-cols-7 gap-1 text-center">{week.map((d) => { const on = d.toDateString() === now.toDateString(), l = lunarInfo(d); return (
+          <div key={d.toISOString()} className={`rounded-xl py-1.5 ${on ? "bg-slate-900 text-white" : "text-slate-500"}`}>
+            <div className="text-[10.5px] font-semibold">{DOW[d.getDay()]}</div>
+            <div className={`text-base font-extrabold tabular-nums ${on ? "text-white" : "text-slate-800"}`}>{d.getDate()}</div>
+            <div className={`text-[9.5px] ${l.special ? "font-bold text-amber-500" : on ? "text-slate-300" : "text-slate-400"}`}>{l.day}/{l.month}</div>
+          </div>); })}</div>
+        <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Sắp tới</div>
+        <div className="space-y-1.5">{upcoming.map((e, i) => { const [tone, label] = TYPE_BADGE[e.type] || ["slate", ""]; const d = new Date(e.date); return (
+          <div key={i} className={`${i > 1 && !phoneMore ? "hidden sm:flex" : "flex"} items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2`}>
+            <div className="w-9 shrink-0 text-center leading-none"><div className="text-[9.5px] font-bold text-slate-400">{MONTHS_VI[d.getMonth()]}</div><div className="text-[15px] font-extrabold text-slate-700">{d.getDate()}</div></div>
+            <div className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-800">{e.title}</div>
+            {label && <Badge tone={tone}>{label}</Badge>}
+          </div>); })}
+          {!upcoming.length && <div className="text-[13px] text-slate-400">Không có sự kiện 30 ngày tới.</div>}</div>
+        {/* 01/11: điện thoại thu gọn — chỉ 2 sự kiện gần nhất, cảnh báo / thu tiền bấm mới mở (Tổng quan trước dài ~4 màn) */}
+        <button type="button" onClick={() => setPhoneMore((v) => !v)} className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl bg-slate-50 py-2 text-[12.5px] font-bold text-slate-600 sm:hidden">
+          {phoneMore ? "Thu gọn" : `Xem thêm${upcoming.length > 2 ? ` ${upcoming.length - 2} sự kiện,` : ""} cảnh báo & thu tiền`} <ChevronDown size={14} className={`transition ${phoneMore ? "rotate-180" : ""}`} />
+        </button>
+        <div className={phoneMore ? "" : "hidden sm:block"}><Feed rows={health} recent={recent} isOwner={isOwner} miss={isOwner ? missingMeasure(rows, rep.data, settings.measureSkip || {}) : []} /></div>
+      </div>
+    ),
+    // 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột
+    kpi: (c) => (
+      <div key="kpi" className={`grid grid-cols-2 gap-3 sm:gap-4 md:col-span-2 md:grid-cols-4 lg:contents ${c}`}>
         <Kpi label={`Doanh thu ${year === curY ? `T1–T${curM}` : year}`} value={tot.rev} delta={pctOf(tot.rev, prevTot.rev)} sub={`so ${year - 1}`} spark={shown.map((m) => m.revenue)} color="#6366f1" />
         <Kpi label="Lợi nhuận gộp" value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`${tot.rev ? Math.round((tot.gp / tot.rev) * 100) : 0}% biên`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
         <Kpi label="Công nợ tới hạn" value={debt} sub={notDue > 0 ? `+ ${formatShort(notDue)} chưa tới hạn` : debt > 0 ? "chưa thu" : "không có nợ"} />
         {isOwner
           ? <Kpi label="Chi quảng cáo 30 ngày" value={adsSpend == null ? "…" : adsSpend} delta={adsSpend != null ? pctOf(adsSpend, adsPrev) : null} deltaGood={false} sub="so 30 ngày trước" />
           : <Kpi label="Khách hàng" value={String(customerList.length)} sub="đang quản lý" />}
-        </div>
+      </div>
+    ),
+    // Sức khoẻ thương hiệu (chủ) / Top khách (tài khoản phụ)
+    health: (c) => (
+      <div key="health" className={`card p-4 ${mdPair ? "" : "md:col-span-2"} lg:col-span-8 ${c}`}>
+        {isOwner ? <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu{health.length > 5 ? <span className="ml-1.5 text-[12px] font-semibold text-slate-400">5 / {health.length} · xấu nhất trước</span> : null}</h3>
+            <Link to="/bao-cao" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-slate-700 hover:bg-slate-200">Trung tâm báo cáo <ArrowUpRight size={14} /></Link></div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{[...health].sort((a, b) => ["ads", "web", "fp", "seo"].filter((k) => b.cells[k].t === "b").length - ["ads", "web", "fp", "seo"].filter((k) => a.cells[k].t === "b").length).slice(0, 5).map((r) => (
+            <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
+              <span className="flex min-w-0 items-center gap-2"><BrandAvatar r={r} size={24} /><span className="truncate text-[13px] font-bold text-slate-800">{r.name}</span></span>
+              <span className="flex gap-1">{["ads", "web", "fp", "seo"].map((k) => { const lb = `${KLBL[k]}: ${rep.loading && !rep.data?.at ? "đang tải" : TLBL[r.cells[k].t] || "không chạy"}${r.cells[k].v ? ` · ${r.cells[k].v}` : ""}`; return <i key={k} title={lb} aria-label={lb} role="img" className={`bar-x h-1.5 flex-1 rounded-full ${rep.loading && !rep.data?.at ? "animate-pulse bg-slate-200" : DOT[r.cells[k].t]}`} />; })}</span>
+              {/* 01/11: chữ thay màu — ai khó phân biệt xanh / đỏ vẫn đọc được kênh nào đang dưới chỉ tiêu */}
+              {!(rep.loading && !rep.data?.at) && (() => { const bad = ["ads", "web", "fp", "seo"].filter((k) => r.cells[k].t === "b").map((k) => KLBL[k]); return <span className={`truncate text-[11px] font-semibold ${bad.length ? "text-rose-600" : "text-slate-400"}`}>{bad.length ? `Dưới chỉ tiêu: ${bad.join(", ")}` : "Không kênh nào dưới chỉ tiêu"}</span>; })()}
+            </button>))}
+            {!health.length && <div className="col-span-full text-[13px] text-slate-400">{rep.loading ? "Đang lấy số các kênh…" : "Chưa có thương hiệu đang chạy."}</div>}</div>
+          <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400"><span>4 vạch = Quảng cáo · Website · Fanpage · SEO</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-emerald-500" />đạt</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-amber-400" />theo dõi</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-rose-500" />dưới chỉ tiêu</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-slate-200" />không chạy kênh này</span></div>
+        </> : <>
+          <h3 className="mb-3 text-[15px] font-extrabold text-slate-800">Top khách hàng</h3>
+          <div className="space-y-2">{topCust.map(({ c: cu, v }) => (
+            <div key={cu.id} className="flex items-center gap-2.5"><span className="w-32 shrink-0 truncate text-[13px] font-semibold text-slate-700">{cu.name}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><i className="block h-full rounded-full bg-indigo-500" style={{ width: `${(v / topCust[0].v) * 100}%` }} /></div>
+              <b className="w-16 shrink-0 text-right text-[12.5px] tabular-nums text-slate-700">{formatShort(v)}</b></div>))}</div>
+        </>}
+      </div>
+    ),
+    year: (c) => <div key="year" className={`min-w-0 md:col-span-2 lg:col-span-12 ${c}`}><YearProgress /></div>,
+    chart: (c) => (
+      <div key="chart" className={`card p-4 md:col-span-2 ${coinOn ? "lg:col-span-5" : "lg:col-span-8"} ${c}`}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
+          <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
+        <div className="h-56"><Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-slate-50" />}><RevenueChart data={chartData} /></Suspense></div>
+        {year === curY && curM < 12 && <div className="text-[11px] text-slate-400">Chỉ vẽ tới tháng {curM} (tháng chưa tới không tính là 0).</div>}
+      </div>
+    ),
+    coin: (c) => <CoinTile key="coin" session={settings.paperBot} className={c} />,
+    receipts: (c) => (
+      <div key="receipts" className={`card p-4 ${coinOn ? "" : "md:col-span-2"} lg:col-span-4 ${c}`}>
+        <div className="mb-2 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Phiếu thu gần đây</h3><Link className="text-[12px] font-bold text-indigo-600" to="/ke-toan">Tất cả →</Link></div>
+        <div className="space-y-1.5">{recent.map((x) => (
+          <div key={x.projectId + x.id} className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-[11px] font-bold text-indigo-600">{(x.customerName || "?").slice(0, 2).toUpperCase()}</div>
+            <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-slate-800">{x.projectName}{x.label ? ` · ${x.label}` : ""}</div><div className="truncate text-[11px] text-slate-400">{x.customerName} · {x.date ? fmtDateVI(x.date) : ""}</div></div>
+            <b className="shrink-0 text-[13px] tabular-nums text-slate-800">{formatShort(x.revenue)}</b>
+          </div>))}
+          {!recent.length && <div className="text-[13px] text-slate-400">Chưa có phiếu thu.</div>}</div>
+      </div>
+    ),
+  };
+  // Máy tính bảng (md) khi giữ thứ tự mặc định: câu trả lời + 4 số trải ngang, rồi lịch tuần | sức khoẻ thương hiệu
+  const MD_ORDER = { today: "md:order-1 lg:order-none", kpi: "md:order-2 lg:order-none", week: "md:order-3 lg:order-none", health: "md:order-4 lg:order-none" };
+  const mdOf = (id) => MD_ORDER[id] || "md:order-5 lg:order-none";
 
-        {/* Sức khoẻ thương hiệu (chủ) / Top khách (tài khoản phụ) */}
-        <div className="card p-4 md:order-4 lg:order-none lg:col-span-8">
-          {isOwner ? <>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Sức khoẻ thương hiệu{health.length > 5 ? <span className="ml-1.5 text-[12px] font-semibold text-slate-400">5 / {health.length} · xấu nhất trước</span> : null}</h3>
-              <Link to="/bao-cao" className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-slate-700 hover:bg-slate-200">Trung tâm báo cáo <ArrowUpRight size={14} /></Link></div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{[...health].sort((a, b) => ["ads", "web", "fp", "seo"].filter((k) => b.cells[k].t === "b").length - ["ads", "web", "fp", "seo"].filter((k) => a.cells[k].t === "b").length).slice(0, 5).map((r) => (
-              <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid gap-2 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-transparent hover:ring-indigo-200">
-                <span className="flex min-w-0 items-center gap-2"><BrandAvatar r={r} size={24} /><span className="truncate text-[13px] font-bold text-slate-800">{r.name}</span></span>
-                <span className="flex gap-1">{["ads", "web", "fp", "seo"].map((k) => { const lb = `${KLBL[k]}: ${rep.loading && !rep.data?.at ? "đang tải" : TLBL[r.cells[k].t] || "không chạy"}${r.cells[k].v ? ` · ${r.cells[k].v}` : ""}`; return <i key={k} title={lb} aria-label={lb} role="img" className={`bar-x h-1.5 flex-1 rounded-full ${rep.loading && !rep.data?.at ? "animate-pulse bg-slate-200" : DOT[r.cells[k].t]}`} />; })}</span>
-                {/* 01/11: chữ thay màu — ai khó phân biệt xanh / đỏ vẫn đọc được kênh nào đang dưới chỉ tiêu */}
-                {!(rep.loading && !rep.data?.at) && (() => { const bad = ["ads", "web", "fp", "seo"].filter((k) => r.cells[k].t === "b").map((k) => KLBL[k]); return <span className={`truncate text-[11px] font-semibold ${bad.length ? "text-rose-600" : "text-slate-400"}`}>{bad.length ? `Dưới chỉ tiêu: ${bad.join(", ")}` : "Không kênh nào dưới chỉ tiêu"}</span>; })()}
-              </button>))}
-              {!health.length && <div className="col-span-full text-[13px] text-slate-400">{rep.loading ? "Đang lấy số các kênh…" : "Chưa có thương hiệu đang chạy."}</div>}</div>
-            <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400"><span>4 vạch = Quảng cáo · Website · Fanpage · SEO</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-emerald-500" />đạt</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-amber-400" />theo dõi</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-rose-500" />dưới chỉ tiêu</span><span><i className="mr-1 inline-block h-1.5 w-2.5 rounded-full bg-slate-200" />không chạy kênh này</span></div>
-          </> : <>
-            <h3 className="mb-3 text-[15px] font-extrabold text-slate-800">Top khách hàng</h3>
-            <div className="space-y-2">{topCust.map(({ c, v }) => (
-              <div key={c.id} className="flex items-center gap-2.5"><span className="w-32 shrink-0 truncate text-[13px] font-semibold text-slate-700">{c.name}</span>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><i className="block h-full rounded-full bg-indigo-500" style={{ width: `${(v / topCust[0].v) * 100}%` }} /></div>
-                <b className="w-16 shrink-0 text-right text-[12.5px] tabular-nums text-slate-700">{formatShort(v)}</b></div>))}</div>
-          </>}
+  return (
+    <div className="bento space-y-4 p-3 sm:p-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{isOwner ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
+          <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
         </div>
+        <button type="button" onClick={() => setCustomizing(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50" title="Chọn ô hiện và thứ tự"><SlidersHorizontal size={14} /> Tuỳ chỉnh</button>
       </div>
 
-      {more && <TodayPanel />}
-
-      {/* 10/11: điện thoại — Tiến độ năm, biểu đồ, Coin, phiếu thu gập lại (trang dài hơn 3 màn hình); máy tính giữ nguyên */}
-      <button type="button" onClick={() => setPhoneRest((o) => !o)} aria-expanded={phoneRest} className="flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white px-3 py-3 text-[13px] font-bold text-slate-600 ring-1 ring-slate-100 sm:hidden">
-        {phoneRest ? "Thu gọn" : "Xem tiến độ năm, biểu đồ doanh thu, phiếu thu"} <ChevronDown size={14} className={`transition ${phoneRest ? "rotate-180" : ""}`} />
-      </button>
-      <div className={`space-y-4 ${phoneRest ? "" : "hidden sm:block"}`}>
-      <YearProgress />
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-        <div className={`card p-4 md:col-span-2 ${coinOk ? "lg:col-span-5" : "lg:col-span-8"}`}>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
-            <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
-          <div className="h-56"><Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-slate-50" />}><RevenueChart data={chartData} /></Suspense></div>
-          {year === curY && curM < 12 && <div className="text-[11px] text-slate-400">Chỉ vẽ tới tháng {curM} (tháng chưa tới không tính là 0).</div>}
-        </div>
-        {coinOk && <CoinTile session={settings.paperBot} />}
-        <div className={`card p-4 ${coinOk ? "" : "md:col-span-2"} lg:col-span-4`}>
-          <div className="mb-2 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Phiếu thu gần đây</h3><Link className="text-[12px] font-bold text-indigo-600" to="/ke-toan">Tất cả →</Link></div>
-          <div className="space-y-1.5">{recent.map((x) => (
-            <div key={x.projectId + x.id} className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2">
-              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-[11px] font-bold text-indigo-600">{(x.customerName || "?").slice(0, 2).toUpperCase()}</div>
-              <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-slate-800">{x.projectName}{x.label ? ` · ${x.label}` : ""}</div><div className="truncate text-[11px] text-slate-400">{x.customerName} · {x.date ? fmtDateVI(x.date) : ""}</div></div>
-              <b className="shrink-0 text-[13px] tabular-nums text-slate-800">{formatShort(x.revenue)}</b>
-            </div>))}
-            {!recent.length && <div className="text-[13px] text-slate-400">Chưa có phiếu thu.</div>}</div>
-        </div>
+      {/* 11/11: một lưới chung — ô xếp theo thứ tự đã tuỳ chỉnh; "dense" để ô sau lấp chỗ trống cạnh cột Tuần này */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-flow-row-dense lg:grid-cols-12">
+        {vis.flatMap((id, i) => [
+          BLOCKS[id](cls(id, mdOf(id))),
+          id === "today" && more ? <div key="today-more" className={`min-w-0 md:col-span-2 lg:col-span-12 ${dflt ? mdOf("today") : ""}`}><TodayPanel /></div> : null,
+          // 10/11: điện thoại — ô sau ô thứ 4 gập lại (trang dài hơn 3 màn hình); máy tính giữ nguyên
+          i === PHONE_FIRST - 1 && vis.length > PHONE_FIRST ? (
+            <button key="phone-rest" type="button" onClick={() => setPhoneRest((o) => !o)} aria-expanded={phoneRest} className={`flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white px-3 py-3 text-[13px] font-bold text-slate-600 ring-1 ring-slate-100 sm:hidden ${phoneRest ? "order-last" : ""}`}>
+              <span className="truncate">{phoneRest ? "Thu gọn" : `Xem thêm: ${restNames.join(", ")}`}</span> <ChevronDown size={14} className={`shrink-0 transition ${phoneRest ? "rotate-180" : ""}`} />
+            </button>
+          ) : null,
+        ])}
+        {!vis.length && <div className="card col-span-full p-6 text-center text-[13px] text-slate-500">Đang ẩn hết các ô. <button onClick={() => setCustomizing(true)} className="font-bold text-indigo-600">Bấm Tuỳ chỉnh để bật lại</button></div>}
       </div>
-      </div>
+
+      {customizing && <DashLayoutDialog layout={layout} avail={avail} labels={isOwner ? {} : { health: { label: "Top khách hàng", hint: "Khách có doanh thu cao nhất" } }} onSave={saveLayout} onClose={() => setCustomizing(false)} />}
     </div>
   );
 }
@@ -280,14 +321,14 @@ function Feed({ rows, recent, isOwner, miss = [] }) {
 }
 
 // Ô Coin: kết quả Demo (tính ngầm, nhớ 5 phút) — chỉ khi có quyền xem Demo và đang có phiên
-function CoinTile({ session }) {
+function CoinTile({ session, className = "" }) {
   const [fin, setFin] = useState(null);
   useEffect(() => { let on = true; import("../lib/coinShared.js").then((m) => m.demoResult(session)).then((f) => on && setFin(f)).catch(() => {}); return () => { on = false; }; }, [session]);
   const P = fin?.portfolio, cap = session?.cfg?.capital || 1000;
   const curve = P?.curve?.map((x) => x.eq) || [];
   const step = Math.max(1, Math.floor(curve.length / 40));
   return (
-    <Link to="/coin" className="card flex flex-col gap-1 p-4 transition hover:-translate-y-0.5 lg:col-span-3">
+    <Link to="/coin" className={`card flex flex-col gap-1 p-4 transition hover:-translate-y-0.5 lg:col-span-3 ${className}`}>
       <div className="flex items-center justify-between"><h3 className="flex items-center gap-1.5 text-[15px] font-extrabold text-slate-800"><Coins size={15} className="text-amber-500" /> Đầu tư Coin</h3><Badge tone="emerald">Demo</Badge></div>
       {!P ? <div className="flex items-center gap-2 py-6 text-[12.5px] text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tính Demo…</div> : <>
         <div className={`text-2xl font-extrabold tabular-nums ${P.equity >= cap ? "text-emerald-600" : "text-rose-600"}`}>{P.equity >= cap ? "+" : ""}{(((P.equity - cap) / cap) * 100).toFixed(1).replace(".", ",")}%</div>

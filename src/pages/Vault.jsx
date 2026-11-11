@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus, X, Trash2, Pencil, Copy, Check, Eye, EyeOff, Search,
   KeyRound, CreditCard, Landmark, Lock, ShieldAlert, ExternalLink,
@@ -126,7 +126,8 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
   const copyAll = async (e) => { e.stopPropagation(); if (await copy(itemToText(item))) { setCopied(true); setTimeout(() => setCopied(false), 1400); } };
   return (
     <Card className="!p-0 overflow-hidden">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-3 p-3 text-left">
+      {/* 11/11: khung bấm mở là div (trong có nút Copy — nút lồng nút là HTML sai) */}
+      <div role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }} className="flex w-full cursor-pointer items-center gap-3 p-3 text-left">
         <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${t.grad} text-white`}>
           <t.icon size={18} />
         </div>
@@ -137,7 +138,7 @@ function VaultCard({ item, canW, onEdit, onDelete }) {
         <button onClick={copyAll} className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold ${copied ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-700"}`} title="Copy thông tin (không gồm mật khẩu, CVV, số thẻ đầy đủ) — copy từng trường ở phần mở rộng">
           <span className="inline-flex items-center gap-1">{copied ? <Check size={12} /> : <Copy size={12} />}{copied ? "Đã copy" : "Copy"}</span>
         </button>
-      </button>
+      </div>
       {open && (
         <div className="border-t border-slate-100 bg-slate-50/50 px-3 pb-3">
           {t.fields.filter(([k]) => item[k]).map(([k, lbl, secret]) => (
@@ -346,6 +347,48 @@ function VaultModal({ initial, onClose, onSave }) {
   );
 }
 
+/* ---- TỰ KHOÁ khi không dùng (11/11) ----
+   Không chạm / gõ / cuộn trên trang N phút (mặc định 5), hoặc ẩn tab quá N phút → khoá lại.
+   Có PIN → khoá thật (phải nhập lại PIN). Chưa có khoá PIN (chế độ máy, không lên mây) → ẩn mọi giá trị đang hiện + làm mờ danh sách tới khi bấm "Mở khoá". */
+const IDLE_KEY = "qws_vault_idle_min";
+const IDLE_OPTIONS = [1, 3, 5, 10, 15, 30];
+const loadIdle = () => { try { const n = Number(localStorage.getItem(IDLE_KEY)); return IDLE_OPTIONS.includes(n) ? n : 5; } catch { return 5; } };
+function useIdleLock(enabled, minutes, onLock) {
+  const last = useRef(Date.now());
+  const hiddenAt = useRef(0);
+  const cb = useRef(onLock);
+  cb.current = onLock;
+  useEffect(() => {
+    if (!enabled) return undefined;
+    last.current = Date.now();
+    const limit = minutes * 60000;
+    const bump = () => { last.current = Date.now(); };
+    const check = () => { if (Date.now() - last.current >= limit) cb.current(); };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") { hiddenAt.current = Date.now(); return; }
+      if (hiddenAt.current && Date.now() - hiddenAt.current >= limit) { hiddenAt.current = 0; cb.current(); return; }
+      hiddenAt.current = 0; check();
+    };
+    const evs = ["pointerdown", "keydown", "wheel", "touchstart", "scroll", "input"];
+    evs.forEach((e) => window.addEventListener(e, bump, { passive: true, capture: true }));
+    document.addEventListener("visibilitychange", onVis);
+    const t = setInterval(check, 10000);
+    return () => { evs.forEach((e) => window.removeEventListener(e, bump, { capture: true })); document.removeEventListener("visibilitychange", onVis); clearInterval(t); };
+  }, [enabled, minutes]);
+}
+
+function IdleSelect({ value, onChange }) {
+  return (
+    <label className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-500">
+      <LockKeyhole size={13} className="shrink-0 text-slate-400" /> Tự khoá sau
+      <select aria-label="Tự khoá sau" value={value} onChange={(e) => onChange(Number(e.target.value))} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[12px] font-bold text-slate-700">
+        {IDLE_OPTIONS.map((n) => <option key={n} value={n}>{n} phút</option>)}
+      </select>
+      không dùng
+    </label>
+  );
+}
+
 /* ---- KHOÁ PIN: màn mở khoá + thanh quản lý PIN ---- */
 function PinUnlock({ onUnlock }) {
   const [pin, setPin] = useState("");
@@ -364,7 +407,7 @@ function PinUnlock({ onUnlock }) {
       <form onSubmit={go} className="mx-auto max-w-xs py-10 text-center">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white"><LockKeyhole size={26} /></div>
         <div className="mt-3 text-base font-extrabold text-slate-800">Kho Tài khoản & Thẻ đang khoá</div>
-        <div className="mt-1 text-xs text-slate-400">Nhập mã PIN để mở. Tự khoá lại khi rời app quá 5 phút.</div>
+        <div className="mt-1 text-xs text-slate-400">Nhập mã PIN để mở. Tự khoá lại khi không dùng hoặc rời app quá {loadIdle()} phút.</div>
         <input autoFocus type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Mã PIN" className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-center text-lg tracking-[0.4em]" />
         {err && <div className="mt-2 text-sm font-bold text-rose-600">{err}</div>}
         <button disabled={busy || !pin} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <Unlock size={15} />} Mở khoá</button>
@@ -429,6 +472,18 @@ export default function Vault() {
   const [modal, setModal] = useState(null); // sửa 1 mục
   const [batch, setBatch] = useState(false); // thêm hàng loạt
   const [aiOpen, setAiOpen] = useState(false); // thêm bằng AI đọc ảnh
+  // 11/11: tự khoá khi không dùng
+  const [idleMin, setIdleMin0] = useState(loadIdle);
+  const setIdleMin = (n) => { setIdleMin0(n); try { localStorage.setItem(IDLE_KEY, String(n)); } catch { /* chế độ riêng tư */ } };
+  const [softLocked, setSoftLocked] = useState(false); // chưa có PIN → khoá mềm: ẩn giá trị + làm mờ
+  const [lockEpoch, setLockEpoch] = useState(0); // đổi → dựng lại thẻ → mọi ô 👁 đang mở về ẩn
+  const pinLock = !!vaultPrivate && !!vaultHasPin;
+  const blocked = !!ownerId && !isOwner;
+  const doLock = () => {
+    setModal(null); setBatch(false); setAiOpen(false); setLockEpoch((e) => e + 1);
+    if (pinLock) lockVault(); else setSoftLocked(true);
+  };
+  useIdleLock(!blocked && !vaultLocked && !softLocked && vault.length > 0, idleMin, doLock);
 
   const counts = useMemo(() => {
     const c = { all: vault.length, app: 0, card: 0, bank: 0 };
@@ -509,6 +564,11 @@ export default function Vault() {
         {q && <button aria-label="Đóng" title="Đóng" onClick={() => setQ("")} className="text-slate-400 hover:text-slate-600"><X size={15} /></button>}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <IdleSelect value={idleMin} onChange={setIdleMin} />
+        {!pinLock && !softLocked && vault.length > 0 && <button type="button" onClick={doLock} className="ml-auto rounded-lg bg-white px-2.5 py-1 text-[12px] font-bold text-slate-600 shadow-sm hover:text-indigo-600">Ẩn hết ngay</button>}
+      </div>
+
       {/* Danh sách */}
       {list.length === 0 ? (
         <Card>
@@ -520,8 +580,22 @@ export default function Vault() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {list.map((item) => (
-            <VaultCard key={item.id} item={item} canW={canW} onEdit={setModal} onDelete={deleteVaultItem} />
+          {softLocked ? (
+            <div className="relative min-h-[220px]">
+              <div aria-hidden="true" className="pointer-events-none select-none space-y-2 blur-sm">
+                {list.slice(0, 4).map((item) => <VaultCard key={item.id} item={{ id: item.id, type: item.type, title: item.title }} canW={false} onEdit={() => {}} onDelete={() => {}} />)}
+              </div>
+              <div className="absolute inset-0 grid place-items-center p-3">
+                <div className="w-full max-w-xs rounded-2xl bg-white p-4 text-center shadow-xl ring-1 ring-slate-100">
+                  <LockKeyhole size={22} className="mx-auto text-indigo-500" />
+                  <div className="mt-1.5 text-sm font-extrabold text-slate-800">Đã tự khoá do không dùng</div>
+                  <div className="mt-0.5 text-[11.5px] text-slate-400">Các giá trị đang hiện đã được ẩn lại.</div>
+                  <button type="button" onClick={() => setSoftLocked(false)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white"><Unlock size={15} /> Mở khoá</button>
+                </div>
+              </div>
+            </div>
+          ) : list.map((item) => (
+            <VaultCard key={item.id + ":" + lockEpoch} item={item} canW={canW} onEdit={setModal} onDelete={deleteVaultItem} />
           ))}
         </div>
       )}

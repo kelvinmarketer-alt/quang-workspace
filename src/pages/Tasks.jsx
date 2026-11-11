@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft, Sparkles } from "lucide-react";
+import { Plus, X, Trash2, Check, Flag, Clock, ListChecks, CalendarDays, Play, Pause, SlidersHorizontal, CornerDownLeft, Sparkles, Repeat, Bell } from "lucide-react";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { tasksOn } from "../lib/features.js";
@@ -12,6 +12,7 @@ import { DUR_OPTIONS, DEFAULT_DUR } from "../lib/schedule.js";
 import { guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { parseQuickTask, dayLabel } from "../lib/quickTask.js";
 import { usePomo, startPomo, stopPomo, dayCount } from "../lib/pomodoro.js";
+import { REPEAT_TYPES, WEEKDAYS, REMIND_OPTIONS, normRepeat, repeatLabel } from "../lib/taskRepeat.js";
 
 // Ô thêm việc 1 dòng (01/11 sếp duyệt): gõ câu → Enter. Dán nhiều dòng = nhiều việc. Không ghi ngày → hôm nay.
 const QUICK = [[" hôm nay", "Hôm nay"], [" mai", "Mai"], [" thứ 2", "Thứ 2"], [" !cao", "Gấp"], [" ~1", "1 🍅"], [" ~2", "2 🍅"]];
@@ -22,7 +23,7 @@ function QuickAdd({ onAdd, onDetail, focusKey }) {
   const ref = useRef(null);
   useEffect(() => { if (focusKey) ref.current?.focus(); }, [focusKey]);
   const p = parseQuickTask(v, custs);
-  const toTask = (x) => ({ title: x.title, date: x.date || todayISO(), time: x.time || "", priority: x.priority || "med", note: "", customerId: x.customerId || null, ...(x.est ? { est: x.est } : {}) });
+  const toTask = (x) => ({ title: x.title, date: x.date || todayISO(), time: x.time || "", priority: x.priority || "med", note: "", customerId: x.customerId || null, ...(x.est ? { est: x.est } : {}), ...(x.repeat ? { repeat: x.repeat } : {}) });
   const submit = () => {
     const lines = v.split(/\n/).map((l) => l.trim()).filter(Boolean);
     const items = lines.map((l) => parseQuickTask(l, custs)).filter((x) => x.title);
@@ -53,7 +54,8 @@ function QuickAdd({ onAdd, onDetail, focusKey }) {
           {p.priority && <Chip c={p.priority === "high" ? "bg-rose-50 text-rose-600" : "bg-sky-50 text-sky-700"}>⚑ {p.priority === "high" ? "Gấp" : "Thấp"}</Chip>}
           {p.customerName && <Chip c="bg-violet-50 text-violet-700"># {p.customerName}</Chip>}
           {p.est && <Chip c="bg-emerald-50 text-emerald-700">🍅 ×{p.est}</Chip>}
-        </> : <><span className="text-[11px] text-slate-400 sm:hidden">Hiểu: <b>mai</b> · <b>9h</b> · <b>!cao</b> · <b>#khách</b> · <b>~2</b> 🍅</span><span className="hidden text-[11.5px] text-slate-400 sm:inline">Gõ 1 câu: <b>mai</b>, <b>thứ 3</b>, <b>15/11</b> · <b>9h</b>, <b>3h chiều</b> · <b>!cao</b> · <b>#tên khách</b> · <b>~2</b> (2 phiên 25 phút). Phím <b>N</b> ở bất kỳ đâu để thêm việc.</span></>}
+          {p.repeat && <Chip c="bg-teal-50 text-teal-700">🔁 {repeatLabel(p.repeat)}</Chip>}
+        </> : <><span className="text-[11px] text-slate-400 sm:hidden">Hiểu: <b>mai</b> · <b>9h</b> · <b>!cao</b> · <b>#khách</b> · <b>~2</b> 🍅</span><span className="hidden text-[11.5px] text-slate-400 sm:inline">Gõ 1 câu: <b>mai</b>, <b>thứ 3</b>, <b>15/11</b> · <b>9h</b>, <b>3h chiều</b> · <b>!cao</b> · <b>#tên khách</b> · <b>~2</b> (2 phiên 25 phút) · <b>mỗi ngày</b>, <b>mỗi thứ 2</b>, <b>mỗi tháng</b> (lặp lại). Phím <b>N</b> ở bất kỳ đâu để thêm việc.</span></>}
         <span className="ml-auto flex flex-wrap gap-1">{QUICK.map(([ins, l]) => <button key={l} type="button" onClick={() => { setV((x) => (x + ins).replace(/^\s+/, "")); ref.current?.focus(); }} className="rounded-full border border-slate-200 px-3 py-1.5 text-[12px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 sm:px-2.5 sm:py-0.5 sm:text-[11.5px]">{l}</button>)}</span>
       </div>
     </div>
@@ -68,7 +70,10 @@ function TaskModal({ initial, onClose, onSave }) {
   const editing = !!initial?.id;
   const { customerList = [], tasks: allTasks = [] } = useData();
   const custs = [...customerList].filter((c) => c.active !== false || c.id === initial?.customerId).sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", dur: DEFAULT_DUR, priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "", dur: initial.dur || DEFAULT_DUR, ...(initial.est ? { est: initial.est } : {}) } : {}) }));
+  const [f, setF] = useState(() => ({ title: "", date: todayISO(), time: "", dur: DEFAULT_DUR, priority: "med", note: "", ...(initial ? { title: initial.title || "", date: initial.date || "", time: initial.time || "", priority: initial.priority || "med", note: initial.note || "", customerId: initial.customerId || "", dur: initial.dur || DEFAULT_DUR, ...(initial.est ? { est: initial.est } : {}), repeat: normRepeat(initial.repeat, initial.date), remind: Number(initial.remind) || 0 } : {}) }));
+  const rep = f.repeat || null;
+  const setRepType = (type) => setF({ ...f, repeat: type ? normRepeat({ type }, f.date) : null });
+  const toggleDay = (d) => { const days = rep?.days || []; const n = days.includes(d) ? days.filter((x) => x !== d) : [...days, d]; if (n.length) setF({ ...f, repeat: { type: "weekly", days: n.sort() } }); };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" onInputCapture={markDirty}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={guardClose(onClose)} />
@@ -88,21 +93,54 @@ function TaskModal({ initial, onClose, onSave }) {
           </label>
           <label className="text-sm">
             {/* Giờ chỉ để hiển thị — bot chỉ gửi 1 tin tổng hợp lúc 7h sáng, không nhắc đúng giờ */}
-            <span className="mb-1 block font-semibold text-slate-600">Giờ <span className="text-[11px] font-medium text-slate-400">(hiển thị — bot nhắc lúc 7h sáng)</span></span>
+            <span className="mb-1 block font-semibold text-slate-600">Giờ <span className="text-[11px] font-medium text-slate-400">(tuỳ chọn)</span></span>
             <input type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2" />
           </label>
         </div>
         {f.time && (
           <div className="mb-3 space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="font-semibold text-slate-600">Kéo dài</span>
-              <select aria-label="Thời lượng" value={f.dur} onChange={(e) => setF({ ...f, dur: Number(e.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
-                {DUR_OPTIONS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
-              </select>
-            </label>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="font-semibold text-slate-600">Kéo dài</span>
+                <select aria-label="Thời lượng" value={f.dur} onChange={(e) => setF({ ...f, dur: Number(e.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+                  {DUR_OPTIONS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+                </select>
+              </label>
+              {/* 11/11: nhắc trước giờ — chỉ khi app đang mở (thông báo máy nếu đã cho phép, không thì thông báo nổi trong app) */}
+              <label className="flex items-center gap-2 text-sm">
+                <Bell size={14} className="text-slate-400" />
+                <select aria-label="Nhắc trước" value={f.remind || 0} onChange={(e) => setF({ ...f, remind: Number(e.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
+                  {REMIND_OPTIONS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+                </select>
+              </label>
+            </div>
+            {f.remind > 0 && <div className="text-[11px] text-slate-400">Nhắc khi app đang mở trên máy này. Bot vẫn gửi tin tổng hợp lúc 7h sáng.</div>}
             <ConflictNotice tasks={allTasks} date={f.date} time={f.time} dur={Number(f.dur) || DEFAULT_DUR} excludeId={initial?.id} onPick={(t) => setF({ ...f, time: t })} />
           </div>
         )}
+        {/* 11/11: việc lặp lại — đánh dấu xong thì app tự tạo lần tới */}
+        <div className="mb-3 text-sm">
+          <span className="mb-1 flex items-center gap-1.5 font-semibold text-slate-600"><Repeat size={14} /> Lặp lại</span>
+          <div className="grid grid-cols-4 gap-1.5">
+            {REPEAT_TYPES.map(([v, l]) => (
+              <button key={v || "none"} type="button" onClick={() => setRepType(v)} className={`rounded-xl border px-1 py-2 text-[12px] font-bold ${(rep?.type || "") === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
+            ))}
+          </div>
+          {rep?.type === "weekly" && (
+            <div className="mt-2 grid grid-cols-7 gap-1">
+              {WEEKDAYS.map(([d, l]) => (
+                <button key={d} type="button" aria-pressed={rep.days.includes(d)} onClick={() => toggleDay(d)} className={`rounded-lg py-1.5 text-[12px] font-bold ${rep.days.includes(d) ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>
+              ))}
+            </div>
+          )}
+          {rep?.type === "monthly" && (
+            <label className="mt-2 flex items-center gap-2 text-[13px] text-slate-600">Ngày
+              <input type="number" min={1} max={31} aria-label="Ngày trong tháng" value={rep.dom} onChange={(e) => setF({ ...f, repeat: { type: "monthly", dom: Math.min(31, Math.max(1, Number(e.target.value) || 1)) } })} className="w-16 rounded-lg border border-slate-200 px-2 py-1" />
+              hằng tháng <span className="text-[11px] text-slate-400">(tháng thiếu ngày → ngày cuối tháng)</span>
+            </label>
+          )}
+          {rep && <div className="mt-1 text-[11px] text-slate-400">Đánh dấu xong → app tự tạo lần tới. Muốn dừng: mở việc, chọn "Không lặp".</div>}
+        </div>
         <div className="mb-3 flex gap-2">
           {Object.entries(PRIO).map(([v, [tone, l]]) => (
             <button key={v} onClick={() => setF({ ...f, priority: v })} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-bold ${f.priority === v ? "border-indigo-500 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500"}`}>{l}</button>
@@ -120,7 +158,7 @@ function TaskModal({ initial, onClose, onSave }) {
           <span className="mb-1 block font-semibold text-slate-600">Ghi chú</span>
           <textarea value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} rows={2} className="w-full rounded-xl border border-slate-200 px-3 py-2" placeholder="Chi tiết (tuỳ chọn)" />
         </label>
-        <button onClick={() => { if (f.title.trim()) { const { dur, ...rest } = f; onSave({ ...rest, ...(f.time ? { dur: Number(dur) || DEFAULT_DUR } : {}), title: f.title.trim(), customerId: f.customerId || null }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{editing ? "Lưu thay đổi" : "Lưu việc"}</button>
+        <button onClick={() => { if (f.title.trim()) { const { dur, repeat, remind, ...rest } = f; onSave({ ...rest, ...(f.time ? { dur: Number(dur) || DEFAULT_DUR } : {}), repeat: normRepeat(repeat, f.date), remind: f.time && remind > 0 ? remind : 0, title: f.title.trim(), customerId: f.customerId || null }); onClose(); } }} className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/30">{editing ? "Lưu thay đổi" : "Lưu việc"}</button>
       </div>
     </div>
   );
@@ -228,6 +266,8 @@ function TaskBoard() {
                   {overdue && <span className="rounded-md bg-rose-100 px-1.5 py-0.5 font-extrabold text-rose-600">Quá hạn</span>}
                   {t.customerId && custName(t.customerId) && <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-600">{custName(t.customerId)}</span>}
                   {t.date && <span className={`flex items-center gap-1 ${overdue ? "font-bold text-rose-500" : ""}`}><Clock size={12} /> {fmtDateVI(t.date)}{t.time ? " · " + t.time : ""}</span>}
+                  {t.repeat && repeatLabel(t.repeat) && <span className="flex items-center gap-1 font-semibold text-teal-600" title="Việc lặp lại — xong thì tự tạo lần tới"><Repeat size={11} /> {repeatLabel(t.repeat)}</span>}
+                  {t.time && Number(t.remind) > 0 && !done && <span className="flex items-center gap-0.5" title={`Nhắc trước ${t.remind} phút khi app đang mở`}><Bell size={11} /> {t.remind}′</span>}
                   {t.note && <span className="min-w-0 truncate">· {t.note}</span>}
                 </div>
               </button>

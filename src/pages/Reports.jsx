@@ -6,8 +6,9 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { RefreshCw, Printer, Sparkles, Loader2, ChevronDown, ArrowLeft, Check, Copy, Link2, ExternalLink, AlertTriangle, Columns3 } from "lucide-react";
 import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure } from "../lib/reports.js";
+import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure, reportCompleteness, completenessText } from "../lib/reports.js";
 import { MeasurePanel } from "../components/MeasureAlerts.jsx";
+import { ask } from "../components/ConfirmDialog.jsx";
 import { AnswerCard, BrandAvatar } from "../components/ReportKit.jsx";
 export { BrandAvatar };
 import { allInstallments } from "../lib/selectors.js";
@@ -39,6 +40,35 @@ function useRows() {
   const rows = useMemo(() => buildBrandRows({ customers: customerList, projects, tasks, data: rep.data, links: settings.reportLinks || {}, reportLog: settings.reportLog || {} }),
     [customerList, projects, tasks, rep.data, settings.reportLinks, settings.reportLog]);
   return { rows, rep };
+}
+
+// ---------- Kiểm đủ số trước khi gửi (11/11) ----------
+const CST = { ok: ["bg-emerald-500", "text-emerald-700"], partial: ["bg-amber-400", "text-amber-700"], missing: ["bg-rose-500", "text-rose-600"] };
+const badLine = (c) => c.bad.map((x) => `${x.label}${x.note ? ` (${x.note})` : ""}`).join(" · ");
+// Hỏi lại trước khi gửi / chép / xuất khi còn thiếu số — trả true = vẫn làm
+async function confirmComplete(comp, what) {
+  if (!comp?.bad?.length) return true;
+  return !!(await ask(`${completenessText(comp)}\n${badLine(comp)}\nKhách có thể hiểu nhầm là kênh bị giảm. Vẫn ${what}?`, { title: "Báo cáo chưa đủ số", ok: `Vẫn ${what}`, danger: false }));
+}
+// Chỉ báo độ đủ số trên trang thương hiệu: "Đủ số 5/5" hoặc "Thiếu số 2/5" + từng kênh
+function CompletenessBar({ comp, loading }) {
+  if (!comp.total) return null;
+  const good = !comp.bad.length;
+  return (
+    <div className={`card flex flex-wrap items-center gap-x-3 gap-y-1.5 !px-4 !py-3 ${good ? "" : "ring-1 ring-amber-200"}`}>
+      <span className={`inline-flex items-center gap-1.5 text-[13px] font-extrabold ${loading ? "text-slate-400" : good ? "text-emerald-700" : "text-amber-700"}`}>
+        {loading ? <Loader2 size={14} className="animate-spin" /> : good ? <Check size={14} /> : <AlertTriangle size={14} />}
+        {loading ? "Đang kiểm số…" : good ? `Đủ số ${comp.ok}/${comp.total}` : `${completenessText(comp)} · ${comp.ok}/${comp.total} đủ`}
+      </span>
+      <span className="flex flex-wrap gap-1.5">
+        {comp.items.map((x) => (
+          <span key={x.key} title={x.note || "Đủ số cả kỳ"} className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11.5px] font-bold text-slate-600">
+            <i className={`h-1.5 w-1.5 rounded-full ${loading ? "bg-slate-300" : CST[x.status][0]}`} />{x.label}{!loading && x.note && <span className={`font-semibold ${CST[x.status][1]}`}>· {x.note}</span>}
+          </span>
+        ))}
+      </span>
+    </div>
+  );
 }
 
 function OwnerOnly() {
@@ -73,6 +103,13 @@ function ReportMatrix() {
   }, [rows, f]);
   const active = rows.filter((r) => r.jobs.length);
   const sent = rows.filter((r) => r.rep.t === "g").length;
+  const comps = useMemo(() => Object.fromEntries(rows.map((r) => [r.id, reportCompleteness(r, rep.data, rep.period)])), [rows, rep.data, rep.period]);
+  const lacking = loading ? [] : list.filter((r) => comps[r.id]?.bad.length);
+  const printPdf = async () => {
+    if (lacking.length && !(await ask(`${lacking.length} thương hiệu thiếu số\n${lacking.slice(0, 5).map((r) => `${r.name}: ${comps[r.id].bad.map((x) => x.label).join(", ")}`).join("\n")}${lacking.length > 5 ? `\n… và ${lacking.length - 5} thương hiệu khác` : ""}\nVẫn xuất PDF?`, { title: "Báo cáo chưa đủ số", ok: "Vẫn xuất PDF", danger: false }))) return;
+    window.print();
+  };
+  const miniComp = (r) => { const c = comps[r.id]; return !loading && c?.bad.length ? <span title={c.bad.map((x) => `${x.label}${x.note ? ` (${x.note})` : ""}`).join(" · ")} className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-amber-600">thiếu {c.bad.length}/{c.total} số</span> : null; };
   const chips = [["att", "Cần chú ý trước"], ["all", "Theo doanh thu"]];
   const cell = {
     rev: (r) => <td key="rev" className="whitespace-nowrap px-3 py-2.5 tabular-nums"><div className="font-bold text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}</div>{r.prevRevenue > 0 && <div className="text-[11px] text-slate-400">T trước {formatShort(r.prevRevenue)}</div>}{r.debt > 0 && <div className="text-[11px] font-bold text-rose-500">nợ {formatShort(r.debt)}</div>}</td>,
@@ -81,7 +118,7 @@ function ReportMatrix() {
     fp: (r) => <td key="fp" className="px-3 py-2.5"><CellPill x={r.cells.fp} loading={loading} /></td>,
     seo: (r) => <td key="seo" className="px-3 py-2.5"><CellPill x={r.cells.seo} loading={loading} /></td>,
     late: (r) => <td key="late" className="px-3 py-2.5 tabular-nums">{r.late ? <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] font-bold text-amber-700">{r.late}</span> : <span className="text-slate-300">0</span>}</td>,
-    rep: (r) => <td key="rep" className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span></td>,
+    rep: (r) => <td key="rep" className="px-3 py-2.5"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span>{miniComp(r)}</td>,
   };
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
@@ -92,7 +129,7 @@ function ReportMatrix() {
         </div>
         <div className="no-print flex flex-wrap gap-2">
           <button onClick={rep.reload} disabled={rep.loading} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-4 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-60"><RefreshCw size={14} className={rep.loading ? "animate-spin" : ""} /> {rep.loading ? "Đang lấy số…" : "Làm mới"}</button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-[13px] font-bold text-white hover:bg-slate-700"><Printer size={14} /> Xuất PDF</button>
+          <button onClick={printPdf} className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2 text-[13px] font-bold text-white hover:bg-slate-700"><Printer size={14} /> Xuất PDF</button>
         </div>
       </div>
 
@@ -123,7 +160,7 @@ function ReportMatrix() {
               <span className="flex items-center gap-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
                 <span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-800">{r.name}</span><span className="block truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</span></span>
-                {cols.some(([k]) => k === "rep") && <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span>}
+                {cols.some(([k]) => k === "rep") && <span className="shrink-0 text-right"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span>{miniComp(r)}</span>}
               </span>
               <span className="grid grid-cols-2 gap-x-3 gap-y-1.5 pl-4">
                 {cols.filter(([k]) => k !== "rep" && (k === "rev" ? r.revenue || r.debt : k === "late" ? r.late : r.cells[k]?.v != null || loading)).map(([k, h]) => (
@@ -268,7 +305,11 @@ function Brand360({ id }) {
   const nm = squash(r.name), late = tasks.filter((t) => t.status !== "done" && t.date && t.date < today && (t.customerId === id || (nm.length >= 4 && squash(t.title).includes(nm)))).slice(0, 3);
   const sent = (settings.reportLog || {})[id]?.[mk];
   const [stTone, stLabel] = STATE[r.state];
-  const markSent = () => { const log = settings.reportLog || {}; setSettings({ reportLog: { ...log, [id]: { ...(log[id] || {}), [mk]: sent ? undefined : today } } }); setToast?.({ text: sent ? "Đã bỏ đánh dấu gửi báo cáo" : "Đã đánh dấu gửi báo cáo tháng này" }); };
+  const comp = reportCompleteness(r, rep.data, rep.period);
+  const markSent = async () => {
+    if (!sent && !(await confirmComplete(comp, "đánh dấu đã gửi"))) return;
+    const log = settings.reportLog || {}; setSettings({ reportLog: { ...log, [id]: { ...(log[id] || {}), [mk]: sent ? undefined : today } } }); setToast?.({ text: sent ? "Đã bỏ đánh dấu gửi báo cáo" : "Đã đánh dấu gửi báo cáo tháng này" });
+  };
   const runAi = async () => {
     setBusy(true); setErr("");
     try {
@@ -277,7 +318,9 @@ function Brand360({ id }) {
         quang_cao: r.ads.map((a) => ({ ten: a.name, nen_tang: a.platform, chi: Math.round(a.spend), ket_qua: a.results, gia_kq: a.results ? Math.round(a.spend / a.results) : null, chi_ky_truoc: a.prevSpend, kq_ky_truoc: a.prevResults, danh_gia: a.verdict?.label })),
         website: r.webs.map((s) => ({ ten: s.domain, click: s.clicks, d_click: s.prevClicks ? Math.round(((s.clicks - s.prevClicks) / s.prevClicks) * 100) : null, hien_thi: s.impressions, vi_tri_tb: s.position, nguoi_dung: s.users, chuyen_doi: s.conv })),
         fanpage: r.pages.map((p) => ({ ten: p.name, tiep_can: p.reach, tin_nhan: p.messages, tin_nhan_ky_truoc: p.prevMessages, tuong_tac: p.engagement })),
-        viec_tre: r.late };
+        viec_tre: r.late,
+        // Kênh thiếu số / chưa phủ hết kỳ → AI không được kết luận là giảm
+        so_lieu_thieu: comp.bad.map((x) => `${x.label}${x.note ? `: ${x.note}` : ""}`) };
       setAi(await aiBrandReport({ data, apiKey: settings.openaiKey }));
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
@@ -310,7 +353,9 @@ function Brand360({ id }) {
         </div>
       </div>
 
-      {(ai || err) && <AiReport ai={ai} err={err} onClose={() => { setAi(null); setErr(""); }} />}
+      <CompletenessBar comp={comp} loading={loading} />
+
+      {(ai || err) && <AiReport ai={ai} err={err} beforeCopy={() => confirmComplete(comp, "chép gửi khách")} onClose={() => { setAi(null); setErr(""); }} />}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tile("Doanh thu tháng này", null, <FitMoney value={r.revenue} />, <>{r.prevRevenue ? `tháng trước ${formatShort(r.prevRevenue)}` : "chưa có đợt thu tháng trước"}{r.debt > 0 && <b className="text-rose-500">· nợ {formatShort(r.debt)}</b>}</>)}
@@ -375,10 +420,10 @@ function Row({ t, s, b }) {
   return <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-2.5"><div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-slate-800">{t}</div><div className="truncate text-[11.5px] text-slate-400">{s}</div></div>{b}</div>;
 }
 
-function AiReport({ ai, err, onClose }) {
+function AiReport({ ai, err, onClose, beforeCopy }) {
   const [copied, setCopied] = useState(false);
   if (err) return <div className="card flex items-start gap-2 p-4 text-[13px] text-rose-700"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><span className="flex-1">{err}</span><button onClick={onClose} className="font-bold text-slate-500">Đóng</button></div>;
-  const copy = async () => { try { await navigator.clipboard.writeText(ai.client); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* trình duyệt chặn */ } };
+  const copy = async () => { if (beforeCopy && !(await beforeCopy())) return; try { await navigator.clipboard.writeText(ai.client); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* trình duyệt chặn */ } };
   return (
     <div className="card grid gap-4 p-4 lg:grid-cols-2">
       <div className="space-y-2 text-[13px] text-slate-700">

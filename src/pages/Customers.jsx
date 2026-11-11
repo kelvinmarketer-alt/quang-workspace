@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin } from "lucide-react";
+import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin, TrendingUp } from "lucide-react";
 import { Card, Badge, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
+import { customerMonthly, monthName } from "../lib/ketoanMonthly.js";
 import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";
 import { imageToDataUrl } from "../lib/ai.js";
@@ -139,6 +140,11 @@ export default function Customers() {
   const [hi, setHi] = useState(null);
   const [chanOpen, setChanOpen] = useState(null); // {id, t}: khách mở sẵn "Kết nối đo lường" (từ thông báo / nút trong job)
   const [sp, setSp] = useSearchParams();
+  // 11/11: sắp xếp — "Gần đây" (mặc định) hoặc "Lãi nhiều nhất" (LN gộp mọi lúc, khớp Kế toán)
+  const [sortBy, setSortBy0] = useState(() => { try { return localStorage.getItem("qws_cust_sort") === "profit" ? "profit" : "recent"; } catch { return "recent"; } });
+  const setSortBy = (v) => { setSortBy0(v); try { localStorage.setItem("qws_cust_sort", v); } catch {} };
+  const [profitOpen, setProfitOpen] = useState(() => new Set()); // khách đang mở "Lãi theo tháng"
+  const toggleProfit = (id) => setProfitOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // Gom dự án theo khách (sort: đang làm trước → hoạt động gần nhất)
   const projByCust = useMemo(() => {
@@ -153,17 +159,17 @@ export default function Customers() {
     const lq = fold(q.trim());
     return customerList.map((c) => {
       const cps = projByCust.get(c.id) || [];
-      let debt = 0, revenue = 0;
-      for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; }
+      let debt = 0, revenue = 0, grossProfit = 0;
+      for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; grossProfit += mm.grossProfit; }
       const lastIncome = customerLastIncome(projects, c.id);
       const jobs = [...new Set(cps.filter((p) => p.status === "doing").map((p) => p.category).filter(Boolean))];
-      return { ...c, active: c.active ?? true, debt, revenue, projects: cps, projectCount: cps.length, lastIncome, jobs };
+      return { ...c, active: c.active ?? true, debt, revenue, grossProfit, projects: cps, projectCount: cps.length, lastIncome, jobs };
     }) // Tìm theo tên / SĐT / Zalo / email / ghi chú / TÊN DỰ ÁN (không cần dấu)
       .filter((c) => !lq || fold([c.name, c.phone, c.zalo, c.email, c.note, ...c.projects.map((p) => p.name)].filter(Boolean).join(" ")).includes(lq))
       // Mặc định chỉ khách đang hoạt động; OFF chỉ hiện khi chọn bộ lọc "Off". Đang TÌM thì tìm cả khách Off (01/11)
       .filter((c) => (lq ? true : typeF === "off" ? !c.active : c.active))
-      .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
-  }, [customerList, projByCust, projects, q, typeF]);
+      .sort((a, b) => (a.active === b.active ? 0 : a.active ? -1 : 1) || (sortBy === "profit" ? b.grossProfit - a.grossProfit : 0) || (b.lastIncome || "").localeCompare(a.lastIncome || "") || b.revenue - a.revenue);
+  }, [customerList, projByCust, projects, q, typeF, sortBy]);
 
   const counts = useMemo(() => {
     const r = { active: 0, off: 0 };
@@ -230,16 +236,26 @@ export default function Customers() {
           )}
         </div>
         {/* MOBILE: dropdown lọc */}
-        <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="mt-2.5 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
-          {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
-            <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
-          ))}
-        </select>
+        <div className="mt-2.5 grid grid-cols-2 gap-2 sm:hidden">
+          <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
+            {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
+              <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
+            ))}
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sắp xếp" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
+            <option value="recent">Thu gần đây</option>
+            <option value="profit">Lãi nhiều nhất</option>
+          </select>
+        </div>
         {/* DESKTOP: chips lọc */}
         <div className="mt-3 hidden flex-wrap gap-1 sm:flex">
           {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
             <button key={v} onClick={() => setTypeF(v)} className={`rounded-lg px-3 py-1.5 text-sm font-bold ${typeF === v ? (v === "off" ? "bg-rose-500 text-white" : "bg-indigo-500 text-white") : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{l} {n > 0 && <span className="opacity-70">{n}</span>}</button>
           ))}
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sắp xếp" className="ml-auto rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm font-semibold text-slate-600">
+            <option value="recent">Thu gần đây</option>
+            <option value="profit">Lãi nhiều nhất</option>
+          </select>
         </div>
         {picked.size > 0 && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-indigo-50 px-3 py-2.5 sm:px-4">
@@ -297,7 +313,9 @@ export default function Customers() {
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>
+                      {sortBy === "profit"
+                        ? <div className={`text-sm font-extrabold ${c.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}`} title="Lợi nhuận gộp mọi lúc">{i < 3 && c.grossProfit > 0 && c.active ? <TrendingUp size={12} className="mr-0.5 inline" /> : null}LN {formatShort(c.grossProfit)}</div>
+                        : <div className="text-sm font-extrabold text-slate-800">{formatShort(c.revenue)}</div>}
                       <div className={`text-[11px] font-bold ${c.debt > 0 ? "text-rose-600" : "text-emerald-500"}`}>{c.debt > 0 ? `nợ ${formatShort(c.debt)}` : "đủ"}</div>
                     </div>
                   </button>
@@ -312,6 +330,7 @@ export default function Customers() {
                       {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
                       {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
+                    {c.projectCount > 0 && <CustomerProfit projects={c.projects} customerId={c.id} open={profitOpen.has(c.id)} onToggle={() => toggleProfit(c.id)} />}
                     {isOwner && <BrandConnections customer={c} startOpen={chanOpen?.id === c.id ? chanOpen.t : 0} />}
                     {isOwner && <CustomerDocs customerId={c.id} />}
                     {c.projects.length === 0 ? (
@@ -347,6 +366,54 @@ export default function Customers() {
           onDelete={() => deleteProject(drawerProject.id)}
           addInstallment={addInstallment} updateInstallment={updateInstallment} deleteInstallment={deleteInstallment}
         />
+      )}
+    </div>
+  );
+}
+
+// 11/11: Lãi theo tháng của 1 khách — 12 tháng gần nhất (doanh thu, chi phí job, LN gộp) + tổng. Số lấy từ cùng công thức Kế toán.
+function CustomerProfit({ projects, customerId, open, onToggle }) {
+  const [months, setMonths] = useState(6);
+  const data = useMemo(() => (open ? customerMonthly(projects, customerId, { months }) : null), [open, projects, customerId, months]);
+  const max = data ? Math.max(1, ...data.rows.map((r) => Math.abs(r.grossProfit))) : 1;
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50">
+        <TrendingUp size={15} className="shrink-0 text-emerald-500" />
+        <span className="flex-1 text-sm font-bold text-slate-700">Lãi theo tháng</span>
+        <ChevronDown size={15} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && data && (
+        <div className="border-t border-slate-100 px-3 pb-3 pt-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400">Theo ngày của từng đợt · tới hôm nay</span>
+            <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
+              {[6, 12].map((m) => <button key={m} type="button" onClick={() => setMonths(m)} className={`rounded-md px-2 py-1 ${months === m ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{m} tháng</button>)}
+            </div>
+          </div>
+          <div className="grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 border-b border-slate-100 pb-1 text-[10px] font-bold uppercase text-slate-400">
+            <span>Tháng</span><span className="text-right">Doanh thu</span><span className="text-right">Chi phí</span><span className="text-right">LN gộp</span>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {data.rows.map((r) => (
+              <div key={r.key} className={`relative grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 py-1.5 text-[12px] tabular-nums ${r.count ? "" : "text-slate-300"}`}>
+                <span className="font-bold text-slate-600">{monthName(r.key).replace(/\/\d{2}(\d{2})$/, "/$1")}</span>
+                <span className="truncate text-right">{r.count ? formatShort(r.revenue) : "—"}</span>
+                <span className="truncate text-right text-amber-600">{r.cost ? formatShort(r.cost) : r.count ? "0" : "—"}</span>
+                <span className={`truncate text-right font-extrabold ${!r.count ? "" : r.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}`}>{r.count ? formatShort(r.grossProfit) : "—"}</span>
+                {r.count > 0 && <span className={`absolute bottom-0 right-0 h-0.5 rounded-full ${r.grossProfit < 0 ? "bg-rose-300" : "bg-emerald-300"}`} style={{ width: `${(Math.abs(r.grossProfit) / max) * 25}%` }} />}
+              </div>
+            ))}
+          </div>
+          <div className="mt-1 grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 rounded-lg bg-slate-50 py-1.5 text-[12px] font-extrabold tabular-nums">
+            <span className="pl-1 text-slate-600">{months} th</span>
+            <span className="truncate text-right text-indigo-600">{formatShort(data.sum.revenue)}</span>
+            <span className="truncate text-right text-amber-600">{formatShort(data.sum.cost)}</span>
+            <span className={`truncate pr-1 text-right ${data.sum.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}`}>{formatShort(data.sum.grossProfit)}</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500">Mọi lúc: DT <b className="text-indigo-600">{formatShort(data.all.revenue)}</b> · CP <b className="text-amber-600">{formatShort(data.all.cost)}</b> · LN <b className={data.all.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}>{formatShort(data.all.grossProfit)}</b>{data.all.revenue > 0 ? ` · ${Math.round((data.all.grossProfit / data.all.revenue) * 100)}% DT` : ""}</div>
+          <div className="mt-0.5 text-[10px] text-slate-400">ADS: LN = phí chạy + chiết khấu − chi phí; job khác: LN = doanh thu − chi phí.</div>
+        </div>
       )}
     </div>
   );

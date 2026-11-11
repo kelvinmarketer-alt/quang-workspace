@@ -11,7 +11,7 @@ import {
   KINDS, FOLDER_COLORS, FOLDER_COLOR_KEYS, MAX_FILE_BYTES, fold, fmtSize, fmtDate, buildTree, flattenTree, folderPath, descendantIds, countDocs,
   frameDoc, tidySnippet, parseTags, filterDocs, sortDocs, extractTitle, toPlain, isMissingTable, prepareFile, downloadDoc,
   libLoad, libGet, libSearch, libAddDoc, libUpdateDoc, libDeleteDoc, libAddFolder, libUpdateFolder, libDeleteFolder,
-  libIndex, libAsk, libIdea, renderAnswer, unindexedDocs,
+  libIndex, libAsk, libIdea, renderAnswer, unindexedDocs, searchWords, highlightParts, intersectHits,
   SHARE_EXPIRY, shareUrl, shareExpired, libShares, libShareCreate, libShareSetExpiry, libShareRevoke,
 } from "../lib/library.js";
 import { todayISO } from "../lib/format.js";
@@ -114,8 +114,14 @@ function SpecialRow({ icon: Icon, label, count, active, onClick, onDropDoc }) {
   );
 }
 
+// Tô sáng từ khoá trong chữ (11/11) — React tự escape, không chèn HTML
+function Hl({ text, q }) {
+  if (!q) return text || null;
+  return highlightParts(text, q).map((p, i) => (p.hit ? <mark key={i} className="rounded bg-amber-200 px-0.5 text-slate-900">{p.t}</mark> : <span key={i}>{p.t}</span>));
+}
+
 // ───────────── Thẻ tài liệu ─────────────
-function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownload, onDelete, onShare, shared, readOnly }) {
+function DocCard({ d, folderName, customerName, snippet, query, onOpen, onEdit, onDownload, onDelete, onShare, shared, readOnly }) {
   const k = KINDS[d.kind] || KINDS.txt;
   const Icon = d.kind === "html" ? FileCode2 : FileText;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
@@ -129,7 +135,7 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
       <div className="flex items-start gap-3">
         <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${KIND_BOX[d.kind] || KIND_BOX.txt}`}><Icon size={20} /></div>
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-[14px] font-extrabold leading-snug text-slate-800">{d.title}</div>
+          <div className="line-clamp-2 text-[14px] font-extrabold leading-snug text-slate-800"><Hl text={d.title} q={query} /></div>
           <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-slate-400">
             <Badge tone={k.tone}>{k.label}</Badge>
             <span>{fmtSize(d.size_bytes)}</span><span>·</span><span>{fmtDate(d.updated_at || d.created_at)}</span>
@@ -137,8 +143,8 @@ function DocCard({ d, folderName, customerName, snippet, onOpen, onEdit, onDownl
           </div>
         </div>
       </div>
-      {snippet ? <p className="line-clamp-3 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] leading-snug text-slate-600">{tidySnippet(snippet)}</p>
-        : d.excerpt ? <p className="line-clamp-2 text-[12px] leading-snug text-slate-500">{d.excerpt}</p> : null}
+      {snippet ? <p className="line-clamp-3 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] leading-snug text-slate-600" title="Đoạn khớp trong nội dung"><Hl text={tidySnippet(snippet)} q={query} /></p>
+        : d.excerpt ? <p className="line-clamp-2 text-[12px] leading-snug text-slate-500"><Hl text={d.excerpt} q={query} /></p> : null}
       {(folderName || customerName || (d.tags || []).length > 0) && (
         <div className="flex flex-wrap gap-1.5">
           {customerName && <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-600"><Users size={11} />{customerName}</span>}
@@ -519,7 +525,7 @@ export default function LibraryPage() {
   const [folders, setFolders] = useState([]), [docs, setDocs] = useState([]);
   const [state, setState] = useState("loading"), [errMsg, setErrMsg] = useState("");
   const [folderId, setFolderId] = useState("all"); // all | none | mã thư mục
-  const [query, setQuery] = useState(""), [hits, setHits] = useState(null), [sort, setSort] = useState("new");
+  const [query, setQuery] = useState(""), [hits, setHits] = useState(null), [sort, setSort] = useState("new"), [searchErr, setSearchErr] = useState("");
   const [reader, setReader] = useState(null), [editing, setEditing] = useState(null);
   const [folderModal, setFolderModal] = useState(null), [pasteOpen, setPasteOpen] = useState(false);
   const [busy, setBusy] = useState(null), [notice, setNotice] = useState(null), [dragOver, setDragOver] = useState(false);
@@ -540,14 +546,27 @@ export default function LibraryPage() {
     libShares().then((r) => { if (!r.error && r.data) setShares(new Map(r.data.map((x) => [x.doc_id, x]))); });
   }, [readOnly]);
 
-  // Tìm trong NỘI DUNG (máy chủ, bỏ dấu) — chạy sau khi ngừng gõ 0,35 giây
+  // Tìm trong NỘI DUNG (máy chủ, bỏ dấu) — chạy sau khi ngừng gõ 0,35 giây.
+  // 11/11: cả cụm không có → tìm TỪNG TỪ (tối đa 4) và giữ tài liệu có đủ mọi từ (không cần đứng liền nhau).
+  // Hàm máy chủ lỗi / chưa cài → không báo lỗi đỏ, chỉ nói rõ đang tìm theo tên, nhãn, ghi chú.
   useEffect(() => {
     const q = query.trim();
-    if (fold(q).length < 2) { setHits(null); return undefined; }
+    if (fold(q).length < 2) { setHits(null); setSearchErr(""); return undefined; }
     let alive = true;
     const t = setTimeout(async () => {
-      const r = await libSearch(q);
-      if (alive) setHits(new Map((r.data || []).map((x) => [x.id, x.snippet])));
+      let r;
+      try { r = await libSearch(q); } catch (e) { r = { data: null, error: e }; }
+      let map = new Map((r?.data || []).map((x) => [x.id, x.snippet]));
+      const words = searchWords(q);
+      if (!r?.error && !map.size && words.length >= 2) {
+        try {
+          const rs = await Promise.all(words.map((w) => libSearch(w)));
+          if (!rs.some((x) => x?.error)) map = intersectHits(rs.map((x) => x?.data || []));
+        } catch { /* giữ kết quả rỗng */ }
+      }
+      if (!alive) return;
+      setHits(map);
+      setSearchErr(r?.error ? (isMissingTable(r.error) ? "Máy chủ chưa có hàm tìm trong nội dung — đang chỉ tìm theo tên, nhãn, ghi chú." : "Chưa tìm được trong nội dung lúc này — đang chỉ tìm theo tên, nhãn, ghi chú.") : "");
     }, 350);
     return () => { alive = false; clearTimeout(t); };
   }, [query]);
@@ -848,6 +867,7 @@ export default function LibraryPage() {
             </div>
 
             {searching && hits === null && <div className="flex items-center gap-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tìm trong nội dung…</div>}
+            {searching && searchErr && <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] font-semibold text-amber-700"><AlertTriangle size={13} className="shrink-0" /> {searchErr}</div>}
 
             {visible.length === 0 ? (
               <Card className="py-10 text-center">
@@ -865,7 +885,7 @@ export default function LibraryPage() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {visible.map((d) => (
-                  <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null} customerName={d.customer_id ? custName.get(d.customer_id) || null : null}
+                  <DocCard key={d.id} d={d} snippet={searching ? hits?.get(d.id) : null} query={searching ? query.trim() : ""} customerName={d.customer_id ? custName.get(d.customer_id) || null : null}
                     folderName={folderId === "all" || searching || folderId === "none" ? (d.folder_id ? folderById.get(d.folder_id)?.name : null) : null}
                     readOnly={readOnly} shared={shares.has(d.id) && !shareExpired(shares.get(d.id))} onShare={() => setShareDoc(d)} onOpen={() => setReader(d.id)} onEdit={() => setEditing(d.id)} onDelete={() => removeDoc(d)}
                     onDownload={async () => { const r = await libGet(d.id); if (r.data) downloadDoc(r.data); else say("Không tải được file"); }} />

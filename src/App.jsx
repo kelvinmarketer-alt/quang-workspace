@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Layout from "./components/Layout.jsx";
 import { ConfirmHost } from "./components/ConfirmDialog.jsx";
 import { ToastHost } from "./components/Toast.jsx";
+import TaskWatch from "./components/TaskWatch.jsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 // Trang khác tải KHI MỞ (chunk riêng) → mở app nhanh hơn; Tổng quan tải sẵn vì là trang đầu.
 const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
@@ -73,6 +74,8 @@ export default function App() {
       </ErrorBoundary>
       <ConfirmHost />
       <ToastHost />
+      {/* 11/11: việc lặp lại (tạo lần tới khi xong) + nhắc trước giờ khi app đang mở */}
+      <TaskWatch />
     </Layout>
   );
 }

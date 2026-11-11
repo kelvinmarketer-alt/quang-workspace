@@ -4,9 +4,9 @@ import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, Trending
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { buildSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr } from "../lib/webData.js";
+import { buildSites, loadSiteSummary, loadSiteDetail, rangesOf, pctChange, expectedCtr, freshText, lagDays, latestOf, lastDataDate } from "../lib/webData.js";
 import { listGoogleProps } from "../lib/google.js";
-import { Star, Bot } from "lucide-react";
+import { Star, Bot, CalendarClock } from "lucide-react";
 import { aiWebAnalysis } from "../lib/ai.js";
 import { downloadCSV } from "../lib/format.js";
 import InfoTip from "../components/InfoTip.jsx";
@@ -85,6 +85,22 @@ export function Delta({ cur, prev, lowerBetter, abs }) {
   return <span className={`inline-flex items-center gap-0.5 text-[10.5px] font-bold ${good ? "text-emerald-600" : "text-rose-600"}`}><I size={11} />{abs ? Math.abs(d).toFixed(1).replace(".", ",") : Math.abs(d).toFixed(0) + "%"}</span>;
 }
 
+// "Số tới ngày dd/mm" (11/11) — ngày mới nhất THỰC có trong dữ liệu. Thiếu ngày cuối kỳ → màu hổ phách + nhắc đừng đọc là tụt.
+// items: [{ src: "Google", date, until }] (1 hoặc nhiều nguồn) · compact = chỉ chữ, không nhắc
+export function FreshTag({ items, compact, className = "" }) {
+  const L = (items || []).filter((x) => x && (x.date || x.until));
+  if (!L.length) return null;
+  const late = L.some((x) => lagDays(x.date, x.until) > 0);
+  const txt = L.length === 1 && !L[0].src ? freshText(L[0].date)
+    : "Số tới ngày " + L.map((x) => `${x.src} ${x.date ? dm(x.date) : "—"}`).join(" · ");
+  return (
+    <span title={late ? "Google/Facebook chốt số chậm 1–3 ngày: phần cuối kỳ chưa có số, không phải bị giảm" : undefined}
+      className={`inline-flex min-w-0 max-w-full items-center gap-1 text-[10.5px] font-semibold normal-case tracking-normal ${late ? "text-amber-600" : "text-slate-400"} ${className}`}>
+      <CalendarClock size={11} className="shrink-0" /><span className="leading-tight">{txt}{late && !compact ? " · cuối kỳ chưa đủ số" : ""}</span>
+    </span>
+  );
+}
+
 export function Spark({ data, field = "clicks" }) {
   if (!data?.length || data.length < 3) return null;
   const v = data.map((d) => d[field] || 0), max = Math.max(...v, 1), W = 120, H = 28;
@@ -125,7 +141,13 @@ function SourceBar({ groups, max = 5, big }) {
   );
 }
 
-function SiteCard({ site, sum, onOpen }) {
+// Độ mới số 1 web: Google (Search Console) + GA4, so với ngày cuối kỳ đang chọn
+const freshItems = (site, sum, R, det) => [
+  site.gsc && { src: "Google", date: sum?.fresh?.gsc?.last ?? null, until: R.until },
+  site.ga && { src: "GA4", date: latestOf([sum?.fresh?.ga?.last, lastDataDate(det?.gaDaily, ["activeUsers", "sessions"])]), until: R.until },
+].filter(Boolean);
+
+function SiteCard({ site, sum, onOpen, R }) {
   const g = sum?.gsc, a = sum?.ga;
   const M = ({ label, v, d }) => (
     <div className="min-w-0"><div className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className="flex items-baseline gap-1"><span className="text-[15px] font-extrabold tabular-nums text-slate-800">{v}</span>{d}</div></div>
@@ -152,6 +174,7 @@ function SiteCard({ site, sum, onOpen }) {
             <M label="Chuyển đổi" v={k(a?.cur.keyEvents)} d={a && <Delta cur={a.cur.keyEvents} prev={a.prev.keyEvents} />} />
           </div>
           {g?.daily && <div className="mt-2"><Spark data={g.daily} /></div>}
+          {R && <FreshTag compact className="mt-1" items={freshItems(site, sum, R)} />}
           {sum.sources?.length > 0 && <div className="mt-2 border-t border-slate-100 pt-2"><div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">Nguồn truy cập</div><SourceBar groups={sum.sources} max={4} /></div>}
           {sum.errors.length > 0 && <div className="mt-1 truncate text-[10.5px] font-semibold text-amber-600" title={sum.errors.join("\n")}>⚠ {sum.errors[0]}</div>}
         </>
@@ -320,6 +343,7 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site.domain, site.gsc, site.ga, R.key, tick, retry]);
   const g = sum?.gsc, a = sum?.ga;
+  const fr = freshItems(site, sum, R, det), frG = fr.filter((x) => x.src === "Google"), frA = fr.filter((x) => x.src === "GA4");
   const chart = useMemo(() => {
     const m = new Map();
     for (const x of g?.daily || []) m.set(x.date, { date: x.date, clicks: x.clicks, impressions: x.impressions });
@@ -376,6 +400,7 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
         <div className="mt-1 text-[11px] text-slate-400">GA4 {dm(R.ga.cur[0])}→{dm(R.ga.cur[1])} · Search Console {R.gsc ? `${dm(R.gsc.cur[0])}→${dm(R.gsc.cur[1])}${R.gscCut ? " (Google trễ ~2 ngày)" : ""}` : "chưa có số cho kỳ này (Google trễ ~2 ngày)"} · so với {R.days} ngày liền trước</div>
       </Card>
 
+      <div>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4 xl:grid-cols-8">
         <KPI icon={MousePointerClick} label="Click Google" v={k(g?.cur.clicks)} d={g && <Delta cur={g.cur.clicks} prev={g.prev.clicks} />} />
         <KPI label="Hiển thị" v={k(g?.cur.impressions)} d={g && <Delta cur={g.cur.impressions} prev={g.prev.impressions} />} />
@@ -386,10 +411,13 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
         <KPI label="Tỉ lệ tương tác" v={a?.cur.engagementRate != null ? pct1(a.cur.engagementRate * 100) : "—"} d={a && <Delta cur={a.cur.engagementRate} prev={a.prev.engagementRate} />} />
         <KPI icon={Target} label="Chuyển đổi" v={k(a?.cur.keyEvents)} d={a && <Delta cur={a.cur.keyEvents} prev={a.prev.keyEvents} />} />
       </div>
+      <div className="mt-1 px-1"><FreshTag items={fr} /></div>
+      </div>
 
       {(det?.sources || sum?.sources) && (
         <Card className="!p-3">
-          <div className="mb-1.5 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Khách đến từ đâu <span className="hidden font-semibold normal-case tracking-normal sm:inline">· theo phiên truy cập GA4</span>
+          <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Khách đến từ đâu <span className="hidden font-semibold normal-case tracking-normal sm:inline">· theo phiên truy cập GA4</span>
+            <FreshTag compact items={frA} />
             <button onClick={() => setTab("sources")} className="ml-auto font-bold normal-case tracking-normal text-indigo-600">Xem chi tiết →</button>
           </div>
           <SourceBar groups={det?.sources || sum.sources} max={10} big />
@@ -398,7 +426,7 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
 
       <div className="grid gap-3 xl:grid-cols-3">
         <Card className="!p-3 xl:col-span-2">
-          <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Theo ngày</div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5"><span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Theo ngày</span><FreshTag items={fr} /></div>
           <div className="h-56">
             <ResponsiveContainer>
               <ComposedChart data={chart}>
@@ -442,6 +470,7 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
         <div className="mb-2 flex gap-1 overflow-x-auto">
           {TABS.map(([kk, l]) => <button key={kk} onClick={() => setTab(kk)} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold ${tab === kk ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`}>{l}</button>)}
         </div>
+        <div className="mb-1.5"><FreshTag items={["opp", "queries", "pages"].includes(tab) ? frG : tab === "device" ? fr : frA} /></div>
         {err ? (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-rose-50 p-2.5 text-[12px] text-rose-600">
             <AlertTriangle size={14} className="shrink-0" /><span className="min-w-0 flex-1">Không tải được chi tiết: {err}</span>
@@ -537,7 +566,7 @@ function Detail({ owner, site, sum, R, tick, gaProps, gaOverride, onGa, onHide, 
 }
 
 // Câu trả lời đầu trang: tổng click + web nào đang giảm / tăng mạnh nhất
-function WebAnswer({ sites, sums, sk, tot }) {
+function WebAnswer({ sites, sums, sk, tot, gscLast }) {
   const L = sites.map((s) => ({ s, x: sums[sk(s)] })).filter((o) => o.x?.gsc);
   if (!L.length) return <AnswerCard eyebrow="Website · Search Console + GA4" title="Đang lấy số các web…" />;
   const d = (o) => pctChange(o.x.gsc.cur.clicks, o.x.gsc.prev.clicks);
@@ -546,7 +575,7 @@ function WebAnswer({ sites, sums, sk, tot }) {
   const dt = pctChange(tot.clicks, tot.pClicks);
   const title = `${int(tot.clicks)} click Google${dt != null ? ` (${dt >= 0 ? "+" : "−"}${Math.abs(Math.round(dt))}%)` : ""}, ${down.length ? `${down.length} web đang giảm` : "không web nào đi xuống"}`;
   const desc = [down.slice(0, 2).map((o) => `${o.s.domain} ${Math.round(d(o) ?? 0)}% click`).join(" · "), best && `Tăng tốt nhất: ${best.s.domain} +${Math.round(d(best))}%`].filter(Boolean).join(" — ");
-  return <AnswerCard eyebrow={`Website · ${L.length} web có số`} title={title} desc={desc || "Các web giữ ổn định so với kỳ trước."} live="Số Google trễ ~2 ngày" />;
+  return <AnswerCard eyebrow={`Website · ${L.length} web có số`} title={title} desc={desc || "Các web giữ ổn định so với kỳ trước."} live={gscLast ? `Số Google tới ngày ${dm(gscLast)}` : "Số Google trễ ~2 ngày"} />;
 }
 
 export default function Web() {
@@ -608,6 +637,12 @@ export default function Web() {
     return t;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sums, sites, R.key, tick]);
+  // Ngày mới nhất có số trên tất cả web (Google / GA4) — hiện "Số tới ngày dd/mm" ở ô tổng
+  const fresh = useMemo(() => {
+    const L = (sites || []).map((s) => sums[sk(s)]?.fresh);
+    return { gsc: latestOf(L.map((f) => f?.gsc?.last)), ga: latestOf(L.map((f) => f?.ga?.last)) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sums, sites, R.key, tick]);
 
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Hiệu quả Website.</div></Card>;
   const site = sel && sites?.find((s) => s.domain === sel);
@@ -639,10 +674,11 @@ export default function Web() {
         </SideDrawer>
       )}
       {(<>
-        {sites?.length > 0 && <WebAnswer sites={sites} sums={sums} sk={sk} tot={tot} />}
+        {sites?.length > 0 && <WebAnswer sites={sites} sums={sums} sk={sk} tot={tot} gscLast={fresh.gsc} />}
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick], ["Người dùng", tot.users, tot.pUsers, Users], ["Chuyển đổi", tot.conv, tot.pConv, Target]].map(([l, c, p, I]) => (
-            <div key={l} className="card min-w-0 px-2.5 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400 sm:tracking-wide"><I size={11} className="hidden shrink-0 sm:block" /> <span className="truncate leading-tight">{l}<span className="hidden sm:inline"> · tất cả web</span></span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+          {[["Click Google", tot.clicks, tot.pClicks, MousePointerClick, fresh.gsc], ["Người dùng", tot.users, tot.pUsers, Users, fresh.ga], ["Chuyển đổi", tot.conv, tot.pConv, Target, fresh.ga]].map(([l, c, p, I, fd]) => (
+            <div key={l} className="card min-w-0 px-2.5 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400 sm:tracking-wide"><I size={11} className="hidden shrink-0 sm:block" /> <span className="truncate leading-tight">{l}<span className="hidden sm:inline"> · tất cả web</span></span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div>
+              {fd && <FreshTag compact items={[{ date: fd, until: R.until }]} />}</div>
           ))}
         </div>
         {!sites ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : sites.length === 0 ? (
@@ -651,7 +687,7 @@ export default function Web() {
           <>
           <div className="flex justify-end"><ViewToggle value={view} onChange={(v) => { setView(v); saveView("qws_web_view", v); }} /></div>
           {view === "rank" ? (
-            <Leaderboard title="Xếp hạng theo click Google" hint="bấm 1 web để xem chi tiết · màu = xu hướng" loading={sites.some((s) => !sums[sk(s)])}
+            <Leaderboard title="Xếp hạng theo click Google" hint={`bấm 1 web để xem chi tiết · màu = xu hướng${fresh.gsc ? ` · số Google tới ${dm(fresh.gsc)}` : ""}`}loading={sites.some((s) => !sums[sk(s)])}
               rows={sites.filter((s) => sums[sk(s)] && !isEmpty(s)).map((s) => { const x = sums[sk(s)], g = x.gsc, a = x.ga, vk = x.verdict?.key;
                 return { key: s.domain, name: s.domain, sub: [g && `${k(g.cur.impressions)} hiển thị`, a && `${k(a.cur.activeUsers)} người dùng`, a?.cur.keyEvents ? `${k(a.cur.keyEvents)} chuyển đổi` : null].filter(Boolean).join(" · "),
                   value: g?.cur.clicks || 0, text: g ? int(g.cur.clicks) : "—", tone: vk === "down" ? "b" : vk === "warn" ? "w" : vk === "up" ? "g" : "a", delta: g ? pctChange(g.cur.clicks, g.prev.clicks) : null,
@@ -659,12 +695,12 @@ export default function Web() {
               onPick={(r) => openSite(r.key)} />
           ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {sites.filter((s) => !isEmpty(s)).sort((a, b) => (sums[sk(b)]?.gsc?.cur.clicks ?? -1) - (sums[sk(a)]?.gsc?.cur.clicks ?? -1)).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}
+            {sites.filter((s) => !isEmpty(s)).sort((a, b) => (sums[sk(b)]?.gsc?.cur.clicks ?? -1) - (sums[sk(a)]?.gsc?.cur.clicks ?? -1)).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} R={R} onOpen={() => openSite(s.domain)} />)}
           </div>)}
           {sites.some(isEmpty) && (
             <details className="group px-3 sm:px-0">
               <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {sites.filter(isEmpty).length} web chưa có số trong kỳ này (Google chưa ghi nhận click / người dùng)</summary>
-              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{sites.filter(isEmpty).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} onOpen={() => openSite(s.domain)} />)}</div>
+              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{sites.filter(isEmpty).map((s) => <SiteCard key={s.domain} site={s} sum={sums[sk(s)]} R={R} onOpen={() => openSite(s.domain)} />)}</div>
             </details>
           )}
           </>

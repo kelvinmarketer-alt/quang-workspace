@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Sparkles, AlertTriangle } from "lucide-react";
 import { Card, SectionTitle } from "./ui.jsx";
 import { supabase } from "../lib/supabase.js";
+import ConnHint from "./ConnHint.jsx";
 
 // Chi phí AI (OpenAI) theo tháng — ghi bởi edge function qws-ai mỗi lần gọi. Chỉ chủ xem.
 const FEAT = { import: "Nhập khách/dự án", resources: "Đọc tài nguyên", vault: "Đọc tài khoản/thẻ", expense: "Đọc hoá đơn chi", ads: "Phân tích quảng cáo", market: "Phân tích coin", web: "Phân tích website", fanpage: "Phân tích fanpage" };
@@ -31,6 +32,7 @@ export default function AiUsage({ vnd = 26000 }) {
   return (
     <Card>
       <SectionTitle action={<Sparkles size={18} className="text-indigo-500" />}>Chi phí AI tháng này</SectionTitle>
+      <ConnHint k="aiUsage" className="-mt-3 mb-3" />
       {err ? (
         <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="shrink-0" /> {err}</div>
       ) : rows === null ? <div className="text-sm text-slate-400">Đang tải…</div> : (

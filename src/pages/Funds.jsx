@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3, ChevronDown, Search } from "lucide-react";
+import { Plus, X, Trash2, Pencil, PiggyBank, ArrowDownToLine, ArrowUpFromLine, Sparkles, ArrowLeftRight, Repeat, BellRing, CalendarClock, Power, SkipForward, Camera, Loader2, Check, AlertCircle, Images, BarChart3, ChevronDown, Search, ClipboardCheck } from "lucide-react";
 import { Card, SectionTitle, Badge, formatVND, formatShort, MoneyInput } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { FUND_COLORS } from "../data/seed.js";
@@ -9,6 +9,7 @@ import { todayISO, fmtDateVI } from "../lib/format.js";
 import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import FundStats from "./FundStats.jsx";
+import FundRecon from "./FundRecon.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const TONE_BG = { indigo: "bg-indigo-500", emerald: "bg-emerald-500", rose: "bg-rose-500", sky: "bg-sky-500", amber: "bg-amber-500", violet: "bg-violet-500", teal: "bg-teal-500", pink: "bg-pink-500" };
@@ -640,6 +641,25 @@ function FundDetail({ fund, fundTx, cats, autoCredit = 0, autoDebit = 0, autoDeb
   );
 }
 
+/* ---- Mục xổ gọn cho công cụ phụ ---- */
+function Fold({ id, open, onToggle, icon: Icon, title, badge, hint, flush, children }) {
+  const isOpen = open.has(id);
+  return (
+    <Card className="!p-0 overflow-hidden">
+      <button type="button" onClick={() => onToggle(id)} aria-expanded={isOpen} className="flex w-full items-center gap-2.5 px-4 py-3.5 text-left hover:bg-slate-50 sm:px-5">
+        <Icon size={17} className="shrink-0 text-indigo-500" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-extrabold text-slate-900">{title}</span>
+          {hint && <span className="block truncate text-[11px] font-semibold text-slate-400">{hint}</span>}
+        </span>
+        {badge && <Badge tone="slate">{badge}</Badge>}
+        <ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen && <div className={flush ? "" : "px-4 pb-4 sm:px-5 sm:pb-5"}>{children}</div>}
+    </Card>
+  );
+}
+
 function FundsMain() {
   const { canEdit } = useData();
   const canW = canEdit ? canEdit("ketoan") : true;
@@ -660,6 +680,9 @@ function FundsMain() {
   const [imgFund, setImgFund] = useState(null); // quỹ đang chi từ ảnh
   const [editTx, setEditTx] = useState(null); // giao dịch quỹ đang sửa
   const [catMgr, setCatMgr] = useState(false); // mở quản lý danh mục chi
+  // 11/11: mục xổ "Xem thêm" (lịch chuyển / theo năm / lịch sử) — nhớ mục nào đang mở
+  const [folds, setFolds] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem("qws_funds_folds") || "[]")); } catch { return new Set(); } });
+  const toggleFold = (id) => setFolds((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); try { localStorage.setItem("qws_funds_folds", JSON.stringify([...n])); } catch {} return n; });
 
   const years = useMemo(() => {
     const ys = new Set(projectYears(projects)); ys.add(curY);
@@ -780,16 +803,7 @@ function FundsMain() {
         </div>
       )}
 
-      {/* Thanh năm */}
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-bold sm:py-2">
-            {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
-          </select>
-          <div className="min-w-0 text-xs font-semibold leading-relaxed text-slate-400 sm:text-sm">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Vào quỹ cá nhân <span className="text-slate-700">{formatShort(allocYear)}</span></div>
-        </div>
-      </Card>
-
+      {/* 11/11: thanh năm chuyển xuống nhóm "Theo năm" bên dưới — đầu trang chỉ còn số chính (quỹ công ty + quỹ cá nhân) */}
       {/* QUỸ CÔNG TY — nguồn = Lợi nhuận gộp, người dùng điều phối ra các quỹ */}
       {companyFund && (
         <div className="overflow-hidden rounded-none sm:rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 p-5 text-white shadow-xl">
@@ -871,11 +885,10 @@ function FundsMain() {
       </div>
 
       {/* Lịch chuyển định kỳ — 01/11: chưa có quỹ để chuyển (cần ≥ 2 quỹ) và chưa có lịch thì ẩn hẳn (trước là ô trống chiếm chỗ) */}
-      {(schedules.length > 0 || allWithBal.length >= 2) && <Card>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900"><Repeat size={17} className="text-indigo-500" /> Lịch chuyển định kỳ <span className="text-slate-400">({schedules.length})</span></h2>
-          {allWithBal.length >= 2 && <button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button>}
-        </div>
+      {/* 11/11: công cụ phụ gom thành các mục xổ (mặc định đóng, nhớ trạng thái) */}
+      <div className="px-3 pt-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-400 sm:px-0">Xem thêm</div>
+      {(schedules.length > 0 || allWithBal.length >= 2) && <Fold id="sched" open={folds} onToggle={toggleFold} icon={Repeat} title="Lịch chuyển định kỳ" badge={schedules.length ? `${schedules.length} lịch` : null} hint={due.length ? `${due.length} đến hạn` : null}>
+        {allWithBal.length >= 2 && <div className="flex justify-end"><button onClick={() => setSchedModal({})} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"><Plus size={15} /> Thêm lịch</button></div>}
         {schedules.length === 0 ? (
           <div className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
             <CalendarClock size={15} className="mt-0.5 shrink-0 text-slate-400" />
@@ -912,11 +925,19 @@ function FundsMain() {
             })}
           </div>
         )}
-      </Card>}
+      </Fold>}
 
+      {/* Theo năm: chọn năm + biểu đồ + bảng phân bổ theo tháng */}
+      <Fold id="year" open={folds} onToggle={toggleFold} icon={BarChart3} title={`Theo năm · ${year}`} hint={`LN gộp ${formatShort(gpYear)} · vào quỹ ${formatShort(allocYear)}`}>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-bold sm:py-2">
+            {years.map((y) => <option key={y} value={y}>Năm {y}</option>)}
+          </select>
+          <div className="min-w-0 text-xs font-semibold leading-relaxed text-slate-400 sm:text-sm">LN gộp {year}: <span className="text-slate-700">{formatVND(gpYear)}</span>{opexYear > 0 && <> · − CP vận hành <span className="text-rose-500">{formatShort(opexYear)}</span></>} · Vào quỹ cá nhân <span className="text-slate-700">{formatShort(allocYear)}</span></div>
+        </div>
       {/* Biểu đồ thu nhập vs phân bổ */}
       {chart.length > 0 && (
-        <Card>
+        <div className="mt-3">
           <SectionTitle action={<span className="text-xs font-bold text-slate-400">LN gộp vs Phân bổ vào quỹ</span>}>Dòng tiền {year}</SectionTitle>
           {/* 01/11: điện thoại — biểu đồ vừa khung, không phải kéo ngang */}
           <div>
@@ -933,15 +954,15 @@ function FundsMain() {
               </ResponsiveContainer>
             </div>
           </div>
-        </Card>
+        </div>
       )}
 
       {/* Bảng dòng tiền theo tháng */}
       {monthRows.length > 0 && (
-        <Card className="!p-0 overflow-hidden">
+        <div className="-mx-4 mt-3 overflow-hidden border-t border-slate-100 sm:-mx-5">
           {/* 01/11: bảng 12 tháng thu gọn mặc định (trang dài ~4 màn) — bấm để xem */}
-          <button type="button" onClick={() => setShowMonths((v) => !v)} className="flex w-full items-center justify-between p-4 text-left sm:p-5">
-            <h2 className="text-base font-extrabold text-slate-900">Phân bổ theo tháng · {year}</h2>
+          <button type="button" onClick={() => setShowMonths((v) => !v)} className="flex w-full items-center justify-between px-4 py-3 text-left sm:px-5">
+            <h3 className="text-sm font-extrabold text-slate-900">Phân bổ theo tháng · {year}</h3>
             <span className="flex items-center gap-2"><Badge tone="slate">{monthRows.length} tháng</Badge><ChevronDown size={16} className={`text-slate-400 transition ${showMonths ? "rotate-180" : ""}`} /></span>
           </button>
           {showMonths && <>
@@ -1013,18 +1034,13 @@ function FundsMain() {
             </table>
           </div>
           </>}
-        </Card>
+        </div>
       )}
+      </Fold>
 
       {/* Lịch sử giao dịch quỹ — gom theo ngày, click để xổ */}
-      <Card className="!p-0 overflow-hidden">
-        <div className="flex items-center justify-between p-4 pb-3 sm:p-5">
-          <div>
-            <h2 className="text-base font-extrabold text-slate-900">Lịch sử giao dịch quỹ</h2>
-            <p className="mt-0.5 text-[11px] text-slate-400">{hAllYears ? "Tất cả năm" : `Năm ${year}`} · bấm vào ngày để xem chi tiết</p>
-          </div>
-          <Badge tone="slate">{histTx.length}{histTx.length !== (fundTx || []).length ? `/${(fundTx || []).length}` : ""}</Badge>
-        </div>
+      <Fold id="hist" open={folds} onToggle={toggleFold} icon={CalendarClock} title="Lịch sử giao dịch quỹ" flush badge={`${histTx.length}${histTx.length !== (fundTx || []).length ? `/${(fundTx || []).length}` : ""}`} hint={hAllYears ? "Tất cả năm" : `Năm ${year}`}>
+        <p className="px-4 pb-2 text-[11px] text-slate-400 sm:px-5">Bấm vào ngày để xem chi tiết</p>
         {(fundTx || []).length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-4 pb-3 sm:px-5">
             <div className="flex min-w-0 flex-1 basis-full items-center gap-1.5 rounded-xl border border-slate-200 px-2.5 py-1.5 sm:basis-48">
@@ -1088,7 +1104,7 @@ function FundsMain() {
             })}
           </div>
         )}
-      </Card>
+      </Fold>
 
       {/* FundDetail render TRƯỚC để các modal thao tác (Nạp/Chi/Chuyển) mở từ trong nó nằm ĐÈ LÊN trên */}
       {detailFund && <FundDetail key={detailFund.id} fund={detailFund} fundTx={fundTx} cats={spendCats} autoCredit={detailFund.role === "company" ? grossTotal : 0} autoDebit={detailFund.role === "company" ? opexTotal : 0} autoDebt={0} onClose={() => setDetailId(null)} onAdd={(fund, type) => setTxModal({ fund, type })} onImage={(fund) => setImgFund(fund)} onTransfer={(fund) => setTransferInit({ from: fund.id })} onDelTx={async (id) => { if (await ask("Xoá giao dịch này? (phiếu chuyển quỹ sẽ xoá cả 2 chiều)")) deleteFundTx(id); }} onEditTx={(t) => setEditTx(t)} />}
@@ -1104,7 +1120,8 @@ function FundsMain() {
   );
 }
 
-const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["stats", "Chi tiêu", BarChart3]];
+// 11/11: thêm "Đối soát" (chốt sổ cuối tháng)
+const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["recon", "Đối soát", ClipboardCheck], ["stats", "Chi tiêu", BarChart3]];
 
 const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
 // 01/11: Quỹ gộp thành tab "Dòng tiền" trong Kế toán — thanh chuyển Quỹ / Thống kê chi tiêu dạng viên nhỏ cùng kiểu app
@@ -1114,7 +1131,7 @@ export default function Funds({ initialTab }) {
   const hasSpend = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 90); const from = d.toISOString().slice(0, 10); return fundSpends(fundTx || []).some((t) => t.date >= from); }, [fundTx]);
   // Có lịch chuyển quỹ đến hạn → mở tab Quỹ (banner xác nhận nằm ở đó, link từ "Hôm nay" trỏ về /quy)
   const hasDue = (fundSchedules || []).some((sc) => pendingOccs(sc, todayISO()).length > 0);
-  const startTab = () => initialTab || (hasDue || !hasSpend ? "funds" : fundTabLS());
+  const startTab = () => { if (initialTab) return initialTab; if (hasDue) return "funds"; const v = fundTabLS(); return v === "stats" && !hasSpend ? "funds" : v; };
   // Route chỉ định tab (vd /quy-thong-ke) → theo route; /quy → mở lại tab đã xem lần trước (nhớ localStorage)
   const [tab, setTab0] = useState(startTab);
   const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_funds_tab", v); } catch {} };
@@ -1122,14 +1139,14 @@ export default function Funds({ initialTab }) {
   useEffect(() => { setTab0(startTab()); /* eslint-disable-next-line */ }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
-      {(hasSpend || tab === "stats") && <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">
-        {FUND_TABS.map(([v, l, Ic]) => (
+      <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">
+        {FUND_TABS.filter(([v]) => v !== "stats" || hasSpend || tab === "stats").map(([v, l, Ic]) => (
           <button key={v} onClick={() => setTab(v)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold transition ${tab === v ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
             <Ic size={14} /> {l}
           </button>
         ))}
-      </div>}
-      {tab === "funds" ? <FundsMain /> : <FundStats />}
+      </div>
+      {tab === "funds" ? <FundsMain /> : tab === "recon" ? <FundRecon /> : <FundStats />}
     </div>
   );
 }

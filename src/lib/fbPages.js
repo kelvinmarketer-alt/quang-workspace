@@ -77,6 +77,7 @@ export async function loadPageSummary(p, R) {
   try {
     const [cur, prev] = await Promise.all([pageInsights(p, R.cur), pageInsights(p, R.prev)]);
     out.cur = cur.t; out.prev = prev.t; out.daily = cur.daily;
+    out.first = cur.daily.find((x) => (x.views || 0) + (x.reach || 0) > 0)?.date || null; out.last = pageLastDate(cur.daily);
   } catch (e) { out.errors.push(e.message); }
   // Hôm nay: Facebook chưa chốt số ngày → không so sánh, không chấm điểm
   if (R.partial) { if (out.cur) out.prev = {}; out.verdict = { key: "live", label: "Chốt sau 0h", tone: "slate" }; }
@@ -93,6 +94,31 @@ export function pageVerdict(s) {
   if (main <= -25 || (de != null && de <= -35)) return { key: "down", label: "Đi xuống", tone: "rose" };
   if (main <= -10) return { key: "warn", label: "Cần chú ý", tone: "amber" };
   return { key: "flat", label: "Ổn định", tone: "sky" };
+}
+
+// ===== SO VỚI KỲ TRƯỚC (11/11) — cùng độ dài liền trước (vd tháng này ↔ cùng số ngày trước đó) =====
+// cur/prev: số tổng của page ({ reach, engagement, er, messages… }) · clicks: { cur, prev } cộng từ bài đăng (page không có chỉ số click riêng)
+export const COMPARE_ROWS = [["reach", "Tiếp cận"], ["engagement", "Tương tác"], ["clicks", "Click vào bài"], ["er", "Tỉ lệ tương tác", "pt"], ["messages", "Tin nhắn mới"]];
+export function comparePeriods(cur = {}, prev = {}, clicks = null) {
+  return COMPARE_ROWS.map(([key, label, unit]) => {
+    const c = key === "clicks" ? clicks?.cur ?? null : cur?.[key] ?? null;
+    const p = key === "clicks" ? clicks?.prev ?? null : prev?.[key] ?? null;
+    // Tỉ lệ (%) so bằng điểm phần trăm (5% → 6% = +1 điểm), các số khác so %
+    const d = c == null || p == null ? null : unit === "pt" ? c - p : pctChange(c, p);
+    return { key, label, cur: c, prev: p, d, unit: unit || "%" };
+  });
+}
+// Tổng click từ danh sách bài (null nếu chưa có bài nào để tính)
+export const sumClicks = (posts) => (posts == null ? null : posts.reduce((s, x) => s + (x.clicks || 0), 0));
+// Bài kéo tương tác nhất: cảm xúc + bình luận + chia sẻ (hoà thì bài nhiều click hơn lên trước); bỏ bài 0 tương tác
+export function topEngaged(posts, n = 5) {
+  return [...(posts || [])].filter((x) => (x.eng || 0) > 0).sort((a, b) => (b.eng || 0) - (a.eng || 0) || (b.clicks || 0) - (a.clicks || 0)).slice(0, n);
+}
+// Ngày mới nhất page có số (Facebook chốt số ngày sau 0h → hôm nay thường chưa có)
+export function pageLastDate(daily) {
+  let last = null;
+  for (const x of daily || []) if ((x.views || 0) + (x.reach || 0) + (x.engagement || 0) > 0 && (!last || x.date > last)) last = x.date;
+  return last;
 }
 
 const TYPE_VI = { added_photos: "Ảnh", added_video: "Video", shared_story: "Chia sẻ / link", mobile_status_update: "Trạng thái", created_event: "Sự kiện", published_story: "Bài", created_note: "Ghi chú" };

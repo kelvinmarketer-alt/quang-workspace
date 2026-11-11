@@ -268,6 +268,46 @@ export function tidySnippet(s) {
   return t;
 }
 
+// ───────────── Tìm trong nội dung + tô sáng (11/11) ─────────────
+// Từ khoá để tô sáng / tìm từng từ: bỏ dấu, ≥ 2 ký tự, tối đa 4 từ
+export function searchWords(query) {
+  return [...new Set(fold(query).split(/[^a-z0-9]+/).filter((w) => w.length >= 2))].slice(0, 4);
+}
+
+// Cắt chữ thành các đoạn { t, hit } — hit = khớp cả cụm hoặc từng từ (không phân biệt hoa thường, dấu)
+export function highlightParts(text, query) {
+  const src = String(text || "").normalize("NFC");
+  const q = fold(query).replace(/\s+/g, " ").trim();
+  if (!src || q.length < 2) return src ? [{ t: src, hit: false }] : [];
+  let f = ""; const map = [];
+  for (let i = 0; i < src.length; i++) { const c = fold(src[i]); for (let k = 0; k < c.length; k++) { f += c[k]; map.push(i); } }
+  const marks = new Array(src.length).fill(false);
+  const mark = (needle) => {
+    if (!needle) return;
+    for (let at = f.indexOf(needle); at >= 0; at = f.indexOf(needle, at + needle.length)) {
+      const a = map[at], b = map[at + needle.length - 1];
+      for (let i = a; i <= b; i++) marks[i] = true;
+    }
+  };
+  mark(q);
+  for (const w of searchWords(q)) mark(w);
+  const out = [];
+  for (let i = 0; i < src.length; i++) {
+    const last = out[out.length - 1];
+    if (last && last.hit === marks[i]) last.t += src[i]; else out.push({ t: src[i], hit: marks[i] });
+  }
+  return out;
+}
+
+// Gộp kết quả tìm TỪNG TỪ (cụm đầy đủ không có): chỉ giữ tài liệu có đủ mọi từ; đoạn trích lấy của từ đầu tiên
+export function intersectHits(lists) {
+  if (!lists.length) return new Map();
+  const maps = lists.map((rows) => new Map((rows || []).map((x) => [x.id, x.snippet])));
+  const out = new Map();
+  for (const [id, snip] of maps[0]) if (maps.every((m) => m.has(id))) out.set(id, snip);
+  return out;
+}
+
 // Tag nhập tay "kế toán, báo cáo ; excel" → ["kế toán","báo cáo","excel"]
 export function parseTags(s) {
   return [...new Set(String(s || "").split(/[,;\n]+/).map((x) => x.trim().replace(/\s+/g, " ")).filter(Boolean).map((x) => x.slice(0, 30)))].slice(0, 12);

@@ -25,6 +25,27 @@ export function rangesOf(period) {
 
 export const pctChange = (cur, prev) => (cur == null || prev == null || !prev ? null : ((cur - prev) / Math.abs(prev)) * 100);
 
+// ===== ĐỘ MỚI CỦA SỐ (11/11): ngày mới nhất THỰC SỰ có trong dữ liệu — Google trễ 2–3 ngày nên cuối biểu đồ hay "tụt" ảo =====
+// rows: [{ date, ...}] hoặc [[date, value]] · fields: cột phải > 0 mới tính là có số (bỏ trống = có dòng là tính)
+const dateOf = (r) => (Array.isArray(r) ? r[0] : r?.date);
+const hasVal = (r, fields) => !fields?.length || fields.some((f) => (Array.isArray(r) ? Number(r[1]) : Number(r?.[f])) > 0);
+export function dataSpan(rows, fields) {
+  let first = null, last = null;
+  for (const r of rows || []) {
+    const d = dateOf(r);
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d) || !hasVal(r, fields)) continue;
+    if (!first || d < first) first = d;
+    if (!last || d > last) last = d;
+  }
+  return { first, last };
+}
+export const lastDataDate = (rows, fields) => dataSpan(rows, fields).last;
+// Ngày mới nhất trong nhiều nguồn (nhiều web) — lấy ngày MUỘN nhất có số
+export const latestOf = (dates) => (dates || []).filter(Boolean).sort().pop() || null;
+export const freshText = (d) => (d ? `Số tới ngày ${d.slice(8, 10)}/${d.slice(5, 7)}` : "Chưa có số theo ngày");
+// Số thiếu bao nhiêu ngày cuối kỳ (0 = đủ tới ngày cuối kỳ)
+export const lagDays = (last, until) => (!last || !until || last >= until ? 0 : daysBetween(last, until) - 1);
+
 // ===== PHÂN LOẠI NGUỒN TRUY CẬP theo nền tảng (từ sessionSource / sessionMedium của GA4) =====
 export const SOURCE_GROUPS = [
   { key: "google", label: "Google tìm kiếm", color: "#4285F4" },
@@ -159,7 +180,13 @@ export async function loadSiteSummary(site, R) {
     site.ga && gaReport(site.ga, { ranges: [R.ga.cur], metrics: ["sessions"], dims: ["sessionSource", "sessionMedium"], limit: 300 }).then((rows) => {
       out.sources = groupSources(rows.map((r) => ({ src: r.sessionSource, med: r.sessionMedium, cur: { sessions: r.sessions }, prev: {} })));
     }).catch(() => {}),
+    // GA4 theo ngày (nhẹ, gom chung 1 lần gọi máy chủ) → biết số GA4 thực có tới ngày nào
+    site.ga && gaReport(site.ga, { ranges: [R.ga.cur], metrics: ["activeUsers"], dims: ["date"], limit: 400 }).then((rows) => {
+      out.gaDaily = rows.map((x) => ({ date: `${String(x.date).slice(0, 4)}-${String(x.date).slice(4, 6)}-${String(x.date).slice(6, 8)}`, activeUsers: x.activeUsers })).sort((a, b) => a.date.localeCompare(b.date));
+    }).catch(() => {}),
   ]);
+  // GSC chỉ trả dòng cho ngày có hiển thị → ngày cuối có dòng = số Google có tới đó
+  out.fresh = { gsc: dataSpan(out.gsc?.daily, ["impressions", "clicks"]), ga: dataSpan(out.gaDaily, ["activeUsers"]) };
   // Hôm nay chưa hết ngày → bỏ so sánh (tránh "giảm 96%" ảo) và không chấm điểm
   if (R.partial) { if (out.gsc) out.gsc.prev = {}; if (out.ga) out.ga.prev = {}; out.verdict = { key: "live", label: "Trong ngày", tone: "slate" }; }
   else out.verdict = verdictOf(out);

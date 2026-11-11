@@ -1,5 +1,7 @@
 // Thêm việc 1 dòng (01/11 sếp duyệt demo): "Gửi báo cáo #VĐG mai 9h !cao ~2" → tên · ngày · giờ · ưu tiên · khách · số phiên 25'.
 // Hiểu: hôm nay · mai/ngày mai · ngày kia · thứ 2..7/t2..t7 · cn/chủ nhật · tuần sau · dd/mm — 9h, 9h30, 14:30, 3h chiều — !cao/!!/!gap, !thap — #tên khách (gõ tắt chữ đầu: #vdg, #nstt) — ~2
+// 11/11: lặp lại — "mỗi ngày / hằng ngày", "mỗi tuần", "mỗi tháng", "mỗi thứ 2", "mỗi CN" (chữ "hàng" KHÔNG tính: "giao hàng ngày mai")
+import { firstOnOrAfter, normRepeat } from "./taskRepeat.js";
 const fold = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const DOW = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
@@ -32,12 +34,26 @@ function matchCustomer(q, customers) {
 
 export function parseQuickTask(raw, customers = [], now = new Date()) {
   let s = " " + String(raw || "").normalize("NFC") + " ", f = fold(s);
-  const out = { title: "", date: null, time: null, priority: null, customerId: null, customerName: null, est: null };
+  const out = { title: "", date: null, time: null, priority: null, customerId: null, customerName: null, est: null, repeat: null };
   // cắt cụm đã hiểu khỏi câu (giữ đúng chỉ số vì fold giữ nguyên độ dài chuỗi NFC)
   const cut = (re) => { const m = f.match(re); if (!m) return null; const i = m.index, j = i + m[0].length; s = s.slice(0, i) + " " + s.slice(j); f = f.slice(0, i) + " " + f.slice(j); return m; };
   const base = new Date(now); base.setHours(0, 0, 0, 0);
   const add = (n) => { const d = new Date(base); d.setDate(d.getDate() + n); return d; };
   let m;
+  // Lặp lại: cắt trước để "mỗi thứ 2" không bị hiểu là "thứ 2 tới"; "hằng" phải đúng chữ "hằng" (không phải "hàng")
+  const cutRep = (re) => {
+    const r = new RegExp(re.source, "g"); let x;
+    while ((x = r.exec(f))) {
+      if (x[1] === "hang" && s.slice(x.index + 1, x.index + 5).toLowerCase() !== "hằng") continue;
+      const i = x.index, j = i + x[0].length; s = s.slice(0, i) + " " + s.slice(j); f = f.slice(0, i) + " " + f.slice(j); return x;
+    }
+    return null;
+  };
+  if (cutRep(/\s(moi|hang)\sngay(?!\s(?:mai|kia)\s)\s/)) out.repeat = { type: "daily" };
+  else if ((m = cutRep(/\s(moi|hang)\s(?:thu\s?|t)([2-7])\s/))) out.repeat = { type: "weekly", days: [+m[2] - 1] };
+  else if (cutRep(/\s(moi|hang)\s(?:chu nhat|cn)\s/)) out.repeat = { type: "weekly", days: [0] };
+  else if (cutRep(/\s(moi|hang)\stuan\s/)) out.repeat = { type: "weekly" };
+  else if (cutRep(/\s(moi|hang)\sthang\s/)) out.repeat = { type: "monthly" };
   // "mai" = ngày mai, TRỪ khi là tên người: viết hoa giữa câu ("Gọi chị Mai") hoặc đứng sau chị/anh/gặp… — lấy chữ "mai" hợp lệ đầu tiên
   const maiHit = () => {
     const re = /\s(ngay mai|mai)(?=\s)/g; let x;
@@ -67,6 +83,11 @@ export function parseQuickTask(raw, customers = [], now = new Date()) {
   if ((m = cut(/\s~(\d{1,2})\s/))) out.est = Math.min(12, +m[1]);
   const hm = s.match(/#([^\s#!~]+(?:\s[^\s#!~]+){0,3})/);
   if (hm) { const b = matchCustomer(hm[1], customers); if (b) { out.customerId = b.c.id; out.customerName = b.c.name; s = s.replace("#" + b.raw, " "); } }
+  if (out.repeat) {
+    // Chưa ghi ngày → lần đầu = ngày khớp gần nhất từ hôm nay; "mỗi tuần"/"mỗi tháng" lấy thứ / ngày của lần đầu
+    out.repeat = normRepeat(out.repeat, out.date || iso(base));
+    if (!out.date) out.date = firstOnOrAfter(out.repeat, iso(base));
+  }
   out.title = s.replace(/\s+/g, " ").trim();
   return out;
 }

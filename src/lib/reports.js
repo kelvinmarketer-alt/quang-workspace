@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabase.js";
 import { listGoogleProps } from "./google.js";
-import { buildSites, loadSiteSummary, rangesOf, pctChange } from "./webData.js";
+import { buildSites, loadSiteSummary, rangesOf, pctChange, lagDays, daysBetween } from "./webData.js";
 import { listPages, loadPageSummary, fbRanges } from "./fbPages.js";
 import { diagnose } from "./adsDiagnose.js";
 import { installmentsInRange, sumInstallments, projectMetrics } from "./selectors.js";
@@ -28,7 +28,7 @@ export function guessCustomer(name, customers) {
 export const siteKey = (domain) => String(domain || "").replace(/^www\./, "").split(".")[0];
 
 // ---------- tải số liệu (nhớ 20 phút trong tab) ----------
-const TTL = 20 * 60000, CK = "qws-report-v1";
+const TTL = 20 * 60000, CK = "qws-report-v2"; // v2 (11/11): thêm ngày có số đầu/cuối của từng web/page để kiểm đủ số
 let MEM = null;
 const readCache = (key) => {
   if (MEM && MEM.key === key && Date.now() - MEM.at < TTL) return MEM;
@@ -63,7 +63,8 @@ async function loadAll(P, settings, adsResults) {
     return sites.map((s, i) => { const x = sums[i] || {}; return { domain: s.domain,
       clicks: x.gsc?.cur.clicks ?? null, prevClicks: x.gsc?.prev.clicks ?? null, impressions: x.gsc?.cur.impressions ?? null, prevImpressions: x.gsc?.prev.impressions ?? null,
       position: x.gsc?.cur.position ?? null, users: x.ga?.cur.activeUsers ?? null, prevUsers: x.ga?.prev.activeUsers ?? null, conv: x.ga?.cur.keyEvents ?? null,
-      daily: (x.gsc?.daily || []).map((d) => [d.date, d.clicks]), verdict: x.verdict?.key || "na" }; });
+      daily: (x.gsc?.daily || []).map((d) => [d.date, d.clicks]), verdict: x.verdict?.key || "na",
+      hasGsc: !!s.gsc, hasGa: !!s.ga, gscFirst: x.fresh?.gsc?.first ?? null, gscLast: x.fresh?.gsc?.last ?? null, gaFirst: x.fresh?.ga?.first ?? null, gaLast: x.fresh?.ga?.last ?? null }; });
   })().catch((e) => { errors.push("Website: " + e.message); return []; });
   const pages = (async () => {
     const { pages: list } = await listPages();
@@ -72,7 +73,7 @@ async function loadAll(P, settings, adsResults) {
     const sums = await pool(shown, 5, (p) => loadPageSummary(p, R));
     return shown.map((p, i) => { const x = sums[i] || {}; return { id: p.page_id, name: p.name,
       reach: x.cur?.reach ?? null, prevReach: x.prev?.reach ?? null, messages: x.cur?.messages ?? null, prevMessages: x.prev?.messages ?? null,
-      engagement: x.cur?.engagement ?? null, verdict: x.verdict?.key || "na" }; });
+      engagement: x.cur?.engagement ?? null, verdict: x.verdict?.key || "na", first: x.first ?? null, last: x.last ?? null }; });
   })().catch((e) => { errors.push("Fanpage: " + e.message); return []; });
   const [a, w, p] = await Promise.all([ads, web, pages]);
   return { ads: a, web: w, pages: p, errors };
@@ -158,6 +159,56 @@ export function buildBrandRows({ customers = [], projects = [], tasks = [], data
       ads, webs, pages, cells, rep: repCell, score, state, spend, results };
   });
 }
+
+// ---------- Kiểm đủ số trước khi gửi báo cáo khách (11/11) ----------
+// Mỗi nguồn: ok (đủ) · partial (có số nhưng không phủ hết kỳ) · missing (không có số / lỗi / chưa gắn).
+// Cho phép trễ bình thường: Search Console 3 ngày, GA4 & Facebook 1 ngày (số chốt sau nửa đêm).
+const TOL = { gsc: 3, ga: 1, fb: 1 };
+const dmy = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+// Phủ kỳ: [first,last] so với [since,until] — trả ghi chú khi thiếu đầu / cuối kỳ quá mức cho phép
+function coverNote(spans, P, tol) {
+  const L = spans.filter((x) => x && x.last);
+  if (!L.length || !P?.until) return null;
+  const last = L.map((x) => x.last).sort()[0]; // web/page cập nhật CHẬM nhất quyết định
+  if (lagDays(last, P.until) > tol) return `số tới ${dmy(last)}`;
+  const firsts = L.map((x) => x.first).filter(Boolean).sort();
+  const first = firsts[firsts.length - 1]; // web/page có số MUỘN nhất
+  if (first && P.since && first > P.since && daysBetween(P.since, first) - 1 > tol) return `số từ ${dmy(first)}`;
+  return null;
+}
+const JOB_NEED = { ADS: "ads", Seo: "seo", Web: "web", Landing: "web" };
+export function reportCompleteness(row, data, P = {}) {
+  const items = [];
+  const add = (key, label, status, note = null) => items.push({ key, label, status, note });
+  if (!row) return { items, ok: 0, total: 0, bad: [], loaded: false };
+  const loaded = !!data?.at, err = (data?.errors || []).join(" ");
+  const need = new Set(row.jobs.filter((p) => !p.status || p.status === "doing").map((p) => JOB_NEED[p.category]).filter(Boolean));
+  const chan = (key, label, list, failRe, hasNum, spans, tol, unlinked) => {
+    if (!list.length && !need.has(key)) return; // kênh không dùng → không tính
+    if (!loaded) return add(key, label, "missing", "đang lấy số");
+    if (failRe.test(err)) return add(key, label, "missing", "lỗi lấy số");
+    if (!list.length) return add(key, label, "missing", unlinked);
+    if (!list.some(hasNum)) return add(key, label, "missing", "chưa có số trong kỳ");
+    const n = spans && coverNote(spans, P, tol);
+    add(key, label, n ? "partial" : "ok", n);
+  };
+  // Doanh thu: kỳ chưa hết mà chưa có đợt thu là bình thường (đầu tháng) → chỉ nhắc nhẹ, không tính thiếu
+  if (row.jobs.length) {
+    const ended = P.until && P.until < new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+    if (row.revenue > 0) add("rev", "Doanh thu", "ok");
+    else if (ended) add("rev", "Doanh thu", "missing", "chưa ghi đợt thu trong kỳ");
+  }
+  chan("ads", "Quảng cáo", row.ads, /Quảng cáo/, () => true, null, 0, "chưa gắn tài khoản QC");
+  chan("web", "Website", row.webs, /Website/, (s) => s.clicks != null || s.users != null,
+    row.webs.map((s) => (s.hasGsc === false ? { first: s.gaFirst, last: s.gaLast } : { first: s.gscFirst, last: s.gscLast })), TOL.gsc, "chưa gắn website");
+  const gscWebs = row.webs.filter((s) => s.hasGsc !== false);
+  if (gscWebs.length || need.has("seo")) chan("seo", "SEO", gscWebs, /Website/, (s) => s.impressions != null, gscWebs.map((s) => ({ first: s.gscFirst, last: s.gscLast })), TOL.gsc, "chưa có Search Console");
+  chan("fp", "Fanpage", row.pages, /Fanpage/, (p) => p.reach != null, row.pages.map((p) => ({ first: p.first, last: p.last })), TOL.fb, "chưa gắn fanpage");
+  const bad = items.filter((x) => x.status !== "ok");
+  return { items, ok: items.length - bad.length, total: items.length, bad, loaded };
+}
+// "Thiếu số: Fanpage, SEO" — câu ngắn cho popup / chip
+export const completenessText = (c) => (c?.bad?.length ? `Thiếu số: ${c.bad.map((x) => x.label).join(", ")}` : "Đủ số các kênh");
 
 // Job đang chạy chưa gắn kênh đo lường (01/11 sếp yêu cầu): ADS cần TK quảng cáo, Seo/Web/Landing cần website,
 // Lương cần ít nhất 1 kênh. App/Coaching/Khác không bắt buộc. Sếp bấm "Không cần đo" → settings.measureSkip[projectId] → không báo nữa.

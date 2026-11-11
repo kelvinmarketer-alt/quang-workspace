@@ -12,6 +12,7 @@ import { pushSupported, permission, isSubscribed, enablePush, disablePush, sendT
 import { ask } from "../components/ConfirmDialog.jsx";
 import PeoplePerms from "../components/PeoplePerms.jsx";
 import IcalSettings from "../components/IcalSettings.jsx";
+import ConnHint from "../components/ConnHint.jsx";
 
 // Phân quyền người dùng: src/components/PeoplePerms.jsx (hồ sơ quyền tập trung — module · phạm vi dự án · vai trò Văn phòng AI)
 
@@ -171,9 +172,10 @@ export default function Settings() {
         <IcalSettings />
         {/* 01/11: kết nối quản trị THEO THƯƠNG HIỆU (Khách & Dự án → thẻ khách → Kết nối đo lường). Ở đây chỉ còn danh sách tổng (nâng cao) + script Google Ads */}
         <details className="card group !p-0">
-          <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-sm font-extrabold text-slate-800">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 p-4 text-sm font-extrabold text-slate-800">
             <Plug size={16} className="text-indigo-500" /> Tất cả tài khoản quảng cáo (nâng cao)
             <span className="ml-auto hidden text-[11.5px] font-medium text-slate-400 group-open:hidden sm:inline">Gắn / thêm kết nối theo thương hiệu: Khách & Dự án → thẻ khách → Kết nối đo lường</span>
+            <ConnHint k="allAds" className="w-full font-normal" />
           </summary>
           <div className="border-t border-slate-100 p-1"><AdsAccounts /></div>
         </details>

@@ -5,6 +5,7 @@ import { useData } from "../lib/store.jsx";
 import { solarToLunar, canChiDay, canChiYear } from "../lib/lunar.js";
 import { generateCalendarEvents, upcomingEvents, parseEventsCSV, normEvent } from "../lib/events.js";
 import { MY_EVENTS } from "../data/myEvents.js";
+import { projectedOccurrences } from "../lib/taskRepeat.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const DOW = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -147,6 +148,8 @@ export default function Calendar() {
     const to = new Date(year, month + 1, 0);
     const ev = generateCalendarEvents(from, to, family);
     const taskEv = tasks.filter((t) => t.date).map((t) => ({ date: t.date, title: t.title, type: "task" }));
+    // 11/11: việc lặp lại → hiện trước các lần sắp tới trong tháng (chưa tạo thành việc thật)
+    for (const o of projectedOccurrences(tasks, isoOf(from), isoOf(to))) taskEv.push({ date: o.date, title: "🔁 " + o.title, type: "task" });
     const map = {};
     for (const e of [...ev, ...taskEv]) (map[e.date] ||= []).push(e);
     return map;

@@ -5,6 +5,8 @@ import { supabase } from "../lib/supabase.js";
 import GADS_SCRIPT from "../../supabase/gads-script.js?raw";
 import { ask } from "./ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
+import { loadHealth, agoVI } from "../lib/adsTokenHealth.js";
+import ConnHint from "./ConnHint.jsx";
 
 // Quản lý TKQC Meta cho module Quảng cáo (CHỈ CHỦ). Token gửi thẳng lên edge fn qws-meta-ads,
 // lưu ở bảng qws_ads_accounts (chỉ service role đọc) — app không bao giờ nhận lại token, chỉ 6 ký tự cuối.
@@ -68,6 +70,7 @@ function GoogleSection() {
         <span className="text-[11px] text-slate-400">script tự đẩy số mỗi giờ</span>
         <button onClick={refresh} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" title="Tải lại"><RefreshCw size={14} /></button>
       </div>
+      <ConnHint k="gads" className="mb-2" />
       <div className="space-y-2">
         {list.map((a) => (
           <div key={a.customer_id} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 ${a.active ? "border-slate-100" : "border-dashed border-slate-200 opacity-60"}`}>
@@ -110,6 +113,7 @@ export default function AdsAccounts() {
   const [found, setFound] = useState(null); // [{id,name,group,services,brand,pick,...}]
   const [msg, setMsg] = useState("");
   const [newTok, setNewTok] = useState({}); // id -> token mới
+  const [health] = useState(loadHealth); // 11/11: tình trạng token theo lần tải gần nhất ở trang Quảng cáo (trên máy này)
 
   const refresh = async () => {
     setErr("");
@@ -154,6 +158,7 @@ export default function AdsAccounts() {
         <h3 className="text-base font-extrabold">Quảng cáo — tài khoản Meta & Google</h3>
         <button onClick={refresh} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" title="Tải lại"><RefreshCw size={14} /></button>
       </div>
+      <ConnHint k="meta" className="-mt-1 mb-3" />
 
       {list.length === 0 && !err && <div className="mb-3 text-xs text-slate-400">Chưa có tài khoản nào. Dán token System User của 1 BM bên dưới để thêm.</div>}
       <div className="space-y-2">
@@ -166,6 +171,8 @@ export default function AdsAccounts() {
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => update(a.id, { services: e.target.checked })} />Gom theo dịch vụ TMV</label>
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.id, { active: e.target.checked })} />Đang dùng</label>
               <span className="text-[11px] text-slate-400">ID {a.id} · token {a.tokenTail || "—"}</span>
+              {health[a.id]?.err ? <Badge tone="rose">{health[a.id].kind === "token" ? "Token hết hạn / lỗi" : health[a.id].kind === "perm" ? "Token mất quyền" : "Tải lỗi"} · {agoVI(health[a.id].lastErr)}</Badge>
+                : health[a.id]?.lastOk ? <span className="text-[11px] font-semibold text-emerald-600">✓ tải được {agoVI(health[a.id].lastOk)}</span> : null}
               <button aria-label="Xoá" title="Xoá" onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>
             </div>
             <div className="mt-1.5 flex items-center gap-1.5">

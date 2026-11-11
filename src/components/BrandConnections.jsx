@@ -15,6 +15,7 @@ import { listPages } from "../lib/fbPages.js";
 import { OFFICE_URL } from "../lib/office.js";
 import { ask } from "./ConfirmDialog.jsx";
 import { useMeasureSkip } from "./MeasureAlerts.jsx";
+import ConnHint from "./ConnHint.jsx";
 
 const call = async (body) => { const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body }); if (error || data?.error) throw new Error(error?.message || data.error); return data; };
 // [tên nhóm, icon, đơn vị đếm]
@@ -158,6 +159,7 @@ export default function BrandConnections({ customer, startOpen = 0 }) {
                     <I size={13} /> {lb} <span className="font-medium text-slate-400">· {m.length}</span>
                     <button type="button" onClick={() => openAdd(kind)} className={`ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-bold ${adding === kind ? "bg-indigo-50 text-indigo-700" : "text-indigo-600 hover:bg-indigo-50"}`}><Plus size={13} /> Gắn</button>
                   </div>
+                  <ConnHint k={{ ads: "brandAds", web: "brandWeb", page: "brandPage" }[kind]} className="mb-1.5 px-0.5 !text-[11.5px]" />
                   <div className="space-y-1.5">
                     {!m.length && adding !== kind && <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-[11.5px] text-slate-400">Chưa gắn {KINDS[kind][2]}</div>}
                     {m.map((x) => kind === "ads" ? <AdsRow key={x.id} a={x} busy={busy === x.id} onPatch={(p) => adsUpdate(x, p)} onUnlink={() => link(kind, x, false)} />

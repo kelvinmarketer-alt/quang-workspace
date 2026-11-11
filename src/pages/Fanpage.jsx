@@ -4,10 +4,11 @@ import { RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, EyeOff, Eye, Ex
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { listPages, loadPageSummary, loadPagePosts, fbRanges, pageVerdict } from "../lib/fbPages.js";
+import { listPages, loadPageSummary, loadPagePosts, fbRanges, pageVerdict, comparePeriods, sumClicks, topEngaged } from "../lib/fbPages.js";
 import InfoTip from "../components/InfoTip.jsx";
 import { aiPageAnalysis } from "../lib/ai.js";
-import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod } from "./Web.jsx";
+import { int, k, pct1, dm, Delta, Spark, Table, AiBox, RangePicker, usePeriod, FreshTag } from "./Web.jsx";
+import { DeltaChip } from "../components/ReportKit.jsx";
 import { AnswerCard, Leaderboard, SideDrawer, ViewToggle, loadView, saveView } from "../components/ReportKit.jsx";
 
 const pctChange = (c, p) => (c == null || p == null || !p ? null : ((c - p) / Math.abs(p)) * 100);
@@ -53,6 +54,59 @@ function PageCard({ p, sum, onOpen }) {
   );
 }
 
+// So với kỳ trước (cùng độ dài liền trước): tiếp cận, tương tác, click, tỉ lệ tương tác, tin nhắn — kỳ này / kỳ trước / % đổi
+function ComparePanel({ sum, R, clicks, clicksLoading }) {
+  const rows = comparePeriods(sum.cur, sum.prev, clicks);
+  const fmt = (r, v) => (v == null ? (r.key === "clicks" && clicksLoading ? "…" : "—") : r.unit === "pt" ? pct1(v) : k(v));
+  return (
+    <Card className="!p-3">
+      <div className="mb-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">So với kỳ trước</span>
+        <span className="text-[10.5px] text-slate-400">{dm(R.cur[0])}→{dm(R.cur[1])} so với {dm(R.prev[0])}→{dm(R.prev[1])}</span>
+        <FreshTag className="sm:ml-auto" items={[{ date: sum.last, until: R.cur[1] }]} />
+      </div>
+      <div className="divide-y divide-slate-50">
+        <div className="grid grid-cols-[minmax(0,1fr)_4.2rem_4.2rem_3.6rem] gap-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"><span>Chỉ số</span><span className="text-right">Kỳ này</span><span className="text-right">Kỳ trước</span><span className="text-right">Đổi</span></div>
+        {rows.map((r) => (
+          <div key={r.key} className="grid grid-cols-[minmax(0,1fr)_4.2rem_4.2rem_3.6rem] items-center gap-2 py-1.5 text-[12.5px]">
+            <span className="min-w-0 truncate font-semibold text-slate-700">{r.label}</span>
+            <span className="text-right font-extrabold tabular-nums text-slate-900">{fmt(r, r.cur)}</span>
+            <span className="text-right tabular-nums text-slate-500">{fmt(r, r.prev)}</span>
+            <span className="flex justify-end">{r.unit === "pt"
+              ? (r.d == null ? <span className="text-slate-300">—</span> : <span className={`text-[11px] font-bold ${Math.abs(r.d) < 0.05 ? "text-slate-400" : r.d > 0 ? "text-emerald-600" : "text-rose-600"}`}>{r.d > 0 ? "+" : r.d < 0 ? "−" : ""}{Math.abs(r.d).toFixed(1).replace(".", ",")} điểm</span>)
+              : r.d == null ? <span className="text-slate-300">—</span> : <DeltaChip d={r.d} />}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 text-[10.5px] leading-snug text-slate-400">Click cộng từ các bài đăng trong từng kỳ{R.hasToday ? " · hôm nay Facebook chưa chốt số nên kỳ này thiếu 1 ngày" : ""}.</div>
+    </Card>
+  );
+}
+
+// Bài kéo tương tác nhất trong kỳ (cảm xúc + bình luận + chia sẻ)
+function TopPosts({ posts }) {
+  const top = topEngaged(posts, 5);
+  return (
+    <Card className="!p-3">
+      <div className="mb-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Bài kéo tương tác nhất</div>
+      {!top.length ? <div className="py-3 text-center text-[12px] text-slate-400">Chưa có bài nào có tương tác trong kỳ.</div> : (
+        <div className="space-y-1.5">
+          {top.map((x, i) => (
+            <a key={x.id} href={x.url} target="_blank" rel="noreferrer" className="flex items-start gap-2 rounded-xl bg-slate-50 p-2 hover:bg-indigo-50/40">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">{i + 1}</span>
+              {x.img ? <img src={x.img} alt="" className="h-11 w-11 shrink-0 rounded-md object-cover" loading="lazy" /> : <div className="h-11 w-11 shrink-0 rounded-md bg-slate-100" />}
+              <div className="min-w-0 flex-1">
+                <div className="line-clamp-2 text-[12px] font-semibold text-slate-700">{x.text || "(không có chữ)"}</div>
+                <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10.5px] text-slate-400"><span>{x.type} · {when(x.at)}</span><span><b className="text-slate-600">{int(x.eng)}</b> tương tác ({int(x.reactions)} cảm xúc · {int(x.comments)} bình luận · {int(x.shares)} chia sẻ)</span>{x.clicks > 0 && <span>{int(x.clicks)} click</span>}{x.er != null && <span>TT {pct1(x.er)}</span>}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function aiPayload(p, sum, det, R) {
   const c = sum.cur, v = sum.prev, d = (a, b) => { const x = pctChange(a, b); return x == null ? null : Math.round(x); };
   const post = (x) => ({ ngay: x.at.slice(0, 16), loai: x.type, noi_dung: x.text.slice(0, 160), tiep_can: x.reach, xem: x.views, click: x.clicks, cam_xuc: x.reactions, binh_luan: x.comments, chia_se: x.shares, er: x.er != null ? +x.er.toFixed(1) : null });
@@ -83,6 +137,17 @@ function Detail({ owner, p, sum, R, tick, onBack, onHide, aiState, setAiState, a
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.page_id, R.key, tick, retry]);
+  // Bài kỳ trước — chỉ để cộng click so sánh (page không có chỉ số click riêng)
+  const [prevPosts, setPrevPosts] = useState(null);
+  useEffect(() => {
+    let alive = true; setPrevPosts(null);
+    if (R.partial) return () => { alive = false; };
+    const PR = { ...R, cur: R.prev, key: `${R.prev[0]}_${R.prev[1]}` };
+    cached(`posts|${p.page_id}|${PR.key}|${tick}`, () => loadPagePosts(p, PR)).then((v) => alive && setPrevPosts(v.posts)).catch(() => alive && setPrevPosts(false));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.page_id, R.key, tick, retry]);
+  const clicks = det && prevPosts ? { cur: sumClicks(det.posts), prev: sumClicks(prevPosts) } : det ? { cur: sumClicks(det.posts), prev: null } : null;
   const c = sum?.cur, v = sum?.prev;
   const key = `${p.page_id}|${R.key}`, ai = aiState[key];
   const runAi = async () => {
@@ -122,9 +187,16 @@ function Detail({ owner, p, sum, R, tick, onBack, onHide, aiState, setAiState, a
         </div>
       )}
 
+      {c && !R.partial && (
+        <div className="grid gap-3 xl:grid-cols-2">
+          <ComparePanel sum={sum} R={R} clicks={clicks} clicksLoading={!det || prevPosts === null} />
+          {det ? <TopPosts posts={det.posts} /> : !err && <Card className="!p-3"><div className="h-40 animate-pulse rounded-lg bg-slate-50" /></Card>}
+        </div>
+      )}
+
       <div className="grid gap-3 xl:grid-cols-3">
         <Card className="!p-3 xl:col-span-2">
-          <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Theo ngày</div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5"><span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Theo ngày</span>{sum?.cur && <FreshTag items={[{ date: sum.last, until: R.cur[1] }]} />}</div>
           <div className="h-56">
             <ResponsiveContainer>
               <ComposedChart data={(sum?.daily || []).map((x) => ({ ...x, day: dm(x.date) }))}>
@@ -266,6 +338,7 @@ export default function Fanpage() {
   const tot = useMemo(() => {
     const t = { reach: 0, pReach: 0, eng: 0, pEng: 0, msg: 0, pMsg: 0 };
     for (const s of Object.values(sums)) if (s.cur) { t.reach += s.cur.reach; t.pReach += s.prev?.reach || 0; t.eng += s.cur.engagement; t.pEng += s.prev?.engagement || 0; t.msg += s.cur.messages; t.pMsg += s.prev?.messages || 0; }
+    t.er = t.reach ? (t.eng / t.reach) * 100 : null; t.pEr = t.pReach ? (t.pEng / t.pReach) * 100 : null;
     return t;
   }, [sums]);
 
@@ -295,9 +368,11 @@ export default function Fanpage() {
       )}
       {(<>
         {shown.length > 0 && <PageAnswer shown={shown} sums={sums} tot={tot} />}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {[["Tiếp cận", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I]) => (
-            <div key={l} className="card min-w-0 px-2.5 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400 sm:tracking-wide"><I size={11} className="hidden shrink-0 sm:block" /> <span className="truncate leading-tight">{l}{l === "Tiếp cận" && <span className="hidden sm:inline"> · tất cả page</span>}</span></div><div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{k(c)}</span><Delta cur={c} prev={p} /></div></div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          {[["Tiếp cận", tot.reach, tot.pReach, Users], ["Tương tác", tot.eng, tot.pEng, Heart], ["Tỉ lệ tương tác", tot.er, tot.pEr, ThumbsUp, true], ["Tin nhắn mới", tot.msg, tot.pMsg, MessageCircle]].map(([l, c, p, I, rate]) => (
+            <div key={l} className="card min-w-0 px-2.5 py-2.5 sm:px-4 sm:py-3"><div className="flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400 sm:tracking-wide"><I size={11} className="hidden shrink-0 sm:block" /> <span className="truncate leading-tight">{l}{l === "Tiếp cận" && <span className="hidden sm:inline"> · tất cả page</span>}</span></div>
+              <div className="flex flex-wrap items-baseline gap-x-1.5"><span className="text-lg font-extrabold sm:text-xl tabular-nums text-slate-900">{rate ? (c != null ? pct1(c) : "—") : k(c)}</span>{rate ? (c != null && p != null && <span className={`text-[10.5px] font-bold ${Math.abs(c - p) < 0.05 ? "text-slate-400" : c > p ? "text-emerald-600" : "text-rose-600"}`}>{c > p ? "+" : c < p ? "−" : ""}{Math.abs(c - p).toFixed(1).replace(".", ",")} điểm</span>) : <Delta cur={c} prev={p} />}</div>
+              {!R.partial && Object.keys(sums).length > 0 && <div className="truncate text-[10.5px] text-slate-400">kỳ trước {rate ? (p != null ? pct1(p) : "—") : k(p)}</div>}</div>
           ))}
         </div>
         {!pages ? <Card><div className="h-24 animate-pulse rounded-lg bg-slate-50" /></Card> : shown.length === 0 ? (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Building2, ExternalLink } from "lucide-react";
 import { Card, SectionTitle } from "./ui.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import ConnHint from "./ConnHint.jsx";
 import { OFFICE_URL, OFFICE_AGENTS, OFFICE_KINDS, loadOfficePrefs, saveOfficePrefs, loadOfficeRunner, officeAgo } from "../lib/office.js";
 
 export default function OfficeSettings() {
@@ -24,6 +25,7 @@ export default function OfficeSettings() {
   return (
     <Card>
       <SectionTitle action={<Building2 size={18} className="text-indigo-500" />}>Văn phòng AI</SectionTitle>
+      <ConnHint k="office" className="-mt-3 mb-3" />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${runner?.online ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
           <span className={`h-2 w-2 rounded-full ${runner?.online ? "bg-emerald-500" : "bg-rose-500"}`} />

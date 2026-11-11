@@ -6,6 +6,7 @@ import { useData } from "../lib/store.jsx";
 import { aiImport, fileToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
 import { guardClose, markDirty } from "./ConfirmDialog.jsx";
+import ConnHint from "./ConnHint.jsx";
 
 const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
@@ -285,6 +286,7 @@ export default function AiImport() {
   return (
     <Card>
       <SectionTitle action={<Sparkles size={18} className="text-indigo-500" />}>Khoá AI (OpenAI)</SectionTitle>
+      <ConnHint k="openai" className="-mt-3 mb-3" />
       <AiKeyBar />
       {/* 10/11: ô "Nhập bằng AI" bỏ khỏi Cài đặt — việc hằng ngày làm ở Khách & Dự án → Thêm ▾ → Nhập bằng AI */}
       <div className="mt-2 text-[12px] text-slate-500">Muốn nhập dự án / đợt thu bằng AI: vào <b>Khách &amp; Dự án → Thêm → Nhập bằng AI</b>.</div>
