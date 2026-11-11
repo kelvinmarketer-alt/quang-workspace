@@ -1,7 +1,7 @@
 {
-  "sha": "fa4a9bc72f8f7cd30575b631cd82ea82e9d0184a",
-  "date": "2026-11-09T08:08:35+07:00",
-  "msg": "Đồng bộ luật Demo D: ghi lệnh ngay khi giá chạm điểm vào (paperBot từ app)",
+  "sha": "1856f2b6c744a1938e903ec0795904ad4f4931ad",
+  "date": "2026-11-12T00:57:35+07:00",
+  "msg": "Thông báo điện thoại dễ hiểu: MUA/BÁN, cắt lỗ/chốt lời, lỗ tối đa $, giá tăng/giảm %, lý do đóng bằng lời thường, kết quả = n lần mức rủi ro",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,15 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "9c6df01495ec1f43176d10c8fe8b9f6711242b27"
+      "sha": "afa36069b1870d35700ea3ed0e4d86b8710e7dc4"
     },
     {
       "path": "lib/paperBot.js",
       "sha": "5d8ddf98d6bb325e6628b8661366cdb7dfb86e24"
+    },
+    {
+      "path": "lib/pushText.js",
+      "sha": "b75e39dcbb6d543473ab91d40bf44646182a72a5"
     },
     {
       "path": "lib/report.js",

@@ -7,6 +7,7 @@
 // - Báo về app: trạng thái (dòng 'status'), lịch sử lệnh đã đóng (dòng 'history'), thông báo đẩy về điện thoại (qws-send-push).
 // Chạy: npm start · thử không đặt lệnh: npm run dry · 1 vòng: npm run once
 import fs from "node:fs";
+import { fillText, pendingText, partialText, closeText } from "./pushText.js";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
 import { runSession, cfgOf, SYMBOLS, TFS, symOf, finalize, statsOf } from "./paperBot.js";
@@ -253,7 +254,7 @@ async function placeProtection(symbol, a) {
 async function protect(symbol, a, qty, why, o = null) {
   if (a.sw3) return fillSW3(symbol, a, qty, why, o);
   a.stage = "open"; a.openedAt = now(); a.filledQty = qty;
-  note(`✅ Khớp ${dirStr(a.side)} ${a.coin} ${TFS[a.tf].label} @ ${px(a.lim)} · SL ${px(a.sl)} · TP ${px(a.tp)}`, `KL ${px(qty)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${why} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
+  { const t = fillText(a, why); note(t.title, t.body, `qws-bot-fill-${a.id}`); }
   if (a.test) testStep(`Lệnh khớp @ ${px(a.lim)} · KL ${px(qty)}`);
   try { await placeProtection(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/TP ${a.coin} ${TFS[a.tf].label}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); if (a.test) testStep(`Lỗi đặt SL/TP: ${e.message} (bot thử lại)`, false); throw e; }
   if (a.test) testStep(`Đã đặt SL ${px(a.sl)} + TP ${px(a.tp)} trên sàn (${a.protKind === "algo" ? "lệnh Algo" : "lệnh điều kiện"})`);
@@ -276,7 +277,7 @@ async function closed(symbol, a, why = null) {
   log(`🏁 ${a.coin} ${a.tf} đóng${exit ? ` @ ${exit}` : ""}${reason ? ` (${reason})` : ""} · lãi/lỗ ${net.toFixed(2)} USDT${R != null ? ` (${R.toFixed(2)}R)` : ""}`);
   journal({ ev: "close", ...a, exit, pnl: net, R, reason, exitAt });
   addHist(histRow({ ...a, exit, pnl: net, R, reason }, exitAt));
-  const cT = `🏁 Đóng ${a.coin} ${TFS[a.tf].label} · ${sgn(net, 2)}$${R != null ? ` (${sgn(R, 1)}R)` : ""}`, cB = `${dirStr(a.side)} @ ${px(a.lim)}${exit ? ` → ${px(exit)}` : ""}${reason ? ` · ${reason}` : ""} · ${modeLbl(a.mode)}`;
+  const { title: cT, body: cB } = closeText(a, { net, R, exit, reason });
   if (a.test) { // lệnh thử: gửi thông báo NGAY (kể cả khi tắt thông báo) và ghi kết quả gửi
     testStep(`Vị thế đã đóng · lãi/lỗ ${sgn(net, 2)}$ (đã trừ phí)`);
     const ok = DRY ? false : await notify(`🧪 ${cT}`, `Lệnh THỬ · ${cB}`, `qws-bot-test-${a.id}`);
@@ -341,7 +342,7 @@ async function place(p, symbol) {
   log(`📌 ${DRY ? "[thử] " : ""}Lệnh chờ ${p.coin} ${TFS[p.tf].label} ${p.side === 1 ? "LONG" : "SHORT"} @ ${lim} · SL ${sl} · TP ${tp} · KL ${qty} · rủi ro ${(qty * risk).toFixed(2)}$ · huỷ lúc ${stamp(p.until)}`);
   journal({ ev: "placed", ...a });
   // Báo điện thoại khi ĐẶT lệnh chờ (21/10) — tắt riêng được bằng config.notifyPending = false; lệnh thử đã có báo riêng
-  if (!p.test && appCfg.notifyPending !== false) note(`📌 Lệnh chờ ${dirStr(p.side)} ${p.coin} ${TFS[p.tf].label} @ ${px(lim)}`, `SL ${px(sl)} · TP ${px(tp)} · rủi ro ${vn(qty * risk, 2)}$ · huỷ lúc ${stamp(p.until)} · ${modeLbl()}`, `qws-bot-place-${p.id}`);
+  if (!p.test && appCfg.notifyPending !== false) { const t = pendingText({ ...a, mode: MODE }, stamp); note(t.title, t.body, `qws-bot-place-${p.id}`); }
 }
 
 // ---------- SW3 (sếp duyệt 06/11): vào lệnh thị trường → SL 2 ATR + lệnh giới hạn chốt 1/3 ở +0,75R → hoà vốn → dời theo đáy/đỉnh 20 nến H4 ----------
@@ -369,7 +370,7 @@ async function placeSW3(p, symbol) {
     S.active[symbol] = a;
     log(`📌 D ${p.coin} ${dirStr(p.side)} lệnh chờ @ ${lp} · KL ${qty} · rủi ro ${(qty * dist).toFixed(2)}$ (${rp}%) · chưa khớp thì vào thị trường lúc ${stamp(p.fallbackAt)} · ${p.why3}`);
     journal({ ev: "placed", ...a });
-    if (appCfg.notifyPending !== false) note(`📌 Lệnh chờ ${dirStr(p.side)} ${p.coin} H4 @ ${px(lp)}`, `Phương án D · rủi ro ${vn(qty * dist, 2)}$ · chưa khớp thì vào thị trường lúc ${stamp(p.fallbackAt)} · ${modeLbl()}`, `qws-bot-place-${p.id}`);
+    if (appCfg.notifyPending !== false) { const t = pendingText({ ...a, mode: MODE }, stamp); note(t.title, t.body, `qws-bot-place-${p.id}`); }
     save(); return;
   }
   await ex.placeMarket({ symbol, side: sideStr(p.side), quantity: qty, clientId: a.entryCid });
@@ -452,7 +453,7 @@ async function fillSW3(symbol, a, qty, why, o) {
   else Object.assign(a, { stage: "open", openedAt: now(), filledQty: qty, lim: en, sl: ex.roundTo(en - a.side * a.dist, info.tick), tp: ex.roundTo(en + a.side * a.partR * a.dist, info.tick), riskUsd: qty * a.dist, q1: ex.roundTo(qty * a.partFrac, info.step, "floor"), partDone: false });
   try { await protectSW3(symbol, a); } catch (e) { note(`⚠ Lỗi đặt SL/chốt 1/3 ${a.coin}`, `${e.message} — bot thử lại ở vòng sau`, `qws-bot-prot-${a.id}`); throw e; }
   log(`✅ SW3 ${a.coin} ${dirStr(a.side)} ${why} @ ${en} · KL ${qty} · SL ${a.sl} · chốt 1/3 (${a.q1}) ở ${a.tp}`);
-  note(`✅ Vào ${dirStr(a.side)} ${a.coin} H4 @ ${px(en)} (${a.limEntry ? `phương án D · ${why}` : "SW3"})`, `SL ${px(a.sl)} · chốt 1/3 ở ${px(a.tp)} · rủi ro ${vn(a.riskUsd, 2)}$ · ${a.why3 || ""} · ${modeLbl(a.mode)}`, `qws-bot-fill-${a.id}`);
+  { const t = fillText(a, a.limEntry ? why : "vào theo giá thị trường"); note(t.title, t.body, `qws-bot-fill-${a.id}`); }
   journal({ ev: "open", ...a });
 }
 const slCid = (a) => a.entryCid.replace("qwsE", `qwsS${a.slSeq || 0}`).slice(0, 36);
@@ -487,7 +488,7 @@ async function manageSW3(symbol, a, amt) {
   if (!a.partDone && a.filledQty && left <= a.filledQty - (a.q1 || 0) * 0.5) { // lệnh chốt 1/3 đã khớp → dời SL về giá vào
     a.partDone = true;
     log(`💰 ${a.coin} đã chốt 1/3 ở ${a.tp}`); journal({ ev: "partial", id: a.id, coin: a.coin, price: a.tp, qty: a.filledQty - left }); // "price" (không dùng "at" — trùng mốc giờ của journal → app hiện 01/01)
-    note(`💰 Chốt 1/3 ${a.coin} H4 @ ${px(a.tp)} (+${vn(a.partR, 2)}R)`, `Dời SL về giá vào ${px(a.lim)} — phần còn lại chạy theo đáy/đỉnh 20 nến · ${modeLbl(a.mode)}`, `qws-bot-part-${a.id}`);
+    { const t = partialText(a); note(t.title, t.body, `qws-bot-part-${a.id}`); }
     await moveSl(symbol, a, a.lim, "hoà vốn sau khi chốt 1/3");
   }
   const lv = lastRaw?.sw3Levels?.[a.coin];
