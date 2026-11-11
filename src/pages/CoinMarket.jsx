@@ -187,10 +187,12 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
   }, [seen, active, sig]); // eslint-disable-line react-hooks/exhaustive-deps
   const list = only ? recs.filter((r) => r.symbol === symKey) : recs;
   const sum = gradeSummary(list, grades);
+  // 12/11 sếp chốt: lệnh không khớp entry = không vào lệnh → ẩn khỏi danh sách, chỉ ghi số đã ẩn
+  const shown = list.filter((r) => grades[r.id]?.outcome !== "miss");
   return (
     <Card className={`!p-3 ${className}`}>
       <div ref={box} className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><History size={13} className="text-indigo-500" /> Lịch sử phân tích AI ({list.length})</div>
+        <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><History size={13} className="text-indigo-500" /> Lịch sử phân tích AI ({shown.length})</div>
         <div className="ml-auto flex rounded-md bg-slate-100 p-0.5 text-[10.5px] font-bold">
           {[[false, "Tất cả"], [true, sym]].map(([k, l]) => <button key={String(k)} onClick={() => { setOnly(k); setShowN(8); }} className={`rounded px-1.5 py-0.5 ${only === k ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}</button>)}
         </div>
@@ -200,17 +202,18 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
           <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-emerald-700">Đúng {sum.ok}</span>
           <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700">Sai {sum.bad}</span>
           <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-600">Chưa rõ {sum.unk}</span>
-          {sum.miss > 0 && <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-700">Không khớp {sum.miss}</span>}
+          
           {sum.winRate != null && <span className="text-slate-600">Tỉ lệ đúng <b className={sum.winRate >= 50 ? "text-emerald-600" : "text-rose-600"}>{fmtPct(sum.winRate, 0)}</b></span>}
           {sum.avgR != null && <span className="text-slate-600">R TB <b className={sum.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{sR(sum.avgR)}</b></span>}
           {sum.none > 0 && <span className="font-semibold text-slate-400">· {sum.none} lần không có kèo</span>}
+          {sum.miss > 0 && <span className="font-semibold text-slate-400">· đã ẩn {sum.miss} lần không khớp entry</span>}
         </div>
       )}
-      {!list.length ? (
+      {!shown.length ? (
         <div className="mt-2 rounded-lg bg-slate-50 px-3 py-4 text-center text-[12px] text-slate-500">Chưa có lần phân tích nào được lưu{only ? ` cho ${sym}` : ""}. Mỗi lần bấm <b>Phân tích</b>, kết quả gọn (hướng, vào/SL/TP) được lưu lên cloud để chấm đúng/sai.</div>
       ) : (
         <ul className="mt-1.5 divide-y divide-slate-100">
-          {list.slice(0, showN).map((r) => {
+          {shown.slice(0, showN).map((r) => {
             const g = grades[r.id], base = (r.symbol || "").replace(/USDT$/, "");
             const [lab, cls] = !r.side ? OUTCOME.none : g ? OUTCOME[g.outcome] || OUTCOME.open : ["Đang chấm…", "bg-slate-50 text-slate-400"];
             const rTxt = g && (g.outcome === "tp" || g.outcome === "sl") ? ` ${sR(g.r, 1)}` : g?.outcome === "open" && g.filled && g.r != null ? ` · tạm ${sR(g.r, 1)}` : "";
@@ -224,7 +227,6 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
                 <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500">
                   <span className="text-slate-400">{MARKETS[r.market]?.label || "Spot"} · {dt(r.at)}</span>
                   {r.side && <span className="font-mono">Vào {px(r.entry)} · SL {px(r.sl)} · TP {px(r.tp)}</span>}
-                  {r.side && g && g.outcome === "miss" && <span className="font-semibold text-amber-600">giá chạm {g.via === "tp" ? "TP" : "SL"} trước khi về điểm vào — không vào lệnh</span>}
                   {r.side && g && g.outcome === "open" && !g.filled && <span className="font-semibold text-amber-600">chưa khớp entry</span>}
                 </div>
                 {r.summary && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-slate-500">{r.summary}</div>}
@@ -233,8 +235,8 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
           })}
         </ul>
       )}
-      {list.length > showN && <button onClick={() => setShowN((n) => n + 12)} className="mt-1 w-full rounded-lg bg-slate-50 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-100">Xem thêm {Math.min(12, list.length - showN)} lần</button>}
-      <div className="mt-2 text-[10.5px] leading-snug text-slate-400">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung), chỉ tính khi giá đã về điểm vào: khớp rồi chạm TP1 = đúng, khớp rồi chạm SL = sai; giá chạy tới TP/SL trước khi khớp = không khớp (không tính); nến khớp lệnh chỉ xét SL, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
+      {shown.length > showN && <button onClick={() => setShowN((n) => n + 12)} className="mt-1 w-full rounded-lg bg-slate-50 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-100">Xem thêm {Math.min(12, shown.length - showN)} lần</button>}
+      <div className="mt-2 text-[10.5px] leading-snug text-slate-400">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung), chỉ tính khi giá đã về điểm vào: khớp rồi chạm TP1 = đúng, khớp rồi chạm SL = sai; giá chạy tới TP/SL trước khi khớp = không vào lệnh → ẩn, không tính; nến khớp lệnh chỉ xét SL, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
     </Card>
   );
 }
