@@ -152,7 +152,7 @@ function KnowledgePanel() {
 
 // Lịch sử phân tích AI (settings.coinAnalyses — lưu cloud, mọi máy thấy) + tự chấm đúng/sai theo nến sau lúc phân tích.
 // Chỉ chấm khi khung này hiện trên màn hình (lười); kết quả giữ trong bộ nhớ (lib/aiGrade.js).
-const OUTCOME = { tp: ["Chạm TP", "bg-emerald-50 text-emerald-700"], sl: ["Chạm SL", "bg-rose-50 text-rose-700"], open: ["Chưa chạm", "bg-slate-100 text-slate-600"], none: ["Không có kèo", "bg-slate-50 text-slate-400"], error: ["Lỗi tải nến", "bg-amber-50 text-amber-700"] };
+const OUTCOME = { miss: ["Không khớp", "bg-amber-50 text-amber-700"], tp: ["Chạm TP", "bg-emerald-50 text-emerald-700"], sl: ["Chạm SL", "bg-rose-50 text-rose-700"], open: ["Chưa chạm", "bg-slate-100 text-slate-600"], none: ["Không có kèo", "bg-slate-50 text-slate-400"], error: ["Lỗi tải nến", "bg-amber-50 text-amber-700"] };
 function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
   const box = useRef(null);
   const [seen, setSeen] = useState(false);
@@ -200,6 +200,7 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
           <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-emerald-700">Đúng {sum.ok}</span>
           <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700">Sai {sum.bad}</span>
           <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-slate-600">Chưa rõ {sum.unk}</span>
+          {sum.miss > 0 && <span className="rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-700">Không khớp {sum.miss}</span>}
           {sum.winRate != null && <span className="text-slate-600">Tỉ lệ đúng <b className={sum.winRate >= 50 ? "text-emerald-600" : "text-rose-600"}>{fmtPct(sum.winRate, 0)}</b></span>}
           {sum.avgR != null && <span className="text-slate-600">R TB <b className={sum.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{sR(sum.avgR)}</b></span>}
           {sum.none > 0 && <span className="font-semibold text-slate-400">· {sum.none} lần không có kèo</span>}
@@ -223,7 +224,8 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
                 <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500">
                   <span className="text-slate-400">{MARKETS[r.market]?.label || "Spot"} · {dt(r.at)}</span>
                   {r.side && <span className="font-mono">Vào {px(r.entry)} · SL {px(r.sl)} · TP {px(r.tp)}</span>}
-                  {r.side && g && g.outcome !== "none" && g.outcome !== "error" && !g.filled && <span className="font-semibold text-amber-600">chưa khớp entry</span>}
+                  {r.side && g && g.outcome === "miss" && <span className="font-semibold text-amber-600">giá chạm {g.via === "tp" ? "TP" : "SL"} trước khi về điểm vào — không vào lệnh</span>}
+                  {r.side && g && g.outcome === "open" && !g.filled && <span className="font-semibold text-amber-600">chưa khớp entry</span>}
                 </div>
                 {r.summary && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-slate-500">{r.summary}</div>}
               </li>
@@ -232,7 +234,7 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
         </ul>
       )}
       {list.length > showN && <button onClick={() => setShowN((n) => n + 12)} className="mt-1 w-full rounded-lg bg-slate-50 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-100">Xem thêm {Math.min(12, list.length - showN)} lần</button>}
-      <div className="mt-2 text-[10.5px] leading-snug text-slate-400">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung): chạm TP1 trước = đúng, chạm SL trước = sai, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
+      <div className="mt-2 text-[10.5px] leading-snug text-slate-400">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung), chỉ tính khi giá đã về điểm vào: khớp rồi chạm TP1 = đúng, khớp rồi chạm SL = sai; giá chạy tới TP/SL trước khi khớp = không khớp (không tính); nến khớp lệnh chỉ xét SL, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
     </Card>
   );
 }

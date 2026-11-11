@@ -14,15 +14,25 @@ export function gradeBars(rec, bars) {
   const s = rec.side === "LONG" ? 1 : rec.side === "SHORT" ? -1 : 0;
   const entry = Number(rec.entry), sl = Number(rec.sl), tp = Number(rec.tp), risk = Math.abs(entry - sl);
   if (!s || !(entry > 0) || !(sl > 0) || !(tp > 0) || !risk || (tp - entry) * s <= 0 || (entry - sl) * s <= 0) return { outcome: "none", r: null, bars: 0 };
-  let filled = false; // giá đã đi qua điểm vào chưa (AI hay đặt entry ở mép vùng chờ)
+  // 11/11: chỉ chấm SAU KHI giá đã về điểm vào (lệnh chờ đã khớp). Giá chạm TP/SL trước khi khớp = "Không khớp" (không vào lệnh,
+  // không tính đúng/sai). Nến khớp lệnh: chỉ xét SL (thận trọng — không biết giá chạm TP trước hay sau lúc khớp), TP xét từ nến sau.
+  let filled = false;
   for (let i = 0; i < bars.length; i++) {
     const k = bars[i];
-    if (!filled && k.low <= entry && k.high >= entry) filled = true;
     const hitSl = s === 1 ? k.low <= sl : k.high >= sl, hitTp = s === 1 ? k.high >= tp : k.low <= tp;
+    if (!filled) {
+      if (k.low <= entry && k.high >= entry) {
+        filled = true;
+        if (hitSl) return { outcome: "sl", r: -1, hitAt: k.time * 1000, bars: i + 1, filled };
+        continue;
+      }
+      if (hitTp || hitSl) return { outcome: "miss", r: null, hitAt: k.time * 1000, bars: i + 1, filled: false, via: hitTp ? "tp" : "sl" };
+      continue;
+    }
     if (hitSl || hitTp) return { outcome: hitSl ? "sl" : "tp", r: hitSl ? -1 : Math.abs(tp - entry) / risk, hitAt: k.time * 1000, bars: i + 1, filled };
   }
   const last = bars[bars.length - 1];
-  return { outcome: "open", r: last ? ((last.close - entry) * s) / risk : null, bars: bars.length, filled, last: last?.close ?? null };
+  return { outcome: "open", r: last && filled ? ((last.close - entry) * s) / risk : null, bars: bars.length, filled, last: last?.close ?? null };
 }
 
 export const cachedGrade = (rec) => CACHE.get(rec.id)?.res || null;
@@ -49,14 +59,15 @@ export function gradeRecord(rec) {
   return p;
 }
 
-// Tổng hợp độ chính xác: đúng = chạm TP, sai = chạm SL, chưa rõ = chưa chạm / chưa chấm (bỏ qua bản không có kèo)
+// Tổng hợp độ chính xác: đúng = khớp rồi chạm TP, sai = khớp rồi chạm SL, chưa rõ = chưa chạm / chưa khớp; "không khớp" và "không có kèo" bỏ qua
 export function gradeSummary(recs, grades) {
-  let ok = 0, bad = 0, unk = 0, none = 0, sumR = 0;
+  let ok = 0, bad = 0, unk = 0, none = 0, miss = 0, sumR = 0;
   for (const r of recs) {
     const g = grades[r.id];
     if (g?.outcome === "none" || (!g && !r.side)) { none++; continue; }
+    if (g?.outcome === "miss") { miss++; continue; } // giá chạy trước khi khớp → không vào lệnh, không tính đúng/sai
     if (g?.outcome === "tp") { ok++; sumR += g.r; } else if (g?.outcome === "sl") { bad++; sumR += g.r; } else unk++;
   }
   const n = ok + bad;
-  return { ok, bad, unk, none, winRate: n ? (ok / n) * 100 : null, avgR: n ? sumR / n : null };
+  return { ok, bad, unk, none, miss, winRate: n ? (ok / n) * 100 : null, avgR: n ? sumR / n : null };
 }
