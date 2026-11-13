@@ -396,7 +396,7 @@ export default function Fanpage() {
           {view === "rank" ? (
             <Leaderboard title="Xếp hạng theo tin nhắn mới" hint="bấm 1 page để xem chi tiết · màu = xu hướng tiếp cận" loading={shown.some((p) => !sums[p.page_id])}
               rows={shown.filter((p) => sums[p.page_id]?.cur && !isIdle(p)).map((p) => { const x = sums[p.page_id], c = x.cur, vk = pageVerdict(x).key;
-                return { key: p.page_id, name: p.name, sub: `${k(c.reach)} tiếp cận · ${k(c.engagement)} tương tác`, value: c.messages || 0, text: int(c.messages), tone: vk === "down" ? "b" : vk === "warn" ? "w" : vk === "up" ? "g" : "a",
+                return { key: p.page_id, name: p.name, sub: `${k(c.reach)} tiếp cận · ${k(c.engagement)} tương tác${clicks[p.page_id] != null ? ` · ${k(clicks[p.page_id])} click` : ""}`, value: c.messages || 0, text: int(c.messages), tone: vk === "down" ? "b" : vk === "warn" ? "w" : vk === "up" ? "g" : "a",
                   delta: pctChange(c.messages, x.prev?.messages), icon: <img src={avatar(p.page_id)} alt="" className="h-7 w-7 shrink-0 rounded-full bg-slate-100" /> }; }).sort((a, b) => b.value - a.value)}
               onPick={(r) => openPage(r.key)} />
           ) : (

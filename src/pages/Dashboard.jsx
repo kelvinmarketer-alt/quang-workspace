@@ -195,7 +195,8 @@ export default function Dashboard() {
       <div key="kpi" className={`grid grid-cols-2 gap-3 sm:gap-4 md:col-span-2 md:grid-cols-4 lg:contents ${c}`}>
         {/* 13/11: dự án đã thành Lương → doanh thu = LN gộp; gộp thành Thu nhập năm + Thu nhập tháng gần nhất (so tháng trước) */}
         <Kpi label={`Thu nhập ${year === curY ? `T1–T${curM}` : year}`} value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`so ${year - 1}`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
-        {(() => { const last = shown[shown.length - 1], before = shown[shown.length - 2]; return <Kpi label={last ? `Thu nhập ${MONTHS_VI[last.month - 1]}` : "Thu nhập tháng"} value={last?.grossProfit || 0} delta={before ? pctOf(last.grossProfit, before.grossProfit) : null} sub={before ? `so ${MONTHS_VI[before.month - 1]}` : "chưa có tháng trước"} color="#6366f1" />; })()}
+        {(() => { const last = shown[shown.length - 1], before = shown[shown.length - 2]; const running = year === curY && last?.month === curM; // tháng đang chạy dở → không so % với cả tháng trước (dễ hiểu nhầm là giảm)
+          return <Kpi label={last ? `Thu nhập ${MONTHS_VI[last.month - 1]}` : "Thu nhập tháng"} value={last?.grossProfit || 0} delta={before && !running ? pctOf(last.grossProfit, before.grossProfit) : null} sub={before ? (running ? `tới hôm nay · ${MONTHS_VI[before.month - 1]}: ${formatShort(before.grossProfit)}` : `so ${MONTHS_VI[before.month - 1]}`) : "chưa có tháng trước"} color="#6366f1" />; })()}
         <Kpi label="Công nợ tới hạn" value={debt} sub={notDue > 0 ? `+ ${formatShort(notDue)} chưa tới hạn` : debt > 0 ? "chưa thu" : "không có nợ"} />
         {isOwner
           ? <Kpi label="Chi quảng cáo 30 ngày" value={adsSpend == null ? "…" : adsSpend} delta={adsSpend != null ? pctOf(adsSpend, adsPrev) : null} deltaGood={false} sub="so 30 ngày trước" />
