@@ -45,7 +45,7 @@ describe("Khách · Lãi theo tháng", () => {
     const Customers = (await import("../src/pages/Customers.jsx")).default;
     await mount(<Customers />);
     await act(async () => { fireEvent.click(screen.getByText("Thương hiệu A")); });
-    await act(async () => { fireEvent.click(screen.getByText("Lãi theo tháng")); });
+    await act(async () => { fireEvent.click(screen.getByText("Lương theo tháng")); });
     expect(screen.getByText(/Mọi lúc:/)).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByText("12 tháng")); });
     expect(screen.getByText("12 th")).toBeTruthy();

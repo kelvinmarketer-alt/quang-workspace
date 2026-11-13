@@ -116,7 +116,7 @@ function ProjectRow({ p, onOpen }) {
       <Badge tone={CAT_TONE[jobKind(p)] || "slate"}>{jobKind(p)}</Badge>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-slate-700">{p.name}</div>
-        <div className="text-[11px] text-slate-400">DT {formatShort(m.revenue)} · LN {formatShort(m.grossProfit)}{m.debt > 0 ? <> · <span className="text-rose-500">nợ {formatShort(m.debt)}</span></> : ""} · <Repeat size={9} className="inline" /> {cnt}</div>
+        <div className="text-[11px] text-slate-400">Lương {formatShort(m.grossProfit)}{m.debt > 0 ? <> · <span className="text-rose-500">nợ {formatShort(m.debt)}</span></> : ""} · <Repeat size={9} className="inline" /> {cnt}</div>
       </div>
       <Badge tone={stone}>{slabel}</Badge>
     </button>
@@ -381,7 +381,7 @@ function CustomerProfit({ projects, customerId, open, onToggle }) {
     <div className="overflow-hidden rounded-xl border border-slate-100 bg-white">
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-slate-50">
         <TrendingUp size={15} className="shrink-0 text-emerald-500" />
-        <span className="flex-1 text-sm font-bold text-slate-700">Lãi theo tháng</span>
+        <span className="flex-1 text-sm font-bold text-slate-700">Lương theo tháng</span>
         <ChevronDown size={15} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && data && (
@@ -392,28 +392,23 @@ function CustomerProfit({ projects, customerId, open, onToggle }) {
               {[6, 12].map((m) => <button key={m} type="button" onClick={() => setMonths(m)} className={`rounded-md px-2 py-1 ${months === m ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{m} tháng</button>)}
             </div>
           </div>
-          <div className="grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 border-b border-slate-100 pb-1 text-[10px] font-bold uppercase text-slate-400">
-            <span>Tháng</span><span className="text-right">Doanh thu</span><span className="text-right">Chi phí</span><span className="text-right">LN gộp</span>
+          <div className="grid grid-cols-[3.6rem_minmax(0,1fr)] gap-x-2 border-b border-slate-100 pb-1 text-[10px] font-bold uppercase text-slate-400">
+            <span>Tháng</span><span className="text-right">Lương</span>
           </div>
           <div className="divide-y divide-slate-50">
             {data.rows.map((r) => (
-              <div key={r.key} className={`relative grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2 py-1.5 text-[12px] tabular-nums ${r.count ? "" : "text-slate-300"}`}>
+              <div key={r.key} className={`relative grid grid-cols-[3.6rem_minmax(0,1fr)] items-center gap-x-2 py-1.5 text-[12px] tabular-nums ${r.count ? "" : "text-slate-300"}`}>
                 <span className="font-bold text-slate-600">{monthName(r.key).replace(/\/\d{2}(\d{2})$/, "/$1")}</span>
-                <span className="truncate text-right">{r.count ? formatShort(r.revenue) : "—"}</span>
-                <span className="truncate text-right text-amber-600">{r.cost ? formatShort(r.cost) : r.count ? "0" : "—"}</span>
                 <span className={`truncate text-right font-extrabold ${!r.count ? "" : r.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}`}>{r.count ? formatShort(r.grossProfit) : "—"}</span>
                 {r.count > 0 && <span className={`absolute bottom-0 right-0 h-0.5 rounded-full ${r.grossProfit < 0 ? "bg-rose-300" : "bg-emerald-300"}`} style={{ width: `${(Math.abs(r.grossProfit) / max) * 25}%` }} />}
               </div>
             ))}
           </div>
-          <div className="mt-1 grid grid-cols-[3.6rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-x-2 rounded-lg bg-slate-50 py-1.5 text-[12px] font-extrabold tabular-nums">
+          <div className="mt-1 grid grid-cols-[3.6rem_minmax(0,1fr)] gap-x-2 rounded-lg bg-slate-50 py-1.5 text-[12px] font-extrabold tabular-nums">
             <span className="pl-1 text-slate-600">{months} th</span>
-            <span className="truncate text-right text-indigo-600">{formatShort(data.sum.revenue)}</span>
-            <span className="truncate text-right text-amber-600">{formatShort(data.sum.cost)}</span>
             <span className={`truncate pr-1 text-right ${data.sum.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}`}>{formatShort(data.sum.grossProfit)}</span>
           </div>
-          <div className="mt-2 text-[11px] text-slate-500">Mọi lúc: DT <b className="text-indigo-600">{formatShort(data.all.revenue)}</b> · CP <b className="text-amber-600">{formatShort(data.all.cost)}</b> · LN <b className={data.all.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}>{formatShort(data.all.grossProfit)}</b>{data.all.revenue > 0 ? ` · ${Math.round((data.all.grossProfit / data.all.revenue) * 100)}% DT` : ""}</div>
-          <div className="mt-0.5 text-[10px] text-slate-400">ADS: LN = phí chạy + chiết khấu − chi phí; job khác: LN = doanh thu − chi phí.</div>
+          <div className="mt-2 text-[11px] text-slate-500">Mọi lúc: <b className={data.all.grossProfit < 0 ? "text-rose-600" : "text-emerald-600"}>{formatShort(data.all.grossProfit)}</b></div>
         </div>
       )}
     </div>
