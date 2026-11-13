@@ -38,6 +38,7 @@ const PAGES = [
   ["Quỹ / Dòng tiền", () => import("../src/pages/Funds.jsx"), "/quy"],
   ["Công việc", () => import("../src/pages/Tasks.jsx"), "/cong-viec"],
   ["Tài nguyên", () => import("../src/pages/Resources.jsx"), "/tai-nguyen"],
+  ["Tài sản", () => import("../src/pages/Assets.jsx"), "/tai-san"],
   ["Tài khoản & Thẻ", () => import("../src/pages/Vault.jsx"), "/tai-khoan"],
   ["Quảng cáo", () => import("../src/pages/Ads.jsx"), "/quang-cao"],
   ["Website", () => import("../src/pages/Web.jsx"), "/website"],

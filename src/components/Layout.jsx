@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, Gem,
 } from "lucide-react";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
@@ -64,6 +64,7 @@ const NAV = [
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "biz" },
   { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin", group: "fin" },
+  { to: "/tai-san", label: "Tài sản", icon: Gem, ownerOnly: true, group: "fin" }, // 13/11: tổng tài sản ròng (chỉ chủ)
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "resources", group: "biz" },
   { to: "/website", label: "Hiệu quả Website", icon: Globe, feat: "web", group: "biz" },
@@ -76,7 +77,7 @@ const NAV = [
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
   { id: "biz", label: "Kinh doanh", order: ["/", "/cong-viec", "/bao-cao", "/khach-hang"] },
-  { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
+  { id: "fin", label: "Tài chính", order: ["/ke-toan", "/tai-san", "/coin"] },
   { id: "me", label: "Lưu trữ", order: ["/kho-tai-lieu"] },
   { id: "sys", label: "Hệ thống", order: [OFFICE_URL, "/cai-dat"] },
 ];
@@ -158,7 +159,7 @@ function useNavPins() {
 }
 // Tiêu đề cho các route phụ (tab con) không nằm trong NAV
 // Tên ngắn trên điện thoại (thanh trên chật: 4 nút bên phải) — 01/11
-const SHORT_TITLE = { "Kế toán & Chi phí": "Kế toán", "Công việc & Lịch": "Công việc", "Tài khoản & Thẻ": "Tài khoản", "Trung tâm báo cáo": "Báo cáo", "Khách & Dự án": "Khách & Dự án" };
+const SHORT_TITLE = { "Kế toán & Chi phí": "Kế toán", "Công việc & Lịch": "Công việc", "Tài khoản & Thẻ": "Tài khoản", "Tài sản": "Tài sản", "Trung tâm báo cáo": "Báo cáo", "Khách & Dự án": "Khách & Dự án" };
 const EXTRA_TITLES = { "/bao-cao": "Trung tâm báo cáo", "/chi-phi": "Kế toán & Chi phí", "/lich": "Công việc & Lịch", "/du-an": "Khách & Dự án", "/don-hang": "Khách & Dự án", "/quy": "Kế toán & Chi phí", "/quy-thong-ke": "Kế toán & Chi phí" };
 
 function Brand({ mini }) {

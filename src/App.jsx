@@ -13,6 +13,7 @@ const Tasks = lazy(() => import("./pages/Tasks.jsx"));
 const Coin = lazy(() => import("./pages/Coin.jsx"));
 const Ads = lazy(() => import("./pages/Ads.jsx"));
 const Vault = lazy(() => import("./pages/Vault.jsx"));
+const Assets = lazy(() => import("./pages/Assets.jsx")); // 13/11: tổng tài sản
 const Resources = lazy(() => import("./pages/Resources.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
 const Web = lazy(() => import("./pages/Web.jsx"));
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/website" element={g("/website", <Web />)} />
         <Route path="/fanpage" element={g("/fanpage", <Fanpage />)} />
         <Route path="/tai-khoan" element={<Vault />} />
+        <Route path="/tai-san" element={<Assets />} />
         {/* 09/11: Kho tài liệu — chủ toàn quyền; thành viên cấp ở Cài đặt → phân quyền (CHỈ XEM; RLS: supabase/SETUP-LIBRARY-MEMBERS.sql) */}
         <Route path="/kho-tai-lieu" element={g("/kho-tai-lieu", <Library />)} />
         <Route path="/cai-dat" element={<Settings />} />

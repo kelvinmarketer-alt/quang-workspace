@@ -149,3 +149,38 @@ export async function mergeCmd(patch, fallback, { stamp = true } = {}) {
   return { error: new Error("Máy khác đang ghi lệnh cho bot cùng lúc — bấm lại sau vài giây") };
 }
 
+
+// ---------- Tổng tiền đầu tư Coin (13/11, cho trang Tài sản) ----------
+// Pure: ví Binance (Spot + Earn + Futures ví + lãi/lỗ đang mở) + coin nhập tay, theo giá USDT. missing = số mã chưa có giá.
+export function investTotals(bn, coins, prices) {
+  const px = (a) => { const s = String(a || "").toUpperCase(); return STABLES.has(s) ? 1 : prices?.[s]?.price; };
+  let binance = 0, manual = 0, missing = 0;
+  for (const b of bn?.balances || []) {
+    const qty = b.totalQty != null ? Number(b.totalQty) || 0 : (Number(b.qty) || 0) + (Number(b.earnQty) || 0);
+    if (!qty) continue;
+    const p = px(b.asset);
+    if (p == null) { missing++; continue; }
+    binance += qty * p;
+  }
+  const f = bn?.futures;
+  if (f) binance += (Number(f.wallet) || 0) + (Number(f.unrealized) || 0);
+  for (const c of coins || []) { const q = Number(c.qty) || 0; if (!q) continue; const p = px(c.symbol); if (p == null) { missing++; continue; } manual += q * p; }
+  return { binance, manual, usd: binance + manual, missing };
+}
+// Hook: đồng bộ ví (dùng chung useBinance) + giá 60 giây/lần. ready = đã có ví (hoặc ví lỗi) và đã có lượt giá đầu.
+export function useInvestTotal(enabled, coins) {
+  const w = useBinance(enabled, true);
+  const [prices, setPrices] = useState(null);
+  const syms = [...(w.bn?.balances || []).map((b) => b.asset), ...(coins || []).map((c) => c.symbol)].map((s) => String(s || "").toUpperCase()).filter(Boolean);
+  const key = [...new Set(syms)].sort().join(",");
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let dead = false;
+    const load = () => fetchTickers(key ? key.split(",") : []).then((p) => { if (!dead) setPrices(p || {}); }).catch(() => { if (!dead) setPrices((x) => x || {}); });
+    load();
+    const t = setInterval(load, 60000);
+    return () => { dead = true; clearInterval(t); };
+  }, [enabled, key]);
+  const t = investTotals(w.bn, coins, prices || {});
+  return { ...t, ready: !!prices && (!!w.bn || !!w.err), err: w.err, syncing: w.syncing, at: w.at, sync: w.sync, hasWallet: !!w.bn };
+}

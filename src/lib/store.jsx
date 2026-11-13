@@ -24,7 +24,7 @@ const clearPending = () => { try { localStorage.removeItem(PEND); } catch { /* b
 // Nhãn cho thông báo "Đã xoá … · Hoàn tác"
 const DELETE_LABELS = {
   deleteTask: "công việc", deleteFamily: "sự kiện", deleteFamilyMany: "các sự kiện", deleteCustomer: "khách hàng (kèm dự án & tài nguyên)", deleteCustomers: "các khách hàng (kèm dự án & tài nguyên)",
-  deleteProject: "dự án (kèm tài nguyên)", deleteInstallment: "đợt thu", deleteExpense: "chi phí", deleteExpensesMany: "các chi phí", deleteFund: "quỹ", deleteSpendCat: "danh mục",
+  deleteProject: "dự án (kèm tài nguyên)", deleteInstallment: "đợt thu", deleteExpense: "chi phí", deleteAsset: "khoản tài sản", deleteExpensesMany: "các chi phí", deleteFund: "quỹ", deleteSpendCat: "danh mục",
   deleteFundTx: "giao dịch quỹ", deleteFundSchedule: "lịch chuyển quỹ", deleteCoin: "coin", deleteAdsResult: "kết quả quảng cáo", deleteResource: "tài nguyên", deleteResources: "các tài nguyên",
 };
 const Ctx = createContext(null);
@@ -85,6 +85,8 @@ function migrate(s) {
   if (!Array.isArray(merged.vault)) merged.vault = [];
   if (!Array.isArray(merged.resources)) merged.resources = [];
   if (!Array.isArray(merged.adsResults)) merged.adsResults = [];
+  if (!Array.isArray(merged.assets)) merged.assets = [];
+  if (!Array.isArray(merged.assetHistory)) merged.assetHistory = [];
   // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
   // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
   if (!merged.catsV5) {
@@ -759,6 +761,17 @@ export function DataProvider({ children }) {
       updateMember: (email, patch) => setState((s) => ({ ...s, members: (s.members || []).map((x) => ((x.email || "").toLowerCase() === (email || "").toLowerCase() ? { ...x, ...patch } : x)) })),
       removeMember: (email) => setState((s) => ({ ...s, members: (s.members || []).filter((x) => (x.email || "").toLowerCase() !== (email || "").toLowerCase()) })),
       // ĐẦU TƯ COIN — danh mục nắm giữ {id, symbol, qty, buyPrice, note}
+      // TÀI SẢN CÁ NHÂN (13/11, chỉ chủ): khoản nhập tay {id,name,type,amount(VND),note,updatedAt}; type "debt" = khoản nợ (trừ ra).
+      // assetHistory: [{m:"YYYY-MM", total, invest, at}] — mỗi tháng 1 dòng, ghi khi mở trang Tài sản.
+      addAsset: (a) => setState((s) => ({ ...s, assets: [{ id: "as" + uid(), updatedAt: Date.now(), ...a }, ...(s.assets || [])] })),
+      updateAsset: (id, patch) => setState((s) => ({ ...s, assets: (s.assets || []).map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)) })),
+      deleteAsset: (id) => setState((s) => ({ ...s, assets: (s.assets || []).filter((x) => x.id !== id) })),
+      snapAssets: (row) => setState((s) => {
+        const h = Array.isArray(s.assetHistory) ? s.assetHistory : [];
+        const cur = h.find((x) => x.m === row.m);
+        if (cur && Math.abs((cur.total || 0) - row.total) < 1000 && Math.abs((cur.invest || 0) - row.invest) < 1000) return s;
+        return { ...s, assetHistory: [...h.filter((x) => x.m !== row.m), row].sort((x, y) => x.m.localeCompare(y.m)).slice(-60) };
+      }),
       addCoin: (c) => setState((s) => ({ ...s, coins: [{ id: "co" + uid(), symbol: (c.symbol || "").toUpperCase(), qty: Number(c.qty) || 0, buyPrice: Number(c.buyPrice) || 0, note: c.note || "" }, ...(s.coins || [])] })),
       updateCoin: (id, patch) => setState((s) => ({ ...s, coins: (s.coins || []).map((c) => (c.id === id ? { ...c, ...patch, symbol: ((patch.symbol ?? c.symbol) || "").toUpperCase() } : c)) })),
       deleteCoin: (id) => setState((s) => ({ ...s, coins: (s.coins || []).filter((c) => c.id !== id) })),
