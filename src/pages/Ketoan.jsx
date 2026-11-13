@@ -182,7 +182,7 @@ function KetoanReport() {
       {/* Thẻ chỉ số chính (có so sánh) */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {/* 13/11: gộp Doanh thu + LN gộp (đã bằng nhau) thành Thu nhập; thêm Lãi ròng sau chi vận hành */}
-        <CompareCard icon={Wallet} label="Thu nhập (lương)" value={cur.grossProfit} prev={prevSum.grossProfit} tone="emerald" compare={compare} />
+        <CompareCard icon={Wallet} label="Thu nhập" value={cur.grossProfit} prev={prevSum.grossProfit} tone="emerald" compare={compare} />
         <CompareCard icon={TrendingUp} label="Lãi ròng" value={netProfit} prev={prevNet} tone="indigo" compare={compare} />
         <CompareCard icon={HandCoins} label="Đã thu" value={cur.collected} prev={prevSum.collected} tone="sky" compare={compare} />
         <CompareCard icon={Receipt} label="Công nợ" value={cur.debt} prev={prevSum.debt} tone="rose" compare={compare} />
