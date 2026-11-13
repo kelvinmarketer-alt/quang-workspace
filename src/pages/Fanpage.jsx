@@ -23,7 +23,7 @@ const cached = async (key, fn) => {
 const avatar = (id) => `https://graph.facebook.com/${id}/picture?type=square&width=64&height=64`;
 const when = (s) => { const d = new Date(s); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
-function PageCard({ p, sum, onOpen }) {
+function PageCard({ p, sum, clk, onOpen }) {
   const c = sum?.cur, v = sum?.prev;
   const M = ({ label, val, d }) => (
     <div className="min-w-0"><div className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className="flex items-baseline gap-1"><span className="text-[15px] font-extrabold tabular-nums text-slate-800">{val}</span>{d}</div></div>
@@ -47,6 +47,8 @@ function PageCard({ p, sum, onOpen }) {
             <M label="Theo dõi ròng" val={(c.netFollows > 0 ? "+" : "") + int(c.netFollows)} d={null} />
             <M label="Xem video" val={k(c.videoViews)} d={<Delta cur={c.videoViews} prev={v.videoViews} />} />
           </div>
+          {/* 13/11: click cộng từ bài đăng trong kỳ (page không có chỉ số click riêng) — tải dần sau số chính */}
+          <div className="mt-1.5 text-[11px] text-slate-400">Click từ bài đăng: <b className="tabular-nums text-slate-700">{clk === undefined ? "…" : clk === null ? "—" : k(clk)}</b></div>
           <div className="mt-2"><Spark data={sum.daily} field="views" /></div>
         </>
       )}
@@ -303,6 +305,7 @@ export default function Fanpage() {
   const [pages, setPages] = useState(null);
   const [meta, setMeta] = useState({});
   const [sums, setSums] = useState({});
+  const [clicks, setClicks] = useState({}); // 13/11: click từng page (cộng từ bài đăng), tải 2 page một lúc
   const [err, setErr] = useState("");
   // Page đang xem nằm trên URL (?page=…) → nút Back điện thoại quay về danh sách, mở link thẳng vào chi tiết
   const [sp, setSp] = useSearchParams();
@@ -330,6 +333,16 @@ export default function Fanpage() {
     if (!pages) return;
     let alive = true; setSums({});
     shown.forEach((p) => cached(`sum|${p.page_id}|${R.key}|${tick}`, () => loadPageSummary(p, R)).then((v) => alive && setSums((o) => ({ ...o, [p.page_id]: v }))));
+    setClicks({});
+    const queue = [...shown];
+    const worker = async () => {
+      while (alive && queue.length) {
+        const p = queue.shift();
+        const v = await cached(`posts|${p.page_id}|${R.key}|${tick}`, () => loadPagePosts(p, R)).catch(() => null);
+        if (alive) setClicks((o) => ({ ...o, [p.page_id]: v ? sumClicks(v.posts) : null }));
+      }
+    };
+    worker(); worker();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, R.key, tick, hidden.join(",")]);
@@ -388,12 +401,12 @@ export default function Fanpage() {
               onPick={(r) => openPage(r.key)} />
           ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {shown.filter((p) => !isIdle(p)).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
+            {shown.filter((p) => !isIdle(p)).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} clk={clicks[p.page_id]} onOpen={() => openPage(p.page_id)} />)}
           </div>)}
           {shown.some(isIdle) && (
             <details className="group px-3 sm:px-0">
               <summary className="cursor-pointer text-[12px] font-bold text-slate-500 hover:text-slate-700"><span className="group-open:hidden">▸</span><span className="hidden group-open:inline">▾</span> {shown.filter(isIdle).length} page không hoạt động trong kỳ này (không có tiếp cận / lượt xem)</summary>
-              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{shown.filter(isIdle).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} onOpen={() => openPage(p.page_id)} />)}</div>
+              <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{shown.filter(isIdle).map((p) => <PageCard key={p.page_id} p={p} sum={sums[p.page_id]} clk={clicks[p.page_id]} onOpen={() => openPage(p.page_id)} />)}</div>
             </details>
           )}
           </>

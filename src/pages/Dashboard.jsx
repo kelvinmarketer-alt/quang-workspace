@@ -74,7 +74,7 @@ export default function Dashboard() {
   const shown = monthly.filter((m) => m.month <= upto);
   const tot = shown.reduce((a, m) => ({ rev: a.rev + m.revenue, gp: a.gp + m.grossProfit }), { rev: 0, gp: 0 });
   const prevTot = lastYear.filter((m) => m.month <= upto).reduce((a, m) => ({ rev: a.rev + m.revenue, gp: a.gp + m.grossProfit }), { rev: 0, gp: 0 });
-  const chartData = shown.map((m) => ({ name: MONTHS_VI[m.month - 1], thu: m.revenue, ln: m.grossProfit }));
+  const chartData = shown.map((m) => ({ name: MONTHS_VI[m.month - 1], ln: m.grossProfit })); // 13/11: 1 đường Thu nhập
   // Công nợ = đợt tới hạn (khớp ô "Cần thu" + Kế toán); đợt ghi ngày tương lai hiện riêng
   const debt = debtToDate(projects, today), notDue = totalDebt(projects) - debt;
 
@@ -193,8 +193,9 @@ export default function Dashboard() {
     // 4 số chính — điện thoại 2 ô/hàng; máy tính wrapper "contents" để 4 ô vẫn nằm thẳng trong lưới 12 cột
     kpi: (c) => (
       <div key="kpi" className={`grid grid-cols-2 gap-3 sm:gap-4 md:col-span-2 md:grid-cols-4 lg:contents ${c}`}>
-        <Kpi label={`Doanh thu ${year === curY ? `T1–T${curM}` : year}`} value={tot.rev} delta={pctOf(tot.rev, prevTot.rev)} sub={`so ${year - 1}`} spark={shown.map((m) => m.revenue)} color="#6366f1" />
-        <Kpi label="Lợi nhuận gộp" value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`${tot.rev ? Math.round((tot.gp / tot.rev) * 100) : 0}% biên`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
+        {/* 13/11: dự án đã thành Lương → doanh thu = LN gộp; gộp thành Thu nhập năm + Thu nhập tháng gần nhất (so tháng trước) */}
+        <Kpi label={`Thu nhập ${year === curY ? `T1–T${curM}` : year}`} value={tot.gp} delta={pctOf(tot.gp, prevTot.gp)} sub={`so ${year - 1}`} spark={shown.map((m) => m.grossProfit)} color="#10b981" />
+        {(() => { const last = shown[shown.length - 1], before = shown[shown.length - 2]; return <Kpi label={last ? `Thu nhập ${MONTHS_VI[last.month - 1]}` : "Thu nhập tháng"} value={last?.grossProfit || 0} delta={before ? pctOf(last.grossProfit, before.grossProfit) : null} sub={before ? `so ${MONTHS_VI[before.month - 1]}` : "chưa có tháng trước"} color="#6366f1" />; })()}
         <Kpi label="Công nợ tới hạn" value={debt} sub={notDue > 0 ? `+ ${formatShort(notDue)} chưa tới hạn` : debt > 0 ? "chưa thu" : "không có nợ"} />
         {isOwner
           ? <Kpi label="Chi quảng cáo 30 ngày" value={adsSpend == null ? "…" : adsSpend} delta={adsSpend != null ? pctOf(adsSpend, adsPrev) : null} deltaGood={false} sub="so 30 ngày trước" />
@@ -228,7 +229,7 @@ export default function Dashboard() {
     year: (c) => <div key="year" className={`min-w-0 md:col-span-2 lg:col-span-12 ${c}`}><YearProgress /></div>,
     chart: (c) => (
       <div key="chart" className={`card p-4 md:col-span-2 ${coinOn ? "lg:col-span-5" : "lg:col-span-8"} ${c}`}>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Doanh thu & lợi nhuận {year}</h3>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Thu nhập theo tháng {year}</h3>
           <div className="flex gap-1">{years.slice(0, 3).map((y) => <button key={y} onClick={() => setYear(y)} className={`rounded-full px-2.5 py-1 text-[12px] font-bold ${y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"}`}>{y}</button>)}</div></div>
         <div className="h-56"><Suspense fallback={<div className="h-full animate-pulse rounded-xl bg-slate-50" />}><RevenueChart data={chartData} /></Suspense></div>
         {year === curY && curM < 12 && <div className="text-[11px] text-slate-400">Chỉ vẽ tới tháng {curM} (tháng chưa tới không tính là 0).</div>}
@@ -242,7 +243,7 @@ export default function Dashboard() {
           <div key={x.projectId + x.id} className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2">
             <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-[11px] font-bold text-indigo-600">{(x.customerName || "?").slice(0, 2).toUpperCase()}</div>
             <div className="min-w-0 flex-1"><div className="truncate text-[13px] font-semibold text-slate-800">{x.projectName}{x.label ? ` · ${x.label}` : ""}</div><div className="truncate text-[11px] text-slate-400">{x.customerName} · {x.date ? fmtDateVI(x.date) : ""}</div></div>
-            <b className="shrink-0 text-[13px] tabular-nums text-slate-800">{formatShort(x.revenue)}</b>
+            <b className="shrink-0 text-[13px] tabular-nums text-slate-800">{formatShort(x.grossProfit)}</b>
           </div>))}
           {!recent.length && <div className="text-[13px] text-slate-400">Chưa có phiếu thu.</div>}</div>
       </div>

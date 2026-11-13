@@ -34,7 +34,7 @@ export default function YearProgress() {
   const editor = (
     <div className="flex flex-wrap items-center gap-2">
       <MoneyInput value={val} onChange={setVal} autoFocus placeholder="vd: 1.000.000.000" className="w-56 rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-      <span className="text-[12px] text-slate-400">đồng, doanh thu cả năm {year}</span>
+      <span className="text-[12px] text-slate-400">đồng, thu nhập cả năm {year}</span>
       <button type="button" onClick={save} className="flex items-center gap-1 rounded-xl bg-slate-900 px-3 py-2 text-[13px] font-bold text-white"><Check size={14} /> Lưu</button>
       <button type="button" onClick={() => setEdit(false)} className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-[13px] font-bold text-slate-500"><X size={14} /> Huỷ</button>
     </div>
@@ -47,7 +47,7 @@ export default function YearProgress() {
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600"><Target size={20} /></div>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-extrabold text-slate-800">Tiến độ năm {year}</div>
-          <div className="text-[12.5px] text-slate-500">Đặt mục tiêu doanh thu cả năm để biết mình đang nhanh hay chậm so với thời gian đã qua.</div>
+          <div className="text-[12.5px] text-slate-500">Đặt mục tiêu thu nhập cả năm để biết mình đang nhanh hay chậm so với thời gian đã qua.</div>
         </div>
         {edit ? editor : <button type="button" onClick={() => { setVal(""); setEdit(true); }} className="rounded-xl bg-slate-900 px-4 py-2 text-[13px] font-bold text-white hover:bg-slate-700">Đặt mục tiêu</button>}
       </div>
@@ -73,10 +73,10 @@ export default function YearProgress() {
           <div role="progressbar" aria-label="Thời gian đã qua" aria-valuenow={Math.round(p.timePct)} aria-valuemin={0} aria-valuemax={100} className="h-2.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-slate-400" style={{ width: `${Math.min(100, p.timePct)}%` }} /></div>
         </div>
         <div>
-          <div className="mb-1 flex justify-between text-[12px] font-semibold text-slate-500"><span>Doanh thu đạt được</span><span>{formatShort(p.revenue)} / {formatShort(p.target)} · {Math.round(p.revenuePct)}%</span></div>
-          <div role="progressbar" aria-label="Doanh thu so với mục tiêu" aria-valuenow={Math.round(p.revenuePct)} aria-valuemin={0} aria-valuemax={100} className="relative h-2.5 rounded-full bg-slate-100">
+          <div className="mb-1 flex justify-between text-[12px] font-semibold text-slate-500"><span>Thu nhập đạt được</span><span>{formatShort(p.revenue)} / {formatShort(p.target)} · {Math.round(p.revenuePct)}%</span></div>
+          <div role="progressbar" aria-label="Thu nhập so với mục tiêu" aria-valuenow={Math.round(p.revenuePct)} aria-valuemin={0} aria-valuemax={100} className="relative h-2.5 rounded-full bg-slate-100">
             <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, p.revenuePct)}%` }} />
-            <div title="Mốc theo kế hoạch: doanh thu nên đạt bằng phần trăm thời gian đã qua" className="absolute -top-1 w-0.5 bg-slate-700" style={{ left: `${Math.min(100, p.timePct)}%`, height: 18 }} />
+            <div title="Mốc theo kế hoạch: thu nhập nên đạt bằng phần trăm thời gian đã qua" className="absolute -top-1 w-0.5 bg-slate-700" style={{ left: `${Math.min(100, p.timePct)}%`, height: 18 }} />
           </div>
         </div>
       </div>

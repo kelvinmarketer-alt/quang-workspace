@@ -85,7 +85,7 @@ export default function Reports() {
 
 // ---------------- Bảng tổng ----------------
 // Cột bảng tổng — sếp bật/tắt được (lưu settings.reportHide = các cột đang ẩn, cột mới mặc định hiện)
-const COLS = [["rev", "Doanh thu tháng"], ["ads", "Quảng cáo"], ["web", "Website Google"], ["fp", "Fanpage"], ["seo", "SEO (hiển thị)"], ["late", "Việc trễ"], ["rep", "Báo cáo"]];
+const COLS = [["rev", "Thu nhập tháng"], ["ads", "Quảng cáo"], ["web", "Website Google"], ["fp", "Fanpage"], ["seo", "SEO (hiển thị)"], ["late", "Việc trễ"], ["rep", "Báo cáo"]];
 
 function ReportMatrix() {
   const { rows, rep } = useRows();
@@ -111,7 +111,7 @@ function ReportMatrix() {
     window.print();
   };
   const miniComp = (r) => { const c = comps[r.id]; return !loading && c?.bad.length ? <span title={c.bad.map((x) => `${x.label}${x.note ? ` (${x.note})` : ""}`).join(" · ")} className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-amber-600">thiếu {c.bad.length}/{c.total} số</span> : null; };
-  const chips = [["att", "Cần chú ý trước"], ["all", "Theo doanh thu"]];
+  const chips = [["att", "Cần chú ý trước"], ["all", "Theo thu nhập"]];
   const cell = {
     rev: (r) => <td key="rev" className="whitespace-nowrap px-3 py-2.5 tabular-nums"><div className="font-bold text-slate-800">{r.revenue ? formatShort(r.revenue) : "—"}</div>{r.prevRevenue > 0 && <div className="text-[11px] text-slate-400">T trước {formatShort(r.prevRevenue)}</div>}{r.debt > 0 && <div className="text-[11px] font-bold text-rose-500">nợ {formatShort(r.debt)}</div>}</td>,
     ads: (r) => <td key="ads" className="px-3 py-2.5"><CellPill x={r.cells.ads} loading={loading} /></td>,
@@ -359,7 +359,7 @@ function Brand360({ id }) {
       {(ai || err) && <AiReport ai={ai} err={err} beforeCopy={() => confirmComplete(comp, "chép gửi khách")} onClose={() => { setAi(null); setErr(""); }} />}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {tile("Doanh thu tháng này", null, <FitMoney value={r.revenue} />, <>{r.prevRevenue ? `tháng trước ${formatShort(r.prevRevenue)}` : "chưa có đợt thu tháng trước"}{r.debt > 0 && <b className="text-rose-500">· nợ {formatShort(r.debt)}</b>}</>)}
+        {tile("Thu nhập tháng này", null, <FitMoney value={r.revenue} />, <>{r.prevRevenue ? `tháng trước ${formatShort(r.prevRevenue)}` : "chưa có đợt thu tháng trước"}{r.debt > 0 && <b className="text-rose-500">· nợ {formatShort(r.debt)}</b>}</>)}
         {tile("Quảng cáo · 30 ngày", r.cells.ads, r.cells.ads.v ?? "Chưa gắn", r.spend ? `chi ${formatShort(r.spend)} · ${r.results.toLocaleString("vi-VN")} kết quả` : "chưa có tài khoản / không chạy")}
         {tile("Website · click Google", r.cells.web, r.cells.web.v ?? "Chưa gắn", r.cells.web.v ? <>{pct(r.cells.web.d) || "chưa so được"} so 30 ngày trước</> : "gắn website ở Trung tâm báo cáo")}
         {tile("Fanpage · tin nhắn mới", r.cells.fp, r.cells.fp.v ?? "Chưa gắn", r.cells.fp.v ? <>{r.cells.fp.sub} {pct(r.cells.fp.d)}</> : "gắn fanpage ở Trung tâm báo cáo")}

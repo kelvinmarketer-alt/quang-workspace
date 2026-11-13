@@ -168,7 +168,7 @@ describe("thẻ Tiến độ năm trên Tổng quan", () => {
     DATA = makeData({ projects: PROJECTS, settings: { yearGoal: { 2026: 1e9 } }, setSettings: vi.fn() });
     await mountCard();
     expect(screen.getByRole("progressbar", { name: "Thời gian đã qua" }).getAttribute("aria-valuenow")).toBe("86");
-    expect(screen.getByRole("progressbar", { name: /Doanh thu so với mục tiêu/ }).getAttribute("aria-valuenow")).toBe("71");
+    expect(screen.getByRole("progressbar", { name: /Thu nhập so với mục tiêu/ }).getAttribute("aria-valuenow")).toBe("71");
     expect(screen.getByText(/Đang chậm hơn kế hoạch 15 điểm phần trăm/)).toBeTruthy();
     expect(screen.getByText(/Cần khoảng/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Sửa mục tiêu năm/ })).toBeTruthy();

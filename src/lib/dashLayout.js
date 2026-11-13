@@ -3,10 +3,10 @@
 export const DASH_BLOCKS = [
   { id: "today", label: "Việc của hôm nay", hint: "Cần thu, việc, gia hạn, việc gấp" },
   { id: "week", label: "Tuần này", hint: "Lịch tuần, sắp tới, cảnh báo, thu tiền" },
-  { id: "kpi", label: "4 số chính", hint: "Doanh thu, lợi nhuận, công nợ, chi quảng cáo" },
+  { id: "kpi", label: "4 số chính", hint: "Thu nhập năm, thu nhập tháng, công nợ, chi quảng cáo" },
   { id: "health", label: "Sức khoẻ thương hiệu", hint: "Kênh nào dưới chỉ tiêu (tài khoản phụ: top khách)" },
   { id: "year", label: "Tiến độ năm", hint: "Mục tiêu doanh thu cả năm" },
-  { id: "chart", label: "Biểu đồ doanh thu", hint: "Doanh thu & lợi nhuận theo tháng" },
+  { id: "chart", label: "Biểu đồ thu nhập", hint: "Thu nhập theo tháng" },
   { id: "coin", label: "Đầu tư Coin", hint: "Kết quả Demo" },
   { id: "receipts", label: "Phiếu thu gần đây", hint: "5 phiếu thu mới nhất" },
 ];
