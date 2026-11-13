@@ -6,6 +6,7 @@ import { Bot, Play, Square, RefreshCw, Loader2, Settings2, Info, ShieldAlert, Ch
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, BarChart, Bar, Cell, Legend } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import BotSignalBoard from "../components/BotSignalBoard.jsx";
+import PnlCalendar from "../components/PnlCalendar.jsx";
 import PairReview from "../components/PairReview.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
@@ -13,7 +14,7 @@ import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeri
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum, timeLeft } from "../lib/format.js";
 import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE, SW3D_DEFAULT, SW3D_MANAGE } from "../lib/paperBot.js";
-import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet, useUsdVnd } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
 
 // Bot thật có đang theo phiên Demo không (dòng command, chỉ chủ đọc được) → null = không biết / không theo
@@ -657,6 +658,7 @@ export default function CoinBot({ active: visible = true }) {
   const res = useMemo(() => finalize(raw, active ? live.current : null, hits.current), [raw, ver, active]);
   const isBase = view === "base" || !cfg.adaptive;
   const P = res ? (isBase ? res.basePortfolio : res.portfolio) : null;
+  const vnd = useUsdVnd();
   const list = useMemo(() => (res ? (isBase ? res.baseTrades : res.trades) : []), [res, isBase]);
 
   // Phát hiện mở/đóng lệnh mới (danh mục chính) → thông báo nổi
@@ -697,6 +699,9 @@ export default function CoinBot({ active: visible = true }) {
     const src = filter === "reject" ? res.rejected.map((t) => ({ ...t, status: "reject" })) : P.trades;
     return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => hMonth === "all" || monthOf(t.entryAt) === hMonth).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
   }, [P, res, filter, hStream, hMonth]);
+  // 13/11: lịch lãi/lỗ theo ngày đóng lệnh (kiểu Binance), tách theo setup
+  const calItems = useMemo(() => (P ? P.trades.filter((t) => t.status === "done" && t.exitAt != null && t.pnl != null).map((t) => ({ t: t.exitAt, v: t.pnl, src: t.setup, label: `${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TFS[t.tf]?.label || t.tf} · ${setupName(t.setup)}` })) : []), [P]);
+  const calSources = useMemo(() => [...new Set(calItems.map((x) => x.src))].map((k) => ({ k, l: setupName(k) })), [calItems]);
   // Tổng theo tháng (lệnh đã vào, theo cặp đang lọc): số lệnh · thắng · lãi/lỗ $
   const months = useMemo(() => {
     if (!P) return [];
@@ -971,6 +976,8 @@ export default function CoinBot({ active: visible = true }) {
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{open.map((t) => <OpenCard key={t.id} t={t} lv={raw?.sw3Levels?.[t.coin]} />)}</div>
           </Card>
         )}
+
+        <PnlCalendar title="Lịch lãi/lỗ bot demo" items={calItems} sources={calSources} rate={vnd} note="Tính theo ngày ĐÓNG lệnh (giờ VN), đã trừ phí. Bấm 1 ngày để xem từng lệnh." />
 
         <Card className="!p-3">
           <div className="mb-2 flex flex-wrap items-center gap-1.5">

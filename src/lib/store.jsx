@@ -87,6 +87,7 @@ function migrate(s) {
   if (!Array.isArray(merged.adsResults)) merged.adsResults = [];
   if (!Array.isArray(merged.assets)) merged.assets = [];
   if (!Array.isArray(merged.assetHistory)) merged.assetHistory = [];
+  if (!Array.isArray(merged.assetDaily)) merged.assetDaily = [];
   // Gộp về 5 danh mục chính (1 LẦN): remap danh mục các khoản chi cũ + thay danh sách danh mục.
   // Sau khi chạy, catsV5=true → user tự thêm/sửa/xoá danh mục thoải mái, migrate không đụng nữa.
   if (!merged.catsV5) {
@@ -771,6 +772,13 @@ export function DataProvider({ children }) {
         const cur = h.find((x) => x.m === row.m);
         if (cur && Math.abs((cur.total || 0) - row.total) < 1000 && Math.abs((cur.invest || 0) - row.invest) < 1000) return s;
         return { ...s, assetHistory: [...h.filter((x) => x.m !== row.m), row].sort((x, y) => x.m.localeCompare(y.m)).slice(-60) };
+      }),
+      // 13/11: mốc NGÀY cho Lịch biến động tài sản [{d:"YYYY-MM-DD", total, invest, at}] — giữ ~13 tháng
+      snapAssetDay: (row) => setState((s) => {
+        const h = Array.isArray(s.assetDaily) ? s.assetDaily : [];
+        const cur = h.find((x) => x.d === row.d);
+        if (cur && Math.abs((cur.total || 0) - row.total) < 1000 && Math.abs((cur.invest || 0) - row.invest) < 1000) return s;
+        return { ...s, assetDaily: [...h.filter((x) => x.d !== row.d), row].sort((x, y) => x.d.localeCompare(y.d)).slice(-400) };
       }),
       addCoin: (c) => setState((s) => ({ ...s, coins: [{ id: "co" + uid(), symbol: (c.symbol || "").toUpperCase(), qty: Number(c.qty) || 0, buyPrice: Number(c.buyPrice) || 0, note: c.note || "" }, ...(s.coins || [])] })),
       updateCoin: (id, patch) => setState((s) => ({ ...s, coins: (s.coins || []).map((c) => (c.id === id ? { ...c, ...patch, symbol: ((patch.symbol ?? c.symbol) || "").toUpperCase() } : c)) })),

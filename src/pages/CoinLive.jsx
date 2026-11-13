@@ -14,8 +14,9 @@ import { pushSupported, permission, isSubscribed, enablePush } from "../lib/push
 import { runSessionAsync } from "../lib/botRunner.js";
 import { finalize, cfgOf } from "../lib/paperBot.js";
 import { normLive, liveSummary, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
-import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet, mergeCmd } from "../lib/coinShared.js";
+import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet, mergeCmd, useUsdVnd } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
+import PnlCalendar from "../components/PnlCalendar.jsx";
 
 // Tab "Bot thật": theo dõi bot giao dịch chạy nền trên máy bàn ở nhà (repo qws-live-bot) qua bảng Supabase qws_live_bot
 // — bot ghi dòng 'status' mỗi ~30 giây + dòng 'history' (lịch sử lệnh thật); app ghi dòng 'command' (LUÔN gộp với dữ liệu cũ)
@@ -370,9 +371,14 @@ function TestTradeCard({ st, cmd, online, stopped, onSent }) {
 function LiveResults({ hist, st, session }) {
   const all = useMemo(() => (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.coin && t.setup !== "TEST").map((t) => normLive(t, st.mode)), [hist, st.mode]); // bỏ lệnh thử khỏi thống kê
   const modes = useMemo(() => [...new Set(all.map((t) => t.mode))], [all]);
+  const vnd = useUsdVnd();
+
   const [mode, setMode] = useState(null), [filter, setFilter] = useState("all"), [pair, setPair] = useState("all"), [showN, setShowN] = useState(30), [mon, setMon] = useState("all");
   const m = mode && modes.includes(mode) ? mode : modes.includes(st.mode) ? st.mode : modes[0];
   const list = useMemo(() => all.filter((t) => t.mode === m), [all, m]);
+  // 13/11: lịch lãi/lỗ theo ngày đóng lệnh — theo chế độ đang chọn (không cộng tiền Testnet với tiền thật), ô tách theo setup
+  const calItems = useMemo(() => list.filter((t) => t.exitAt != null && t.pnl != null).map((t) => ({ t: t.exitAt, v: t.pnl, src: t.setup, label: `${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TF[t.tf] || t.tf} · ${setupName(t.setup)}` })), [list]);
+  const calSources = useMemo(() => [...new Set(calItems.map((x) => x.src))].map((k) => ({ k, l: setupName(k) })), [calItems]);
   const S = useMemo(() => liveSummary(list, m === st.mode ? st.lastScan?.eq : null), [list, m, st.mode, st.lastScan?.eq]);
   const coins = useMemo(() => [...new Set(list.map((t) => t.coin))].sort(), [list]);
   const streams = useMemo(() => [...new Set(list.map((t) => `${t.coin}|${t.tf}`))].sort(), [list]);
@@ -432,6 +438,8 @@ function LiveResults({ hist, st, session }) {
         </div>
       ) : <div className="py-4 text-center text-[12px] text-slate-400">Cần ít nhất 1 lệnh đã đóng để vẽ đường vốn.</div>}
     </Card>
+
+    <PnlCalendar key={m} title={`Lịch lãi/lỗ · ${MODE_L[m] || m}`} items={calItems} sources={calSources} rate={vnd} note={`Tính theo ngày ĐÓNG lệnh (giờ VN), đã trừ phí.${modes.length > 1 ? " Đổi Tiền thật / Testnet ở nút phía trên." : ""} Bấm 1 ngày để xem từng lệnh.`} />
 
     <Card className="!p-3">
       <div className="mb-2 flex flex-wrap items-center gap-1.5">

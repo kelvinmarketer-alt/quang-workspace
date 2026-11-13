@@ -6,6 +6,8 @@ import { supabase } from "../lib/supabase.js";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
 import { fmtUsd, fmtUsdSigned, fmtPx, fmtNum } from "../lib/format.js";
+import PnlCalendar from "../components/PnlCalendar.jsx";
+import { useUsdVnd } from "../lib/coinShared.js";
 
 // 07/11/2026 — Tab "EA MT5" (chỉ chủ): theo dõi EA QWS_Gop chạy trong MT5 trên máy bàn (tài khoản demo IC Markets).
 // Cầu nối C:\mt5-research\bridge\mt5_bridge.py ghi bảng Supabase qws_mt5_bot: 'status' (~30 giây), 'history' (lịch sử lệnh + đường vốn).
@@ -60,6 +62,10 @@ export default function CoinMT5({ active }) {
   const trades = hist?.trades || [];
   const S = useMemo(() => mt5Stats(trades), [trades]);
   const eq = useMemo(() => (hist?.equity || []).map((p) => ({ t: p.t, eq: p.eq, bal: p.bal })), [hist]);
+  const vnd = useUsdVnd();
+  // 13/11: lịch lãi/lỗ theo ngày đóng lệnh (t_out, ms), tách theo chiến lược (slot) — chỉ ĐỌC lịch sử cầu nối gửi lên
+  const calItems = useMemo(() => trades.filter((x) => x.closed && x.t_out && x.pnl != null).map((x) => ({ t: x.t_out < 1e12 ? x.t_out * 1000 : x.t_out, v: +x.pnl, src: x.slot, label: `${x.side === 1 ? "MUA" : "BÁN"} ${x.sym || SYMS[x.slot] || ""} · ${SLOTS[x.slot] || ""}` })), [trades]);
+  const calSources = useMemo(() => SLOTS.map((l, k) => ({ k, l })).filter((s) => calItems.some((x) => x.src === s.k)), [calItems]);
 
   const setStop = async (stop) => {
     const ok = await ask(stop ? "Dừng EA MT5?\nEA huỷ lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho EA MT5 chạy lại?\nEA tiếp tục vào lệnh theo tín hiệu mới.", { ok: stop ? "Dừng EA" : "Chạy lại", danger: stop });
@@ -122,6 +128,8 @@ export default function CoinMT5({ active }) {
           <Num label="Lệnh đã đóng" v={S.n} sub={S.n ? `thắng ${fmtNum(S.win, 0)}% · PF ${S.pf != null ? fmtNum(S.pf, 2) : "—"}` : "chưa có"} />
         </div>
       </Card>
+
+      <PnlCalendar title="Lịch lãi/lỗ Forex MT5" items={calItems} sources={calSources} rate={vnd} note="Tài khoản demo IC Markets. Tính theo ngày ĐÓNG lệnh (giờ VN). Bấm 1 ngày để xem từng lệnh." />
 
       <Card className="!p-3 sm:!p-4">
         <Title icon={ListChecks} right={<span className="text-[11px] text-slate-400">{open.length} vị thế · {pend.length} lệnh chờ</span>}>Lệnh đang mở</Title>

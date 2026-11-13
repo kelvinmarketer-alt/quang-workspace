@@ -5,6 +5,7 @@ import { Card, SectionTitle, MoneyInput, formatVND, formatShort } from "../compo
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
 import { useInvestTotal, useUsdVnd } from "../lib/coinShared.js";
+import PnlCalendar from "../components/PnlCalendar.jsx";
 import { fmtUsd } from "../lib/format.js";
 
 // TÀI SẢN (13/11/2026, sếp: "báo cáo tổng quan tài sản, tôi nhập vào và cộng cả tiền đầu tư → ra tổng tài sản").
@@ -72,7 +73,7 @@ function AssetModal({ initial, onClose, onSave }) {
 }
 
 export default function Assets() {
-  const { isOwner, assets = [], assetHistory = [], coins = [], addAsset, updateAsset, deleteAsset, snapAssets } = useData();
+  const { isOwner, assets = [], assetHistory = [], assetDaily = [], coins = [], addAsset, updateAsset, deleteAsset, snapAssets, snapAssetDay } = useData();
   const inv = useInvestTotal(!!isOwner, coins);
   const vnd = useUsdVnd();
   const investVnd = Math.round(inv.usd * vnd);
@@ -83,7 +84,19 @@ export default function Assets() {
   useEffect(() => {
     if (!isOwner || !inv.ready || inv.missing || (!assets.length && !investVnd)) return;
     snapAssets?.({ m: monthNow(), total: S.net, invest: investVnd, at: Date.now() });
+    snapAssetDay?.({ d: new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10), total: S.net, invest: investVnd, at: Date.now() });
   }, [isOwner, inv.ready, inv.missing, S.net, investVnd]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 13/11: biến động theo ngày = chênh lệch giữa 2 mốc ngày liên tiếp, tách Đầu tư Coin / Khoản nhập tay
+  const calItems = useMemo(() => {
+    const h = [...assetDaily].sort((a, b) => a.d.localeCompare(b.d)), out = [];
+    for (let i = 1; i < h.length; i++) {
+      const di = (h[i].invest || 0) - (h[i - 1].invest || 0), dm = (h[i].total - (h[i].invest || 0)) - (h[i - 1].total - (h[i - 1].invest || 0));
+      if (Math.abs(di) >= 1000) out.push({ d: h[i].d, v: di, src: "coin", label: "Đầu tư Coin (giá + lãi/lỗ)" });
+      if (Math.abs(dm) >= 1000) out.push({ d: h[i].d, v: dm, src: "manual", label: "Khoản nhập tay (tiền, vàng, nợ…)" });
+    }
+    return out;
+  }, [assetDaily]);
 
   if (!isOwner) return <Card className="py-10 text-center text-sm text-slate-500">Trang Tài sản chỉ chủ workspace xem được.</Card>;
 
@@ -183,6 +196,10 @@ export default function Assets() {
           ))}
         </div>
       </Card>
+
+      <PnlCalendar title="Lịch biến động tài sản" items={calItems} base="VND" rate={vnd} unit="lần đổi" word="Biến động" sources={[{ k: "coin", l: "Đầu tư Coin" }, { k: "manual", l: "Khoản nhập tay" }]}
+        empty="Bắt đầu ghi từ hôm nay — mỗi ngày anh mở trang Tài sản app ghi 1 mốc, lịch hiện chênh lệch so với mốc trước."
+        note="Mỗi lần mở trang ghi 1 mốc/ngày. Ngày không mở trang thì phần thay đổi dồn vào ngày mở kế tiếp." />
 
       {/* Theo tháng */}
       {hist.length > 0 && (
