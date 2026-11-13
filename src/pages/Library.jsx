@@ -11,7 +11,7 @@ import {
   KINDS, FOLDER_COLORS, FOLDER_COLOR_KEYS, MAX_FILE_BYTES, fold, fmtSize, fmtDate, buildTree, flattenTree, folderPath, descendantIds, countDocs,
   frameDoc, tidySnippet, parseTags, filterDocs, sortDocs, extractTitle, toPlain, isMissingTable, prepareFile, downloadDoc,
   libLoad, libGet, libSearch, libAddDoc, libUpdateDoc, libDeleteDoc, libAddFolder, libUpdateFolder, libDeleteFolder,
-  libIndex, libAsk, libIdea, renderAnswer, unindexedDocs, searchWords, highlightParts, intersectHits,
+  libIndex, libAsk, libIdea, semanticSearch, renderAnswer, unindexedDocs, searchWords, highlightParts, intersectHits,
   SHARE_EXPIRY, shareUrl, shareExpired, libShares, libShareCreate, libShareSetExpiry, libShareRevoke,
 } from "../lib/library.js";
 import { todayISO } from "../lib/format.js";
@@ -516,6 +516,41 @@ function ChatPanel({ docs, folders, customers = [], scope, setScope, onOpenDoc, 
 }
 
 // ───────────── Trang chính ─────────────
+// 13/11: TÌM THEO Ý NGHĨA — bấm mới gọi máy chủ (đổi câu tìm thành vector, so với các đoạn đã nạp hỏi đáp). Tìm theo chữ vẫn chạy như cũ.
+function MeaningSearch({ q, onOpen }) {
+  const [st, setSt] = useState({ q: "", busy: false, list: null, err: "" });
+  const fresh = st.q === q;
+  const run = async () => {
+    setSt({ q, busy: true, list: null, err: "" });
+    const r = await semanticSearch(q);
+    setSt({ q, busy: false, list: r.data?.results || [], err: r.error || "" });
+  };
+  if (!q) return null;
+  return (
+    <div className="rounded-xl border border-violet-100 bg-violet-50/50 p-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={run} disabled={st.busy} className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-2.5 py-1.5 text-[12px] font-bold text-white hover:bg-violet-700 disabled:opacity-60">
+          {st.busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Tìm theo ý nghĩa
+        </button>
+        <span className="text-[11.5px] text-slate-500">{fresh && st.list ? `${st.list.length} tài liệu gần nghĩa với "${q}"` : "Tìm cả tài liệu không chứa đúng chữ đã gõ (chỉ tài liệu đã nạp hỏi đáp)"}</span>
+      </div>
+      {fresh && st.err && <div className="mt-2 text-[12px] font-semibold text-amber-700">{st.err}</div>}
+      {fresh && st.list && st.list.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {st.list.map((r) => (
+            <li key={r.doc_id}>
+              <button type="button" onClick={() => onOpen(r.doc_id)} className="block w-full rounded-lg bg-white p-2 text-left hover:bg-violet-50">
+                <div className="flex items-center justify-between gap-2"><span className="truncate text-[13px] font-bold text-slate-800">{r.title}</span><span className="shrink-0 text-[11px] font-bold text-violet-600">{Math.round((r.score || 0) * 100)}% gần nghĩa</span></div>
+                <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-slate-500">{r.excerpt}</div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function LibraryPage() {
   const data = useData() || {};
   const readOnly = !!data.ownerId && !data.isOwner; // thành viên được cấp quyền: CHỈ XEM (không tải lên / sửa / xoá / Hỏi đáp AI)
@@ -868,6 +903,7 @@ export default function LibraryPage() {
 
             {searching && hits === null && <div className="flex items-center gap-2 text-[12px] text-slate-400"><Loader2 size={13} className="animate-spin" /> Đang tìm trong nội dung…</div>}
             {searching && searchErr && <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12px] font-semibold text-amber-700"><AlertTriangle size={13} className="shrink-0" /> {searchErr}</div>}
+            {searching && !readOnly && <MeaningSearch q={query.trim()} onOpen={(id) => setReader(id)} />}
 
             {visible.length === 0 ? (
               <Card className="py-10 text-center">

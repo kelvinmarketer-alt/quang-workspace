@@ -45,6 +45,41 @@ async function loadAccounts(all = false) {
 }
 const safe = (a: any) => ({ id: a.id, name: a.name, brand: a.brand, group: a.group, services: a.services, active: a.active, sort: a.sort, cust: a.cust || null, tokenTail: a.token ? "…" + String(a.token).slice(-6) : "" });
 
+// 13/11: HẠN TOKEN — Graph /debug_token (dùng chính token đó) → ngày hết hạn token + hạn quyền đọc dữ liệu (data access, ~90 ngày).
+// Token System User "không bao giờ hết hạn" trả expires_at = 0 → chỉ còn hạn data access. Lỗi → coi là token hỏng.
+const DAY = 86400000;
+async function tokenInfo(token: string) {
+  if (!token) return { valid: false, exp: 0, err: "Chưa có token" };
+  try {
+    const d = await gget("debug_token", { input_token: token }, token);
+    const x = d?.data || {};
+    const exps = [num(x.expires_at) * 1000, num(x.data_access_expires_at) * 1000].filter((v) => v > 0);
+    return { valid: x.is_valid !== false, exp: exps.length ? Math.min(...exps) : 0, err: x.is_valid === false ? String(x.error?.message || "token không còn hiệu lực").slice(0, 160) : "" };
+  } catch (e) { return { valid: false, exp: 0, err: String((e as Error).message || e).slice(0, 160) }; }
+}
+// Theo từng token (nhiều TKQC dùng chung 1 token BM) → { tail: {valid, exp, err, names[]} }
+async function tokenHealth(accounts: any[]) {
+  const byTok = new Map<string, string[]>();
+  for (const a of accounts) if (a.token) byTok.set(a.token, [...(byTok.get(a.token) || []), a.name]);
+  const out: Record<string, any> = {};
+  await Promise.all([...byTok].map(async ([tok, names]) => { out[tok.slice(-6)] = { ...(await tokenInfo(tok)), names }; }));
+  return out;
+}
+// Cảnh báo trước khi hết hạn: còn ≤ 7 ngày (mỗi ngày nhắc 1 lần nhờ khoá ngày|token|tokexp) hoặc token đã hỏng
+function tokenAlerts(found: { key: string; text: string }[], today: string, health: Record<string, any>) {
+  const now = Date.now();
+  for (const [tail, h] of Object.entries(health)) {
+    const who = h.names.slice(0, 3).join(", ") + (h.names.length > 3 ? ` +${h.names.length - 3}` : "");
+    const key = `${today}|tok${tail}|tokexp`;
+    if (!h.valid) { found.push({ key, text: `🔑 Token …${tail} (${who}) đã hỏng/hết hạn — vào Quảng cáo dán token mới` }); continue; }
+    if (h.exp && h.exp - now <= 7 * DAY) {
+      const left = Math.max(0, Math.ceil((h.exp - now) / DAY));
+      const d = new Date(h.exp + 7 * 3600000);
+      found.push({ key, text: `🔑 Token …${tail} (${who}) còn ${left} ngày (hết ${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}) — tạo token mới trước khi mất số` });
+    }
+  }
+}
+
 const MSG = "onsite_conversion.messaging_conversation_started_7d";
 const BASE_FIELDS = "spend,impressions,reach,frequency,cpm,ctr,cpc,clicks,actions,action_values,video_thruplay_watched_actions";
 const PURCHASE = ["purchase", "offsite_conversion.fb_pixel_purchase", "onsite_web_purchase", "omni_purchase"];
@@ -373,6 +408,8 @@ async function watch() {
         found.push({ key: k("cpr"), text: `📈 ${a.name}: giá/kết quả hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / bc - 1) * 100)}% so với TB 7 ngày ${fmt(bc)})` });
     }
   });
+  // Hạn token Meta (13/11): báo trước 7 ngày, mỗi ngày tối đa 1 lần/token
+  try { tokenAlerts(found, today, await tokenHealth(ACCOUNTS)); } catch (_) { /* phụ */ }
   // Số dư Meta (TK trả trước có sổ nạp tiền)
   const mLed = await ledgers(ACCOUNTS.map((a: any) => a.id));
   for (const acc of ACCOUNTS) {
@@ -643,7 +680,11 @@ Deno.serve(async (req) => {
   };
 
   try {
-    if (mode === "config_list") return json({ accounts: (await loadAccounts(true)).map(safe) });
+    if (mode === "config_list") {
+      const all = await loadAccounts(true);
+      const health = body.health ? await tokenHealth(all).catch(() => ({})) : {};
+      return json({ accounts: all.map((a: any) => { const h = health[String(a.token || "").slice(-6)]; return { ...safe(a), ...(h ? { tokenValid: h.valid, tokenExp: h.exp || 0, tokenErr: h.err || "" } : {}) }; }) });
+    }
 
     if (mode === "config_discover") {
       // Token → danh sách TKQC mà token đó đọc được (để tick chọn)

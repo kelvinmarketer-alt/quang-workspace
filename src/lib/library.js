@@ -420,6 +420,8 @@ export const libIndex = (docIds) => callLib({ mode: "index", doc_ids: docIds });
 // Hỏi: folderIds = chỉ tìm trong các thư mục này; docId = chỉ 1 tài liệu → { data: { answer, sources, usage } }
 export const libAsk = ({ question, history, folderIds, docId, docIds, model }) =>
   callLib({ mode: "ask", question, history, folder_ids: folderIds || undefined, doc_id: docId || undefined, doc_ids: docIds || undefined, model });
+// 13/11: tìm theo ý nghĩa (vector, không gọi AI trả lời) → [{doc_id, title, score, excerpt}]
+export const semanticSearch = (q, { folderIds, docIds } = {}) => callLib({ mode: "search", q, folder_ids: folderIds || undefined, doc_ids: docIds || undefined });
 
 // Ý hay mỗi ngày: seed = ngày (hôm nay) để app và thông báo 7h sáng ra cùng 1 ý; thêm "#n" để đổi ý khác → { data: { idea, doc_id, doc_title } } (idea = null nếu chưa có gì để rút)
 export const libIdea = (seed) => callLib({ mode: "idea", seed });

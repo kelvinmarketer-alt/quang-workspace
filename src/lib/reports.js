@@ -10,6 +10,7 @@ import { diagnose } from "./adsDiagnose.js";
 import { installmentsInRange, sumInstallments, projectMetrics } from "./selectors.js";
 import { formatShort } from "./format.js";
 import { useData } from "./store.jsx";
+import { jobKind } from "./selectors.js";
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export function reportPeriod(days = 30) {
@@ -182,7 +183,7 @@ export function reportCompleteness(row, data, P = {}) {
   const add = (key, label, status, note = null) => items.push({ key, label, status, note });
   if (!row) return { items, ok: 0, total: 0, bad: [], loaded: false };
   const loaded = !!data?.at, err = (data?.errors || []).join(" ");
-  const need = new Set(row.jobs.filter((p) => !p.status || p.status === "doing").map((p) => JOB_NEED[p.category]).filter(Boolean));
+  const need = new Set(row.jobs.filter((p) => !p.status || p.status === "doing").map((p) => JOB_NEED[jobKind(p)]).filter(Boolean));
   const chan = (key, label, list, failRe, hasNum, spans, tol, unlinked) => {
     if (!list.length && !need.has(key)) return; // kênh không dùng → không tính
     if (!loaded) return add(key, label, "missing", "đang lấy số");
@@ -220,10 +221,10 @@ export function missingMeasure(rows, data, skip = {}) {
   const out = [];
   for (const r of rows) for (const p of r.jobs) {
     if ((p.status && p.status !== "doing") || skip[p.id]) continue;
-    const n = NEED[p.category];
+    const n = NEED[jobKind(p)];
     if (!n || !ok[n[0]]) continue;
     const has = n[0] === "ads" ? r.ads.length : n[0] === "web" ? r.webs.length : r.ads.length + r.webs.length + r.pages.length;
-    if (!has) out.push({ id: p.id, custId: r.id, brand: r.name, job: p.name, cat: p.category, need: n[1] });
+    if (!has) out.push({ id: p.id, custId: r.id, brand: r.name, job: p.name, cat: jobKind(p), need: n[1] });
   }
   return out;
 }

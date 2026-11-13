@@ -7,7 +7,7 @@ import { rollNext, newlyDone, dueReminders } from "../lib/taskRepeat.js";
 // 1) Việc LẶP LẠI vừa được đánh dấu xong (ở trang Công việc, khung Hôm nay…) → tạo lần kế tiếp.
 // 2) NHẮC TRƯỚC GIỜ: việc có giờ + "nhắc trước 10/30/60 phút" → thông báo khi app đang mở.
 //    Đã cho phép thông báo → hiện thông báo của máy; chưa cho phép → chỉ hiện thông báo nổi trong app.
-//    App đóng hẳn thì KHÔNG nhắc được (cần máy chủ gửi thông báo đẩy theo giờ — chưa có).
+//    13/11: app đóng → Worker Cloudflare qws-monitor (repo qws-bot/cf-monitor, 5 phút/lần) gửi thông báo đẩy, cùng khoá + tag "task-<id>".
 const FIRED_KEY = "qws_task_remind_fired";
 const loadFired = () => { try { const a = JSON.parse(localStorage.getItem(FIRED_KEY) || "[]"); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); } };
 const saveFired = (s) => { try { localStorage.setItem(FIRED_KEY, JSON.stringify([...s].slice(-200))); } catch { /* chế độ riêng tư */ } };

@@ -34,7 +34,7 @@ describe("Công việc — form có Lặp lại + Nhắc trước", () => {
     await click(screen.getByRole("button", { name: "Hằng tuần" }));
     const t2 = screen.getByRole("button", { name: "T2" }), t6 = screen.getByRole("button", { name: "T6" });
     if (t2.getAttribute("aria-pressed") !== "true") await click(t2);
-    await click(t6);
+    if (t6.getAttribute("aria-pressed") !== "true") await click(t6); // hôm nay là T6 thì đã chọn sẵn (13/11 thứ Sáu: bấm lại thành bỏ chọn)
     fireEvent.change(document.querySelector('input[type="time"]'), { target: { value: "09:00" } });
     await act(async () => {});
     fireEvent.change(screen.getByLabelText("Nhắc trước"), { target: { value: "30" } });

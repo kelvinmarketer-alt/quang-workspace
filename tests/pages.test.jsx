@@ -69,14 +69,17 @@ describe("Kế toán: bấm qua 4 tab", () => {
 });
 
 describe("form Thêm dự án", () => {
-  it("đổi danh mục qua lại Lương / Web / ADS không sập (lỗi 01/11)", async () => {
+  it("13/11: chỉ còn loại Lương — chọn mảng việc không sập, lưu ra category Lương + service", async () => {
     const { ProjectModal } = await import("../src/pages/Projects.jsx");
-    const { errors } = await mount(<ProjectModal initial={{ name: "", customerId: "c1", category: "Web", status: "doing", note: "" }} customers={DATA.customerList} onClose={() => {}} onSave={() => {}} />);
-    const sel = [...document.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "Lương"));
+    const onSave = vi.fn();
+    const { errors } = await mount(<ProjectModal initial={{ name: "", customerId: "c1", category: "Lương", service: "Khác", status: "doing", note: "" }} customers={DATA.customerList} onClose={() => {}} onSave={onSave} />);
+    const sel = [...document.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.value === "ADS"));
     expect(sel).toBeTruthy();
-    for (const v of ["Lương", "Web", "ADS", "Lương", "Seo"]) await safely(() => fireEvent.change(sel, { target: { value: v } }));
+    expect([...sel.options].some((o) => o.value === "Lương")).toBe(false);
+    for (const v of ["Web", "ADS", "Seo"]) await safely(() => fireEvent.change(sel, { target: { value: v } }));
+    await safely(() => fireEvent.click(screen.getByRole("button", { name: "Tạo dự án" })));
     expect(errors).toEqual([]);
-    expect(document.body.textContent).toMatch(/Danh mục/); // form vẫn còn trên màn hình
+    expect(onSave.mock.calls[0][0]).toMatchObject({ category: "Lương", service: "Seo" });
   });
 });
 

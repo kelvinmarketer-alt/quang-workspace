@@ -16,6 +16,7 @@ import { OFFICE_URL } from "../lib/office.js";
 import { ask } from "./ConfirmDialog.jsx";
 import { useMeasureSkip } from "./MeasureAlerts.jsx";
 import ConnHint from "./ConnHint.jsx";
+import { jobKind } from "../lib/selectors.js";
 
 const call = async (body) => { const { data, error } = await supabase.functions.invoke("qws-meta-ads", { body }); if (error || data?.error) throw new Error(error?.message || data.error); return data; };
 // [tên nhóm, icon, đơn vị đếm]
@@ -60,12 +61,12 @@ function useChannels() {
 
 // Đo của 1 job: null = không bắt buộc · [] = đủ · [kind…] = còn thiếu
 const jobGap = (p, mine, custId) => {
-  if (!REQUIRED.includes(p.category)) return null;
-  const need = kindsOfJob(p.category);
+  if (!REQUIRED.includes(jobKind(p))) return null;
+  const need = kindsOfJob(jobKind(p));
   return need.length === 1 ? need.filter((k) => !mine(k, custId).length) : need.every((k) => !mine(k, custId).length) ? need : [];
 };
 const gapText = (g) => (g.length > 1 ? "kênh đo nào" : KINDS[g[0]][2]);
-const usedText = (p, mine, custId) => { const need = kindsOfJob(p.category), n = need.reduce((s, k) => s + mine(k, custId).length, 0); return `${n} ${need.length === 1 ? KINDS[need[0]][2] : "kênh"}`; };
+const usedText = (p, mine, custId) => { const need = kindsOfJob(jobKind(p)), n = need.reduce((s, k) => s + mine(k, custId).length, 0); return `${n} ${need.length === 1 ? KINDS[need[0]][2] : "kênh"}`; };
 
 function Chip({ kind, x }) {
   const I = KINDS[kind][1];
@@ -135,7 +136,7 @@ export default function BrandConnections({ customer, startOpen = 0 }) {
               <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-3">
                 {gaps.map(({ p, g }) => (
                   <div key={p.id} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-white px-2.5 py-1.5 text-[12px]">
-                    <Badge tone="slate">{p.category}</Badge>
+                    <Badge tone="slate">{jobKind(p)}</Badge>
                     <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{p.name}</span>
                     {g === null ? <span className="text-[11px] text-slate-400">không bắt buộc đo</span>
                       : !g.length ? <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600"><Check size={12} />{usedText(p, mine, cid)}</span>
@@ -198,7 +199,7 @@ export function JobMeasure({ project }) {
   if (!isOwner) return null;
   const cust = customerList.find((c) => c.id === project.customerId);
   if (!cust) return null;
-  const used = lists ? kindsOfJob(project.category).flatMap((k) => mine(k, cust.id).map((x) => [k, x])) : [];
+  const used = lists ? kindsOfJob(jobKind(project)).flatMap((k) => mine(k, cust.id).map((x) => [k, x])) : [];
   const g = lists ? jobGap(project, mine, cust.id) : null;
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-3">

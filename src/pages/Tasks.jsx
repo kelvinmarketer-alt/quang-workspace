@@ -106,7 +106,7 @@ function TaskModal({ initial, onClose, onSave }) {
                   {DUR_OPTIONS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
                 </select>
               </label>
-              {/* 11/11: nhắc trước giờ — chỉ khi app đang mở (thông báo máy nếu đã cho phép, không thì thông báo nổi trong app) */}
+              {/* 11/11: nhắc trước giờ — app mở thì TaskWatch nhắc; 13/11: app tắt thì Worker qws-monitor gửi thông báo đẩy (5 phút/lần) */}
               <label className="flex items-center gap-2 text-sm">
                 <Bell size={14} className="text-slate-400" />
                 <select aria-label="Nhắc trước" value={f.remind || 0} onChange={(e) => setF({ ...f, remind: Number(e.target.value) })} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
@@ -114,7 +114,7 @@ function TaskModal({ initial, onClose, onSave }) {
                 </select>
               </label>
             </div>
-            {f.remind > 0 && <div className="text-[11px] text-slate-400">Nhắc khi app đang mở trên máy này. Bot vẫn gửi tin tổng hợp lúc 7h sáng.</div>}
+            {f.remind > 0 && <div className="text-[11px] text-slate-400">Gửi thông báo đẩy về điện thoại/máy đã bật Thông báo (Cài đặt), kể cả khi app đã tắt. Bot vẫn gửi tin tổng hợp lúc 7h sáng.</div>}
             <ConflictNotice tasks={allTasks} date={f.date} time={f.time} dur={Number(f.dur) || DEFAULT_DUR} excludeId={initial?.id} onPick={(t) => setF({ ...f, time: t })} />
           </div>
         )}
@@ -267,7 +267,7 @@ function TaskBoard() {
                   {t.customerId && custName(t.customerId) && <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-600">{custName(t.customerId)}</span>}
                   {t.date && <span className={`flex items-center gap-1 ${overdue ? "font-bold text-rose-500" : ""}`}><Clock size={12} /> {fmtDateVI(t.date)}{t.time ? " · " + t.time : ""}</span>}
                   {t.repeat && repeatLabel(t.repeat) && <span className="flex items-center gap-1 font-semibold text-teal-600" title="Việc lặp lại — xong thì tự tạo lần tới"><Repeat size={11} /> {repeatLabel(t.repeat)}</span>}
-                  {t.time && Number(t.remind) > 0 && !done && <span className="flex items-center gap-0.5" title={`Nhắc trước ${t.remind} phút khi app đang mở`}><Bell size={11} /> {t.remind}′</span>}
+                  {t.time && Number(t.remind) > 0 && !done && <span className="flex items-center gap-0.5" title={`Nhắc trước ${t.remind} phút (thông báo đẩy, kể cả khi tắt app)`}><Bell size={11} /> {t.remind}′</span>}
                   {t.note && <span className="min-w-0 truncate">· {t.note}</span>}
                 </div>
               </button>

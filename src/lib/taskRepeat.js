@@ -2,7 +2,7 @@
 // Việc lặp: task.repeat = { type: "daily" } | { type: "weekly", days: [1, 3] } (0 = CN … 6 = T7) | { type: "monthly", dom: 15 }
 // Đánh dấu xong 1 lần → app tạo lần kế tiếp (cùng seriesId). Lần kế tiếp luôn SAU max(ngày của việc, hôm nay):
 // việc hằng ngày quá hạn 3 hôm, hôm nay mới xong → lần tới là ngày mai (không đẻ ra 3 việc quá hạn).
-// Nhắc trước: task.remind = 10 | 30 | 60 (phút) — CHỈ chạy khi app đang mở (nhắc nền cần máy chủ gửi thông báo đẩy).
+// Nhắc trước: task.remind = 10 | 30 | 60 (phút) — app mở: TaskWatch; app tắt: Worker qws-monitor gửi thông báo đẩy (13/11).
 
 export const REPEAT_TYPES = [["", "Không lặp"], ["daily", "Hằng ngày"], ["weekly", "Hằng tuần"], ["monthly", "Hằng tháng"]];
 export const WEEKDAYS = [[1, "T2"], [2, "T3"], [3, "T4"], [4, "T5"], [5, "T6"], [6, "T7"], [0, "CN"]];

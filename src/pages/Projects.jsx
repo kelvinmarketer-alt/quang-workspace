@@ -7,7 +7,8 @@ import { ProjectResources } from "./Resources.jsx";
 import { JobMeasure } from "../components/BrandConnections.jsx";
 import { useData } from "../lib/store.jsx";
 import { PROJECT_CATEGORIES } from "../data/seed.js";
-import { projectMetrics, installmentMetrics } from "../lib/selectors.js";
+const SERVICES = PROJECT_CATEGORIES.filter((c) => c !== "Lương");
+import { projectMetrics, installmentMetrics, jobKind } from "../lib/selectors.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
@@ -69,8 +70,9 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
   const [feeTouched, setFeeTouched] = useState(() => num(f.serviceFee) > 0 && num(f.serviceFee) !== Math.round(num(f.amount) * rate() / 100));
   if (isSalary) {
     const amt = num(f.amount);
-    // nhập lương → coi như đã nhận đủ (collected = amount)
-    const setAmt = (v) => setF((p) => ({ ...p, amount: v, collected: v }));
+    // nhập lương → đang nhận đủ thì giữ nhận đủ; đợt còn nợ (13/11: đợt đổi từ dự án cũ) thì giữ số đã nhận
+    const setAmt = (v) => setF((p) => ({ ...p, amount: v, collected: p.collected === "" || p.collected == null || num(p.collected) >= num(p.amount) ? v : p.collected }));
+    const owe = Math.max(0, amt - num(f.collected));
     return (
       <div className="space-y-3">
         <div className="rounded-xl bg-violet-50/70 p-3">
@@ -81,6 +83,18 @@ function InstallmentFields({ f, setF, isAds, isSalary, salaryBase = 0 }) {
           {salaryBase > 0 && amt > 0 && amt !== salaryBase && (
             <div className={`mt-1.5 text-[11px] font-bold ${amt > salaryBase ? "text-emerald-600" : "text-rose-600"}`}>{amt > salaryBase ? `Cao hơn mặc định ${formatVND(amt - salaryBase)}` : `Thấp hơn mặc định ${formatVND(salaryBase - amt)}`}</div>
           )}
+        </div>
+        <div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-slate-600">Đã nhận</span>
+            <div className="flex gap-1">
+              {[["Nhận đủ", () => f.amount], ["Chưa nhận", () => "0"]].map(([l, v]) => (
+                <button key={l} type="button" onClick={() => setF((p) => ({ ...p, collected: String(v()) }))} className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-indigo-100 hover:text-indigo-600">{l}</button>
+              ))}
+            </div>
+          </div>
+          <MoneyInput value={f.collected} onChange={(v) => setF((p) => ({ ...p, collected: v }))} className={inputCls} placeholder="0" />
+          <div className={`mt-0.5 text-[11px] ${owe > 0 ? "font-bold text-rose-600" : "text-slate-400"}`}>{owe > 0 ? `Còn nợ ${formatVND(owe)}` : "Đã nhận đủ"}</div>
         </div>
         <Field label="Ghi chú (lý do tăng/giảm)"><input value={f.note || ""} onChange={(e) => setF({ ...f, note: e.target.value })} className={inputCls} placeholder="VD: trừ 2 ngày nghỉ, thưởng quý…" /></Field>
       </div>
@@ -198,7 +212,8 @@ function Modal({ title, onClose, children, wide }) {
 const autoName = (cat, cust) => (cust ? `${cat} ${cust.name}` : "");
 export function ProjectModal({ initial, customers, onClose, onSave }) {
   const { projects = [] } = useData();
-  const [f, setF] = useState(() => ({ ...initial, monthlySalary: initial.monthlySalary ?? "", feeRate: initial.feeRate ?? "" }));
+  // 13/11: mọi dự án là loại Lương (1 số tiền/đợt = LN gộp). Loại việc gốc chỉ để gắn báo cáo/đo lường → trường service.
+  const [f, setF] = useState(() => ({ ...initial, service: initial.service || (initial.category && initial.category !== "Lương" ? initial.category : "") || "Khác", category: "Lương", monthlySalary: initial.monthlySalary ?? "", feeRate: initial.feeRate ?? "" }));
   const [inst, setInst] = useState(blankInst());
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const cust = customers.find((c) => c.id === f.customerId);
@@ -229,9 +244,7 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
     }
   };
   useEffect(() => { applyDefaults(f.customerId, f.category); }, [f.customerId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onCategory = (e) => { const cat = e.target.value; setF((p) => ({ ...p, category: cat })); if ((cat === "Lương") !== isSalary || cat === "ADS") applyDefaults(f.customerId, cat); };
   const onSalary = (v) => { setF((p) => ({ ...p, monthlySalary: v })); if (!editing) setInst((p) => ({ ...p, amount: v, collected: v })); };
-  const onFee = (e) => { const v = e.target.value; setF((p) => ({ ...p, feeRate: v })); if (!editing) setInst((p) => ({ ...p, feeRate: v, serviceFee: num(p.amount) ? String(Math.round(num(p.amount) * rateOf(v) / 100)) : p.serviceFee })); };
 
   return (
     <Modal wide title={editing ? "Sửa dự án" : "Thêm dự án"} onClose={onClose}>
@@ -244,9 +257,9 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Danh mục">
-            <select value={f.category} onChange={onCategory} className={inputCls}>
-              {PROJECT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          <Field label="Mảng việc" hint="Chỉ để gắn báo cáo / đo lường">
+            <select value={f.service} onChange={set("service")} className={inputCls}>
+              {SERVICES.map((c) => <option key={c}>{c}</option>)}
             </select>
           </Field>
           <Field label="Trạng thái">
@@ -256,9 +269,8 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
             </select>
           </Field>
         </div>
-        {isSalary && <Field label="Lương tháng" hint="Tự điền mỗi lần ghi lương"><MoneyInput value={f.monthlySalary} onChange={onSalary} className={inputCls} placeholder="15.000.000" /></Field>}
-        {isAds && <Field label="% phí dịch vụ" hint="Tự điền khi thêm đợt ADS"><input value={f.feeRate} onChange={onFee} inputMode="decimal" className={inputCls} placeholder="20" /></Field>}
-        <Field label="Tên dự án" hint="Bỏ trống = tự đặt theo danh mục + khách"><input value={f.name} onChange={set("name")} className={inputCls} placeholder={autoName(f.category, cust) || "VD: ADS Vua Đóng Gói"} /></Field>
+        {isSalary && <Field label="Lương tháng" hint="Tự điền mỗi lần ghi lương (= lợi nhuận anh nhận)"><MoneyInput value={f.monthlySalary} onChange={onSalary} className={inputCls} placeholder="15.000.000" /></Field>}
+        <Field label="Tên dự án" hint="Bỏ trống = tự đặt theo mảng việc + khách"><input value={f.name} onChange={set("name")} className={inputCls} placeholder={autoName(f.service, cust) || "VD: ADS Vua Đóng Gói"} /></Field>
         <Field label="Ghi chú"><input value={f.note} onChange={set("note")} className={inputCls} /></Field>
 
         {!editing && (
@@ -273,8 +285,8 @@ export function ProjectModal({ initial, customers, onClose, onSave }) {
       <button
         onClick={() => {
           if (!f.customerId) return;
-          const base = { name: (f.name || "").trim() || autoName(f.category, cust), customerId: f.customerId, customerName: cust?.name || "", category: f.category, status: f.status, note: f.note,
-            ...(isSalary ? { monthlySalary: num(f.monthlySalary) } : {}), ...(isAds ? { feeRate: rateOf(f.feeRate) } : {}) };
+          const base = { name: (f.name || "").trim() || autoName(f.service, cust), customerId: f.customerId, customerName: cust?.name || "", category: "Lương", service: f.service || "Khác", status: f.status, note: f.note,
+            monthlySalary: num(f.monthlySalary) };
           if (editing) onSave(base);
           else {
             const firstAmt = num(inst.amount);
@@ -341,7 +353,7 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Badge tone={CAT_TONE[project.category] || "slate"}>{project.category}</Badge>
+              <Badge tone={CAT_TONE[jobKind(project)] || "slate"}>{jobKind(project)}</Badge>
               <Badge tone={stone}>{slabel}</Badge>
               {!canW && <span className="rounded-lg bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-600">Chỉ xem</span>}
             </div>
@@ -356,8 +368,8 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
-          <div className="min-w-0 rounded-xl bg-indigo-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-indigo-400">Doanh thu</div><div className="break-words text-base font-extrabold text-indigo-700 sm:text-lg">{formatVND(m.revenue)}</div></div>
-          <div className="min-w-0 rounded-xl bg-emerald-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-emerald-400">Lợi nhuận gộp</div><div className="break-words text-base font-extrabold text-emerald-700 sm:text-lg">{formatVND(m.grossProfit)}</div></div>
+          {!isSalary && <div className="min-w-0 rounded-xl bg-indigo-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-indigo-400">Doanh thu</div><div className="break-words text-base font-extrabold text-indigo-700 sm:text-lg">{formatVND(m.revenue)}</div></div>}
+          <div className="min-w-0 rounded-xl bg-emerald-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-emerald-400">{isSalary ? "Tổng lương" : "Lợi nhuận gộp"}</div><div className="break-words text-base font-extrabold text-emerald-700 sm:text-lg">{formatVND(m.grossProfit)}</div></div>
           {isAds && <div className="min-w-0 rounded-xl bg-sky-50 p-3"><div className="truncate text-[11px] font-bold uppercase text-sky-400">Chiết khấu nền tảng</div><div className="break-words text-base font-extrabold text-sky-700 sm:text-lg">{formatVND(m.platformDiscount)}</div></div>}
           <div className={`min-w-0 rounded-xl p-3 ${m.debt > 0 ? "bg-rose-50" : "bg-slate-50"}`}><div className={`truncate text-[11px] font-bold uppercase ${m.debt > 0 ? "text-rose-400" : "text-slate-400"}`}>Công nợ</div><div className={`break-words text-base font-extrabold sm:text-lg ${m.debt > 0 ? "text-rose-700" : "text-slate-500"}`}>{formatVND(m.debt)}</div></div>
         </div>
@@ -395,8 +407,9 @@ export function ProjectDrawer({ project, custFeeRate = 20, custSalary = 0, onClo
                   {isAds && <span>CK <b className="text-sky-600">{formatShort(im.platformDiscount)}</b></span>}
                   {im.refund > 0 && <span className="text-rose-500">Hoàn {formatShort(im.refund)}</span>}
                   {im.carry > 0 && <span className="text-amber-600">Chuyển {formatShort(im.carry)}</span>}
+                  {isSalary ? <span>Lương <b className="text-emerald-600">{formatShort(im.grossProfit)}</b></span> : <>
                   <span>DT <b className="text-indigo-600">{formatShort(im.revenue)}</b></span>
-                  <span>LN <b className="text-emerald-600">{formatShort(im.grossProfit)}</b></span>
+                  <span>LN <b className="text-emerald-600">{formatShort(im.grossProfit)}</b></span></>}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <span className={`text-[11px] font-bold ${full ? "text-emerald-600" : "text-rose-600"}`}>

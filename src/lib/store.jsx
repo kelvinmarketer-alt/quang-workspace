@@ -4,6 +4,7 @@ import { useAuth } from "./auth.jsx";
 import { supabase, WORKSPACE_TABLE } from "./supabase.js";
 import { ALL_FEATURES, ALL_KEYS, FEATURE_WRITES, OWNER_ONLY_WRITES, memberAccess, memberScope, SCOPE_BLOCKED } from "./permissions.js";
 import { merge3, deepEqual } from "./merge.js";
+import { toLuongProject } from "./selectors.js";
 import { deriveKey, encryptJSON, decryptJSON, newSalt, PIN_ITER } from "./crypto.js";
 
 const PRIVATE_TABLE = "qws_private";
@@ -99,6 +100,12 @@ function migrate(s) {
     merged.catsV5 = true;
   }
   merged.settings = { ...SEED_SETTINGS, ...(merged.settings || {}) };
+  // 13/11: mọi dự án → loại Lương, số tiền đợt = LN gộp cũ (xem toLuongProject). Lần đầu đổi: giữ bản sao số cũ
+  // ở projectsBak1311 (chỉ các dự án bị đổi) để đối chiếu / khôi phục nếu cần.
+  if (merged.projects.some((p) => p.category !== "Lương")) {
+    if (!merged.projectsBak1311) merged.projectsBak1311 = { at: new Date().toISOString(), projects: merged.projects.filter((p) => p.category !== "Lương") };
+    merged.projects = merged.projects.map(toLuongProject);
+  }
   // Lương: tên đợt luôn theo tháng của ngày thu (sửa dữ liệu cũ bị giữ label sai khi nhân bản)
   const monthLabel = (iso) => { const [y, m] = (iso || "").split("-"); return m ? `Th${Number(m)}/${y}` : "Lương"; };
   merged.projects = merged.projects.map((p) =>
@@ -519,7 +526,7 @@ export function DataProvider({ children }) {
         setState((s) => ({ ...s, customerList: s.customerList.filter((c) => !ids.includes(c.id)), projects: s.projects.filter((p) => !ids.includes(p.customerId)), resources: (s.resources || []).filter((r) => !ids.includes(r.customerId)) })),
       // PROJECTS / DỰ ÁN
       addProject: (p) =>
-        setState((s) => ({ ...s, projects: [{ id: "p" + uid(), status: "unpaid", ...p }, ...s.projects] })),
+        setState((s) => ({ ...s, projects: [toLuongProject({ id: "p" + uid(), status: "unpaid", ...p }), ...s.projects] })), // 13/11: nhập AI/tin nhắn cũng thành loại Lương
       updateProject: (id, patch) =>
         setState((s) => ({ ...s, projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) })),
       deleteProject: (id) =>

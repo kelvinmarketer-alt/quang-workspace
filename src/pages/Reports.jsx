@@ -14,6 +14,7 @@ export { BrandAvatar };
 import { allInstallments } from "../lib/selectors.js";
 import { aiBrandReport } from "../lib/ai.js";
 import { fmtDateVI, todayISO } from "../lib/format.js";
+import { jobKind } from "../lib/selectors.js";
 
 const TONE = { g: "bg-emerald-50 text-emerald-700", w: "bg-amber-50 text-amber-700", b: "bg-rose-50 text-rose-700", n: "bg-slate-100 text-slate-400" };
 const DOT = { g: "bg-emerald-500", w: "bg-amber-400", b: "bg-rose-500", n: "bg-slate-200" };
@@ -159,7 +160,7 @@ function ReportMatrix() {
             <button key={r.id} onClick={() => nav(`/bao-cao/${r.id}`)} className="grid w-full gap-2 p-3 text-left active:bg-slate-50">
               <span className="flex items-center gap-2.5">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
-                <span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-800">{r.name}</span><span className="block truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate font-bold text-slate-800">{r.name}</span><span className="block truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => jobKind(j) || j.name))].join(", ") : "không job đang chạy"}</span></span>
                 {cols.some(([k]) => k === "rep") && <span className="shrink-0 text-right"><span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${TONE[r.rep.t]}`}>{r.rep.v}</span>{miniComp(r)}</span>}
               </span>
               <span className="grid grid-cols-2 gap-x-3 gap-y-1.5 pl-4">
@@ -184,7 +185,7 @@ function ReportMatrix() {
                 <tr key={r.id} tabIndex={0} onClick={() => nav(`/bao-cao/${r.id}`)} onKeyDown={(e) => e.key === "Enter" && nav(`/bao-cao/${r.id}`)} className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/70">
                   <td className="px-3 py-2.5"><div className="flex items-center gap-2.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[r.state]}`} /><BrandAvatar r={r} />
-                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => j.category || j.name))].join(", ") : "không job đang chạy"}</div></div>
+                    <div className="min-w-0"><div className="font-bold text-slate-800">{r.name}</div><div className="max-w-[230px] truncate text-[11.5px] text-slate-400">{r.jobs.length ? [...new Set(r.jobs.map((j) => jobKind(j) || j.name))].join(", ") : "không job đang chạy"}</div></div>
                   </div></td>
                   {cols.map(([k]) => cell[k](r))}
                 </tr>
@@ -314,7 +315,7 @@ function Brand360({ id }) {
     setBusy(true); setErr("");
     try {
       const data = { thuong_hieu: r.name, loai: r.type, ky_kenh: `${rep.period.since} → ${rep.period.until}`,
-        job: r.jobs.map((j) => ({ ten: j.name, loai: j.category })),
+        job: r.jobs.map((j) => ({ ten: j.name, loai: jobKind(j) })),
         quang_cao: r.ads.map((a) => ({ ten: a.name, nen_tang: a.platform, chi: Math.round(a.spend), ket_qua: a.results, gia_kq: a.results ? Math.round(a.spend / a.results) : null, chi_ky_truoc: a.prevSpend, kq_ky_truoc: a.prevResults, danh_gia: a.verdict?.label })),
         website: r.webs.map((s) => ({ ten: s.domain, click: s.clicks, d_click: s.prevClicks ? Math.round(((s.clicks - s.prevClicks) / s.prevClicks) * 100) : null, hien_thi: s.impressions, vi_tri_tb: s.position, nguoi_dung: s.users, chuyen_doi: s.conv })),
         fanpage: r.pages.map((p) => ({ ten: p.name, tiep_can: p.reach, tin_nhan: p.messages, tin_nhan_ky_truoc: p.prevMessages, tuong_tac: p.engagement })),
@@ -382,7 +383,7 @@ function Brand360({ id }) {
           <div className="mb-2 flex items-center justify-between"><h3 className="text-[15px] font-extrabold text-slate-800">Job</h3><Badge tone="indigo">{r.cps.length} job</Badge></div>
           <div className="space-y-2">{[...r.cps].sort((a, b) => (a.status === "doing" ? -1 : 1) - (b.status === "doing" ? -1 : 1)).slice(0, 6).map((p) => { const [t, l] = PJ[p.status] || PJ.doing; return (
             <div key={p.id} className="flex items-center gap-2.5 rounded-xl bg-slate-50 p-2.5">
-              <Badge tone={CAT[p.category] || "slate"}>{p.category || "Khác"}</Badge>
+              <Badge tone={CAT[jobKind(p)] || "slate"}>{jobKind(p)}</Badge>
               <div className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-800">{p.name}</div>
               <Badge tone={t}>{l}</Badge>
             </div>); })}

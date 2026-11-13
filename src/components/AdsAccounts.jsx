@@ -105,6 +105,16 @@ function GoogleSection() {
   );
 }
 
+// 13/11: hạn token theo Facebook (/debug_token). Máy chủ chưa cập nhật → không có tokenValid → không hiện gì.
+function TokenExp({ a }) {
+  if (a.tokenValid === undefined) return null;
+  if (!a.tokenValid) return <Badge tone="rose" title={a.tokenErr || ""}>Token hỏng · dán token mới</Badge>;
+  if (!a.tokenExp) return <span className="text-[11px] font-semibold text-emerald-600">Token không hết hạn</span>;
+  const left = Math.ceil((a.tokenExp - Date.now()) / 86400000);
+  const d = new Date(a.tokenExp).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return left <= 7 ? <Badge tone="rose">Token còn {Math.max(0, left)} ngày (hết {d})</Badge> : <span className="text-[11px] text-slate-400">Token hết hạn {d} (còn {left} ngày)</span>;
+}
+
 export default function AdsAccounts() {
   const [list, setList] = useState([]);
   const [err, setErr] = useState("");
@@ -117,7 +127,8 @@ export default function AdsAccounts() {
 
   const refresh = async () => {
     setErr("");
-    try { setList((await call({ mode: "config_list" })).accounts || []); } catch (e) { setErr(e.message || String(e)); }
+    // 13/11: kèm hạn token (máy chủ hỏi Facebook)
+    try { setList((await call({ mode: "config_list", health: true })).accounts || []); } catch (e) { setErr(e.message || String(e)); }
   };
   useEffect(() => { refresh(); }, []);
 
@@ -171,6 +182,7 @@ export default function AdsAccounts() {
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.services} onChange={(e) => update(a.id, { services: e.target.checked })} />Gom theo dịch vụ TMV</label>
               <label className="flex items-center gap-1 text-xs text-slate-500"><input type="checkbox" checked={!!a.active} onChange={(e) => update(a.id, { active: e.target.checked })} />Đang dùng</label>
               <span className="text-[11px] text-slate-400">ID {a.id} · token {a.tokenTail || "—"}</span>
+              <TokenExp a={a} />
               {health[a.id]?.err ? <Badge tone="rose">{health[a.id].kind === "token" ? "Token hết hạn / lỗi" : health[a.id].kind === "perm" ? "Token mất quyền" : "Tải lỗi"} · {agoVI(health[a.id].lastErr)}</Badge>
                 : health[a.id]?.lastOk ? <span className="text-[11px] font-semibold text-emerald-600">✓ tải được {agoVI(health[a.id].lastOk)}</span> : null}
               <button aria-label="Xoá" title="Xoá" onClick={() => remove(a)} className="ml-auto rounded-lg p-1.5 text-slate-300 hover:bg-rose-50 hover:text-rose-500"><Trash2 size={14} /></button>

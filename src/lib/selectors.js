@@ -29,6 +29,27 @@ export function installmentMetrics(inst, isAds) {
   return { contractValue, collected, cashIn, debt, platformDiscount, revenue, cost, grossProfit, spend, refund, carry, ctv, other };
 }
 
+// 13/11/2026 sếp chốt: bỏ doanh thu trong dự án — mọi dự án thành loại "Lương", mỗi đợt chỉ còn 1 số tiền = LN gộp cũ
+// (bỏ ngân sách ADS, tiền chạy, CTV, chi phí). Đã thu = LN gộp × tỷ lệ đã thu cũ. Loại việc gốc giữ ở `service`
+// để báo cáo khách / đo lường vẫn biết job ADS hay Seo/Web. Dự án đã là Lương → giữ nguyên (chạy lại không đổi gì).
+export const jobKind = (p) => p?.service || p?.category || "Khác";
+export function toLuongProject(p) {
+  if (!p || p.category === "Lương") return p;
+  const isAds = p.category === "ADS";
+  const installments = (p.installments || []).map((inst) => {
+    const m = installmentMetrics(inst, isAds);
+    const amount = Math.round(m.grossProfit);
+    const old = n(inst.amount);
+    const ratio = old > 0 ? Math.min(1, Math.max(0, n(inst.collected) / old)) : n(inst.collected) > 0 ? 1 : 0;
+    const collected = amount > 0 ? Math.round(amount * ratio) : amount; // LN âm (lỗ) → không tính nợ
+    const keep = {};
+    for (const k of ["id", "date", "note", "carried", "label"]) if (inst[k] !== undefined) keep[k] = inst[k];
+    return { ...keep, amount, feeRate: 0, serviceFee: 0, spend: 0, refund: 0, carry: 0, ctv: 0, costs: [], collected };
+  });
+  const { feeRate, ...rest } = p; // eslint-disable-line no-unused-vars
+  return { ...rest, service: p.service || p.category || "Khác", category: "Lương", installments };
+}
+
 /** Tổng hợp 1 dự án = cộng các đợt. */
 export function projectMetrics(p) {
   const isAds = p.category === "ADS";

@@ -230,6 +230,26 @@ Deno.serve(async (req) => {
       return json({ answer: String(data.choices?.[0]?.message?.content || "").trim(), sources: ctx.sources, model, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: cost + (e.tokens * EMBED_PRICE) / 1e6 } });
     }
 
+    // ───────── TÌM THEO Ý NGHĨA (13/11) ─────────
+    // Không gọi AI trả lời — chỉ đổi câu tìm thành vector rồi lấy tài liệu có đoạn gần nghĩa nhất (rất rẻ: ~0,00002$/lần).
+    if (body.mode === "search") {
+      const q = String(body.q || "").trim().slice(0, 500);
+      if (!q) return json({ results: [] });
+      const folderIds = Array.isArray(body.folder_ids) && body.folder_ids.length ? body.folder_ids.filter(isUuid).slice(0, 500) : null;
+      const { ids: docIds, empty: noDocs } = pickDocIds(body.doc_ids);
+      if (noDocs) return json({ results: [] });
+      const e = await embed(key, [q]);
+      const m = await userClient.rpc("qws_lib_match", { query_embedding: e.vectors[0], folder_ids: folderIds, only_doc: null, match_count: 20, doc_ids: docIds });
+      if (m.error) throw new Error("Tìm đoạn lỗi: " + m.error.message);
+      await log("lib-embed-q", EMBED_MODEL, e.tokens, 0, (e.tokens * EMBED_PRICE) / 1e6);
+      const best = new Map();
+      for (const r of m.data || []) {
+        const cur = best.get(r.doc_id);
+        if (!cur || r.similarity > cur.score) best.set(r.doc_id, { doc_id: r.doc_id, title: r.doc_title, folder_id: r.folder_id, score: r.similarity, excerpt: String(r.content || "").slice(0, 280) });
+      }
+      return json({ results: [...best.values()].sort((a, b) => b.score - a.score).slice(0, 12) });
+    }
+
     // ───────── Ý HAY MỖI NGÀY ─────────
     if (body.mode === "idea") {
       const seed = String(body.seed || new Date().toISOString().slice(0, 10)).slice(0, 40);
@@ -257,7 +277,7 @@ Deno.serve(async (req) => {
       return json({ idea: null, reason: "skip" });
     }
 
-    return json({ error: "Thiếu mode (index | ask | idea)" }, 400);
+    return json({ error: "Thiếu mode (index | ask | search | idea)" }, 400);
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);
   }

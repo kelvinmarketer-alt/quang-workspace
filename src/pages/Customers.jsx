@@ -12,6 +12,7 @@ import { usePasteImages } from "../lib/paste.js";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import BrandConnections from "../components/BrandConnections.jsx";
 import CustomerDocs from "../components/CustomerDocs.jsx";
+import { jobKind } from "../lib/selectors.js";
 
 const AVA = ["from-indigo-500 to-violet-500", "from-sky-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500", "from-rose-500 to-pink-500", "from-fuchsia-500 to-purple-500"];
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
@@ -112,7 +113,7 @@ function ProjectRow({ p, onOpen }) {
   const cnt = (p.installments || []).length;
   return (
     <button onClick={onOpen} className="flex w-full items-center gap-2.5 rounded-xl border border-slate-100 bg-white p-2.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50/30">
-      <Badge tone={CAT_TONE[p.category] || "slate"}>{p.category}</Badge>
+      <Badge tone={CAT_TONE[jobKind(p)] || "slate"}>{jobKind(p)}</Badge>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-slate-700">{p.name}</div>
         <div className="text-[11px] text-slate-400">DT {formatShort(m.revenue)} · LN {formatShort(m.grossProfit)}{m.debt > 0 ? <> · <span className="text-rose-500">nợ {formatShort(m.debt)}</span></> : ""} · <Repeat size={9} className="inline" /> {cnt}</div>
@@ -162,7 +163,7 @@ export default function Customers() {
       let debt = 0, revenue = 0, grossProfit = 0;
       for (const p of cps) { const mm = projectMetrics(p); debt += mm.debt; revenue += mm.revenue; grossProfit += mm.grossProfit; }
       const lastIncome = customerLastIncome(projects, c.id);
-      const jobs = [...new Set(cps.filter((p) => p.status === "doing").map((p) => p.category).filter(Boolean))];
+      const jobs = [...new Set(cps.filter((p) => p.status === "doing").map(jobKind).filter(Boolean))];
       return { ...c, active: c.active ?? true, debt, revenue, grossProfit, projects: cps, projectCount: cps.length, lastIncome, jobs };
     }) // Tìm theo tên / SĐT / Zalo / email / ghi chú / TÊN DỰ ÁN (không cần dấu)
       .filter((c) => !lq || fold([c.name, c.phone, c.zalo, c.email, c.note, ...c.projects.map((p) => p.name)].filter(Boolean).join(" ")).includes(lq))
@@ -328,7 +329,7 @@ export default function Customers() {
                       {canW && <button onClick={() => setModal(c)} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-indigo-600"><Pencil size={12} /> Sửa khách</button>}
                       {zl && <a href={zl} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg bg-[#0068FF]/10 px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-[#0068FF] hover:bg-[#0068FF]/20"><MessageCircle size={12} /> Zalo</a>}
                       {canW && <button onClick={async () => { const nP = c.projectCount; if (await ask(`Xoá khách "${c.name}"${nP ? ` và ${nP} dự án` : ""}?\nTài nguyên (tài khoản, mật khẩu) gắn với khách này cũng bị xoá. Có thể bấm "Hoàn tác" trong 10 giây.`)) deleteCustomer(c.id); }} className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] sm:py-1.5 font-bold text-slate-600 hover:text-rose-600"><Trash2 size={12} /> Xoá</button>}
-                      {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Web", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
+                      {canW && <button onClick={() => setProjModal({ name: "", customerId: c.id, category: "Lương", service: "Khác", status: "doing", note: "" })} className="ml-auto flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-[11px] sm:py-1.5 font-bold text-white"><FolderPlus size={13} /> Thêm dự án</button>}
                     </div>
                     {c.projectCount > 0 && <CustomerProfit projects={c.projects} customerId={c.id} open={profitOpen.has(c.id)} onToggle={() => toggleProfit(c.id)} />}
                     {isOwner && <BrandConnections customer={c} startOpen={chanOpen?.id === c.id ? chanOpen.t : 0} />}
