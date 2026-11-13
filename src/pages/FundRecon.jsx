@@ -58,7 +58,7 @@ export default function FundRecon() {
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase text-emerald-600"><ArrowDownToLine size={13} /> Tiền vào</div>
           <div className="mt-1 text-lg font-extrabold text-slate-900 sm:text-2xl">{formatShort(r.moneyIn.total)}</div>
           <div className="mt-1 space-y-0.5 text-[11px] text-slate-400">
-            <div className="flex justify-between gap-2"><span>LN gộp</span><b className="text-slate-600">{formatShort(r.moneyIn.grossProfit)}</b></div>
+            <div className="flex justify-between gap-2"><span>Thu nhập (lương)</span><b className="text-slate-600">{formatShort(r.moneyIn.grossProfit)}</b></div>
             <div className="flex justify-between gap-2"><span>Nạp tay vào quỹ</span><b className="text-slate-600">{formatShort(r.moneyIn.manualIn)}</b></div>
           </div>
         </div>
@@ -72,7 +72,7 @@ export default function FundRecon() {
         </div>
       </div>
       <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4 sm:p-5">
-        {[["Doanh thu", r.revenue, "text-indigo-600"], ["Lãi tháng (sau CP)", r.net, r.net < 0 ? "text-rose-600" : "text-emerald-600"], ["Đã chia ra quỹ", r.allocated, "text-slate-800"], ["Thu nợ trong tháng", r.collectedPays, "text-sky-600"]].map(([l, v, c]) => (
+        {[["Công nợ cuối tháng", r.debt, r.debt > 0 ? "text-rose-600" : "text-slate-800"], ["Lãi tháng (sau CP)", r.net, r.net < 0 ? "text-rose-600" : "text-emerald-600"], ["Đã chia ra quỹ", r.allocated, "text-slate-800"], ["Thu nợ trong tháng", r.collectedPays, "text-sky-600"]].map(([l, v, c]) => (
           <div key={l} className="min-w-0">
             <div className="truncate text-[11px] font-semibold uppercase text-slate-400">{l}</div>
             <div className={`break-words text-base font-extrabold ${c}`}>{formatShort(v)}</div>
@@ -99,7 +99,7 @@ export default function FundRecon() {
               </div>
             ))}
           </div>
-          <div className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400 sm:px-5">Quỹ công ty = LN gộp − chi vận hành − phần đã chia/chi (không trừ công nợ chưa thu).</div>
+          <div className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400 sm:px-5">Quỹ công ty = thu nhập (lương) − chi vận hành − phần đã chia/chi (không trừ công nợ chưa thu).</div>
         </Card>
       )}
 
@@ -135,7 +135,7 @@ export default function FundRecon() {
         {allDone && <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-2 text-[13px] font-bold text-emerald-700"><Sparkles size={14} /> Đã chốt xong {monthName(month)}</div>}
       </Card>
 
-      <div className="px-3 text-[11px] leading-relaxed text-slate-400 sm:px-0">Tiền vào = LN gộp của các đợt trong tháng + nạp tay vào quỹ. Tiền ra = chi vận hành + chi thật từ quỹ. Chuyển và phân bổ giữa các quỹ là tiền nội bộ nên không tính vào/ra.</div>
+      <div className="px-3 text-[11px] leading-relaxed text-slate-400 sm:px-0">Tiền vào = thu nhập (lương) của các đợt trong tháng + nạp tay vào quỹ. Tiền ra = chi vận hành + chi thật từ quỹ. Chuyển và phân bổ giữa các quỹ là tiền nội bộ nên không tính vào/ra.</div>
     </div>
   );
 }

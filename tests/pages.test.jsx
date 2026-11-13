@@ -58,10 +58,10 @@ describe("mở từng trang không lỗi", () => {
 });
 
 describe("Kế toán: bấm qua 4 tab", () => {
-  it("Doanh thu → Công nợ → Chi phí → Dòng tiền", async () => {
+  it("Thu nhập → Công nợ → Chi phí → Dòng tiền", async () => {
     const K = (await import("../src/pages/Ketoan.jsx")).default;
     const { errors } = await mount(<K />, "/ke-toan");
-    for (const t of ["Công nợ", "Chi phí", "Dòng tiền", "Doanh thu"]) {
+    for (const t of ["Công nợ", "Chi phí", "Dòng tiền", "Thu nhập"]) {
       await safely(() => fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${t}$`) })[0]));
     }
     expect(errors).toEqual([]);

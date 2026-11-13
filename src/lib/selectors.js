@@ -154,7 +154,7 @@ export function allInstallments(projects) {
     for (const inst of p.installments || []) {
       out.push({
         ...inst, isAds,
-        projectId: p.id, projectName: p.name, customerId: p.customerId, customerName: p.customerName, category: p.category,
+        projectId: p.id, projectName: p.name, customerId: p.customerId, customerName: p.customerName, category: p.category, service: jobKind(p),
         ...installmentMetrics(inst, isAds), // contractValue, revenue, platformDiscount, cost, grossProfit, debt, collected, spend
         serviceFee: isAds ? n(inst.serviceFee) : 0,
       });

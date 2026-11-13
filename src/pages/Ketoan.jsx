@@ -74,15 +74,18 @@ function CompareCard({ icon: Icon, label, value, prev, tone, compare }) {
 function Waterfall({ rev, gp, op, opN, net, prevNet }) {
   const max = Math.max(rev, 1);
   const rows = [
-    { l: "Doanh thu", v: rev, left: 0, w: rev, c: "from-indigo-400 to-indigo-600", t: "text-slate-800" },
-    { l: "− Chi phí job (tiền chạy QC, CTV…)", v: -(rev - gp), left: gp, w: rev - gp, c: "from-amber-300 to-amber-500", t: "text-amber-600" },
-    { l: "= Lợi nhuận gộp", v: gp, left: 0, w: gp, c: "from-emerald-300 to-emerald-500", t: "text-emerald-600" },
+    // 13/11: dự án đã thành Lương (doanh thu = LN gộp) → chỉ còn Thu nhập → chi vận hành → lãi ròng
+    ...(Math.round(rev - gp) !== 0 ? [
+      { l: "Doanh thu", v: rev, left: 0, w: rev, c: "from-indigo-400 to-indigo-600", t: "text-slate-800" },
+      { l: "− Chi phí job (tiền chạy QC, CTV…)", v: -(rev - gp), left: gp, w: rev - gp, c: "from-amber-300 to-amber-500", t: "text-amber-600" },
+      { l: "= Lợi nhuận gộp", v: gp, left: 0, w: gp, c: "from-emerald-300 to-emerald-500", t: "text-emerald-600" },
+    ] : [{ l: "Thu nhập (lương)", v: gp, left: 0, w: gp, c: "from-emerald-300 to-emerald-500", t: "text-emerald-600" }]),
     { l: `− Chi vận hành (${opN} khoản)`, v: -op, left: Math.max(0, net), w: op, c: "from-rose-300 to-rose-500", t: "text-rose-500" },
     { l: "= Lợi nhuận ròng", v: net, left: 0, w: Math.max(0, net), c: "from-sky-400 to-indigo-500", t: "text-indigo-600", end: true },
   ];
   return (
     <Card>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Từ doanh thu đến lãi ròng</h3>{prevNet ? <span className="text-[12px] text-slate-400">lãi ròng kỳ trước {formatShort(prevNet)}</span> : null}</div>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-[15px] font-extrabold text-slate-800">Từ thu nhập đến lãi ròng</h3>{prevNet ? <span className="text-[12px] text-slate-400">lãi ròng kỳ trước {formatShort(prevNet)}</span> : null}</div>
       <div className="space-y-2">
         {rows.map((r) => (
           <div key={r.l} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_7.5rem]">
@@ -172,14 +175,15 @@ function KetoanReport() {
       </Card>
 
       <AnswerCard eyebrow={`Kế toán · ${fmtDateVI(from)} → ${fmtDateVI(to)}`}
-        title={cur.revenue ? `Lãi ròng ${formatShort(netProfit)} trên ${formatShort(cur.revenue)} doanh thu` : "Chưa có phiếu thu trong kỳ này"}
-        desc={cur.revenue ? [`Mỗi 100 đồng doanh thu giữ lại ${Math.round((netProfit / cur.revenue) * 100)} đồng`, compare && prevNet ? `lãi ròng ${netProfit >= prevNet ? "tăng" : "giảm"} ${Math.abs(Math.round(((netProfit - prevNet) / Math.abs(prevNet)) * 100))}% so kỳ trước` : null, cur.debt > 0 ? `còn ${formatShort(cur.debt)} chưa thu` : "đã thu đủ"].filter(Boolean).join(" · ") : null}
+        title={cur.grossProfit ? `Lãi ròng ${formatShort(netProfit)} trên ${formatShort(cur.grossProfit)} thu nhập` : "Chưa có phiếu thu trong kỳ này"}
+        desc={cur.grossProfit ? [`Mỗi 100 đồng thu nhập giữ lại ${Math.round((netProfit / cur.grossProfit) * 100)} đồng`, compare && prevNet ? `lãi ròng ${netProfit >= prevNet ? "tăng" : "giảm"} ${Math.abs(Math.round(((netProfit - prevNet) / Math.abs(prevNet)) * 100))}% so kỳ trước` : null, cur.debt > 0 ? `còn ${formatShort(cur.debt)} chưa thu` : "đã thu đủ"].filter(Boolean).join(" · ") : null}
         live={`${list.length} đợt thu`} />
 
       {/* Thẻ chỉ số chính (có so sánh) */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <CompareCard icon={Wallet} label="Doanh thu" value={cur.revenue} prev={prevSum.revenue} tone="indigo" compare={compare} />
-        <CompareCard icon={TrendingUp} label="Lợi nhuận gộp" value={cur.grossProfit} prev={prevSum.grossProfit} tone="emerald" compare={compare} />
+        {/* 13/11: gộp Doanh thu + LN gộp (đã bằng nhau) thành Thu nhập; thêm Lãi ròng sau chi vận hành */}
+        <CompareCard icon={Wallet} label="Thu nhập (lương)" value={cur.grossProfit} prev={prevSum.grossProfit} tone="emerald" compare={compare} />
+        <CompareCard icon={TrendingUp} label="Lãi ròng" value={netProfit} prev={prevNet} tone="indigo" compare={compare} />
         <CompareCard icon={HandCoins} label="Đã thu" value={cur.collected} prev={prevSum.collected} tone="sky" compare={compare} />
         <CompareCard icon={Receipt} label="Công nợ" value={cur.debt} prev={prevSum.debt} tone="rose" compare={compare} />
       </div>
@@ -188,19 +192,19 @@ function KetoanReport() {
       <Waterfall rev={cur.revenue} gp={cur.grossProfit} op={opCost.total} opN={opCost.items.length} net={netProfit} prevNet={compare ? prevNet : null} />
 
       {/* Chỉ số phụ */}
-      <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4 sm:p-5">
+      {(cur.discount || cur.serviceFee || cur.spend) ? <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:grid-cols-4 sm:p-5">
         {[["Số tiền nhận", cur.received], ["Chiết khấu nền tảng", cur.discount], ["Phí chạy (ADS)", cur.serviceFee], ["Tiền chạy thực tế", cur.spend]].map(([l, v]) => (
           <div key={l} className="min-w-0">
             <div className="truncate text-[11px] font-semibold uppercase text-slate-400">{l}</div>
             <div className="break-words text-base font-extrabold text-slate-800">{formatVND(v)}</div>
           </div>
         ))}
-      </div>
+      </div> : null}
 
       {/* Biểu đồ theo tháng trong kỳ */}
       {series.length > 0 && (
         <Card>
-          <SectionTitle action={<span className="text-xs font-bold text-slate-400">Doanh thu / LN gộp theo tháng</span>}>Diễn biến trong kỳ</SectionTitle>
+          <SectionTitle action={<span className="text-xs font-bold text-slate-400">Thu nhập theo tháng</span>}>Diễn biến trong kỳ</SectionTitle>
           {/* 01/11: điện thoại — biểu đồ vừa khung (trước phải kéo ngang mới thấy hết tháng) */}
           <div>
            <div className="h-56">
@@ -209,8 +213,7 @@ function KetoanReport() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#eef0f6" vertical={false} />
                 <XAxis dataKey="name" tickFormatter={(v) => String(v).replace(/^Th0?/, "T")} interval="preserveStartEnd" minTickGap={2} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v) => formatShort(v).replace(" tr", "tr")} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={44} />
-                <Tooltip formatter={(v, k) => [formatVND(v), k === "dt" ? "Doanh thu" : "LN gộp"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
-                <Bar dataKey="dt" fill="#6366f1" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+                <Tooltip formatter={(v) => [formatVND(v), "Thu nhập"]} contentStyle={{ borderRadius: 12, border: "1px solid #eef0f6", fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,.14)" }} />
                 <Bar dataKey="ln" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={22} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
@@ -236,7 +239,7 @@ function KetoanReport() {
                   <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                   <span className="whitespace-nowrap text-sm font-extrabold text-slate-700">{monthLbl(g.month).replace("Tháng ", "Th ")}</span>
                   <Badge tone="slate">{g.count}</Badge>
-                  <span className="ml-auto text-right text-xs font-bold leading-tight"><span className="block text-indigo-600">{formatShort(g.revenue)}</span><span className="block text-emerald-600">LN {formatShort(g.grossProfit)}</span></span>
+                  <span className="ml-auto text-right text-xs font-bold leading-tight"><span className="block text-emerald-600">{formatShort(g.grossProfit)}</span>{g.debt > 0 && <span className="block text-rose-600">nợ {formatShort(g.debt)}</span>}</span>
                 </button>
                 {open && (
                   <div className="space-y-2 border-t border-slate-100 p-2">
@@ -244,13 +247,12 @@ function KetoanReport() {
                       <div key={x.id} className="rounded-xl border border-slate-100 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-bold text-slate-800">{x.customerName}</span></div>
+                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.service || x.category] || "slate"}>{x.service || x.category}</Badge><span className="truncate text-sm font-bold text-slate-800">{x.customerName}</span></div>
                             <div className="truncate text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
-                            <div className="text-[11px] text-slate-400">{fmtDateVI(x.date)}{x.isAds && x.spend ? ` · chạy ${formatShort(x.spend)}` : ""}</div>
+                            <div className="text-[11px] text-slate-400">{fmtDateVI(x.date)}</div>
                           </div>
                           <div className="shrink-0 text-right">
-                            <div className="text-sm font-extrabold text-indigo-600">{formatShort(x.revenue)}</div>
-                            <div className="text-[11px] font-bold text-emerald-600">LN {formatShort(x.grossProfit)}</div>
+                            <div className="text-sm font-extrabold text-emerald-600">{formatShort(x.grossProfit)}</div>
                             <div className={`text-[11px] font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? `nợ ${formatShort(x.debt)}` : "đủ"}</div>
                           </div>
                         </div>
@@ -264,7 +266,7 @@ function KetoanReport() {
           {list.length > 0 && (
             <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-extrabold text-slate-700">
               <span>Tổng {cur.count} đợt</span>
-              <span>DT <span className="text-indigo-600">{formatShort(cur.revenue)}</span> · LN <span className="text-emerald-600">{formatShort(cur.grossProfit)}</span></span>
+              <span>Thu nhập <span className="text-emerald-600">{formatShort(cur.grossProfit)}</span></span>
             </div>
           )}
         </div>
@@ -276,27 +278,24 @@ function KetoanReport() {
               <tr className="border-y border-slate-100 text-left text-[11px] uppercase tracking-wide text-slate-400">
                 <th className="px-5 py-2.5 font-bold">Ngày</th>
                 <th className="px-3 py-2.5 font-bold">Khách / Dự án</th>
-                <th className="px-3 py-2.5 text-right font-bold">Nhận</th>
-                <th className="px-3 py-2.5 text-right font-bold">Tiền chạy</th>
-                <th className="px-3 py-2.5 text-right font-bold">Chiết khấu</th>
-                <th className="px-3 py-2.5 text-right font-bold">Doanh thu</th>
-                <th className="px-3 py-2.5 text-right font-bold">LN gộp</th>
+                <th className="px-3 py-2.5 text-right font-bold">Thu nhập</th>
+                <th className="px-3 py-2.5 text-right font-bold">Đã thu</th>
                 <th className="px-3 py-2.5 text-right font-bold">Còn nợ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {list.length === 0 && <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-slate-400">Chưa có phiếu thu nào trong kỳ này.</td></tr>}
+              {list.length === 0 && <tr><td colSpan={5} className="px-5 py-10 text-center text-sm text-slate-400">Chưa có phiếu thu nào trong kỳ này.</td></tr>}
               {byMonth.map((g) => {
                 const open = openMonths.has(g.month);
                 return (
                   <Fragment key={g.month}>
                     <tr className="cursor-pointer border-b border-slate-100 bg-slate-50/50 hover:bg-slate-50" onClick={() => toggleMonth(g.month)}>
-                      <td colSpan={8} className="px-5 py-2">
+                      <td colSpan={5} className="px-5 py-2">
                         <div className="flex items-center gap-2.5">
                           <ChevronDown size={15} className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
                           <span className="text-sm font-extrabold text-slate-700">{monthLbl(g.month)}</span>
                           <Badge tone="slate">{g.count} đợt</Badge>
-                          <span className="ml-auto flex gap-4 text-xs font-bold"><span className="text-indigo-600">DT {formatShort(g.revenue)}</span><span className="text-emerald-600">LN {formatShort(g.grossProfit)}</span>{g.debt > 0 && <span className="text-rose-600">nợ {formatShort(g.debt)}</span>}</span>
+                          <span className="ml-auto flex gap-4 text-xs font-bold"><span className="text-emerald-600">{formatShort(g.grossProfit)}</span>{g.debt > 0 && <span className="text-rose-600">nợ {formatShort(g.debt)}</span>}</span>
                         </div>
                       </td>
                     </tr>
@@ -304,14 +303,11 @@ function KetoanReport() {
                       <tr key={x.id} className="hover:bg-slate-50/70">
                         <td className="px-5 py-3 whitespace-nowrap text-slate-500">{fmtDateVI(x.date)}</td>
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-2"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="font-semibold text-slate-700">{x.customerName}</span></div>
+                          <div className="flex items-center gap-2"><Badge tone={CAT_TONE[x.service || x.category] || "slate"}>{x.service || x.category}</Badge><span className="font-semibold text-slate-700">{x.customerName}</span></div>
                           <div className="text-[11px] text-slate-400">{x.projectName} · {x.label}</div>
                         </td>
-                        <td className="px-3 py-3 text-right font-semibold text-slate-700">{formatShort(x.contractValue)}</td>
-                        <td className="px-3 py-3 text-right text-slate-400">{x.isAds ? formatShort(x.spend) : "—"}</td>
-                        <td className="px-3 py-3 text-right text-sky-600">{x.platformDiscount ? formatShort(x.platformDiscount) : "—"}</td>
-                        <td className="px-3 py-3 text-right font-bold text-indigo-600">{formatShort(x.revenue)}</td>
                         <td className="px-3 py-3 text-right font-bold text-emerald-600">{formatShort(x.grossProfit)}</td>
+                        <td className="px-3 py-3 text-right text-slate-600">{formatShort(x.collected)}</td>
                         <td className={`px-3 py-3 text-right font-bold ${x.debt > 0 ? "text-rose-600" : "text-slate-300"}`}>{x.debt > 0 ? formatShort(x.debt) : "0"}</td>
                       </tr>
                     ))}
@@ -323,11 +319,8 @@ function KetoanReport() {
               <tfoot>
                 <tr className="border-t-2 border-slate-100 bg-slate-50/60 font-extrabold">
                   <td className="px-5 py-3" colSpan={2}>Tổng</td>
-                  <td className="px-3 py-3 text-right text-slate-800">{formatShort(cur.received)}</td>
-                  <td className="px-3 py-3 text-right text-slate-500">{formatShort(cur.spend)}</td>
-                  <td className="px-3 py-3 text-right text-sky-600">{formatShort(cur.discount)}</td>
-                  <td className="px-3 py-3 text-right text-indigo-600">{formatShort(cur.revenue)}</td>
                   <td className="px-3 py-3 text-right text-emerald-600">{formatShort(cur.grossProfit)}</td>
+                  <td className="px-3 py-3 text-right text-slate-600">{formatShort(cur.collected)}</td>
                   <td className="px-3 py-3 text-right text-rose-600">{formatShort(cur.debt)}</td>
                 </tr>
               </tfoot>
@@ -508,7 +501,7 @@ function DebtPanel() {
                       {g.items.map((x) => (
                         <div key={x.id} className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-3 sm:flex-nowrap sm:gap-3 sm:px-4">
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.category] || "slate"}>{x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
+                            <div className="flex items-center gap-1.5"><Badge tone={CAT_TONE[x.service || x.category] || "slate"}>{x.service || x.category}</Badge><span className="truncate text-sm font-semibold text-slate-700">{x.projectName}</span></div>
                             <div className="text-[11px] text-slate-400 sm:truncate">{lateDays(x) > 0 && <b className={`mr-1 rounded px-1 py-0.5 font-extrabold ${x.snooze ? "bg-slate-100 text-slate-500" : "bg-rose-100 text-rose-600"}`}>{x.snooze ? "đã gác nhắc" : `quá hạn ${lateDays(x)} ngày`}</b>}{x.label} · {fmtDateVI(x.date)} · đã thu {formatShort(x.collected)}/{formatShort(x.contractValue)}{storedPays(x).length > 0 && <button onClick={() => setCollect(x)} className="ml-1 font-bold text-indigo-500 hover:underline">· {storedPays(x).length} lần thu</button>}</div>
                           </div>
                           <div className="contents sm:block sm:shrink-0 sm:text-right">
@@ -555,7 +548,7 @@ function DebtPanel() {
 }
 
 // 01/11: thêm "Dòng tiền" = trang Quỹ cũ (đã ẩn khỏi menu) — /quy, /quy-thong-ke mở thẳng tab này
-const TABS = [["report", "Doanh thu", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí", CreditCard], ["cash", "Dòng tiền", PiggyBank]];
+const TABS = [["report", "Thu nhập", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí", CreditCard], ["cash", "Dòng tiền", PiggyBank]];
 const Funds = lazy(() => import("./Funds.jsx"));
 
 const ktTabLS = () => { try { const v = localStorage.getItem("qws_kt_tab"); return TABS.some(([k]) => k === v) ? v : "report"; } catch { return "report"; } };
