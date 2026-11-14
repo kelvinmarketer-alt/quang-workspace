@@ -344,7 +344,7 @@ export function DataProvider({ children }) {
       // 14/11: không có gì để gỡ + cờ AI không đổi → giữ nguyên state. Trước đây luôn tạo object mới → MỖI LẦN MỞ APP
       // lại đẩy cả khối 226 KB lên cloud (qws_save), điện thoại mạng yếu phải tải lên + máy khác phải tải lại.
       const ai = !!(P.openaiKey || "").trim();
-      if (!s.vault?.length && s.settings?.openaiKey === undefined && !!s.settings?.aiEnabled === ai) return s;
+      if (!s.vault?.length && !s.settings?.openaiKey && !!s.settings?.aiEnabled === ai) return s;
       const clean = stripSecrets(s);
       return { ...clean, settings: { ...clean.settings, aiEnabled: !!(P.openaiKey || "").trim() } };
     });
