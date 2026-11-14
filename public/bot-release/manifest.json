@@ -1,7 +1,7 @@
 {
-  "sha": "05c67085c940d0eb5e9c620cac531e8bb502e761",
-  "date": "2026-11-14T21:41:07+07:00",
-  "msg": "Đòn bẩy theo Demo tới 125x (trần khối lượng) + đòn bẩy trên sàn tự tính từng lệnh để giá thanh lý (ký quỹ riêng) luôn xa hơn SL; lúc chờ (Hedge/chưa khoá) vẫn đọc luật Demo; chép luật app mới (sw3Now chỉ đọc)",
+  "sha": "f2392f3dbccf4e1777cc0aeb12972730d18c7f21",
+  "date": "2026-11-14T22:28:47+07:00",
+  "msg": "Phản hồi nút trong app nhanh: lúc nghỉ dò mốc sửa lệnh mỗi 3 giây (chỉ đọc updated_at), vừa xử lý Dừng/Chạy lại/Đóng hết thì báo trạng thái ngay; Vốn tính lệnh > 0 → rủi ro tính đúng theo số đó (kể cả ví ít hơn)",
   "files": [
     {
       "path": "README.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "062a66c97965ae89b6a995d98f7ae1614704cdd2"
+      "sha": "ab98577ac2a0d0591fc5ebd5a3f645c89e1023ab"
     },
     {
       "path": "lib/paperBot.js",
@@ -41,7 +41,7 @@
     },
     {
       "path": "lib/report.js",
-      "sha": "a0dd0ea0bb5d087ed4fcf92bf7366daeccf94cfb"
+      "sha": "0893b31aa1dfe7d98b92d04009d3e1f41054c70a"
     },
     {
       "path": "lib/updater.js",

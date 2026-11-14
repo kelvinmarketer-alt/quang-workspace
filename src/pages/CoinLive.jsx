@@ -97,7 +97,11 @@ export default function CoinLive({ active }) {
       setSt(row("status")); setCmd(row("command")); setHist(row("history"));
     } catch (e) { setErr(e.message || String(e)); }
   };
-  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, 20000); return () => clearInterval(t); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 14/11: vừa bấm Dừng / Chạy lại / Đóng hết / Lưu → đọc trạng thái mỗi 3 giây trong 2 phút (bình thường 20 giây)
+  const [fastUntil, setFastUntil] = useState(0);
+  const fast = fastUntil > Date.now();
+  useEffect(() => { if (!fast) return undefined; const t = setTimeout(() => setFastUntil(0), fastUntil - Date.now()); return () => clearTimeout(t); }, [fastUntil]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, fast ? 3000 : 20000); return () => clearInterval(t); }, [active, fast]); // eslint-disable-line react-hooks/exhaustive-deps
   // Bảng có rồi mà ~20 giây chưa thấy bot báo trạng thái → hiện hướng dẫn kiểm tra (không quay vòng mãi)
   const hasSt = !!st;
   useEffect(() => { if (!active || hasSt) return undefined; const t = setTimeout(() => setSlow(true), 20000); return () => clearTimeout(t); }, [active, hasSt]);
@@ -115,7 +119,7 @@ export default function CoinLive({ active }) {
     const ans = await ask(stop ? "Dừng bot?\nBot huỷ các lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho bot chạy lại?\nBot sẽ tiếp tục đặt lệnh theo tín hiệu mới.", { ok: stop ? "Dừng bot" : "Chạy lại", danger: stop, input: "Lý do (không bắt buộc)…" }); if (!ans) return;
     setBusy(true);
     const { error } = await mergeCmd({ stop }, cmd);
-    setBusy(false); if (error) setErr(error.message); else { setNote({ t: stop ? "Đã gửi lệnh Dừng — bot áp dụng trong ~15–30 giây." : "Đã cho bot chạy lại." }); logBot(stop ? "dừng bot" : "cho bot chạy lại", ans.text); load(); }
+    setBusy(false); if (error) setErr(error.message); else { setFastUntil(Date.now() + 120000); setNote({ t: stop ? "Đã gửi lệnh Dừng — bot nhận trong vài giây." : "Đã gửi lệnh Chạy lại — bot nhận trong vài giây." }); logBot(stop ? "dừng bot" : "cho bot chạy lại", ans.text); load(); }
   };
   // Đóng hết: bước 1 = popup giải thích, bước 2 = gõ "ĐÓNG HẾT" ngay trong thẻ rồi mới gửi lệnh
   const startCloseAll = async () => {
@@ -129,7 +133,7 @@ export default function CoinLive({ active }) {
     const { error } = await mergeCmd({ closeAllAt: Date.now(), stop: true }, cmd);
     setBusy(false);
     if (error) setNote({ bad: true, t: error.message });
-    else { setClosing(false); setCloseTxt(""); logBot("đóng hết vị thế + dừng bot"); load(); }
+    else { setClosing(false); setCloseTxt(""); logBot("đóng hết vị thế + dừng bot"); setFastUntil(Date.now() + 120000); load(); }
   };
 
   if (missing) return (
@@ -233,7 +237,7 @@ export default function CoinLive({ active }) {
 
       {isOwner && st.mode === "testnet" && !st.dry && <TestTradeCard st={st} cmd={cmd} online={online} stopped={stopped} onSent={load} />}
 
-      {isOwner && <BotSettings st={st} cmd={cmd} session={session} onSaved={load} defaultOpen={!!st.waiting} liveChecks={liveChecks} />}
+      {isOwner && <BotSettings st={st} cmd={cmd} session={session} onSaved={() => { setFastUntil(Date.now() + 120000); load(); }} defaultOpen={!!st.waiting} liveChecks={liveChecks} />}
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         {st.wallet ? <Num label="Số dư ví Futures" v={fmtUsd(st.wallet.balance + st.wallet.uPnl)} t={st.wallet.uPnl ? tone(st.wallet.uPnl) : undefined}
@@ -664,7 +668,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
           <label className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50/50 p-2.5 text-[12px] text-emerald-900"><input type="checkbox" className="mt-0.5" checked={f.followDemo !== false} onChange={(e) => setF({ ...f, followDemo: e.target.checked })} /><span><b>Rủi ro & giới hạn theo phiên Demo (đồng bộ)</b> — rủi ro/lệnh, số lệnh mở, dừng ngày, đòn bẩy lấy đúng như Demo{demo ? ` (${fmtNum(demo.riskPct, 2, 0)}% · ${demo.maxOpen} lệnh · dừng ngày ${fmtNum(demo.dailyStopPct, 2, 0)}% · ${demo.maxLev}x)` : ""}; sửa ở Demo là bot theo. Bỏ chọn để đặt riêng cho bot (khi đó Demo và bot sẽ KHÁC nhau).</span></label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {num("riskPct", "Rủi ro / lệnh", 0.25, "%", live ? "tháng đầu nên 1%" : null)}
-            {num("capitalCap", "Vốn tính lệnh tối đa", 50, "$", "0 = cả ví Futures")}
+            {num("capitalCap", "Vốn tính lệnh", 50, "$", f.capitalCap > 0 ? `mỗi lệnh thua ≈ ${fmtUsd((Number(f.capitalCap) * Number((f.followDemo !== false && session ? cfgOf(session).riskPct : f.riskPct) || 0)) / 100)}` : "0 = theo tiền trong ví Futures")}
             {num("maxOpen", "Tối đa lệnh mở", 1)}
             {num("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}
             {num("maxLev", "Đòn bẩy tối đa", 1, "x", "trần khối lượng; sàn tự hạ để thanh lý xa hơn SL")}

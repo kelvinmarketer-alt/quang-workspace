@@ -4,7 +4,7 @@ const URL_ = (process.env.SUPABASE_URL || "").trim(), KEY = (process.env.SUPABAS
 const H = () => ({ apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" });
 let lastPush = 0, missing = false;
 export async function pushStatus(status, force = false) {
-  if (!URL_ || !KEY || missing || (!force && Date.now() - lastPush < 30000) || (force && Date.now() - lastPush < 10000)) return;
+  if (!URL_ || !KEY || missing || (!force && Date.now() - lastPush < 30000) || (force === true && Date.now() - lastPush < 10000)) return; // force "now" = báo ngay (vừa xử lý nút bấm trong app)
   lastPush = Date.now();
   const r = await fetch(`${URL_}/rest/v1/qws_live_bot`, { method: "POST", headers: { ...H(), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: "status", data: status, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(20000) });
   if (r.status === 404) { missing = true; console.log("(Chưa có bảng qws_live_bot trên Supabase — chạy file supabase.sql để bot báo về app)"); }
@@ -34,6 +34,13 @@ export async function notify(title, body, tag, url = "/coin?tab=live") {
     lastPush_ = { ok: r.ok, status: r.status, at: Date.now(), title: String(title || "").slice(0, 80), sent: j?.sent ?? null, total: j?.total ?? null, results: Array.isArray(j?.results) ? j.results.map((x) => ({ host: x.host, ok: !!x.ok, code: x.code ?? null })) : null };
     return r.ok;
   } catch (e) { lastPush_ = { ok: false, status: e.message, at: Date.now() }; return false; }
+}
+// 14/11: chỉ đọc mốc sửa của lệnh từ app (vài chục byte) — bot dò lúc nghỉ giữa 2 vòng để bấm nút trong app có hiệu lực ngay
+export async function commandStamp() {
+  if (!URL_ || !KEY || missing) return null;
+  const r = await fetch(`${URL_}/rest/v1/qws_live_bot?id=eq.command&select=updated_at`, { headers: H(), signal: AbortSignal.timeout(10000) });
+  if (!r.ok) return null;
+  return (await r.json())[0]?.updated_at || null;
 }
 export async function readCommand() {
   if (!URL_ || !KEY || missing) return null;

@@ -11,7 +11,7 @@ import { fillText, pendingText, partialText, closeText } from "./pushText.js";
 import crypto from "node:crypto";
 import { makeClient, MAIN, sleep } from "./binance.js";
 import { runSession, cfgOf, SYMBOLS, TFS, symOf, finalize, statsOf } from "./paperBot.js";
-import { pushStatus, readCommand, readDemoSession, readRulesLog, readStatus, pushHistory, notify, lastPush_ } from "./report.js";
+import { pushStatus, readCommand, readDemoSession, readRulesLog, readStatus, pushHistory, notify, lastPush_, commandStamp } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
 const DRY = process.argv.includes("--dry"), ONCE = process.argv.includes("--once");
@@ -162,7 +162,7 @@ async function equityUsd() {
   if (DRY) return CAP || 1000;
   const b = await ex.balance(); const u = b.find((x) => x.asset === "USDT") || {};
   const eq = Number(u.balance || 0) + Number(u.crossUnPnl || 0);
-  return CAP > 0 ? Math.min(CAP, eq) : eq;
+  return CAP > 0 ? CAP : eq; // 14/11 (sếp): có "Vốn tính lệnh tối đa" → rủi ro/lệnh tính theo ĐÚNG số vốn đó (kể cả khi ví ít hơn)
 }
 // Lãi/lỗ đã chốt hôm nay (giờ VN) — phục vụ "dừng ngày"
 async function todayPnl() {
@@ -673,13 +673,17 @@ async function cycle(state) {
   await readPos();
   // 23/10: số dư ví Futures (USDT) cho app — số dư, lãi/lỗ đang mở, khả dụng (vốn tính lệnh có thể bị giới hạn bởi "Vốn tính lệnh tối đa")
   if (!DRY) try { const u = (await ex.balance()).find((x) => x.asset === "USDT") || {}; wallet = { balance: Number(u.balance) || 0, uPnl: Number(u.crossUnPnl) || 0, avail: Number(u.availableBalance) || 0, at: now() }; } catch { /* giữ số cũ */ }
-  if (Number(cmd?.closeAllAt) > (S.closeAllHandled || 0)) { await closeAll(Number(cmd.closeAllAt), posMap); await readPos(); }
+  let urgent = false;
+  if (Number(cmd?.closeAllAt) > (S.closeAllHandled || 0)) { await closeAll(Number(cmd.closeAllAt), posMap); await readPos(); urgent = true; }
+  if (!!stop !== !!state.stopped) urgent = true;
   if (stop && !state.stopped) { // dừng khẩn: huỷ lệnh CHỜ vào, giữ SL/TP của vị thế đang mở
     log("🛑 Nhận lệnh DỪNG — huỷ các lệnh chờ, không mở lệnh mới");
     for (const [symbol, a] of Object.entries(S.active)) if (a.stage === "entry") { if (!DRY) await ex.cancel(symbol, a.entryCid).catch(() => {}); delete S.active[symbol]; }
     save();
   }
   state.stopped = !!stop;
+  const sendStatus = (f) => pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null, wallet, posPnl, push: lastPush_ }, f).catch(() => {});
+  if (urgent) await sendStatus("now"); // 14/11: vừa xử lý Dừng / Chạy lại / Đóng hết → báo app NGAY (không đợi quét tín hiệu + giới hạn 30 giây)
   if (!DRY && Number(cmd?.testTradeAt) > (S.testHandled || 0)) await startTest(Number(cmd.testTradeAt), posMap, stop);
   await manage(posMap);
   const closedBar = Math.floor(now() / 300000); // mỗi nến M5 đóng (+8s cho sàn chốt nến) → quét tín hiệu
@@ -696,7 +700,7 @@ async function cycle(state) {
     state.lastScan = { at: now(), eq, pnl, halted, pending: (raw.pending || []).length };
     lastRaw = raw;
   }
-  await pushStatus({ ...base, cfgSummary: cfgSummary(), closeAllHandled: S.closeAllHandled || 0, histCount: HIST.length, waiting: null, rules: cfgSrc, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, lastScan: state.lastScan || null, lossRun: lossRun(), riskNow: riskNow(), learnFrom: demoStart, followDemo: appCfg.followDemo !== false, positions: posMap, events: (S.events || []).slice(0, 40), test: S.test || null, wallet, posPnl, push: lastPush_ }).catch(() => {});
+  await sendStatus();
   await syncHistory();
   try { weeklyReport(); } catch (e) { log("Lỗi báo cáo tuần:", e.message); }
   try { weakAlert(); } catch (e) { log("Lỗi cảnh báo cặp yếu:", e.message); }
@@ -733,7 +737,19 @@ async function main() {
     try { await cycle(state); await maybeUpdate(lastCmd); } catch (e) { log("Lỗi vòng lặp:", e.message); }
     beat = now();
     if (ONCE) { log("Xong 1 vòng (--once)."); break; }
-    await sleep(15000);
+    await waitCmd(15000);
+  }
+}
+// 14/11: nghỉ giữa 2 vòng nhưng cứ 3 giây dò mốc sửa lệnh trong app — có thay đổi (Dừng / Chạy lại / Đóng hết / cài đặt) thì chạy vòng mới ngay
+let cmdStamp = null;
+async function waitCmd(ms) {
+  const end = now() + ms;
+  if (cmdStamp == null) cmdStamp = await commandStamp().catch(() => null);
+  while (now() < end) {
+    await sleep(Math.min(3000, Math.max(0, end - now())));
+    const st = await commandStamp().catch(() => null);
+    if (st && cmdStamp && st !== cmdStamp) { cmdStamp = st; return; }
+    if (st) cmdStamp = st;
   }
 }
 main();
