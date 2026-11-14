@@ -608,7 +608,6 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
     if (!hasNewKey && (!saved || stale) && !envKey) return setMsg({ bad: true, t: `Chưa có khoá API ${live ? "THẬT" : "Testnet"} — dán API Key + Secret Key rồi lưu` });
     if (!st.pubKey) return setMsg({ bad: true, t: st.at ? "Bot trên máy bàn là bản cũ — tải bản mới (Download ZIP, chép đè) rồi thử lại" : "Chưa nhận được tín hiệu từ máy chạy bot — bật bot trên máy bàn trước (khoá được mã hoá bằng khoá công khai của máy bot)" });
     if (live && cmd?.config?.mode !== "live") {
-      if (!liveChecks.length || !liveChecks.every((c) => c.ok)) return setMsg({ bad: true, t: "Chưa đủ điều kiện bật TIỀN THẬT — xem danh sách bên dưới (testnet ≥ 2 tuần, ≥ 20 lệnh, có lãi, lệnh thử đạt)." });
       if (confirm.trim().toUpperCase() !== "TIỀN THẬT" && confirm.trim().toUpperCase() !== "TIEN THAT") return setMsg({ bad: true, t: 'Gõ đúng chữ "TIỀN THẬT" vào ô xác nhận để bật chế độ tiền thật' });
       if (!(await ask(`Bật chạy TIỀN THẬT?\nBot sẽ đặt lệnh THẬT trên Binance: rủi ro ${v.riskPct}%/lệnh, vốn tính lệnh tối đa ${v.capitalCap ? v.capitalCap + "$" : "toàn bộ ví Futures"}, tối đa ${v.maxOpen} lệnh, dừng ngày -${v.dailyStopPct}%.\nKết quả quá khứ/testnet không đảm bảo lợi nhuận.`, { ok: "Bật tiền thật", danger: true }))) return;
     }
@@ -678,11 +677,6 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
           {live && cmd?.config?.mode !== "live" && (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[12px] text-rose-800">
               <b>Bật TIỀN THẬT:</b> bot sẽ đặt lệnh thật bằng tiền trong ví Futures. Khuyên: tháng đầu vốn 100–200$ (ô “Vốn tính lệnh tối đa”).
-              <div className="mt-2 rounded-lg bg-white p-2">
-                <div className="mb-1 text-[11px] font-extrabold uppercase tracking-wide text-slate-500">Điều kiện trước khi chạy tiền thật ({liveChecks.filter((c) => c.ok).length}/{liveChecks.length})</div>
-                {liveChecks.map((c) => <div key={c.t} className={`flex items-baseline justify-between gap-2 py-0.5 ${c.ok ? "text-emerald-700" : "text-slate-600"}`}><span>{c.ok ? "✓" : "○"} {c.t}</span><span className="shrink-0 font-bold tabular-nums">{c.v}</span></div>)}
-                {!liveChecks.every((c) => c.ok) && <div className="mt-1 text-[11px] font-bold text-rose-700">Chưa đạt đủ → chưa bật được tiền thật. Cứ để bot chạy testnet thêm.</div>}
-              </div>
               <input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder='Gõ "TIỀN THẬT" để xác nhận' className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-2.5 py-2 text-sm" />
             </div>
           )}
