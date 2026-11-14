@@ -385,7 +385,9 @@ export function DataProvider({ children }) {
       baseRef.current = blob || null;
       baseAtRef.current = blobAt;
       const pend = readPending(user.id);
-      if (blob && Object.keys(blob).length > 0 && pend) {
+      let pendSame = false; // bản "chưa lưu" thực ra y hệt cloud → bỏ cờ, không gộp/đẩy lại (14/11)
+      if (blob && pend) { try { pendSame = JSON.stringify(stripSecrets(stateRef.current)) === JSON.stringify(stripSecrets(blob)); } catch { /* bỏ qua */ } if (pendSame) clearPending(); }
+      if (blob && Object.keys(blob).length > 0 && pend && !pendSame) {
         // Máy này còn bản sửa CHƯA lên cloud (lần trước mạng yếu / tắt app) → GỘP 3 chiều, không để cloud đè mất
         const merged = migrate(merge3(pend.base ?? readBase(user.id) ?? undefined, stateRef.current, blob));
         skipSave.current = true;
@@ -430,11 +432,11 @@ export function DataProvider({ children }) {
     if (!user) return;
     if (skipSave.current) { skipSave.current = false; return; }
     // Đánh dấu "có bản sửa chưa lên cloud" (sống qua tắt app). Giữ base cũ nếu đã có cờ.
+    // 14/11: nội dung y hệt bản cloud (state chỉ đổi object, không đổi dữ liệu) → không đánh dấu, không lưu. Trước đây MỖI LẦN MỞ APP
+    // đều đẩy lại cả khối ~226 KB (chỉ đổi updated_at) → điện thoại phải tải lên + máy khác thấy "có bản mới" và tải lại.
+    try { if (!dirty.current && baseRef.current && JSON.stringify(stripSecrets(state)) === JSON.stringify(stripSecrets(baseRef.current))) { if (synced) clearPending(); return; } } catch { /* so không được → lưu như cũ */ }
     if (!readPending(user.id)) writePending({ uid: user.id, base: baseRef.current, at: Date.now() });
     if (!synced) return; // chưa tải xong cloud → lúc tải xong sẽ GỘP bản sửa này
-    // 14/11: nội dung y hệt bản cloud (state chỉ đổi object, không đổi dữ liệu) → không lưu. Trước đây MỖI LẦN MỞ APP
-    // đều đẩy lại cả khối ~226 KB (chỉ đổi updated_at) → điện thoại phải tải lên + máy khác thấy "có bản mới" và tải lại.
-    try { if (!dirty.current && baseRef.current && JSON.stringify(outgoing(state)) === JSON.stringify(baseRef.current)) { clearPending(); return; } } catch { /* so không được → lưu như cũ */ }
     dirty.current = true;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(pushCloud, 700);
