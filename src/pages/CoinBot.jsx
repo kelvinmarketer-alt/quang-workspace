@@ -571,6 +571,22 @@ export default function CoinBot({ active: visible = true }) {
   const [tab, setTab] = useState("chart");
   const [showRules, setShowRules] = useState(false), [editCoins, setEditCoins] = useState(null), [editTfs, setEditTfs] = useState([]);
   const tfName = (l) => l.map((x) => TFS[x]?.label || x).join(", ");
+  // 14/11: sửa rủi ro & giới hạn ngay trên phiên đang chạy (giữ ngày bắt đầu) — Demo tính lại, bot thật "theo Demo" áp dụng ~5 phút
+  const RISK_F = [["riskPct", "Rủi ro / lệnh", "%", 0.1, 5, 0.25], ["maxOpen", "Tối đa lệnh mở", "", 1, 10, 1], ["dailyStopPct", "Dừng ngày khi lỗ (0 = không dừng)", "%", 0, 20, 0.5], ["maxLev", "Đòn bẩy tối đa", "x", 1, 125, 1]];
+  const [editRisk, setEditRisk] = useState(null);
+  const saveRisk = async () => {
+    const nv = Object.fromEntries(RISK_F.map(([k]) => [k, Number(editRisk[k])]));
+    const bad = RISK_F.find(([k, , , lo, hi]) => !(nv[k] >= lo && nv[k] <= hi));
+    if (bad) return setErr(`${bad[1]} phải trong khoảng ${bad[3]}–${bad[4]}`);
+    nv.maxOpen = Math.round(nv.maxOpen); nv.maxLev = Math.round(nv.maxLev);
+    const ch = RISK_F.filter(([k]) => Number(cfg[k]) !== nv[k]).map(([k, l, u]) => `${l.replace(/ \(.*\)/, "")}: ${cfg[k]}${u} → ${nv[k]}${u}`);
+    if (!ch.length) return setEditRisk(null);
+    if (!(await confirmLiveFollow(session.cfg, { ...(session.cfg || {}), ...nv }))) return;
+    const ans = await ask(`Lưu rủi ro & giới hạn?\n${ch.map((x) => "• " + x).join("\n")}\nDemo tính lại từ ${dt(session.startAt)} (giữ nguyên ngày bắt đầu); bot thật đang "theo Demo" áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do (không bắt buộc)…" });
+    if (!ans) return;
+    saveWithLog({ ...session, cfg: { ...(session.cfg || {}), ...nv }, createdAt: Date.now() }, `Rủi ro & giới hạn: ${ch.join(" · ")}`, ans.text);
+    setEditRisk(null);
+  };
   const saveCoins = async () => {
     if (!editCoins?.length || !editTfs.length) return;
     const added = editCoins.filter((x) => !cfg.coins.includes(x)), removed = cfg.coins.filter((x) => !editCoins.includes(x));
@@ -768,7 +784,21 @@ export default function CoinBot({ active: visible = true }) {
           </div>
         </div>
         <div className="mt-1 text-[11.5px] text-slate-500 [overflow-wrap:anywhere]">
-          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => { setEditTfs([...cfg.tfs]); setEditCoins((v) => (v ? null : [...cfg.coins])); }} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa ▴" : "Thêm/sửa cặp & khung ▾"}</button></>}
+          Từ <b>{dt(session.startAt)}</b>{session.stoppedAt ? <> đến <b>{dt(session.stoppedAt)}</b></> : <> · đã chạy {ago(session.startAt)}</>} · {cfg.coins.join(", ")} · {cfg.tfs.map((x) => TFS[x].label).join(" ")}{cfg.offStreams?.length ? <span className="text-amber-600"> (tắt {cfg.offStreams.map((k) => { const [c, t] = k.split("|"); return `${c} ${TFS[t]?.label || t}`; }).join(", ")})</span> : null} · rủi ro {cfg.riskPct}%/lệnh{Object.keys(cfg.riskBySetup || {}).length ? ` (${Object.entries(cfg.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, cfg.riskPct), 2, 0)}%`).join(", ")})` : ""} · tối đa {cfg.maxOpen} lệnh <button onClick={() => setShowRules((v) => !v)} className="font-bold text-indigo-600">{showRules ? "Ẩn luật ▴" : "Xem luật ▾"}</button>{isOwner && !session.stoppedAt && <> · <button onClick={() => { setEditTfs([...cfg.tfs]); setEditCoins((v) => (v ? null : [...cfg.coins])); }} className="font-bold text-indigo-600">{editCoins ? "Đóng sửa ▴" : "Thêm/sửa cặp & khung ▾"}</button> · <button onClick={() => setEditRisk((v) => (v ? null : Object.fromEntries(RISK_F.map(([k]) => [k, cfg[k]]))))} className="font-bold text-indigo-600">{editRisk ? "Đóng ▴" : "Sửa rủi ro & đòn bẩy ▾"}</button></>}
+          {editRisk && (
+            <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+              <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Rủi ro & giới hạn (Demo + bot thật đang theo Demo)</div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{RISK_F.map(([k, l, u, lo, hi, st]) => (
+                <label key={k} className="block min-w-0"><span className="mb-0.5 block text-[11.5px] font-semibold text-slate-500">{l}</span>
+                  <span className="flex items-center gap-1"><input id={`risk-${k}`} type="number" inputMode="decimal" min={lo} max={hi} step={st} value={editRisk[k] ?? ""} onChange={(e) => setEditRisk((o) => ({ ...o, [k]: e.target.value }))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" /><span className="text-[11px] text-slate-400">{u}</span></span></label>
+              ))}</div>
+              <div className="mt-1 text-[11px] leading-snug text-slate-500">Đòn bẩy là trần khối lượng; bot thật tự hạ đòn bẩy trên sàn từng lệnh để giá thanh lý luôn xa hơn SL.</div>
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => setEditRisk(null)} className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-[12px] font-bold text-slate-600">Huỷ</button>
+                <button onClick={saveRisk} className="flex-1 rounded-lg bg-indigo-600 py-2 text-[12px] font-bold text-white">Lưu & chạy lại</button>
+              </div>
+            </div>
+          )}
           {editCoins && (
             <div className="mt-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
               <div className="mb-1.5 text-[12.5px] font-extrabold text-slate-800">Cặp bot giao dịch (Demo + bot thật)</div>
