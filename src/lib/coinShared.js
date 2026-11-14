@@ -120,6 +120,17 @@ export async function demoCacheGet(session) {
     return v && v.key === key ? v.raw : null; // chỉ dùng khi đúng phiên (cùng luật) — đổi luật thì bỏ
   } catch { return null; }
 }
+// 14/11: kết quả lần trước + lúc tính (Tổng quan hiện ngay, không chạy lại cả phiên lúc mở app)
+export async function demoFromCache(session) {
+  try {
+    const key = demoKey(session); if (!key) return null;
+    const db = await cdb();
+    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get("last"); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
+    return v && v.key === key ? { fin: finalize(v.raw, null), at: v.at || 0 } : null;
+  } catch { return null; }
+}
+// Điện thoại / máy yếu: không tự chạy lại phiên Demo ngầm (18 mã × nến H4 + M15 từ ngày bắt đầu phiên ≈ 55–160 lượt gọi Binance + tính toán nặng)
+export const isPhone = () => { try { return window.matchMedia("(max-width: 767px)").matches || (navigator.hardwareConcurrency || 8) <= 4; } catch { return false; } };
 export async function demoCacheSet(session, raw) {
   try {
     const key = demoKey(session); if (!key || !raw) return;

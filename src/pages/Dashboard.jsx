@@ -325,7 +325,22 @@ function Feed({ rows, recent, isOwner, miss = [] }) {
 // Ô Coin: kết quả Demo (tính ngầm, nhớ 5 phút) — chỉ khi có quyền xem Demo và đang có phiên
 function CoinTile({ session, className = "" }) {
   const [fin, setFin] = useState(null);
-  useEffect(() => { let on = true; import("../lib/coinShared.js").then((m) => m.demoResult(session)).then((f) => on && setFin(f)).catch(() => {}); return () => { on = false; }; }, [session]);
+  // 14/11: mở app chậm trên điện thoại vì ô này chạy lại CẢ phiên Demo ngay lúc mở (phiên từ 10/08, 18 mã, nến M15).
+  // Giờ: hiện kết quả lần trước ngay; chỉ tính lại khi chưa có bản lưu, hoặc bản lưu > 30 phút trên máy tính (lúc rảnh, sau 8 giây).
+  useEffect(() => {
+    let on = true, t = null;
+    import("../lib/coinShared.js").then(async (m) => {
+      const c = await m.demoFromCache(session);
+      if (!on) return;
+      if (c) setFin(c.fin);
+      if (c && (m.isPhone() || Date.now() - c.at < 30 * 60000)) return;
+      t = setTimeout(() => {
+        const go = () => m.demoResult(session).then((f) => on && setFin(f)).catch(() => {});
+        if (window.requestIdleCallback) window.requestIdleCallback(go, { timeout: 5000 }); else go();
+      }, c ? 8000 : 2500);
+    }).catch(() => {});
+    return () => { on = false; clearTimeout(t); };
+  }, [session]);
   const P = fin?.portfolio, cap = session?.cfg?.capital || 1000;
   const curve = P?.curve?.map((x) => x.eq) || [];
   const step = Math.max(1, Math.floor(curve.length / 40));

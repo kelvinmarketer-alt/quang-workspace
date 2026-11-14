@@ -341,6 +341,10 @@ export function DataProvider({ children }) {
     if (changed) savePrivate();
     // Gỡ bí mật khỏi khối chung (+ cờ aiEnabled để tài khoản phụ biết AI dùng được) → effect lưu sẽ đẩy bản sạch lên
     setState((s) => {
+      // 14/11: không có gì để gỡ + cờ AI không đổi → giữ nguyên state. Trước đây luôn tạo object mới → MỖI LẦN MỞ APP
+      // lại đẩy cả khối 226 KB lên cloud (qws_save), điện thoại mạng yếu phải tải lên + máy khác phải tải lại.
+      const ai = !!(P.openaiKey || "").trim();
+      if (!s.vault?.length && s.settings?.openaiKey === undefined && !!s.settings?.aiEnabled === ai) return s;
       const clean = stripSecrets(s);
       return { ...clean, settings: { ...clean.settings, aiEnabled: !!(P.openaiKey || "").trim() } };
     });

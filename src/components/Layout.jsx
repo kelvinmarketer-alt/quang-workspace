@@ -481,7 +481,7 @@ function useDemoWarm() {
     const t = setTimeout(() => {
       if (done.current || document.hidden) return;
       done.current = true;
-      const go = () => import("../lib/coinShared.js").then((m) => m.demoResult(settings.paperBot)).catch(() => {});
+      const go = () => import("../lib/coinShared.js").then((m) => (m.isPhone() ? null : m.demoResult(settings.paperBot))).catch(() => {}); // 14/11: điện thoại không tính ngầm
       if (window.requestIdleCallback) window.requestIdleCallback(go, { timeout: 5000 }); else go();
     }, 6000);
     return () => clearTimeout(t);
