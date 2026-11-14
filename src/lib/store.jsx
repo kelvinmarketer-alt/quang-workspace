@@ -15,6 +15,18 @@ function stripSecrets(s) {
   return { ...rest, settings };
 }
 
+// 14/11: so sánh sâu không phụ thuộc thứ tự khoá (Postgres jsonb tự xếp lại khoá → so chuỗi JSON luôn lệch)
+function sameData(a, b) {
+  if (a === b) return true;
+  if (typeof a !== typeof b || a === null || b === null || typeof a !== "object") return a === b || (Number.isNaN(a) && Number.isNaN(b));
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (!sameData(a[i], b[i])) return false; return true; }
+  const ka = Object.keys(a).filter((k) => a[k] !== undefined), kb = Object.keys(b).filter((k) => b[k] !== undefined);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!sameData(a[k], b[k])) return false;
+  return true;
+}
+
 const KEY = "quang-workspace-v4";
 // Bản sửa CHƯA lên cloud (mạng yếu / tắt app giữa chừng): lưu cờ + bản cloud gốc (base) để lần mở sau GỘP thay vì bị cloud đè mất.
 const PEND = "quang-workspace-pending";
@@ -386,7 +398,7 @@ export function DataProvider({ children }) {
       baseAtRef.current = blobAt;
       const pend = readPending(user.id);
       let pendSame = false; // bản "chưa lưu" thực ra y hệt cloud → bỏ cờ, không gộp/đẩy lại (14/11)
-      if (blob && pend) { try { pendSame = JSON.stringify(stripSecrets(stateRef.current)) === JSON.stringify(stripSecrets(blob)); } catch { /* bỏ qua */ } if (pendSame) clearPending(); }
+      if (blob && pend) { try { pendSame = sameData(stripSecrets(stateRef.current), stripSecrets(blob)); } catch { /* bỏ qua */ } if (pendSame) clearPending(); }
       if (blob && Object.keys(blob).length > 0 && pend && !pendSame) {
         // Máy này còn bản sửa CHƯA lên cloud (lần trước mạng yếu / tắt app) → GỘP 3 chiều, không để cloud đè mất
         const merged = migrate(merge3(pend.base ?? readBase(user.id) ?? undefined, stateRef.current, blob));
@@ -434,7 +446,7 @@ export function DataProvider({ children }) {
     // Đánh dấu "có bản sửa chưa lên cloud" (sống qua tắt app). Giữ base cũ nếu đã có cờ.
     // 14/11: nội dung y hệt bản cloud (state chỉ đổi object, không đổi dữ liệu) → không đánh dấu, không lưu. Trước đây MỖI LẦN MỞ APP
     // đều đẩy lại cả khối ~226 KB (chỉ đổi updated_at) → điện thoại phải tải lên + máy khác thấy "có bản mới" và tải lại.
-    try { if (!dirty.current && baseRef.current && JSON.stringify(stripSecrets(state)) === JSON.stringify(stripSecrets(baseRef.current))) { if (synced) clearPending(); return; } } catch { /* so không được → lưu như cũ */ }
+    try { if (!dirty.current && baseRef.current && sameData(stripSecrets(state), stripSecrets(baseRef.current))) { if (synced) clearPending(); return; } } catch { /* so không được → lưu như cũ */ }
     if (!readPending(user.id)) writePending({ uid: user.id, base: baseRef.current, at: Date.now() });
     if (!synced) return; // chưa tải xong cloud → lúc tải xong sẽ GỘP bản sửa này
     dirty.current = true;
