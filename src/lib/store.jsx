@@ -432,6 +432,9 @@ export function DataProvider({ children }) {
     // Đánh dấu "có bản sửa chưa lên cloud" (sống qua tắt app). Giữ base cũ nếu đã có cờ.
     if (!readPending(user.id)) writePending({ uid: user.id, base: baseRef.current, at: Date.now() });
     if (!synced) return; // chưa tải xong cloud → lúc tải xong sẽ GỘP bản sửa này
+    // 14/11: nội dung y hệt bản cloud (state chỉ đổi object, không đổi dữ liệu) → không lưu. Trước đây MỖI LẦN MỞ APP
+    // đều đẩy lại cả khối ~226 KB (chỉ đổi updated_at) → điện thoại phải tải lên + máy khác thấy "có bản mới" và tải lại.
+    try { if (!dirty.current && baseRef.current && JSON.stringify(outgoing(state)) === JSON.stringify(baseRef.current)) { clearPending(); return; } } catch { /* so không được → lưu như cũ */ }
     dirty.current = true;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(pushCloud, 700);
