@@ -370,11 +370,11 @@ function TestTradeCard({ st, cmd, online, stopped, onSent }) {
 
 function LiveResults({ hist, st, session }) {
   const all = useMemo(() => (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.coin && t.setup !== "TEST").map((t) => normLive(t, st.mode)), [hist, st.mode]); // bỏ lệnh thử khỏi thống kê
-  const modes = useMemo(() => [...new Set(all.map((t) => t.mode))], [all]);
+  const modes = useMemo(() => [...new Set(["testnet", "live", ...all.map((t) => t.mode)])], [all]); // 14/11: luôn có 2 tab Testnet / Tiền thật, mỗi tab chỉ thống kê lệnh của chế độ đó
   const vnd = useUsdVnd();
 
   const [mode, setMode] = useState(null), [filter, setFilter] = useState("all"), [pair, setPair] = useState("all"), [showN, setShowN] = useState(30), [mon, setMon] = useState("all");
-  const m = mode && modes.includes(mode) ? mode : modes.includes(st.mode) ? st.mode : modes[0];
+  const m = mode && modes.includes(mode) ? mode : st.mode || "testnet";
   const list = useMemo(() => all.filter((t) => t.mode === m), [all, m]);
   // 13/11: lịch lãi/lỗ theo ngày đóng lệnh — theo chế độ đang chọn (không cộng tiền Testnet với tiền thật), ô tách theo setup
   const calItems = useMemo(() => list.filter((t) => t.exitAt != null && t.pnl != null).map((t) => ({ t: t.exitAt, v: t.pnl, src: t.setup, label: `${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TF[t.tf] || t.tf} · ${setupName(t.setup)}` })), [list]);
@@ -398,20 +398,21 @@ function LiveResults({ hist, st, session }) {
   ]);
   const chip = (on) => `rounded-md px-2.5 py-1.5 text-[11.5px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
 
-  if (!all.length) return (
+  const modeTabs = (
+    <span className="flex gap-1 rounded-lg bg-slate-100 p-0.5">{modes.map((x) => <button key={x} onClick={() => { setMode(x); setShowN(30); setPair("all"); setMon("all"); }} className={`rounded-md px-2 py-1 text-[11px] font-bold ${x === m ? (x === "live" ? "bg-rose-600 text-white" : "bg-white text-slate-900 shadow-sm") : "text-slate-500"}`}>{MODE_L[x] || x}{x === st.mode ? " ●" : ""}</button>)}</span>
+  );
+  if (!list.length) return (
     <Card className="!p-3">
-      <Title icon={BarChart3}>Kết quả lệnh thật</Title>
+      <Title icon={BarChart3} right={modeTabs}>Kết quả lệnh thật</Title>
       <div className="py-5 text-center text-[12.5px] text-slate-400">
-        {hist ? "Chưa có lệnh thật nào đóng — thống kê, đường vốn và lịch sử lệnh sẽ hiện khi bot đóng lệnh đầu tiên." : "Bot chưa gửi lịch sử lệnh thật. Nếu bot đã có lệnh đóng mà vẫn trống → bot là bản cũ, cần cập nhật (Cài đặt bot → Tự cập nhật)."}
+        {hist ? `Chưa có lệnh ${m === "live" ? "TIỀN THẬT" : "Testnet"} nào — thống kê, đường vốn và lịch sử lệnh ${MODE_L[m] || m} sẽ hiện khi bot đóng lệnh đầu tiên ở chế độ này.${all.length ? ` (${MODE_L[m === "live" ? "testnet" : "live"]} có ${all.length} lệnh — bấm tab bên cạnh để xem.)` : ""}` : "Bot chưa gửi lịch sử lệnh thật. Nếu bot đã có lệnh đóng mà vẫn trống → bot là bản cũ, cần cập nhật (Cài đặt bot → Tự cập nhật)."}
       </div>
     </Card>
   );
   const pf = S.pf == null ? "—" : S.pf === Infinity ? "∞" : fmtNum(S.pf, 2);
   return (<>
     <Card className="!p-3">
-      <Title icon={BarChart3} right={modes.length > 1 ? (
-        <span className="flex gap-1 rounded-lg bg-slate-100 p-0.5">{modes.map((x) => <button key={x} onClick={() => { setMode(x); setShowN(30); }} className={`rounded-md px-2 py-1 text-[11px] font-bold ${x === m ? (x === "live" ? "bg-rose-600 text-white" : "bg-white text-slate-900 shadow-sm") : "text-slate-500"}`}>{MODE_L[x] || x}</button>)}</span>
-      ) : <Badge tone={m === "live" ? "rose" : "sky"}>{MODE_L[m] || m}</Badge>}>Kết quả lệnh thật</Title>
+      <Title icon={BarChart3} right={modeTabs}>Kết quả lệnh thật</Title>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Lãi / lỗ tổng" v={fmtUsdSigned(S.total)} sub={`TB ${fmtUsdSigned(S.expUsd)}/lệnh`} t={tone(S.total)} />
         <Num label="Tỉ lệ thắng" v={fmtPct(S.winRate)} sub={`${S.wins} thắng · ${S.losses} thua · ${S.bes} hoà`} />
