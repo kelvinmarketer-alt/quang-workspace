@@ -7,6 +7,7 @@ import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, Flo
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
+import BotView, { useSw3Now, sw3Brief } from "../components/BotView.jsx";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { mergeCmd } from "../lib/coinShared.js";
@@ -16,7 +17,7 @@ import { aiMarketAnalysis } from "../lib/ai.js";
 import { KNOWLEDGE, KNOWLEDGE_SOURCES } from "../lib/tradeKnowledge.js";
 import { fmtNum, fmtPct } from "../lib/format.js";
 import { runSessionAsync } from "../lib/botRunner.js";
-import { finalize, cfgOf } from "../lib/paperBot.js";
+import { finalize, cfgOf, isSW3 } from "../lib/paperBot.js";
 import { gradeRecord, cachedGrade, gradeSummary } from "../lib/aiGrade.js";
 import { isSubscribed } from "../lib/push.js";
 
@@ -466,6 +467,21 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
     const done = botList.filter((t) => !t.open && t.r != null), from = (data.ltf[0]?.time || 0) * 1000;
     return { n: botList.length, win: done.filter((t) => t.r > 0.05).length, loss: done.filter((t) => t.r < -0.05).length, open: botList.filter((t) => t.open).length, sumR: done.reduce((a, t) => a + t.r, 0), inView: botList.filter((t) => t.entryAt >= from).length };
   }, [botList, data.ltf]);
+  // 14/11: thẻ "Bot demo đánh giá" — trạng thái mã theo luật bot (SW3 phương án D) + thành tích demo; gửi kèm AI làm 1 yếu tố quyết định
+  const bv = useSw3Now(sym, session && isSW3(session) ? session : null, active && !fx);
+  const [allBot, setAllBot] = useState(null);
+  useEffect(() => {
+    if (!active || !session) return undefined;
+    let off = false;
+    demoTrades(session).then((t) => { if (!off) setAllBot({ key: sessKey, t }); }, () => {});
+    return () => { off = true; };
+  }, [active, sessKey, sym]); // eslint-disable-line react-hooks/exhaustive-deps
+  const botRec = useMemo(() => {
+    const l = allBot?.key === sessKey ? allBot.t.filter((t) => t.coin === sym) : null;
+    if (!l) return null;
+    const done = l.filter((t) => !t.open && t.r != null), op = l.filter((t) => t.open);
+    return { n: l.length, done: done.length, win: done.filter((t) => t.r > 0.05).length, sumR: done.reduce((a, t) => a + t.r, 0), open: op.length, uR: op.length ? op.reduce((a, t) => a + (t.uR || 0), 0) : null };
+  }, [allBot, sessKey, sym]);
   const sessCfg = session ? cfgOf(session) : null, inSess = !!sessCfg && sessCfg.coins.includes(sym) && sessCfg.tfs.includes(tf);
 
   // Nhãn trên biểu đồ: từng cái 3 mức có nhãn → chỉ đường → ẩn (nhớ trên máy này, dùng chung cho mọi ô)
@@ -558,7 +574,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
     if (!s || stale) return; // chưa tải xong coin mới → không gửi dữ liệu coin cũ cho AI
     setAiBusy(true); setAiErr("");
     try {
-      const r = await aiMarketAnalysis({ symbol: sym, tf: TF[tf].label, htf: TF[tf].htf, summary: s, htfSummary: htfContext(data.htf), candles: compactCandles(data.ltf, 40), apiKey: settings.openaiKey, model: "gpt-4o", venue });
+      const r = await aiMarketAnalysis({ symbol: sym, tf: TF[tf].label, htf: TF[tf].htf, summary: s, htfSummary: htfContext(data.htf), candles: compactCandles(data.ltf, 40), apiKey: settings.openaiKey, model: "gpt-4o", venue, bot: fx || bv.coin !== sym ? null : sw3Brief(bv.v, botRec, price) });
       const next = { ...cache, [aiKey]: { ...r, priceAt: price, market: usedMkt } };
       const keys = Object.keys(next).sort((a, b) => (next[b].at || 0) - (next[a].at || 0)).slice(0, 12); // giữ 12 bản gần nhất trên máy này
       const trimmed = Object.fromEntries(keys.map((k) => [k, next[k]]));
@@ -618,6 +634,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
       {fx && <Mt5FeedBar feed={feed} />}
 
       <CoinSignal sym={sym} tf={tf} market={usedMkt} summary={s} stale={stale} active={active} />
+      {!fx && <BotView v={bv.v} busy={bv.busy} rec={botRec} price={price} />}
 
       <div className="grid gap-3 xl:grid-cols-3">
         {/* Biểu đồ */}
@@ -745,6 +762,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                   {ai.key_levels.support.length > 0 && <div className="flex flex-wrap items-center gap-1"><span className="w-16 font-bold text-emerald-600">Hỗ trợ</span>{ai.key_levels.support.map((v) => <span key={v} className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono font-bold text-emerald-700">{px(v)}</span>)}</div>}
                 </div>
               )}
+              {ai.bot_view && <div className="flex items-start gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[11.5px] leading-snug text-indigo-800"><Bot size={13} className="mt-0.5 shrink-0" /><span><b>Đối chiếu bot:</b> {ai.bot_view}</span></div>}
               {ai.risk_note && <div className="flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11.5px] leading-snug text-amber-800"><ShieldAlert size={13} className="mt-0.5 shrink-0" /> {ai.risk_note}</div>}
               <div className="text-[10.5px] text-slate-400">Phân tích {ago(ai.at)} · giá lúc đó {px(ai.priceAt)}{ai.market ? ` · ${MARKETS[ai.market]?.label}` : ""}</div>
             </div>

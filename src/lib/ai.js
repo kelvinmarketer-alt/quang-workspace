@@ -418,7 +418,7 @@ uu_tien tối đa 6 việc.`;
 
 // Phân tích thị trường coin (module Coin → tab Thị trường) theo BỘ KIẾN THỨC riêng của Quang (lib/tradeKnowledge.js:
 // EA SMC/Price Action + Key Volume + VSA/Wyckoff). Số liệu tính sẵn ở lib/ta.js; app tự kiểm tra lại SL/TP + khoảng cách SL ≤ 4 ATR.
-export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model, venue }) {
+export async function aiMarketAnalysis({ symbol, tf, htf, summary, htfSummary, candles, apiKey, model, venue, bot }) {
   const fx = venue === "forex"; // 09/11: thị trường Forex/CFD từ MT5 (IC Markets) — khác crypto ở khối lượng, phiên giao dịch, spread
   const key = (apiKey || "").trim();
   const { PLAYBOOK_TEXT, SETUP_TYPES } = await import("./tradeKnowledge.js");
@@ -440,7 +440,12 @@ ${fx ? `LƯU Ý RIÊNG FOREX/CFD (bắt buộc tuân theo):
 - Cân nhắc phiên giao dịch (Á / Âu / Mỹ, giờ mở-đóng chợ), tin tức vĩ mô lớn và khoảng trống giá đầu tuần; spread nới rộng quanh giờ đóng cửa nên SL không đặt quá sát.
 - Số liệu giá theo đúng tick của sàn (vd XAUUSD 2 số lẻ, EURUSD 5 số lẻ): entry/SL/TP giữ đúng số chữ số thập phân.
 ` : ""}
-YÊU CẦU:
+${bot ? `PHƯƠNG PHÁP BOT DEMO (14/11 — YẾU TỐ QUYẾT ĐỊNH BẮT BUỘC XÉT): trường "bot" là trạng thái mã theo luật bot demo người dùng đang chạy (SW3 phương án D, H4, đã kiểm thử 2018–2026): MUA/BÁN khi nến H4 đóng phá đỉnh/đáy 30 nến ≥ 0,3 ATR, volume ≥ 1,3× TB20, thuận EMA200 H4 của mã VÀ BTC cùng phía EMA50 D1, là cú phá vỡ đầu tiên của nhịp; cắt lỗ 2 ATR, chốt 1/3 ở +0,75R rồi hoà vốn, phần còn lại dời theo đáy/đỉnh 20 nến H4.
+- Setup ngược "allowed_direction" của bot → hạ confidence ít nhất 15 điểm, gắn nhãn "phụ" và nói rõ vì sao vẫn đề xuất. Bot "đứng ngoài" → chỉ đề xuất khi setup của bộ kiến thức rất rõ, nêu rủi ro.
+- Bot có tín hiệu mới hoặc đang giữ lệnh cùng hướng setup → có thể nâng confidence; SL của bạn không nên nằm trong vùng bot sẽ bị quét (so với trailing_stop).
+- Không bịa thêm trạng thái bot ngoài dữ liệu. Ghi "bot_view": 1–2 câu bạn đồng ý / khác bot ở điểm nào.
+
+` : ""}YÊU CẦU:
 - Đánh giá đủ: bối cảnh khung lớn → xu hướng/bộ lọc → vùng (Key Volume/OB/SDz/HVN) → thanh khoản đã bị lấy chưa → tín hiệu VSA/nến xác nhận.
 - Chỉ đề xuất setup khi khớp 1 setup trong bộ kiến thức (setup_type thuộc: ${SETUP_TYPES.join(", ")}). Ghi rõ điều kiện KÍCH HOẠT còn phải chờ (trigger) — vì người dùng ưu tiên confirm entry, KHÔNG khuyến khích Limit chặn tàu.
 - entry = giá tham chiếu dự kiến (thường là mép vùng hoặc giá đóng nến xác nhận); entry_zone = vùng chờ [thấp, cao]. SL theo cấu trúc + đệm ~0.2 ATR, KHÔNG nằm trong vùng OB/FVG; |entry−SL| ≤ 4×ATR. TP tại thanh khoản/OB/HVN đối diện, R:R TP1 ≥ ~1:2 nếu có thể.
@@ -457,9 +462,9 @@ Viết tiếng Việt ngắn gọn, đúng thuật ngữ. CHỈ trả JSON:
  "momentum": "...", "smc": "...", "liquidity": "thanh khoản ở đâu, đã bị quét chưa", "price_action": "...",
  "key_levels": { "support": [number], "resistance": [number] },
  "setups": [ { "setup_type": "...", "direction": "long" | "short", "label": "chính" | "phụ", "entry_zone": [number, number], "entry": number, "trigger": "điều kiện xác nhận cần thấy trước khi vào", "stop_loss": number, "take_profit": [number, number], "checklist": [ { "item": "...", "ok": true } ], "reason": "...", "invalidation": "...", "management": "dời BE/trailing/thoát sớm theo bộ kiến thức" } ],
- "wait_for": "...", "risk_note": "..."
+ "wait_for": "...", "risk_note": "..."${bot ? `, "bot_view": "..."` : ""}
 }`;
-  const payload = { symbol: fx ? symbol.toUpperCase() : symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles };
+  const payload = { symbol: fx ? symbol.toUpperCase() : symbol.toUpperCase() + "USDT", timeframe: tf, higherTimeframe: htf, ltf: summary, htf: htfSummary, candles, ...(bot ? { bot } : {}) };
   const res = await chat({ model: model || "gpt-4o", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(payload) }] }, key, "market");
   if (!res.ok) {
     let msg = res.status + "";
