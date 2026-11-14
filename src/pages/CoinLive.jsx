@@ -598,7 +598,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   const save = async () => {
     setMsg(null);
     const src = follow ? demo : f;
-    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), notify: f.notify !== false, notifyPending: f.notifyPending !== false, notifyWeak: f.notifyWeak !== false };
+    const v = { mode: f.mode, followDemo: f.followDemo !== false, riskPct: Number(src.riskPct), capitalCap: Number(f.capitalCap) || 0, maxOpen: Math.round(Number(src.maxOpen)), dailyStopPct: Number(src.dailyStopPct), maxLev: Math.round(Number(src.maxLev)), followOpen: f.followOpen === true, notify: f.notify !== false, notifyPending: f.notifyPending !== false, notifyWeak: f.notifyWeak !== false };
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
     if (!(v.maxOpen >= 1 && v.maxOpen <= 10)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–10" }); // 09/11: phương án D chạy tối đa 10 lệnh (trước giới hạn 1–5 khiến không lưu được cấu hình theo Demo)
     if (!(v.dailyStopPct >= 0 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 0–20% (0 = không dừng ngày)" });
@@ -622,6 +622,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
       if (error) throw error;
       // Nhật ký: chỉ ghi phần THẬT SỰ đổi so với cài đặt cũ
       const old = cmd?.config || {}, L = [];
+      if ((old.followOpen !== false) !== v.followOpen) L.push(`vào theo lệnh Demo đang mở: ${v.followOpen ? "bật" : "tắt (chỉ vào điểm đẹp)"}`);
       if (old.mode !== v.mode) L.push(`chế độ ${old.mode === "live" ? "TIỀN THẬT" : old.mode ? "Testnet" : "—"} → ${v.mode === "live" ? "TIỀN THẬT" : "Testnet"}`);
       for (const [key, lbl, suf] of [["riskPct", "rủi ro", "%"], ["maxOpen", "tối đa lệnh", ""], ["dailyStopPct", "dừng ngày", "%"], ["maxLev", "đòn bẩy", "x"], ["capitalCap", "vốn tính lệnh", "$"]]) if (old[key] != null && Number(old[key]) !== Number(v[key])) L.push(`${lbl} ${old[key]}${suf} → ${v[key]}${suf}`);
       if (old.followDemo !== undefined && old.followDemo !== v.followDemo) L.push(v.followDemo ? "bật theo Demo" : "tắt theo Demo");
@@ -666,6 +667,10 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
             {num("maxOpen", "Tối đa lệnh mở", 1)}
             {num("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}
             {num("maxLev", "Đòn bẩy tối đa", 1, "x", "trần khối lượng; sàn tự hạ để thanh lý xa hơn SL")}
+          </div>
+          <div className="rounded-xl border border-slate-200 p-3">
+            <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><input id="bot-follow-open" type="checkbox" checked={f.followOpen === true} onChange={(e) => setF({ ...f, followOpen: e.target.checked })} /> Vào theo lệnh Demo đang mở</label>
+            <div className="mt-0.5 text-[11.5px] text-slate-500">Bỏ tick (khuyên dùng): bot chỉ vào khi có tín hiệu MỚI ở điểm vào đẹp như Demo. Tick: lúc bật bot / bot vừa chạy lại, lệnh Demo nào đang mở mà bot chưa có sẽ được vào theo bằng giá thị trường — rủi ro $ vẫn đúng mức nhưng vào giữa chừng nên tỉ lệ lời/lỗ kém hơn Demo.</div>
           </div>
           <div className="rounded-xl border border-slate-200 p-3">
             <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><input type="checkbox" checked={f.notify !== false} onChange={(e) => setF({ ...f, notify: e.target.checked })} /><BellRing size={14} className="text-indigo-500" /> Gửi thông báo về điện thoại</label>
