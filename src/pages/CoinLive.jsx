@@ -602,7 +602,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
     if (!(v.riskPct > 0 && v.riskPct <= 5)) return setMsg({ bad: true, t: "Rủi ro mỗi lệnh phải trong khoảng 0,1–5%" });
     if (!(v.maxOpen >= 1 && v.maxOpen <= 10)) return setMsg({ bad: true, t: "Tối đa lệnh mở: 1–10" }); // 09/11: phương án D chạy tối đa 10 lệnh (trước giới hạn 1–5 khiến không lưu được cấu hình theo Demo)
     if (!(v.dailyStopPct >= 0 && v.dailyStopPct <= 20)) return setMsg({ bad: true, t: "Dừng ngày: 0–20% (0 = không dừng ngày)" });
-    if (!(v.maxLev >= 1 && v.maxLev <= 20)) return setMsg({ bad: true, t: "Đòn bẩy tối đa: 1–20x" });
+    if (!(v.maxLev >= 1 && v.maxLev <= 125)) return setMsg({ bad: true, t: "Đòn bẩy tối đa: 1–125x" }); // 14/11: cho như Demo (100x) — bot tự hạ đòn bẩy trên sàn từng lệnh để giá thanh lý luôn xa hơn SL
     const hasNewKey = k.key.trim() && k.secret.trim();
     if ((k.key.trim() || k.secret.trim()) && !hasNewKey) return setMsg({ bad: true, t: "Cần điền đủ cả API Key và Secret Key" });
     const envKey = st.keySrc === ".env" && st.mode === f.mode; // bot đang chạy bằng khoá trong .env của máy bot
@@ -665,7 +665,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
             {num("capitalCap", "Vốn tính lệnh tối đa", 50, "$", "0 = cả ví Futures")}
             {num("maxOpen", "Tối đa lệnh mở", 1)}
             {num("dailyStopPct", "Dừng ngày khi lỗ", 0.5, "%")}
-            {num("maxLev", "Đòn bẩy tối đa", 1, "x")}
+            {num("maxLev", "Đòn bẩy tối đa", 1, "x", "trần khối lượng; sàn tự hạ để thanh lý xa hơn SL")}
           </div>
           <div className="rounded-xl border border-slate-200 p-3">
             <label className="flex items-center gap-2 text-[12.5px] font-extrabold text-slate-700"><input type="checkbox" checked={f.notify !== false} onChange={(e) => setF({ ...f, notify: e.target.checked })} /><BellRing size={14} className="text-indigo-500" /> Gửi thông báo về điện thoại</label>

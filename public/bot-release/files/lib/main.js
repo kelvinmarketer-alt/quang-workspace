@@ -136,8 +136,12 @@ function riskFrom(c) {
   RISK = clamp(f ? demoCfg.riskPct : num(c.riskPct, ENV("RISK_PCT", 2)), 0.1, 5, 2);
   MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 10, 3)); // phương án D: tối đa 10 lệnh
   DAILY_STOP = clamp(f ? demoCfg.dailyStopPct : num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)), 0, 20, 6); // 0 = không dừng ngày (SW3)
-  MAX_LEV = Math.round(clamp(f ? demoCfg.maxLev : num(c.maxLev, ENV("MAX_LEV", 20)), 1, 20, 20));
+  MAX_LEV = Math.round(clamp(f ? demoCfg.maxLev : num(c.maxLev, ENV("MAX_LEV", 20)), 1, 125, 20)); // 14/11: cho tới 125x như Demo (chỉ là trần khối lượng)
 }
+// 14/11: đòn bẩy ĐẶT TRÊN SÀN tính theo từng lệnh để giá thanh lý (ký quỹ riêng) luôn nằm XA HƠN SL → lệnh chỉ ra ở SL như Demo, không bị thanh lý sớm.
+// Ký quỹ = giá trị lệnh / đòn bẩy phải > lỗ tại SL (dist/giá) × 1,3 + 1% (ký quỹ duy trì + phí). Trần = MAX_LEV (theo Demo, vd 100x).
+const safeLev = (dist, price) => { const d = Math.abs(dist) / price; return Math.max(1, Math.min(MAX_LEV, Math.floor(1 / (d * 1.3 + 0.01)) || 1)); };
+const setLev = async (symbol, dist, price) => { const lv = safeLev(dist, price); await ex.setLeverage(symbol, lv).catch(() => ex.setLeverage(symbol, Math.min(lv, 20)).catch(() => {})); return lv; };
 async function refreshCfg() {
   if (Date.now() - cfgAt < 240000) return; cfgAt = Date.now(); // đọc cấu hình Demo mỗi lần quét (≈5 phút)
   const demo = await readDemoSession().catch(() => null);
@@ -334,7 +338,7 @@ async function place(p, symbol) {
   const a = { id: p.id, coin: p.coin, tf: p.tf, setup: p.setup, side: p.side, lim, sl, tp, qty, riskUsd: qty * risk, until: p.until, signalAt: p.signalAt, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE, ...(p.test ? { test: true } : {}) };
   if (!DRY) {
     await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
-    await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+    await setLev(symbol, risk, lim);
     await ex.placeLimit({ symbol, side: sideStr(p.side), quantity: qty, price: lim, clientId: a.entryCid });
   }
   S.active[symbol] = a;
@@ -359,7 +363,7 @@ async function placeSW3(p, symbol) {
   if (!(qty > 0) || qty * mark < info.minNotional) { log(`· Bỏ ${p.coin}: khối lượng ${qty} quá nhỏ (tối thiểu ${info.minNotional} USDT)`); journal({ ev: "skip", why: "khối lượng nhỏ", ...p, tags: undefined }); return; }
   const a = { id: p.id, coin: p.coin, tf: p.tf, setup: "SW3", sw3: true, side: p.side, k, dist, partR: p.partR, partFrac: p.partFrac, lim: mark, sl: ex.roundTo(mark - p.side * dist, info.tick), tp: ex.roundTo(mark + p.side * p.partR * dist, info.tick), qty, riskUsd: qty * dist, until: p.until, signalAt: p.signalAt, entryBarAt: p.signalAt + TFS["4h"].ms, entryCid: cid(p, "E"), stage: "entry", placedAt: now(), mode: MODE, slSeq: 0, why3: p.why3 };
   await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
-  await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+  await setLev(symbol, dist, mark);
   if (p.limEntry) { // phương án D: lệnh chờ cách giá đóng nến 0,25 ATR (giá thật → quy đổi testnet); hết 4 giờ chưa khớp → vào thị trường (fallbackSW3)
     const lp = ex.roundTo(p.lim * k, info.tick);
     qty = ex.roundTo(Math.min(riskUsd / dist, (MAX_LEV * eq) / lp), info.step, "floor");
@@ -414,7 +418,7 @@ async function adoptSW3(t, symbol, realMark, sl0, partDone) {
   if (!(qty > 0) || qty * mark < info.minNotional) { log(`· Bỏ theo lệnh Demo ${t.coin}: khối lượng ${qty} quá nhỏ`); S.traded[t.id] = now(); return; }
   const a = { id: t.id, coin: t.coin, tf: t.tf, setup: "SW3", sw3: true, adopt: true, adoptSl: sl, adoptTp: tp, side: t.side, k, dist, partR: Math.abs(tp - mark) / dist, partFrac: t.pf || 1 / 3, lim: mark, sl, tp, qty, riskUsd: qty * dist, until: now() + 3600000, signalAt: t.signalAt, entryBarAt: t.signalAt, entryCid: cid({ ...t, signalAt: t.signalAt + 1000 }, "E"), stage: "entry", placedAt: now(), mode: MODE, slSeq: 0, partDone, why3: `theo lệnh Demo đang mở (Demo vào ${stamp(t.entryAt)} @ ${px(t.entry)})` };
   await ex.setMarginType(symbol, "ISOLATED").catch(() => {});
-  await ex.setLeverage(symbol, MAX_LEV).catch(() => {});
+  await setLev(symbol, dist, mark);
   S.traded[t.id] = now();
   await ex.placeMarket({ symbol, side: sideStr(t.side), quantity: qty, clientId: a.entryCid });
   S.active[symbol] = a;
@@ -660,6 +664,7 @@ function weeklyReport() {
 // ---------- Vòng lặp ----------
 async function cycle(state) {
   const cmd = await resolveRun(false);
+  if (!DRY && !ex) await refreshCfg().catch(() => {}); // 14/11: đang chờ vẫn đọc luật Demo → app không báo "khác Demo" sai
   const stop = fs.existsSync(STOP_F) || cmd?.stop;
   const base = { mode: MODE, dry: DRY, at: now(), pubKey: MK.pub, pubFp: PUB_FP, keys: { testnet: !!cmd?.keys?.testnet, live: !!cmd?.keys?.live }, keySrc, settings: { riskPct: RISK, maxOpen: MAX_OPEN, dailyStopPct: DAILY_STOP, maxLev: MAX_LEV, capitalCap: CAP }, version: updateInfo(), github: !!ghToken, cfgSummary: cfgSummary(), rulesHash: RULES_HASH, closeAllHandled: S.closeAllHandled || 0, notify: appCfg.notify !== false, histCount: HIST.length };
   if (!DRY && !ex) { await pushStatus({ ...base, waiting, stopped: !!stop, risk: RISK, maxOpen: MAX_OPEN, dailyStop: DAILY_STOP, active: S.active, events: (S.events || []).slice(0, 40) }, true).catch(() => {}); await syncHistory(); await maybeUpdate(cmd); return; } // chờ khoá / cài đặt từ app

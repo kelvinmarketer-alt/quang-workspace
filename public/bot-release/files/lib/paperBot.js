@@ -935,3 +935,55 @@ export function statsOf(list) {
     feeR: avg(done, (t) => t.feeR), fundR: avg(done, (t) => t.fundR || 0), reasons,
   };
 }
+
+// ---------------- 14/11/2026: TRẠNG THÁI HIỆN TẠI của 1 mã theo phương pháp bot (tab Thị trường) ----------------
+// Sếp: "phần Thị trường tích hợp kiến thức + phương pháp bot demo để phân tích, làm 1 yếu tố quyết định".
+// Cùng nến Futures (loadKlines), cùng công thức và cùng chuỗi "nhịp phá vỡ" như runSW3 — chỉ đọc, không tạo lệnh.
+export async function sw3Now(coin, session = null) {
+  const own = session && isSW3(session), cfg = cfgOf(own ? session : { cfg: { ...SW3D_DEFAULT } }), P = cfg.sw;
+  const step = TFS["4h"].ms, D1 = TFS["1d"].ms, now = Date.now();
+  const from = (own && session.startAt ? Math.min(session.startAt, now) : now) - 700 * step; // = mốc bot dùng → cùng chuỗi nhịp
+  const [KA, BA] = await Promise.all([loadKlines(symOf(coin), "4h", from), loadKlines("BTCUSDT", "1d", now - 320 * D1)]);
+  const K = KA.filter((k) => k[0] + step <= now), n = K.length, BD = BA.filter((k) => k[0] + D1 <= now);
+  if (n < 320) return { coin, err: n ? "Mã niêm yết chưa lâu, chưa đủ 320 nến H4 (≈ 53 ngày) để bot tính." : "Không có nến H4 trên Binance Futures." };
+  const O = K.map((k) => k[1]), H = K.map((k) => k[2]), L = K.map((k) => k[3]), C = K.map((k) => k[4]), V = K.map((k) => k[5]);
+  const { atr } = atrAdx(H, L, C), E = emaArr(C, P.emaH4), VM = smaArr(V, P.volN), HH = hiPrev(H, P.brkN), LL = loPrev(L, P.brkN);
+  const BE = emaArr(BD.map((k) => k[4]), P.btcEma);
+  const btcAt = (tClose) => { let lo = 0, hi = BD.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (BD[m][0] + D1 <= tClose) { r = m; lo = m + 1; } else hi = m - 1; } return r < P.btcEma ? 0 : BD[r][4] > BE[r] ? 1 : -1; };
+  const trailAt = (k, side) => { let m = side === 1 ? Infinity : -Infinity; for (let j = Math.max(0, k - P.trailN + 1); j <= k; j++) m = side === 1 ? Math.min(m, L[j]) : Math.max(m, H[j]); return m; };
+  const shadow = (i, side) => { // = sim() của runSW3, chỉ lấy đường đi của cắt lỗ (đủ để biết nhịp còn chạy không)
+    const e = i + 1, en = O[e], risk = P.stopAtr * atr[i], p1 = en + side * P.partR * risk;
+    let stop = en - side * risk, half = false;
+    for (let k = e; k < n; k++) {
+      if (side === 1 ? L[k] <= stop : H[k] >= stop) return { x: k, en, risk, stop, half };
+      if (!half && (side === 1 ? H[k] >= p1 : L[k] <= p1)) { half = true; if ((en - stop) * side > 0) stop = en; }
+      const ns = trailAt(k, side); if ((ns - stop) * side > 0) stop = ns;
+    }
+    return { x: null, en, risk, stop, half, open: true };
+  };
+  const failOf = (brk, vx, h4, btc, side) => (brk < P.brkAtr ? `phá vỡ yếu (${fmt2(brk)} < ${fmt2(P.brkAtr)} ATR)` : vx < P.volX ? `volume thấp (${fmt2(vx)}× < ${fmt2(P.volX)}×)` : h4 !== side ? `ngược EMA200 H4 của ${coin}` : btc !== side ? "ngược xu hướng BTC (EMA50 D1)" : null);
+  let occ = -1, ride = null, fresh = null;
+  for (let i = 300; i < n; i++) {
+    if (i <= occ) continue;
+    const side = C[i] > HH[i] ? 1 : C[i] < LL[i] ? -1 : 0; if (!side) continue;
+    const brk = ((C[i] - (side === 1 ? HH[i] : LL[i])) * side) / atr[i], vx = V[i] / (VM[i - 1] || Infinity), h4 = C[i] > E[i] ? 1 : -1, btc = btcAt(K[i][0] + step);
+    const sig = { at: K[i][0], side, brk, vx, h4, btc, fail: failOf(brk, vx, h4, btc, side) };
+    if (i === n - 1) { // nến H4 VỪA đóng là nến tín hiệu
+      const risk = P.stopAtr * atr[i], lp = P.entry === "lim" ? C[i] - side * P.limAtr * atr[i] : C[i];
+      fresh = { ...sig, close: C[i], risk, entry: lp, sl: lp - side * risk, tp1: lp + side * P.partR * risk, fallbackAt: K[i][0] + step + (P.limH || 4) * 3600000 };
+      break;
+    }
+    const t = shadow(i, side); occ = t.open ? Infinity : t.x;
+    if (t.open) ride = { ...sig, ...t };
+  }
+  const i = n - 1, A = atr[i];
+  let hi = -Infinity, lo = Infinity; for (let j = n - P.brkN; j < n; j++) { hi = Math.max(hi, H[j]); lo = Math.min(lo, L[j]); } // mốc phá vỡ cho nến H4 đang chạy
+  const h4 = C[i] > E[i] ? 1 : -1, btc = btcAt(now);
+  return {
+    coin, at: now, barAt: K[i][0], nextClose: K[i][0] + 2 * step, close: C[i], atr: A, ema200: E[i], h4, btc,
+    btcClose: BD.length ? BD[BD.length - 1][4] : null, btcEma: BE.length ? BE[BE.length - 1] : null,
+    allowed: btc && h4 === btc ? h4 : 0, hi, lo, buyAt: hi + P.brkAtr * A, sellAt: lo - P.brkAtr * A,
+    volNeed: P.volX, volLast: V[i] / (VM[i - 1] || Infinity), ride, fresh,
+    inList: cfg.coins.includes(coin), riskPct: cfg.riskByCoin?.[coin] ?? cfg.riskPct, lim: P.entry === "lim", own: !!own, startAt: own ? session.startAt : null, P,
+  };
+}

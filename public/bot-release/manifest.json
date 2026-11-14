@@ -1,7 +1,7 @@
 {
-  "sha": "1856f2b6c744a1938e903ec0795904ad4f4931ad",
-  "date": "2026-11-12T00:57:35+07:00",
-  "msg": "Thông báo điện thoại dễ hiểu: MUA/BÁN, cắt lỗ/chốt lời, lỗ tối đa $, giá tăng/giảm %, lý do đóng bằng lời thường, kết quả = n lần mức rủi ro",
+  "sha": "05c67085c940d0eb5e9c620cac531e8bb502e761",
+  "date": "2026-11-14T21:41:07+07:00",
+  "msg": "Đòn bẩy theo Demo tới 125x (trần khối lượng) + đòn bẩy trên sàn tự tính từng lệnh để giá thanh lý (ký quỹ riêng) luôn xa hơn SL; lúc chờ (Hedge/chưa khoá) vẫn đọc luật Demo; chép luật app mới (sw3Now chỉ đọc)",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "afa36069b1870d35700ea3ed0e4d86b8710e7dc4"
+      "sha": "062a66c97965ae89b6a995d98f7ae1614704cdd2"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "5d8ddf98d6bb325e6628b8661366cdb7dfb86e24"
+      "sha": "3a2e7accf55280dc2b8873e4684349173c1c8626"
     },
     {
       "path": "lib/pushText.js",
