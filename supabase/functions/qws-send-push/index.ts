@@ -49,13 +49,17 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const who = await callerOf(req);
   if (!who) return json({ error: "Không có quyền gửi thông báo" }, 401);
-  const { title, body, url: rawUrl, tag, user_id: want } = await req.json().catch(() => ({}));
+  const { title, body, url: rawUrl, tag, user_id: want, app } = await req.json().catch(() => ({}));
   const url = safeUrl(rawUrl);
   const user_id = who.all ? want : who.uid;
 
   let q = supa.from("qws_push_subs").select("endpoint, sub");
   if (user_id) q = q.eq("user_id", user_id);
-  const { data: subs, error } = await q;
+  const { data: all, error } = await q;
+  // 14/11/2026: bảng dùng chung QWS + Văn phòng AI. Máy của Văn phòng AI có nhãn sub.app = "office".
+  // Gửi app:"office" → chỉ máy office; không ghi app (bot trade, QWS) → mọi máy TRỪ máy office.
+  const isOffice = (r: { sub?: { app?: string } }) => r.sub?.app === "office";
+  const subs = (all || []).filter((r) => (app === "office" ? isOffice(r) : !isOffice(r)));
   if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...cors, "content-type": "application/json" } });
 
   const payload = JSON.stringify({ title: title || "Quang Workspace", body: body || "", url: url || "/", tag });
