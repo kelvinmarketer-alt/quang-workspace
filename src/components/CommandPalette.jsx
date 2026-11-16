@@ -111,9 +111,9 @@ export default function CommandPalette({ open, setOpen, navItems = [], menuItems
     if (pages.length)
       out.push({ label: "Trang", items: (tokens.length ? take(pages, (n) => n.label) : pages).map((n) => ({
         key: "nav:" + (n.to || n.href), icon: n.icon, title: n.label,
-        sub: n.href ? "Mở tab mới" : tokens.length && hubLabel[n.to] ? `Trong ${hubLabel[n.to]}` : "",
-        ext: !!n.href,
-        run: n.href ? () => window.open(n.href, "_blank", "noopener") : go(n.to),
+        sub: n.href?.startsWith("/") ? "Văn phòng AI" : n.href ? "Mở tab mới" : tokens.length && hubLabel[n.to] ? `Trong ${hubLabel[n.to]}` : "",
+        ext: !!n.href && !n.href.startsWith("/"),
+        run: n.href?.startsWith("/") ? () => location.assign(n.href) : n.href ? () => window.open(n.href, "_blank", "noopener") : go(n.to),
       })) });
 
     if (!tokens.length) return out;
