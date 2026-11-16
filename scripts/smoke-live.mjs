@@ -1,6 +1,6 @@
 // 16/11/2026 gộp Văn phòng AI: kiểm BẢN THẬT ngay sau khi đưa lên (GitHub Actions chạy sau bước deploy; tay: node scripts/smoke-live.mjs).
 // Trượt → báo đỏ ở GitHub Actions. Cloudflare cần vài giây lan bản mới → mỗi mục thử lại tối đa 6 lần, cách 10 giây.
-// Bản sao y hệt ở repo ai-office: web/scripts/smoke-live.mjs (sửa thì sửa cả 2).
+// BẢN DUY NHẤT (17/11/2026): repo ai-office tải file này từ GitHub để chạy (web/scripts/smoke-live.mjs) → repo này phải để công khai; sửa chỉ ở đây.
 const BOSS = process.env.SMOKE_BOSS || "https://boss.2bkin.io.vn";
 const OFFICE = process.env.SMOKE_OFFICE || "https://office.2bkin.io.vn";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
