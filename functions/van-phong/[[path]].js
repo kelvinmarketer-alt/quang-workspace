@@ -3,7 +3,7 @@
 // Code Văn phòng AI vẫn ở repo riêng (ai-office) để sau đóng gói bán cho khách.
 const PROD = "https://ai-office-78c.pages.dev";
 // Bản thử: <nhánh>.quang-workspace.pages.dev → <nhánh>.ai-office-78c.pages.dev (cùng tên nhánh 2 repo)
-const originFor = (host) => {
+export const originFor = (host) => {
   const m = host.match(/^([a-z0-9-]+)\.quang-workspace\.pages\.dev$/);
   return m && !/^[0-9a-f]{8}$/.test(m[1]) ? `https://${m[1]}.ai-office-78c.pages.dev` : PROD;
 };

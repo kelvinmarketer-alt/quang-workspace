@@ -381,6 +381,13 @@ function Notifications() {
   const ref = useRef(null);
   const today = todayISO();
 
+  // 16/11/2026 gộp: chuông này là CHUÔNG CHUNG (nhắc việc Workspace + tin Văn phòng AI). Văn phòng mở "/?chuong=1" (hoặc =vp) → tự bật chuông
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search), c = q.get("chuong");
+    if (!c) return;
+    setOpen(true); if (c === "vp") setTab("office"); // chỉ chủ có link =vp (bên văn phòng)
+    q.delete("chuong"); window.history.replaceState(window.history.state, "", window.location.pathname + (q.size ? `?${q}` : "") + window.location.hash);
+  }, []);
   useEffect(() => {
     const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", h);

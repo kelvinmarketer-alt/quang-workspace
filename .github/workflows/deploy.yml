@@ -21,3 +21,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 4649c2cb98968b25b5ba0757c08cf345
           command: pages deploy dist --project-name quang-workspace --branch main
+      # 16/11/2026: kiểm bản thật ngay sau khi lên (Văn phòng AI /van-phong, link khách, tên miền cũ) — trượt là báo đỏ
+      - run: node scripts/smoke-live.mjs

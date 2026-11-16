@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "./lib/auth.jsx";
+import { officeOnlyAccount } from "./lib/officeOnly.js";
 import { DataProvider } from "./lib/store.jsx";
 import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
@@ -14,7 +15,17 @@ initMotion(); // hiệu ứng cuộn tới đâu chạy tới đó (thẻ, biể
 
 function Gate() {
   const { loading, session } = useAuth();
-  if (loading) {
+  // 16/11/2026: tài khoản chỉ thuộc Văn phòng AI → vào /van-phong/ (không tạo Workspace trống)
+  const uid = session?.user?.id;
+  const [office, setOffice] = useState(null); // null = đang kiểm, false = dùng Workspace
+  useEffect(() => {
+    if (!uid) return;
+    let alive = true;
+    setOffice(null);
+    officeOnlyAccount(uid).then((v) => { if (!alive) return; if (v) window.location.replace("/van-phong/"); else setOffice(false); }).catch(() => alive && setOffice(false));
+    return () => { alive = false; };
+  }, [uid]);
+  if (loading || (session && office !== false)) {
     return (
       <div className="grid min-h-screen place-items-center bg-slate-50 text-slate-400">
         <Loader2 size={28} className="animate-spin" />
