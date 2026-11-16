@@ -204,7 +204,7 @@ function PersonCard({ p, customers, office, ownerId, onOfficeSaved, onRemove }) 
                   <button disabled={busy} onClick={saveOffice} className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[12px] font-bold text-white disabled:opacity-50">{busy && <Loader2 size={13} className="animate-spin" />} Lưu vai trò Văn phòng AI</button>
                   {role !== initRole && <span className="text-[11px] font-bold text-amber-600">Chưa lưu</span>}
                   {msg && <span className={`text-[11.5px] font-bold ${msg.ok ? "text-emerald-600" : "text-rose-600"}`}>{msg.t}</span>}
-                  {role !== "none" && <span className="text-[11px] text-slate-400">Người này vào {OFFICE_URL.replace("https://", "")} bằng chính email trên.</span>}
+                  {role !== "none" && <span className="text-[11px] text-slate-400">Người này vào {location.host}{OFFICE_URL} bằng chính email trên.</span>}
                 </div>
               </div>
             )}

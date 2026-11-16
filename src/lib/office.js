@@ -1,8 +1,14 @@
-// Kết nối Văn phòng AI (office.2bkin.io.vn) — chung Supabase + tài khoản. Bảng office_* chỉ chủ tài khoản thấy (RLS).
+// Kết nối Văn phòng AI — chung Supabase + tài khoản. Bảng office_* chỉ chủ tài khoản thấy (RLS).
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase.js";
 
-export const OFFICE_URL = "https://office.2bkin.io.vn";
+// 16/11/2026 gộp: Văn phòng AI chạy ngay trong app này ở /van-phong/ (code riêng repo ai-office, Pages Function functions/van-phong proxy sang).
+export const OFFICE_URL = "/van-phong/";
+// Link cũ office.2bkin.io.vn/… (thông báo đã lưu) → mở trong app: /van-phong/…
+export const officeHref = (u) => {
+  if (!u) return OFFICE_URL;
+  try { const x = new URL(u, location.origin); if (x.host === "office.2bkin.io.vn") return `/van-phong${x.pathname}${x.search}${x.hash}`; return x.origin === location.origin ? `${x.pathname}${x.search}${x.hash}` : u; } catch { return OFFICE_URL; }
+};
 export const OFFICE_AGENTS = [
   { id: "00-truong-phong", name: "Trưởng phòng", emoji: "👔" },
   { id: "01-ads", name: "NV Ads", emoji: "📊" },

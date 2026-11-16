@@ -31,7 +31,7 @@ export default function OfficeSettings() {
           <span className={`h-2 w-2 rounded-full ${runner?.online ? "bg-emerald-500" : "bg-rose-500"}`} />
           {runner === undefined ? "Đang kiểm tra…" : runner?.online ? `Đội AI có mặt · ${runner.host}` : runner ? `Đội AI vắng · tín hiệu cuối ${officeAgo(runner.last_seen)}` : "Chưa có máy chạy kết nối"}
         </span>
-        <a href={OFFICE_URL} target="_blank" rel="noopener" className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white hover:bg-indigo-700">Mở văn phòng <ExternalLink size={14} /></a>
+        <a href={OFFICE_URL} className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white hover:bg-indigo-700">Mở văn phòng <ExternalLink size={14} /></a>
       </div>
 
       <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">

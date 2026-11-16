@@ -14,18 +14,20 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (req.mode === "navigate") {
+    // 16/11/2026: Văn phòng AI (/van-phong/…) là trang riêng → lưu riêng, không đè trang Workspace khi mất mạng
+    const shell = /^\/van-phong(\/|$)/.test(url.pathname) ? "/van-phong/" : "/";
     event.respondWith((async () => {
       try {
         const res = await fetch(req, { cache: "no-cache" }); // luôn hỏi lại máy chủ (không dùng HTML cũ trong bộ nhớ đệm HTTP)
-        if (res.ok) { const c = await caches.open(CACHE); c.put("/", res.clone()); }
+        if (res.ok) { const c = await caches.open(CACHE); c.put(shell, res.clone()); }
         return res;
       } catch {
-        return (await caches.match("/")) || Response.error();
+        return (await caches.match(shell)) || Response.error();
       }
     })());
     return;
   }
-  if (url.pathname.startsWith("/assets/") || /\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname)) {
+  if (/^\/(van-phong\/)?assets\//.test(url.pathname) || /\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname)) {
     event.respondWith((async () => {
       const hit = await caches.match(req);
       if (hit) return hit;
@@ -61,9 +63,11 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
-  // Link sang trang khác (vd Văn phòng AI office.2bkin.io.vn) → mở cửa sổ mới, không đè app
-  const target = new URL(url, self.location.origin);
+  let url = (event.notification.data && event.notification.data.url) || "/";
+  // Link sang trang khác → mở cửa sổ mới, không đè app. Link cũ office.2bkin.io.vn → mở ngay trong app (/van-phong/…, gộp 16/11/2026)
+  let target = new URL(url, self.location.origin);
+  if (target.hostname === "office.2bkin.io.vn") target = new URL(`/van-phong${target.pathname}${target.search}${target.hash}`, self.location.origin);
+  url = target.href;
   if (target.origin !== self.location.origin) {
     // Chỉ mở link ngoài thuộc hệ 2BKIN (Văn phòng AI) — chặn link lạ chèn vào thông báo
     if (target.protocol === "https:" && target.hostname.endsWith(".2bkin.io.vn")) event.waitUntil(self.clients.openWindow(target.href));

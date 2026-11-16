@@ -18,7 +18,7 @@ import { useAuth } from "../lib/auth.jsx";
 import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
-import { OFFICE_URL, useOfficeNotifications, useOfficeAccess, officeAgo } from "../lib/office.js";
+import { OFFICE_URL, officeHref, useOfficeNotifications, useOfficeAccess, officeAgo } from "../lib/office.js";
 import { peekReportData, buildBrandRows, missingMeasure } from "../lib/reports.js";
 import { MeasureList } from "./MeasureAlerts.jsx";
 
@@ -194,11 +194,11 @@ function NavItem({ n, onNavigate, pinned, onTogglePin, mobile, mini, onTip }) {
   return (
     <div className="group/item relative">
       {n.href ? (
-        <a href={n.href} target="_blank" rel="noopener" onClick={onNavigate} aria-label={mini ? n.label : undefined} {...tip}
+        <a href={n.href} {...(n.href.startsWith("/") ? {} : { target: "_blank", rel: "noopener" })} onClick={onNavigate} aria-label={mini ? n.label : undefined} {...tip}
           className={`group flex items-center gap-3 py-2.5 text-sm font-semibold transition ${mini ? "mx-auto h-11 w-11 justify-center rounded-2xl px-0 text-slate-400 hover:bg-white/10 hover:text-white" : "rounded-xl px-3 pr-9 text-slate-500 hover:bg-white hover:text-slate-900"}`}>
           <n.icon size={18} className="shrink-0" />
           {!mini && n.label}
-          {!mini && <ExternalLink size={13} className="ml-auto opacity-50" />}
+          {!mini && !n.href.startsWith("/") && <ExternalLink size={13} className="ml-auto opacity-50" />}
         </a>
       ) : (
         <NavLink
@@ -420,12 +420,12 @@ function Notifications() {
               <div className="flex items-center gap-2 px-4 py-3">
                 <span className="text-sm font-extrabold text-slate-800">🏢 Văn phòng AI</span>
                 {office.unread > 0 && <button onClick={() => office.markRead(office.rows.filter((r) => !r.read_at).map((r) => r.id))} className="text-[11px] font-bold text-slate-400 hover:text-indigo-600">Đã đọc hết</button>}
-                <a href={OFFICE_URL} target="_blank" rel="noopener" className="ml-auto text-[11px] font-bold text-indigo-600">Mở văn phòng ↗</a>
+                <a href={OFFICE_URL} className="ml-auto text-[11px] font-bold text-indigo-600">Mở văn phòng →</a>
               </div>
               {office.rows.length === 0 && <div className="px-4 pb-3 text-sm text-slate-400">Chưa có thông báo từ đội AI.</div>}
               <div className="max-h-64 overflow-y-auto">
                 {office.rows.slice(0, 8).map((r) => (
-                  <a key={r.id} href={r.url || OFFICE_URL} target="_blank" rel="noopener" onClick={() => !r.read_at && office.markRead([r.id])}
+                  <a key={r.id} href={officeHref(r.url)} onClick={() => !r.read_at && office.markRead([r.id])}
                     className={`flex items-start gap-3 border-t border-slate-50 px-4 py-2.5 hover:bg-slate-50 ${r.read_at ? "opacity-60" : ""}`}>
                     <span className={`mt-0.5 h-8 w-1.5 shrink-0 rounded-full ${OFFICE_TONE[r.kind] || "bg-slate-400"}`} />
                     <div className="min-w-0 flex-1">

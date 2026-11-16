@@ -175,7 +175,7 @@ export default function BrandConnections({ customer, startOpen = 0 }) {
                           {!shown.length && <span className="text-[11.5px] text-slate-400">{q ? "Không thấy kênh khớp." : "Không còn kênh nào khác."}</span>}
                         </div>
                         {kind === "ads" ? <NewMetaAccount custId={cid} custName={customer.name} onDone={() => reload(true)} /> : (
-                          <div className="mt-2 text-[11px] text-slate-400">Chưa có trong danh sách? {kind === "web" ? "Thêm email robot vào Search Console / GA4 của web" : "Gán page cho System User trong Business Manager"}, rồi bật ở <a href={OFFICE_URL} target="_blank" rel="noopener" className="font-bold text-indigo-600">Văn phòng AI → Kết nối <ExternalLink size={10} className="inline" /></a>.</div>
+                          <div className="mt-2 text-[11px] text-slate-400">Chưa có trong danh sách? {kind === "web" ? "Thêm email robot vào Search Console / GA4 của web" : "Gán page cho System User trong Business Manager"}, rồi bật ở <a href={`${OFFICE_URL}ket-noi`} className="font-bold text-indigo-600">Văn phòng AI → Kết nối <ExternalLink size={10} className="inline" /></a>.</div>
                         )}
                       </div>
                     )}
