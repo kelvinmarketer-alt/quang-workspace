@@ -57,7 +57,7 @@ export default function App() {
         <Route path="/chi-phi" element={g("/chi-phi", <Ketoan initialTab="expenses" />)} />
         {/* 01/11: Quỹ gộp vào Kế toán (tab Dòng tiền) — link cũ vẫn mở đúng chỗ */}
         <Route path="/quy" element={g("/quy", <Ketoan initialTab="cash" />)} />
-        <Route path="/quy-thong-ke" element={g("/quy-thong-ke", <Ketoan initialTab="cash" fundsTab="stats" />)} />
+        <Route path="/quy-thong-ke" element={g("/quy-thong-ke", <Ketoan initialTab="expenses" spendFocus />)} />
         <Route path="/cong-viec" element={g("/cong-viec", <Tasks />)} />
         <Route path="/lich" element={g("/lich", <Tasks initialTab="calendar" />)} />
         <Route path="/coin" element={g("/coin", <Coin />)} />

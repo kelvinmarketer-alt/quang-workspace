@@ -8,7 +8,6 @@ import { fundBalance, monthlyGrossProfit, monthlyOpex, monthlyFundInflow, grossP
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { aiReadExpense, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
-import FundStats from "./FundStats.jsx";
 import FundRecon from "./FundRecon.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
@@ -1121,17 +1120,15 @@ function FundsMain() {
 }
 
 // 11/11: thêm "Đối soát" (chốt sổ cuối tháng)
-const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["recon", "Đối soát", ClipboardCheck], ["stats", "Chi tiêu", BarChart3]];
+const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["recon", "Đối soát", ClipboardCheck]]; // 17/11: "Chi tiêu" chuyển sang Kế toán → Chi phí (phần "Chi tiêu từ quỹ")
 
 const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
 // 01/11: Quỹ gộp thành tab "Dòng tiền" trong Kế toán — thanh chuyển Quỹ / Thống kê chi tiêu dạng viên nhỏ cùng kiểu app
 export default function Funds({ initialTab }) {
   const { fundSchedules, fundTx } = useData();
-  // 10/11: 90 ngày không có khoản chi nào từ quỹ → ẩn tab "Chi tiêu" (trang thống kê trống). Ghi 1 khoản chi là tab tự hiện lại; link /quy-thong-ke vẫn mở được.
-  const hasSpend = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - 90); const from = d.toISOString().slice(0, 10); return fundSpends(fundTx || []).some((t) => t.date >= from); }, [fundTx]);
   // Có lịch chuyển quỹ đến hạn → mở tab Quỹ (banner xác nhận nằm ở đó, link từ "Hôm nay" trỏ về /quy)
   const hasDue = (fundSchedules || []).some((sc) => pendingOccs(sc, todayISO()).length > 0);
-  const startTab = () => { if (initialTab) return initialTab; if (hasDue) return "funds"; const v = fundTabLS(); return v === "stats" && !hasSpend ? "funds" : v; };
+  const startTab = () => { if (initialTab && FUND_TABS.some(([k]) => k === initialTab)) return initialTab; if (hasDue) return "funds"; return fundTabLS(); };
   // Route chỉ định tab (vd /quy-thong-ke) → theo route; /quy → mở lại tab đã xem lần trước (nhớ localStorage)
   const [tab, setTab0] = useState(startTab);
   const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_funds_tab", v); } catch {} };
@@ -1140,13 +1137,13 @@ export default function Funds({ initialTab }) {
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">
-        {FUND_TABS.filter(([v]) => v !== "stats" || hasSpend || tab === "stats").map(([v, l, Ic]) => (
+        {FUND_TABS.map(([v, l, Ic]) => (
           <button key={v} onClick={() => setTab(v)} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold transition ${tab === v ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>
             <Ic size={14} /> {l}
           </button>
         ))}
       </div>
-      {tab === "funds" ? <FundsMain /> : tab === "recon" ? <FundRecon /> : <FundStats />}
+      {tab === "recon" ? <FundRecon /> : <FundsMain />}
     </div>
   );
 }

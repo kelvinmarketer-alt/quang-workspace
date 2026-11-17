@@ -1,7 +1,7 @@
 import AdsAccounts from "../components/AdsAccounts.jsx";
 import OfficeSettings from "../components/OfficeSettings.jsx";
 import { useEffect, useRef, useState } from "react";
-import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2, Building2, Plug } from "lucide-react";
+import { Download, Upload, RotateCcw, Database, ShieldCheck, AlertTriangle, Cloud, LogOut, UserCircle, Bell, BellRing, Send, Users2, UserPlus, Trash2, Plug } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -111,9 +111,10 @@ export default function Settings() {
   };
 
   // Chia trang thành các mục (nhớ mục đang mở trên máy này) — trước đây 1 trang cuộn rất dài
-  const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["members", "Phân quyền", Users2], ["office", "Văn phòng AI", Building2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
+  const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["members", "Phân quyền", Users2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
   const [sec, setSec0] = useState(() => { const q = new URLSearchParams(location.search).get("muc"); if (q) return q; try { return localStorage.getItem("qws_settings_sec") || "account"; } catch { return "account"; } }); // 17/11: ?muc=connect mở thẳng mục (link từ Văn phòng AI)
-  const cur = SECS.some(([k]) => k === sec) ? sec : "account";
+  const sec1 = sec === "office" ? "notify" : sec; // 17/11 sếp duyệt: mục "Văn phòng AI" (thông báo văn phòng) gộp vào "Thông báo"
+  const cur = SECS.some(([k]) => k === sec1) ? sec1 : "account";
   const setSec = (k) => { setSec0(k); try { localStorage.setItem("qws_settings_sec", k); } catch { /* bỏ qua */ } };
   const [resetTxt, setResetTxt] = useState("");
   const resetOk = resetTxt.trim().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/Đ/g, "D") === "DAT LAI";
@@ -160,9 +161,7 @@ export default function Settings() {
       </Card>
       </>}
 
-      {cur === "notify" && <PushCard userId={user?.id} />}
-
-      {cur === "office" && isOwner && <OfficeSettings />}
+      {cur === "notify" && <><PushCard userId={user?.id} />{isOwner && <OfficeSettings />}</>}
 
       {cur === "members" && isOwner && <PeoplePerms />}
 
