@@ -6,6 +6,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { RefreshCw, Printer, Sparkles, Loader2, ChevronDown, ArrowLeft, Check, Copy, Link2, ExternalLink, AlertTriangle, Columns3 } from "lucide-react";
 import { Badge, FitMoney, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
+import BrandJump from "../components/BrandJump.jsx";
 import { useReportData, buildBrandRows, linkChannels, monthKey, squash, missingMeasure, reportCompleteness, completenessText } from "../lib/reports.js";
 import { MeasurePanel } from "../components/MeasureAlerts.jsx";
 import { ask } from "../components/ConfirmDialog.jsx";
@@ -337,7 +338,7 @@ function Brand360({ id }) {
   );
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
-      <Link to="/bao-cao" className="no-print inline-flex items-center gap-1 text-[13px] font-bold text-slate-500 hover:text-indigo-600"><ArrowLeft size={15} /> Trung tâm báo cáo</Link>
+      <div className="no-print flex flex-wrap items-center gap-2"><Link to="/bao-cao" className="inline-flex items-center gap-1 text-[13px] font-bold text-slate-500 hover:text-indigo-600"><ArrowLeft size={15} /> Trung tâm báo cáo</Link><BrandJump custId={id} from="r360" className="ml-auto" /></div>
       <div className="card overflow-hidden p-0">
         <div className="h-24 bg-gradient-to-r from-indigo-100 via-violet-100 to-pink-100 sm:h-28" />
         <div className="-mt-9 flex flex-wrap items-end gap-3 px-4 pb-4 sm:px-5">
