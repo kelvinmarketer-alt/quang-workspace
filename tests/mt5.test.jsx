@@ -1,5 +1,5 @@
 // 07/11/2026: tab "EA MT5" — hiển thị trạng thái/lịch sử EA QWS_Gop từ bảng qws_mt5_bot (dữ liệu giả, không gọi mạng)
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
 
 const now = Date.now();
@@ -19,6 +19,8 @@ vi.mock("../src/lib/supabase.js", () => ({
 vi.mock("../src/lib/store.jsx", () => ({ useData: () => ({ isOwner: true }), DataProvider: ({ children }) => children }));
 
 afterEach(cleanup);
+// 17/11/2026: trên máy CI chậm, việc tải nền của trang còn chạy sau khi file kiểm xong → "window is not defined" làm trượt cả lượt đưa lên. Chờ cho xong rồi mới đóng môi trường.
+afterAll(async () => { cleanup(); await new Promise((ok) => setTimeout(ok, 500)); });
 
 describe("EA MT5", () => {
   it("tính thống kê theo ngăn", async () => {
