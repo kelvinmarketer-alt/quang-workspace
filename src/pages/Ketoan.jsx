@@ -1,6 +1,6 @@
 import { Fragment, lazy, Suspense, useMemo, useState, useEffect } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
-import { Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, PiggyBank, ChevronDown, Check, Search, Trash2, History } from "lucide-react";
+import { Gem, Wallet, TrendingUp, HandCoins, Receipt, ArrowUp, ArrowDown, Calendar, BarChart3, CreditCard, PiggyBank, ChevronDown, Check, Search, Trash2, History } from "lucide-react";
 import { Card, SectionTitle, Badge, MoneyInput, DateField, FitMoney, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { installmentsInRange, sumInstallments, monthlySeriesInRange, expensesInRange, allInstallments } from "../lib/selectors.js";
@@ -550,26 +550,31 @@ function DebtPanel() {
 // 01/11: thêm "Dòng tiền" = trang Quỹ cũ (đã ẩn khỏi menu) — /quy, /quy-thong-ke mở thẳng tab này
 const TABS = [["report", "Thu nhập", BarChart3], ["debt", "Công nợ", HandCoins], ["expenses", "Chi phí", CreditCard], ["cash", "Dòng tiền", PiggyBank]];
 const Funds = lazy(() => import("./Funds.jsx"));
+const Assets = lazy(() => import("./Assets.jsx")); // 17/11 sếp duyệt gộp: trang Tài sản → tab cuối Kế toán (chỉ chủ); /tai-san mở thẳng tab này
+const ASSET_TAB = ["assets", "Tài sản", Gem];
 
-const ktTabLS = () => { try { const v = localStorage.getItem("qws_kt_tab"); return TABS.some(([k]) => k === v) ? v : "report"; } catch { return "report"; } };
+const ktTabLS = () => { try { const v = localStorage.getItem("qws_kt_tab"); return TABS.some(([k]) => k === v) || v === "assets" ? v : "report"; } catch { return "report"; } };
 export default function Ketoan({ initialTab, fundsTab }) {
+  const { isOwner } = useData();
+  const tabs = isOwner ? [...TABS, ASSET_TAB] : TABS;
   // Route chỉ định tab (vd /chi-phi) → theo route; /ke-toan → mở lại tab đã xem lần trước (nhớ localStorage)
   const [tab, setTab0] = useState(() => initialTab || ktTabLS());
   const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_kt_tab", v); } catch {} };
   // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
   useEffect(() => { setTab0(initialTab || ktTabLS()); }, [initialTab]);
+  const cur = tab === "assets" && !isOwner ? "report" : tab;
   return (
     <div className="bento space-y-4 p-3 sm:p-5">
       <div className="flex">
-        <div className="grid w-full grid-cols-4 gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:inline-flex sm:w-auto">
-          {TABS.map(([v, l, Ic]) => (
-            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-full px-1 py-2 text-[12.5px] font-bold transition sm:gap-2 sm:px-3 sm:text-sm ${tab === v ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+        <div className={`grid w-full ${tabs.length > 4 ? "grid-cols-5" : "grid-cols-4"} gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-100 sm:inline-flex sm:w-auto`}>
+          {tabs.map(([v, l, Ic]) => (
+            <button key={v} onClick={() => setTab(v)} className={`flex items-center justify-center gap-1.5 rounded-full px-1 py-2 text-[12.5px] font-bold transition sm:gap-2 sm:px-3 sm:text-sm ${cur === v ? "tab-active bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
               <Ic size={16} className="hidden shrink-0 sm:block" /> <span className="whitespace-nowrap">{l}</span>
             </button>
           ))}
         </div>
       </div>
-      {tab === "report" ? <KetoanReport /> : tab === "debt" ? <DebtPanel /> : tab === "cash" ? <Suspense fallback={<div className="py-16 text-center text-sm text-slate-400">Đang tải…</div>}><Funds initialTab={fundsTab} /></Suspense> : <Expenses />}
+      {cur === "report" ? <KetoanReport /> : cur === "debt" ? <DebtPanel /> : cur === "assets" ? <Suspense fallback={<div className="py-16 text-center text-sm text-slate-400">Đang tải…</div>}><Assets /></Suspense> : cur === "cash" ? <Suspense fallback={<div className="py-16 text-center text-sm text-slate-400">Đang tải…</div>}><Funds initialTab={fundsTab} /></Suspense> : <Expenses />}
     </div>
   );
 }

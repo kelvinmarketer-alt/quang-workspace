@@ -59,6 +59,7 @@ export const ROUTE_FEATURE = {
   "/quy": "ketoan",
   "/quy-thong-ke": "ketoan",
   "/kho-tai-lieu": "library",
+  "/tai-san": "ketoan", // 17/11: tab Tài sản nằm trong Kế toán (tab vẫn chỉ chủ thấy)
 };
 
 export const featLabel = (k) => (FEATURES.find(([key]) => key === k) || [k, k])[1];

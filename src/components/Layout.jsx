@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, Gem, KanbanSquare, GraduationCap, Plug, HeartPulse,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, KanbanSquare, GraduationCap, Plug, HeartPulse,
 } from "lucide-react";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
@@ -64,7 +64,6 @@ const NAV = [
   // Quỹ / Dòng tiền: ẩn khỏi menu theo yêu cầu (giữ route /quy + dữ liệu để bật lại khi cần)
   { to: "/cong-viec", label: "Công việc & Lịch", icon: ListChecks, feat: "tasks", group: "biz" },
   { to: "/coin", label: "Đầu tư Coin", icon: Coins, feat: "coin", group: "fin" },
-  { to: "/tai-san", label: "Tài sản", icon: Gem, ownerOnly: true, group: "fin" }, // 13/11: tổng tài sản ròng (chỉ chủ)
   { to: "/quang-cao", label: "Quảng cáo", icon: Megaphone, feat: "ads", group: "biz" },
   { to: "/tai-nguyen", label: "Tài nguyên", icon: FolderOpen, feat: "resources", group: "biz" },
   { to: "/website", label: "Hiệu quả Website", icon: Globe, feat: "web", group: "biz" },
@@ -84,7 +83,7 @@ const NAV = [
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
 const NAV_GROUPS = [
   { id: "biz", label: "Kinh doanh", order: ["/", "/cong-viec", "/bao-cao", "/khach-hang"] },
-  { id: "fin", label: "Tài chính", order: ["/ke-toan", "/tai-san", "/coin"] },
+  { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
   { id: "me", label: "Lưu trữ", order: ["/kho-tai-lieu"] },
   { id: "ai", label: "Văn phòng AI", order: [OFFICE_URL, `${OFFICE_URL}viec`, `${OFFICE_URL}du-an`] },
   { id: "sys", label: "Hệ thống", order: ["/cai-dat"] },
@@ -96,8 +95,8 @@ const navKey = (n) => n.key || n.to || n.href;
 const HUBS = [
   { id: "report", label: "Báo cáo", icon: BarChart3, group: "biz", tabs: [["/bao-cao", "Tổng hợp", BarChart3], ["/quang-cao", "Quảng cáo", Megaphone], ["/website", "Website", Globe], ["/fanpage", "Fanpage", ThumbsUp]] },
   // 09/11: Kho tài liệu + Tài khoản & Thẻ → 1 mục "Kho" (Tài khoản & Thẻ vẫn chỉ chủ; thành viên chỉ có Kho tài liệu thì không hiện thanh tab)
-  { id: "store", label: "Kho", icon: Library, group: "me", tabs: [["/kho-tai-lieu", "Kho tài liệu", Library], ["/tai-khoan", "Tài khoản & Thẻ", KeyRound]] },
-  { id: "cust", label: "Khách & Dự án", icon: Users, group: "biz", tabs: [["/khach-hang", "Khách & dự án", Users], ["/tai-nguyen", "Tài nguyên", FolderOpen]], also: ["/du-an", "/don-hang"] },
+  { id: "store", label: "Kho", icon: Library, group: "me", tabs: [["/kho-tai-lieu", "Kho tài liệu", Library], ["/tai-nguyen", "Tài nguyên", FolderOpen], ["/tai-khoan", "Tài khoản & Thẻ", KeyRound]] }, // 17/11: Tài nguyên chuyển từ Khách & Dự án sang Kho
+  { id: "cust", label: "Khách & Dự án", icon: Users, group: "biz", tabs: [["/khach-hang", "Khách & dự án", Users]], also: ["/du-an", "/don-hang"] },
 ];
 const inPath = (path, t) => path === t || path.startsWith(t + "/");
 const hubOf = (path) => HUBS.find((h) => h.tabs.some(([t]) => inPath(path, t)) || (h.also || []).some((t) => inPath(path, t)));
