@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, KanbanSquare, GraduationCap, Plug, HeartPulse,
+  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, GraduationCap, HeartPulse,
 } from "lucide-react";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)
@@ -71,13 +71,11 @@ const NAV = [
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
   { to: "/kho-tai-lieu", label: "Kho tài liệu", icon: Library, feat: "library", group: "me" },
   // 16/11/2026 đợt 2 gộp: Văn phòng AI là 1 nhóm menu đủ trang (mở ngay trong app, /van-phong/…)
+  // 17/11/2026 sếp duyệt gộp 7 → 4 (bên văn phòng: Bảng việc, Tiến độ & đội ngũ, Kết nối thành tab đầu trang của mục cùng loại)
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "ai" },
-  { href: `${OFFICE_URL}viec`, label: "Bảng việc AI", icon: KanbanSquare, office: true, group: "ai" },
   { href: `${OFFICE_URL}du-an`, label: "Thương hiệu", icon: FolderKanban, office: true, group: "ai" },
-  { href: `${OFFICE_URL}checklist`, label: "Tiến độ & đội ngũ", icon: ListChecks, office: true, group: "ai" },
   { href: `${OFFICE_URL}kien-thuc`, label: "Kiến thức AI", icon: GraduationCap, office: true, group: "ai" },
-  { href: `${OFFICE_URL}ket-noi`, label: "Kết nối", icon: Plug, office: true, group: "ai" },
-  { href: `${OFFICE_URL}suc-khoe`, label: "Vận hành AI", icon: HeartPulse, office: true, group: "ai" },
+  { href: `${OFFICE_URL}suc-khoe`, label: "Vận hành & Kết nối", icon: HeartPulse, office: true, group: "ai" },
   { to: "/cai-dat", label: "Cài đặt", icon: SettingsIcon, group: "sys" },
 ];
 // Nhóm menu (thứ tự hiển thị). Thứ tự mục TRONG nhóm theo `order` (key = to|href); mục không có group → "Khác".
@@ -85,7 +83,7 @@ const NAV_GROUPS = [
   { id: "biz", label: "Kinh doanh", order: ["/", "/cong-viec", "/bao-cao", "/khach-hang"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
   { id: "me", label: "Lưu trữ", order: ["/kho-tai-lieu"] },
-  { id: "ai", label: "Văn phòng AI", order: [OFFICE_URL, `${OFFICE_URL}viec`, `${OFFICE_URL}du-an`] },
+  { id: "ai", label: "Văn phòng AI", order: [OFFICE_URL, `${OFFICE_URL}du-an`, `${OFFICE_URL}kien-thuc`, `${OFFICE_URL}suc-khoe`] },
   { id: "sys", label: "Hệ thống", order: ["/cai-dat"] },
 ];
 const navKey = (n) => n.key || n.to || n.href;

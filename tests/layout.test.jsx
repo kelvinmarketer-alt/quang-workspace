@@ -44,10 +44,10 @@ describe("menu gộp Kho", () => {
 
 // 16/11/2026 gộp Văn phòng AI: menu có nhóm Văn phòng AI (mở ngay trong app) + chuông chung mở được từ văn phòng (?chuong=1)
 describe("gộp Văn phòng AI", () => {
-  it("chủ: menu có đủ 7 trang văn phòng, không mở tab mới", async () => {
+  it("chủ: menu có 4 mục văn phòng (gộp 17/11), không mở tab mới", async () => {
     await mountLayout("/");
     const office = [...document.querySelectorAll('a[href^="/van-phong/"]')];
-    for (const h of ["/van-phong/", "/van-phong/viec", "/van-phong/du-an", "/van-phong/checklist", "/van-phong/kien-thuc", "/van-phong/ket-noi", "/van-phong/suc-khoe"])
+    for (const h of ["/van-phong/", "/van-phong/du-an", "/van-phong/kien-thuc", "/van-phong/suc-khoe"])
       expect(office.map((a) => a.getAttribute("href")), h).toContain(h);
     expect(office.every((a) => !a.target)).toBe(true);
   });

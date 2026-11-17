@@ -112,7 +112,7 @@ export default function Settings() {
 
   // Chia trang thành các mục (nhớ mục đang mở trên máy này) — trước đây 1 trang cuộn rất dài
   const SECS = [["account", "Tài khoản", UserCircle], ["notify", "Thông báo", Bell], ...(isOwner ? [["members", "Phân quyền", Users2], ["office", "Văn phòng AI", Building2], ["connect", "Kết nối & AI", Plug], ["data", "Dữ liệu & sao lưu", ShieldCheck]] : [])];
-  const [sec, setSec0] = useState(() => { try { return localStorage.getItem("qws_settings_sec") || "account"; } catch { return "account"; } });
+  const [sec, setSec0] = useState(() => { const q = new URLSearchParams(location.search).get("muc"); if (q) return q; try { return localStorage.getItem("qws_settings_sec") || "account"; } catch { return "account"; } }); // 17/11: ?muc=connect mở thẳng mục (link từ Văn phòng AI)
   const cur = SECS.some(([k]) => k === sec) ? sec : "account";
   const setSec = (k) => { setSec0(k); try { localStorage.setItem("qws_settings_sec", k); } catch { /* bỏ qua */ } };
   const [resetTxt, setResetTxt] = useState("");
@@ -169,6 +169,7 @@ export default function Settings() {
       {cur === "connect" && isOwner && <>
         <AiImport />
         <AiUsage />
+        <div className="-mt-2 px-1 text-[12.5px] text-slate-500">Đội AI ở Văn phòng AI dùng gói Claude (không tính tiền token) — mức tiêu hao và kết nối Facebook, Google, Pancake, Zalo của đội AI xem ở <a href="/van-phong/suc-khoe#chi-phi" className="font-bold text-indigo-600">Vận hành & Kết nối</a>.</div>
         <IcalSettings />
         {/* 01/11: kết nối quản trị THEO THƯƠNG HIỆU (Khách & Dự án → thẻ khách → Kết nối đo lường). Ở đây chỉ còn danh sách tổng (nâng cao) + script Google Ads */}
         <details className="card group !p-0">
