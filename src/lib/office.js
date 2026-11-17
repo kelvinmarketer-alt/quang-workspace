@@ -144,7 +144,7 @@ export async function saveOfficePrefs(userId, prefs) {
 }
 export async function loadOfficeRunner() {
   const { data } = await supabase.from("office_runner").select("host,last_seen").maybeSingle();
-  return data ? { ...data, online: Date.now() - new Date(data.last_seen).getTime() < 200_000 } // 17/11: máy văn phòng gửi tín hiệu 2 phút / lần : null;
+  return data ? { ...data, online: Date.now() - new Date(data.last_seen).getTime() < 200_000 } : null; // 17/11: máy văn phòng gửi tín hiệu 2 phút / lần
 }
 export function officeAgo(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
