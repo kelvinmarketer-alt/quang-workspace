@@ -7,6 +7,7 @@ import { makeData } from "./fixture.js";
 
 let DATA = makeData();
 vi.mock("../src/lib/store.jsx", () => ({ useData: () => DATA, DataProvider: ({ children }) => children }));
+vi.mock("../src/lib/auth.jsx", () => ({ useAuth: () => ({ user: { id: "u1", email: "chu@example.com" } }), AuthProvider: ({ children }) => children })); // 20/11: dải Sức khoẻ ở Tổng quan cần biết ai đang đăng nhập
 afterEach(() => { cleanup(); DATA = makeData(); });
 
 async function mount() {

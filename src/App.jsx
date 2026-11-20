@@ -19,6 +19,7 @@ const Web = lazy(() => import("./pages/Web.jsx"));
 const Fanpage = lazy(() => import("./pages/Fanpage.jsx"));
 const Reports = lazy(() => import("./pages/Reports.jsx"));
 const Library = lazy(() => import("./pages/Library.jsx"));
+const Health = lazy(() => import("./pages/Health.jsx"));
 
 const PageLoading = () => (
   <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>
@@ -35,7 +36,7 @@ function firstAllowed(perms) {
 }
 
 export default function App() {
-  const { perms = [] } = useData();
+  const { perms = [], isOwner } = useData();
   const { pathname } = useLocation();
   // Chặn theo quyền: trang có feature mà mình không được cấp → chuyển về trang đầu tiên được phép.
   const g = (path, el) => {
@@ -69,6 +70,8 @@ export default function App() {
         <Route path="/tai-san" element={g("/tai-san", <Ketoan initialTab="assets" />)} />{/* 17/11: Tài sản thành tab trong Kế toán */}
         {/* 09/11: Kho tài liệu — chủ toàn quyền; thành viên cấp ở Cài đặt → phân quyền (CHỈ XEM; RLS: supabase/SETUP-LIBRARY-MEMBERS.sql) */}
         <Route path="/kho-tai-lieu" element={g("/kho-tai-lieu", <Library />)} />
+        {/* 20/11: Sức khoẻ — chỉ chủ (dữ liệu cá nhân, bảng qws_health) */}
+        <Route path="/suc-khoe" element={isOwner ? <Health /> : <Navigate to={firstAllowed(perms)} replace />} />
         <Route path="/cai-dat" element={<Settings />} />
       </Routes>
       </Suspense>

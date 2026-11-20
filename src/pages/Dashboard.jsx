@@ -3,6 +3,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 // Biểu đồ doanh thu tải sau (thư viện biểu đồ ~100KB nén) — Tổng quan hiện số ngay, biểu đồ hiện tiếp (01/11)
 const RevenueChart = lazy(() => import("../components/RevenueChart.jsx"));
+const HealthStrip = lazy(() => import("../components/health/HealthStrip.jsx")); // 20/11: dải Sức khoẻ (chỉ chủ, đã nhập chỉ số mới hiện)
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase.js";
 import { ArrowUpRight, ChevronDown, HandCoins, ListChecks, CalendarDays, Repeat, Activity, Coins, Loader2, SlidersHorizontal } from "lucide-react";
@@ -263,6 +264,8 @@ export default function Dashboard() {
         </div>
         <button type="button" onClick={() => setCustomizing(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50" title="Chọn ô hiện và thứ tự"><SlidersHorizontal size={14} /> Tuỳ chỉnh</button>
       </div>
+
+      {isOwner && <Suspense fallback={null}><HealthStrip /></Suspense>}
 
       {/* 11/11: một lưới chung — ô xếp theo thứ tự đã tuỳ chỉnh; "dense" để ô sau lấp chỗ trống cạnh cột Tuần này */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-flow-row-dense lg:grid-cols-12">
