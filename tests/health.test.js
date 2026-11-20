@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { targets, waterGoal, waterTotal, mealTotals, fastState, dueReminders, needsWeek, anyRemind, weekStats, weekText, withDefaults, dayKeyOf, suggest, lastSession, isRecord, weightSeries, weightTrend, trendNote, searchFoods, planFromTemplate, PLAN_TEMPLATES, FOODS } from "../src/lib/health.js";
+import { targets, waterGoal, waterTotal, mealTotals, fastState, dueReminders, needsWeek, anyRemind, weekStats, weekText, withDefaults, dayKeyOf, suggest, lastSession, isRecord, weightSeries, weightTrend, trendNote, searchFoods, planFromTemplate, PLAN_TEMPLATES, FOODS, LEVELS, planFromLevel, levelProgress, exInfo, exImgs, EX_INFO } from "../src/lib/health.js";
 
 // Mốc giờ VN: 20/11/2026 là thứ Sáu. at("10:00") = 10h sáng giờ VN hôm đó.
 const at = (hm, day = "2026-11-20") => new Date(`${day}T${hm}:00+07:00`).getTime();
@@ -150,5 +150,41 @@ describe("cân nặng + món ăn", () => {
     expect(searchFoods("pho").map((x) => x.name)).toEqual(["Phở bò", "Phở gà"]);
     expect(searchFoods("com nha", [{ name: "Cơm nhà", kcal: 600, p: 30, c: 70, f: 20 }])[0].g).toBe("Món của tôi");
     for (const f of FOODS) expect(Math.abs(f.p * 4 + f.c * 4 + f.f * 9 - f.kcal) / Math.max(f.kcal, 60), f.name).toBeLessThan(f.name === "Bia" ? 1 : 0.2); // bia: calo từ cồn
+  });
+});
+
+describe("lộ trình theo cấp (dễ → khó) + hình mẫu", () => {
+  it("4 cấp tăng dần: cấp 1 không có bài tạ đòn, ít hiệp, buổi ngắn", () => {
+    expect(LEVELS.map((l) => l.lv)).toEqual([1, 2, 3, 4]);
+    const l1 = LEVELS[0].routines.flatMap((r) => r.ex);
+    expect(l1.every((e) => e.sets <= 2)).toBe(true);
+    for (const L of LEVELS.slice(0, 3)) expect(L.routines.flatMap((r) => r.ex).some((e) => /tạ đòn|deadlift\)$|Gánh tạ \(squat\)/.test(e.name) && !/tạ đơn/.test(e.name)), "cấp " + L.lv).toBe(false);
+    const total = (L) => L.routines.reduce((s, r) => s + r.ex.reduce((a, e) => a + e.sets, 0), 0) / L.routines.length;
+    expect(total(LEVELS[0])).toBeLessThan(total(LEVELS[1]));
+    expect(total(LEVELS[1])).toBeLessThan(total(LEVELS[2]));
+  });
+  it("mọi bài trong lộ trình và lịch mẫu đều có hình + 3 ý cách tập", () => {
+    const names = new Set([...LEVELS, ...PLAN_TEMPLATES].flatMap((t) => t.routines.flatMap((r) => r.ex.map((e) => e.name))));
+    for (const n of names) { expect(exInfo(n), n).toBeTruthy(); expect(exInfo(n).cues.length, n).toBe(3); expect(exImgs(n).length).toBe(2); }
+    expect(exImgs("Bài tự thêm")).toEqual([]);
+    expect(Object.keys(EX_INFO).length).toBeGreaterThanOrEqual(names.size);
+  });
+  it("vào cấp 1 → 3 buổi T2/T4/T6; đủ 9 buổi mới gợi ý lên cấp, buổi trước ngày vào cấp không tính", () => {
+    const now = at("09:00");
+    const plan = planFromLevel(1, now);
+    expect(plan.level).toBe(1); expect(plan.levelAt).toBe("2026-11-20");
+    expect(Object.keys(plan.week)).toEqual(["1", "3", "5"]);
+    const sess = { gym: { ex: [{ name: "x", sets: [{ kg: 0, reps: 10 }] }] } };
+    const days = { "2026-11-01": sess, "2026-11-19": sess };
+    for (let i = 0; i < 8; i++) days[dayKeyOf(now + i * 2 * 86400000)] = sess;
+    days["2026-12-30"] = { gym: { ex: [{ name: "x", sets: [] }] } }; // mở buổi nhưng chưa ghi hiệp → không tính
+    let p = levelProgress(plan, days);
+    expect(p).toMatchObject({ done: 8, need: 9, ready: false });
+    days["2026-12-31"] = sess;
+    p = levelProgress(plan, days);
+    expect(p.ready).toBe(true); expect(p.next.lv).toBe(2);
+    expect(levelProgress(planFromLevel(4, now), days).ready).toBe(false); // cấp cao nhất
+    expect(levelProgress({ routines: [], week: {} }, days)).toBeNull(); // lịch tự chọn
+    expect(withDefaults({ plan }).plan.level).toBe(1); // không làm rơi cấp khi đọc cấu hình
   });
 });

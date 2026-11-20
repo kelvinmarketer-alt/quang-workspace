@@ -151,7 +151,7 @@ export function lastSession(days, exName, beforeKey) {
 // Bài không tạ (step 0 hoặc kg = 0) → thêm 1–2 lần mỗi hiệp.
 export function suggest(last, ex) {
   const sets = last?.sets || [];
-  if (!sets.length) return { kg: null, reps: n(ex.reps), up: false, text: "Buổi đầu: chọn mức làm đủ số lần mà vẫn còn sức 1–2 lần nữa" };
+  if (!sets.length) return { kg: null, reps: n(ex.reps), up: false, text: n(ex.step) ? "Buổi đầu: chọn mức tạ làm đủ số lần mà vẫn còn sức 2–3 lần nữa" : "Buổi đầu: làm theo mục tiêu, chậm và đúng động tác" };
   const top = Math.max(...sets.map((s) => n(s.kg)));
   const atTop = sets.filter((s) => n(s.kg) === top);
   const full = sets.length >= n(ex.sets) && atTop.length >= n(ex.sets) && atTop.every((s) => n(s.reps) >= n(ex.reps));
@@ -212,4 +212,98 @@ export function trendNote(perWeek, weightKg, goal) {
   if (perWeek > -0.1) return "Cân chưa giảm: bớt khoảng 150–200 kcal mỗi ngày (ít cơm, bỏ nước ngọt) hoặc thêm 20 phút đi bộ.";
   if (pct < -1) return "Giảm hơi nhanh, dễ mất cơ: ăn thêm khoảng 150–200 kcal và giữ đủ đạm.";
   return "Tốc độ giảm vừa đẹp (0,3–1% cân nặng mỗi tuần), giữ như vậy.";
+}
+
+// ===== HÌNH MẪU + CÁCH TẬP TỪNG ĐỘNG TÁC (20/11, sếp: người mới cần hình để học theo) =====
+// Ảnh: bộ Free Exercise DB (phạm vi công cộng — Unlicense), 2 ảnh mỗi bài: tư thế bắt đầu và kết thúc. Ghim theo 1 phiên bản để link không đổi.
+const IMG_BASE = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/";
+const G = (img, muscle, cues) => ({ img, muscle, cues });
+export const EX_INFO = {
+  "Đi bộ nhanh (phút)": G("Walking_Treadmill", "Tim mạch, khởi động", ["Đi nhanh tới mức hơi thở gấp nhưng vẫn nói chuyện được", "Vung tay tự nhiên, lưng thẳng, mắt nhìn trước", "Trên máy chạy: tốc độ 5–6, có thể thêm dốc 2–3"]),
+  "Đứng lên ngồi xuống (squat không tạ)": G("Bodyweight_Squat", "Đùi, mông", ["Chân rộng bằng vai, mũi chân hơi mở", "Đẩy mông ra sau như ngồi xuống ghế, gối không chụm vào trong", "Xuống tới khi đùi gần ngang sàn rồi đứng thẳng lên. Mới tập có thể đặt ghế phía sau, chạm ghế rồi đứng lên"]),
+  "Chống đẩy tay cao (tay đặt lên ghế)": G("Incline_Push-Up", "Ngực, vai, tay sau", ["Hai tay đặt lên mép ghế / bàn chắc chắn, rộng hơn vai một chút", "Người thẳng một đường từ đầu tới gót, siết bụng", "Hạ ngực gần chạm mép ghế rồi đẩy lên. Chỗ tựa càng cao càng nhẹ"]),
+  "Chống đẩy": G("Pushups", "Ngực, vai, tay sau", ["Tay rộng hơn vai, người thẳng một đường, siết bụng và mông", "Hạ ngực gần chạm sàn, khuỷu tay chếch 45 độ so với thân", "Chưa đủ sức thì quỳ gối xuống sàn, vẫn giữ lưng thẳng"]),
+  "Chống đẩy tay hẹp": G("Push-Ups_-_Close_Triceps_Position", "Tay sau, ngực", ["Hai tay đặt hẹp ngay dưới vai", "Khuỷu tay ép sát thân khi hạ xuống", "Người thẳng, không võng lưng"]),
+  "Chống đẩy dốc chân cao": G("Push-Ups_With_Feet_Elevated", "Ngực trên, vai", ["Hai chân đặt lên ghế, tay chống sàn", "Siết bụng để lưng không võng", "Hạ chậm, đẩy lên dứt khoát"]),
+  "Kéo xô máy": G("Wide-Grip_Lat_Pulldown", "Lưng xô", ["Ngồi chắc, đùi cài dưới đệm, nắm thanh rộng hơn vai", "Ưỡn ngực nhẹ, kéo thanh xuống ngực trên bằng cách kéo khuỷu tay xuống", "Thả lên chậm tới khi tay gần thẳng. Không ngả người giật"]),
+  "Kéo cáp ngồi": G("Seated_Cable_Rows", "Lưng giữa", ["Ngồi lưng thẳng, gối hơi chùng", "Kéo tay cầm về bụng, ép hai bả vai vào nhau", "Thả ra chậm, không đổ người theo"]),
+  "Cầu mông": G("Butt_Lift_Bridge", "Mông, đùi sau", ["Nằm ngửa, gối gập, bàn chân sát mông", "Đạp gót, nâng hông tới khi gối – hông – vai thẳng hàng", "Siết mông 1 giây ở trên rồi hạ chậm"]),
+  "Plank (giây)": G("Plank", "Bụng, lưng dưới", ["Chống khuỷu tay ngay dưới vai, người thẳng một đường", "Siết bụng và mông, không để hông võng hay chổng lên", "Thở đều. Mỏi quá thì hạ gối xuống sàn"]),
+  "Gập bụng": G("Crunches", "Bụng", ["Nằm ngửa, gối gập, tay đặt nhẹ sau tai", "Cuộn vai rời sàn bằng cơ bụng, không kéo cổ", "Hạ chậm, lưng dưới luôn chạm sàn"]),
+  "Leo núi tại chỗ (giây)": G("Mountain_Climbers", "Bụng, tim mạch", ["Tư thế chống đẩy tay thẳng", "Kéo lần lượt từng gối về ngực", "Giữ hông thấp, nhịp đều"]),
+  "Đạp đùi máy": G("Leg_Press", "Đùi, mông", ["Lưng và mông ép sát đệm, chân rộng bằng vai trên bàn đạp", "Hạ tới khi gối gập khoảng 90 độ, gối không chụm vào trong", "Đạp lên nhưng không khoá thẳng gối"]),
+  "Đẩy ngực máy": G("Machine_Bench_Press", "Ngực, vai, tay sau", ["Chỉnh ghế để tay cầm ngang ngực", "Lưng tựa sát, đẩy ra tới khi tay gần thẳng", "Thu về chậm trong 2 giây"]),
+  "Đẩy vai tạ đơn": G("Seated_Dumbbell_Press", "Vai", ["Ngồi tựa lưng, tạ ngang tai, lòng bàn tay hướng trước", "Đẩy thẳng lên đầu, không ưỡn lưng", "Hạ chậm về ngang tai"]),
+  "Gánh tạ đơn ôm ngực (goblet squat)": G("Goblet_Squat", "Đùi, mông, bụng", ["Ôm một quả tạ sát ngực, khuỷu tay hướng xuống", "Ngồi xuống giữa hai chân, lưng thẳng, gót không nhấc", "Đứng lên bằng cách đạp gót"]),
+  "Đẩy ngực tạ đơn": G("Dumbbell_Bench_Press", "Ngực, vai, tay sau", ["Nằm ghế phẳng, chân đạp sàn, tạ ngang ngực", "Đẩy lên tới khi tay gần thẳng, hai tạ gần nhau", "Hạ chậm tới khi khuỷu tay ngang thân"]),
+  "Đẩy ngực dốc lên tạ đơn": G("Incline_Dumbbell_Press", "Ngực trên, vai", ["Ghế dốc 30–45 độ", "Đẩy tạ thẳng lên trên ngực trên", "Hạ chậm, khuỷu tay chếch 45 độ"]),
+  "Kéo tạ đơn một tay": G("One-Arm_Dumbbell_Row", "Lưng", ["Một tay và một gối chống lên ghế, lưng phẳng", "Kéo tạ về hông, khuỷu tay sát thân", "Hạ chậm tới khi tay thẳng"]),
+  "Cuốn tạ tay trước": G("Dumbbell_Bicep_Curl", "Tay trước", ["Đứng thẳng, khuỷu tay ép sát sườn", "Cuốn tạ lên vai, không đánh lưng lấy đà", "Hạ chậm"]),
+  "Kéo cáp tay sau": G("Triceps_Pushdown", "Tay sau", ["Khuỷu tay ép sát sườn và giữ yên", "Ấn thanh xuống tới khi tay thẳng", "Thả lên chậm tới ngang ngực"]),
+  "Gập người tạ đơn (Romanian deadlift)": G("Stiff-Legged_Dumbbell_Deadlift", "Đùi sau, mông, lưng dưới", ["Gối hơi chùng, lưng thẳng suốt động tác", "Đẩy mông ra sau, tạ trượt sát chân tới giữa ống chân", "Đứng lên bằng cách siết mông, không cong lưng"]),
+  "Gập người tạ đòn (Romanian deadlift)": G("Romanian_Deadlift", "Đùi sau, mông, lưng dưới", ["Gối hơi chùng, lưng thẳng suốt động tác", "Đẩy mông ra sau, thanh đòn trượt sát chân tới giữa ống chân", "Đứng lên bằng cách siết mông, không cong lưng"]),
+  "Móc đùi sau máy": G("Lying_Leg_Curls", "Đùi sau", ["Đệm đặt trên gót chân, hông ép sát ghế", "Cuốn gót về mông", "Hạ chậm, không để rơi tạ"]),
+  "Đá đùi trước máy": G("Leg_Extensions", "Đùi trước", ["Lưng tựa sát, đệm đặt trên cổ chân", "Duỗi thẳng chân, siết đùi 1 giây", "Hạ chậm"]),
+  "Nhón bắp chuối": G("Standing_Calf_Raises", "Bắp chân", ["Đứng mũi chân trên bậc, gót thả xuống", "Nhón lên cao hết mức, giữ 1 giây", "Hạ chậm xuống dưới mặt bậc"]),
+  "Chùng chân tạ đơn (lunge)": G("Dumbbell_Lunges", "Đùi, mông", ["Bước một chân dài ra trước, thân thẳng", "Hạ tới khi cả hai gối gập 90 độ, gối sau gần chạm sàn", "Đạp chân trước để về vị trí cũ, đổi bên"]),
+  "Dang tạ vai ngang": G("Side_Lateral_Raise", "Vai giữa", ["Tạ nhẹ, khuỷu tay hơi chùng", "Dang tay sang ngang tới ngang vai", "Hạ chậm, không nhún người lấy đà"]),
+  "Kéo dây mặt (face pull)": G("Face_Pull", "Vai sau, lưng trên", ["Cáp ngang mặt, nắm hai đầu dây", "Kéo về phía mặt, khuỷu tay cao ngang vai", "Ép bả vai, thả ra chậm"]),
+  "Đẩy ngực tạ đòn": G("Barbell_Bench_Press_-_Medium_Grip", "Ngực, vai, tay sau", ["Nằm mắt ngay dưới thanh đòn, chân đạp chắc xuống sàn, ép bả vai", "Hạ thanh đòn chạm nhẹ giữa ngực, khuỷu tay chếch 45 độ", "Đẩy lên thẳng. Tạ nặng phải có người đỡ hoặc tập trong khung an toàn"]),
+  "Đẩy vai tạ đòn": G("Standing_Military_Press", "Vai", ["Đứng chân rộng bằng vai, thanh đòn ngang xương đòn", "Siết bụng và mông, đẩy thẳng lên đầu", "Hạ chậm, không ưỡn lưng"]),
+  "Kéo tạ đòn gập người": G("Bent_Over_Barbell_Row", "Lưng", ["Gập người khoảng 45 độ, lưng phẳng, gối chùng", "Kéo thanh đòn về bụng dưới", "Hạ chậm, không giật người"]),
+  "Gánh tạ (squat)": G("Barbell_Squat", "Đùi, mông", ["Thanh đòn đặt trên cơ vai (không phải cổ), chân rộng bằng vai", "Hít sâu, siết bụng, ngồi xuống tới khi đùi ngang sàn, gối theo hướng mũi chân", "Đạp gót đứng lên. Luôn tập trong khung có thanh an toàn"]),
+  "Kéo tạ đất (deadlift)": G("Barbell_Deadlift", "Lưng, mông, đùi sau", ["Thanh đòn sát ống chân, tay nắm ngoài hai gối", "Lưng phẳng, ngực ưỡn, đạp sàn để nâng tạ lên", "Đứng thẳng rồi hạ tạ theo đường cũ. Bài khó: học với tạ nhẹ trước"]),
+  "Hít xà (hoặc kéo dây)": G("Pullups", "Lưng xô, tay trước", ["Nắm xà rộng hơn vai", "Kéo người lên tới khi cằm qua xà", "Hạ chậm. Chưa kéo được thì dùng dây trợ lực hoặc kéo xô máy"]),
+};
+export const exInfo = (name) => EX_INFO[name] || null;
+export const exImgs = (name) => { const i = EX_INFO[name]; return i ? [0, 1].map((k) => `${IMG_BASE}${i.img}/${k}.jpg`) : []; };
+export const exVideoUrl = (name) => `https://www.youtube.com/results?search_query=${encodeURIComponent(name.replace(/\s*\(giây\)|\s*\(phút\)/g, "") + " hướng dẫn đúng kỹ thuật")}`;
+
+// ===== LỘ TRÌNH THEO CẤP: dễ → khó (20/11, sếp là người mới: không ép bài khó ngay) =====
+// need = số buổi cần hoàn thành ở cấp này trước khi app gợi ý lên cấp. Lên / xuống cấp luôn do người dùng bấm.
+export const LEVELS = [
+  {
+    lv: 1, name: "Làm quen", weeks: "Tuần 1–4", time: "20–25 phút", need: 9, days: [1, 3, 5],
+    goal: "Tạo thói quen đi tập 3 buổi mỗi tuần. Bài rất nhẹ, không cần tạ nặng.",
+    tips: ["Chỉ cần ĐẾN ĐỦ BUỔI, chưa cần tập nặng", "Mỗi bài 2 hiệp, nghỉ 60–90 giây giữa hiệp", "Tập xong vẫn thấy còn sức là đúng"],
+    routines: [{ name: "Toàn thân nhẹ", ex: [E("Đi bộ nhanh (phút)", 1, 8, 0), E("Đứng lên ngồi xuống (squat không tạ)", 2, 10, 0), E("Chống đẩy tay cao (tay đặt lên ghế)", 2, 8, 0), E("Kéo xô máy", 2, 10, 2.5), E("Cầu mông", 2, 12, 0), E("Plank (giây)", 2, 20, 0)] }],
+  },
+  {
+    lv: 2, name: "Nền tảng", weeks: "Tuần 5–8", time: "30–35 phút", need: 10, days: [1, 3, 5],
+    goal: "Học động tác chuẩn với máy và tạ đơn nhẹ. Hai buổi A, B xen kẽ.",
+    tips: ["Mỗi bài 3 hiệp", "Chọn mức tạ làm đủ số lần mà còn sức 2–3 lần nữa", "Động tác đúng quan trọng hơn tạ nặng"],
+    routines: [
+      { name: "Toàn thân A (máy)", ex: [E("Đạp đùi máy", 3, 12, 5), E("Đẩy ngực máy", 3, 10, 2.5), E("Kéo xô máy", 3, 10, 2.5), E("Đẩy vai tạ đơn", 3, 10, 2), E("Plank (giây)", 3, 30, 0)] },
+      { name: "Toàn thân B (tạ đơn)", ex: [E("Gánh tạ đơn ôm ngực (goblet squat)", 3, 10, 2), E("Chống đẩy", 3, 8, 0), E("Kéo cáp ngồi", 3, 10, 2.5), E("Cầu mông", 3, 15, 0), E("Gập bụng", 3, 12, 0)] },
+    ],
+  },
+  {
+    lv: 3, name: "Tăng sức", weeks: "Tuần 9–14", time: "40–45 phút", need: 14, days: [1, 3, 5],
+    goal: "Tách thân trên, thân dưới để mỗi nhóm cơ được tập kỹ hơn. Bắt đầu tăng tạ đều.",
+    tips: ["App gợi ý tăng tạ khi buổi trước làm đủ mọi hiệp", "Ngủ đủ và ăn đủ đạm thì cơ mới lên", "Đau khớp (không phải mỏi cơ) thì giảm tạ"],
+    routines: [
+      { name: "Thân trên", ex: [E("Đẩy ngực tạ đơn", 3, 10, 2), E("Kéo tạ đơn một tay", 3, 10, 2), E("Đẩy vai tạ đơn", 3, 10, 2), E("Kéo xô máy", 3, 10, 2.5), E("Cuốn tạ tay trước", 2, 12, 1), E("Kéo cáp tay sau", 2, 12, 2.5)] },
+      { name: "Thân dưới", ex: [E("Gánh tạ đơn ôm ngực (goblet squat)", 3, 12, 2), E("Gập người tạ đơn (Romanian deadlift)", 3, 10, 2), E("Đạp đùi máy", 3, 12, 5), E("Móc đùi sau máy", 3, 12, 2.5), E("Nhón bắp chuối", 3, 15, 5), E("Plank (giây)", 3, 40, 0)] },
+      { name: "Toàn thân", ex: [E("Chùng chân tạ đơn (lunge)", 3, 10, 2), E("Chống đẩy", 3, 10, 0), E("Kéo cáp ngồi", 3, 10, 2.5), E("Dang tạ vai ngang", 3, 12, 1), E("Gập bụng", 3, 15, 0)] },
+    ],
+  },
+  {
+    lv: 4, name: "Tạ đòn", weeks: "Từ tuần 15", time: "50–60 phút", need: 0, days: [1, 3, 5],
+    goal: "Chuyển sang các bài tạ đòn lớn (đẩy ngực, gánh tạ) theo lịch Đẩy · Kéo · Chân.",
+    tips: ["Bài tạ đòn nên nhờ huấn luyện viên xem động tác vài buổi đầu", "Gánh tạ và đẩy ngực luôn tập trong khung an toàn", "Tăng tạ chậm: 2,5 kg mỗi lần là đủ"],
+    routines: PLAN_TEMPLATES[0].routines,
+  },
+];
+export const levelOf = (lv) => LEVELS.find((l) => l.lv === Number(lv)) || null;
+export function planFromLevel(lv, nowMs = Date.now()) {
+  const L = levelOf(lv) || LEVELS[0];
+  return { ...planFromTemplate({ routines: L.routines, days: L.days }), level: L.lv, levelAt: dayKeyOf(nowMs) };
+}
+// Tiến độ ở cấp hiện tại: số buổi đã tập (có ghi ít nhất 1 hiệp) kể từ ngày vào cấp
+export function levelProgress(plan, days) {
+  const L = levelOf(plan?.level);
+  if (!L) return null;
+  const from = plan.levelAt || "";
+  const done = Object.keys(days || {}).filter((k) => k >= from && days[k]?.gym?.ex?.some((e) => (e.sets || []).length)).length;
+  return { level: L, done, need: L.need, ready: L.need > 0 && done >= L.need, next: levelOf(L.lv + 1) };
 }

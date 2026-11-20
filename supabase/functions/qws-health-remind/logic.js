@@ -32,7 +32,7 @@ export function withDefaults(cfg) {
     fast: { ...d.fast, ...(c.fast || {}) },
     weigh: { ...d.weigh, ...(c.weigh || {}) },
     weekly: { ...d.weekly, ...(c.weekly || {}) },
-    plan: { routines: Array.isArray(c.plan?.routines) ? c.plan.routines : [], week: c.plan?.week && typeof c.plan.week === "object" ? c.plan.week : {} },
+    plan: { ...(c.plan || {}), routines: Array.isArray(c.plan?.routines) ? c.plan.routines : [], week: c.plan?.week && typeof c.plan.week === "object" ? c.plan.week : {} }, // giữ thêm level / levelAt của lộ trình (máy chủ không dùng)
     foods: Array.isArray(c.foods) ? c.foods : [],
     favs: Array.isArray(c.favs) ? c.favs : [],
   };

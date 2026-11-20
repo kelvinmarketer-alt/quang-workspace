@@ -80,6 +80,31 @@ describe("Sức khoẻ — trang", () => {
     expect(screen.getByLabelText("Mức tạ Đẩy ngực tạ đòn").value).toBe("52,5");
   });
 
+  it("tab Tập gym lần đầu: thấy lộ trình 4 cấp → bắt đầu Cấp 1 → bài nhẹ, có hình mẫu", async () => {
+    await mount("/suc-khoe?tab=gym", { cfg: { profile } });
+    expect(screen.getByText(/Lộ trình cho người mới/)).toBeTruthy();
+    expect(screen.getByText("Làm quen")).toBeTruthy(); expect(screen.getByText("Tạ đòn")).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Bắt đầu từ đây \(khuyên dùng\)/ })); });
+    expect(cached().cfg.plan.level).toBe(1);
+    expect(cached().cfg.plan.routines[0].ex.map((e) => e.name)).toContain("Chống đẩy tay cao (tay đặt lên ghế)");
+    expect(screen.getByText(/đã tập 0\/9 buổi/)).toBeTruthy();
+  });
+
+  it("xem động tác: 2 ảnh bắt đầu / kết thúc + 3 ý + link video", async () => {
+    const { planFromLevel } = await import("../src/lib/health.js");
+    const plan = planFromLevel(1);
+    const dow = new Date(Date.now() + 7 * 3600000).getUTCDay();
+    plan.week = { [dow]: plan.routines[0].id };
+    await mount("/suc-khoe?tab=gym", { cfg: { profile, plan } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Xem cách tập Cầu mông" })); });
+    const dlg = screen.getByRole("dialog", { name: "Cách tập Cầu mông" });
+    const imgs = within(dlg).getAllByRole("img");
+    expect(imgs.length).toBe(2);
+    expect(imgs[0].getAttribute("src")).toContain("Butt_Lift_Bridge/0.jpg");
+    expect(within(dlg).getAllByRole("listitem").length).toBe(3);
+    expect(within(dlg).getByRole("link", { name: /video hướng dẫn/ }).getAttribute("href")).toContain("youtube.com/results");
+  });
+
   it("tab Ăn uống: tìm 'pho' → thêm Phở bò → còn 1460 kcal", async () => {
     await mount("/suc-khoe?tab=an", { cfg: { profile } });
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: /Thêm món/ })[0]); });
