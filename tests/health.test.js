@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { targets, waterGoal, waterTotal, mealTotals, fastState, dueReminders, needsWeek, anyRemind, weekStats, weekText, withDefaults, dayKeyOf, suggest, lastSession, isRecord, weightSeries, weightTrend, trendNote, searchFoods, planFromTemplate, PLAN_TEMPLATES, FOODS, LEVELS, planFromLevel, levelProgress, exInfo, exImgs, EX_INFO } from "../src/lib/health.js";
+import fs from "node:fs";
+import { mergeDay } from "../src/lib/healthStore.js";
+import { parseFoodJson } from "../src/lib/healthAi.js";
+import { targets, waterGoal, waterTotal, mealTotals, fastState, dueReminders, needsWeek, anyRemind, weekStats, weekText, withDefaults, dayKeyOf, suggest, lastSession, isRecord, weightSeries, weightTrend, trendNote, searchFoods, planFromTemplate, PLAN_TEMPLATES, FOODS, LEVELS, planFromLevel, levelProgress, exInfo, exImgs, EX_INFO, dayTargets, kcalProposal, mealPlan, streaks, planImgs, WARMUP, STRETCH } from "../src/lib/health.js";
 
 // Mốc giờ VN: 20/11/2026 là thứ Sáu. at("10:00") = 10h sáng giờ VN hôm đó.
 const at = (hm, day = "2026-11-20") => new Date(`${day}T${hm}:00+07:00`).getTime();
@@ -186,5 +189,67 @@ describe("lộ trình theo cấp (dễ → khó) + hình mẫu", () => {
     expect(levelProgress(planFromLevel(4, now), days).ready).toBe(false); // cấp cao nhất
     expect(levelProgress({ routines: [], week: {} }, days)).toBeNull(); // lịch tự chọn
     expect(withDefaults({ plan }).plan.level).toBe(1); // không làm rơi cấp khi đọc cấu hình
+  });
+});
+
+describe("gói nâng cấp 20/11", () => {
+  it("ảnh mẫu nằm sẵn trong app: mọi bài của mọi cấp + khởi động + giãn cơ đều có file", () => {
+    const urls = new Set(LEVELS.flatMap((L) => planImgs(planFromLevel(L.lv))));
+    for (const n of Object.keys(EX_INFO)) exImgs(n).forEach((u) => urls.add(u));
+    expect(urls.size).toBe((new Set(Object.values(EX_INFO).map((i) => i.img)).size + WARMUP.length + STRETCH.length) * 2);
+    for (const u of urls) { expect(u.startsWith("/health/ex/")).toBe(true); expect(fs.existsSync("public" + u), u).toBe(true); }
+  });
+  it("buổi trước báo nặng → giữ mức; báo đau khớp → lùi một bậc", () => {
+    const ex = { sets: 3, reps: 10, step: 2.5 }, full = [1, 2, 3].map(() => ({ kg: 50, reps: 10 }));
+    expect(suggest({ sets: full }, ex)).toMatchObject({ kg: 52.5, up: true });
+    expect(suggest({ sets: full, feel: "nang" }, ex)).toMatchObject({ kg: 50, up: false });
+    expect(suggest({ sets: full, pain: true }, ex)).toMatchObject({ kg: 47.5, up: false });
+    const days = { "2026-11-18": { gym: { feel: "nang", ex: [{ name: "A", sets: full }] } } };
+    expect(lastSession(days, "A", "2026-11-20")).toMatchObject({ feel: "nang", pain: false });
+  });
+  it("thực đơn gợi ý: sát calo (±8%), đủ đạm, 3 phương án khác nhau", () => {
+    const tg = targets(profile, 2026);
+    const plans = [0, 1, 2].map((r) => mealPlan(tg, r));
+    for (const p of plans) { expect(Math.abs(p.kcal - tg.kcal) / tg.kcal).toBeLessThan(0.08); expect(p.p).toBeGreaterThanOrEqual(tg.protein * 0.93); expect(p.slots.length).toBeGreaterThanOrEqual(3); }
+    expect(new Set(plans.map((p) => JSON.stringify(p.slots))).size).toBe(3);
+    const small = mealPlan(targets({ ...profile, sex: "f", weightKg: 50, heightCm: 155 }, 2026), 0);
+    expect(small.kcal).toBeLessThan(1500);
+  });
+  it("tự chỉnh calo: cần đủ số lần cân; cân đứng yên → đề xuất −150; đồng ý rồi thì 14 ngày sau mới đề xuất tiếp", () => {
+    const now = at("09:00"), cfg = { profile }, days = {};
+    expect(kcalProposal(cfg, days, now)).toBeNull();
+    for (let i = 0; i < 21; i++) days[dayKeyOf(now - i * 86400000)] = { weight: 75 };
+    expect(kcalProposal(cfg, days, now)).toMatchObject({ delta: -150 });
+    expect(dayTargets({ ...cfg, kcalAdj: -150 }).kcal).toBe(1760);
+    expect(dayTargets({ ...cfg, kcalAdj: -150 }).protein).toBe(150); // đạm giữ nguyên, chỉ bớt tinh bột
+    expect(dayTargets({ ...cfg, kcalAdj: -900 }).kcal).toBe(1500); // không xuống dưới mức an toàn
+    expect(kcalProposal({ ...cfg, kcalAdj: -150, kcalAdjAt: dayKeyOf(now - 3 * 86400000) }, days, now)).toBeNull();
+    const down = {}; for (let i = 0; i < 21; i++) down[dayKeyOf(now - i * 86400000)] = { weight: 75 + i * 0.07 }; // giảm ~0,5 kg/tuần
+    expect(kcalProposal(cfg, down, now)).toBeNull(); // đang giảm đẹp → không đổi
+  });
+  it("chuỗi ngày + huy hiệu", () => {
+    const now = at("21:00"), days = {};
+    for (let i = 1; i <= 7; i++) days[dayKeyOf(now - i * 86400000)] = { water: [{ t: 1, ml: 3200 }] }; // 7 ngày tới hôm qua, hôm nay chưa đủ
+    days[dayKeyOf(now - 86400000)].gym = { ex: [{ name: "a", sets: [{ kg: 0, reps: 8 }] }] };
+    const s = streaks({ profile }, days, now);
+    expect(s.water).toBe(7); expect(s.sessions).toBe(1);
+    expect(s.badges.find((b) => b.id === "w7").got).toBe(true);
+    expect(s.badges.find((b) => b.id === "g9").got).toBe(false);
+    delete days[dayKeyOf(now - 3 * 86400000)];
+    expect(streaks({ profile }, days, now).water).toBe(2); // đứt chuỗi
+  });
+  it("hai máy cùng sửa một ngày → gộp, không mất ly nước hay món ăn của máy nào", () => {
+    const a = { water: [{ t: 1, ml: 250 }, { t: 5, ml: 250 }], meals: [{ id: "m1", kcal: 400 }], weight: 74.5 };
+    const b = { water: [{ t: 1, ml: 250 }, { t: 3, ml: 500 }], meals: [{ id: "m2", kcal: 300 }], gym: { name: "x", ex: [] }, steps: 6000 };
+    const m = mergeDay(a, b);
+    expect(m.water.map((w) => w.t)).toEqual([1, 3, 5]);
+    expect(m.meals.map((x) => x.id).sort()).toEqual(["m1", "m2"]);
+    expect(m.weight).toBe(74.5); expect(m.steps).toBe(6000); expect(m.gym.name).toBe("x");
+    expect(mergeDay(null, b)).toBe(b); expect(mergeDay(a, null)).toBe(a);
+  });
+  it("AI ảnh món ăn: đọc JSON an toàn (bỏ món rỗng, chặn số vô lý)", () => {
+    const r = parseFoodJson('{"items":[{"name":"Cơm trắng","unit":"1 bát","kcal":195.4,"p":4,"c":43,"f":0},{"name":"","kcal":100},{"name":"Lạ","kcal":99999}],"note":""}');
+    expect(r.items).toEqual([{ name: "Cơm trắng", unit: "1 bát", kcal: 195, p: 4, c: 43, f: 0 }, { name: "Lạ", unit: "1 phần", kcal: 3000, p: 0, c: 0, f: 0 }]);
+    expect(parseFoodJson("xin lỗi").items).toEqual([]);
   });
 });

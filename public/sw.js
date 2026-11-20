@@ -27,7 +27,7 @@ self.addEventListener("fetch", (event) => {
     })());
     return;
   }
-  if (/^\/(van-phong\/)?assets\//.test(url.pathname) || /\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname)) {
+  if (/^\/(van-phong\/)?assets\//.test(url.pathname) || /\.(png|svg|ico|webmanifest|woff2?)$/.test(url.pathname) || /^\/health\/ex\/.+\.jpg$/.test(url.pathname)) { // 20/11: ảnh mẫu động tác (Sức khoẻ) → xem được khi mất mạng
     event.respondWith((async () => {
       const hit = await caches.match(req);
       if (hit) return hit;
@@ -37,8 +37,8 @@ self.addEventListener("fetch", (event) => {
       if (res.ok && !html) {
         const c = await caches.open(CACHE);
         c.put(req, res.clone());
-        const keys = await c.keys(); // giữ gọn: tối đa ~250 file, xoá file cũ nhất
-        if (keys.length > 250) for (const k of keys.slice(0, keys.length - 250)) await c.delete(k);
+        const keys = await c.keys(); // giữ gọn: tối đa ~400 file, xoá file cũ nhất
+        if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) await c.delete(k);
       }
       return res;
     })());

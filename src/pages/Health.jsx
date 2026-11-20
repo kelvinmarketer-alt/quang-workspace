@@ -1,11 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { Droplets, Flame, Dumbbell, Undo2, Plus, Sun, Utensils, Settings2, CloudOff, Check, Scale, Hourglass } from "lucide-react";
+import { Droplets, Flame, Dumbbell, Undo2, Plus, Sun, Utensils, Settings2, CloudOff, Check, Scale, Hourglass, Footprints, X } from "lucide-react";
 import { Card, SectionTitle } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { useHealth, addWater, undoWater, flush } from "../lib/healthStore.js";
-import { waterTotal, waterGoal, mealTotals, targets, fastState, dayKeyOf, dowOf, lastKeys, DOW, vnNum } from "../lib/health.js";
-import { Ring, Bar, btnGhost } from "../components/health/bits.jsx";
+import { useHealth, addWater, undoWater, flush, setDayField, setCfg } from "../lib/healthStore.js";
+import { waterTotal, waterGoal, mealTotals, dayTargets, streaks, fastState, dayKeyOf, dowOf, lastKeys, DOW, vnNum } from "../lib/health.js";
+import { Ring, Bar, btnGhost, btnPrimary, num } from "../components/health/bits.jsx";
 import { ProfileForm } from "../components/health/HealthSettings.jsx";
 
 // SỨC KHOẺ (20/11/2026, sếp duyệt): uống nước + nhắc, tập gym, ăn uống — 4 tab. Dữ liệu riêng từng tài khoản (bảng qws_health).
@@ -19,7 +19,7 @@ const Loading = () => <div className="flex justify-center py-16"><div className=
 
 function CloudChip({ cloud, pending }) {
   if (cloud === "off") return <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[12px] font-bold text-amber-700"><CloudOff size={13} /> Đang lưu tạm trong máy này</span>;
-  if (cloud === "error") return <button onClick={() => flush()} className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-[12px] font-bold text-rose-700"><CloudOff size={13} /> Chưa lưu được — bấm thử lại</button>;
+  if (cloud === "error") return <button onClick={() => flush()} title="Dữ liệu vẫn nằm an toàn trong máy này. Có mạng lại app sẽ tự gửi; bấm để gửi ngay." className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-[12px] font-bold text-amber-700"><CloudOff size={13} /> {pending} thay đổi chờ mạng — bấm gửi lại</button>;
   if (pending || cloud === "saving") return <span className="text-[12px] font-semibold text-slate-400">Đang lưu…</span>;
   return cloud === "ok" ? <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-400"><Check size={13} /> Đã lưu</span> : null;
 }
@@ -29,7 +29,12 @@ function Today({ cfg, days, todayKey, go }) {
   const drunk = waterTotal(day), goal = waterGoal(cfg, day), glass = cfg.water.glassMl || 250;
   const tot = mealTotals(day);
   const latestW = useMemo(() => { const k = Object.keys(days).filter((x) => days[x]?.weight).sort().pop(); return k ? days[k].weight : cfg.profile?.weightKg; }, [days, cfg.profile]);
-  const tg = useMemo(() => targets(cfg.profile ? { ...cfg.profile, weightKg: latestW || cfg.profile.weightKg } : null), [cfg.profile, latestW]);
+  const tg = useMemo(() => dayTargets(cfg, latestW), [cfg, latestW]);
+  const st = useMemo(() => streaks(cfg, days), [cfg, days]);
+  const stepsGoal = Number(cfg.stepsGoal) || 8000;
+  const [stepIn, setStepIn] = useState("");
+  const saveSteps = () => { const v = Math.round(num(stepIn)); if (v < 1 || v > 100000) return; setDayField("steps", v, todayKey); setStepIn(""); };
+  const INTRO = [["Uống nước", "Mỗi lần uống xong bấm nút xanh “Uống 1 ly”. App nhắc khi anh quên."], ["Tập", "Tab Tập gym: bắt đầu từ Cấp 1, mỗi động tác có hình mẫu. Chỉ cần đến đủ 3 buổi mỗi tuần."], ["Ăn", "Tab Ăn uống: ghi bữa bằng tìm món hoặc chụp ảnh. Nhìn ô “Còn được ăn”."], ["Cân", "Mỗi sáng cân một lần, mỗi tuần đo vòng eo. App vẽ xu hướng và tự đề xuất chỉnh."]];
   const dow = dowOf(Date.now());
   const planned = cfg.plan.routines.find((r) => r.id === cfg.plan.week[String(dow)]);
   const gym = day.gym, setsDone = (gym?.ex || []).reduce((s, e) => s + (e.sets || []).length, 0), setsAll = (gym?.ex || []).reduce((s, e) => s + (e.n || 0), 0) || (planned?.ex || []).reduce((s, e) => s + e.sets, 0);
@@ -40,6 +45,13 @@ function Today({ cfg, days, todayKey, go }) {
 
   return (
     <div className="space-y-4">
+      {cfg.profile && !cfg.introDone && (
+        <Card>
+          <SectionTitle action={<button onClick={() => setCfg((c) => ({ ...c, introDone: true }))} aria-label="Đóng hướng dẫn" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={16} /></button>}>4 việc mỗi ngày, mỗi việc dưới 1 phút</SectionTitle>
+          <ol className="-mt-1 grid gap-2 sm:grid-cols-2">{INTRO.map(([t, d], i) => <li key={t} className="flex gap-2.5 rounded-xl bg-slate-50 px-3 py-2"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-indigo-600 text-[12px] font-bold text-white">{i + 1}</span><span className="text-[13px] text-slate-600"><b className="text-slate-900">{t}.</b> {d}</span></li>)}</ol>
+          <button onClick={() => setCfg((c) => ({ ...c, introDone: true }))} className={btnPrimary + " mt-3"}>Đã hiểu</button>
+        </Card>
+      )}
       <Card>
         <div className="grid grid-cols-3 justify-items-center gap-2">
           <button onClick={() => addWater(glass)} className="grid justify-items-center gap-1.5" aria-label={`Nước: đã uống ${drunk} trên ${goal} ml. Bấm để thêm 1 ly`}>
@@ -79,6 +91,27 @@ function Today({ cfg, days, todayKey, go }) {
             <span className="inline-flex items-center gap-1.5 font-semibold text-slate-600"><Scale size={14} /> Cân nặng</span>
             <button onClick={() => go("an", "can")} className="font-bold text-indigo-600">{day.weight ? `${vnNum(day.weight)} kg (hôm nay)` : latestW ? `${vnNum(latestW)} kg · nhập hôm nay` : "Nhập số cân"}</button>
           </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <SectionTitle>Bước chân</SectionTitle>
+          <div className="-mt-1"><Bar label={<span className="inline-flex items-center gap-1.5"><Footprints size={14} /> Hôm nay</span>} value={day.steps || 0} max={stepsGoal} unit="bước" color="#8b5cf6" /></div>
+          <div className="mt-3 flex items-end gap-2">
+            <label className="min-w-0 flex-1 text-[12px] font-semibold text-slate-500">Số bước (xem trong app Sức khoẻ của điện thoại)<input id="sk-buoc" inputMode="numeric" value={stepIn} onChange={(e) => setStepIn(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveSteps()} className="mt-0.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900" placeholder={day.steps ? String(day.steps) : "6500"} /></label>
+            <button onClick={saveSteps} disabled={!(num(stepIn) >= 1)} className={btnGhost}>Lưu</button>
+          </div>
+          <p className="mt-1.5 text-[12px] text-slate-400">Muốn tự động: xem cách nối Phím tắt iPhone ở tab Cài đặt.</p>
+        </Card>
+        <Card>
+          <SectionTitle>Chuỗi ngày & huy hiệu</SectionTitle>
+          <div className="-mt-1 grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-sky-50 px-1 py-2"><div className="text-xl font-extrabold tabular-nums text-slate-900">{st.water}</div><div className="text-[11.5px] text-slate-600">ngày đủ nước liên tiếp</div></div>
+            <div className="rounded-xl bg-emerald-50 px-1 py-2"><div className="text-xl font-extrabold tabular-nums text-slate-900">{st.weeks}</div><div className="text-[11.5px] text-slate-600">tuần liền có tập</div></div>
+            <div className="rounded-xl bg-amber-50 px-1 py-2"><div className="text-xl font-extrabold tabular-nums text-slate-900">{st.sessions}</div><div className="text-[11.5px] text-slate-600">buổi tập đã xong</div></div>
+          </div>
+          <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Huy hiệu">{st.badges.map((b) => <li key={b.id} title={b.got ? "Đã đạt" : "Chưa đạt"} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold ${b.got ? "bg-indigo-50 text-indigo-700" : "bg-slate-50 text-slate-400"}`}><span className={b.got ? "" : "opacity-40 grayscale"} aria-hidden>{b.icon}</span>{b.label}{b.got && <Check size={12} />}</li>)}</ul>
         </Card>
       </div>
 
@@ -123,6 +156,15 @@ export default function Health() {
     drank.current = true;
     if (ml >= 50 && ml <= 1500) { addWater(Math.round(ml)); setToast?.({ text: `Đã ghi 1 ly ${Math.round(ml)} ml`, at: Date.now() }); }
     const n = new URLSearchParams(sp); n.delete("uong"); setSp(n, { replace: true });
+  }, [ready, sp, setSp, setToast]);
+  // ?buoc=8500 (Phím tắt iPhone gửi số bước trong ngày) → ghi rồi xoá tham số
+  const stepped = useRef(false);
+  useEffect(() => {
+    const v = Math.round(Number(sp.get("buoc")));
+    if (!ready || stepped.current || !sp.has("buoc")) return;
+    stepped.current = true;
+    if (v >= 1 && v <= 100000) { setDayField("steps", v); setToast?.({ text: `Đã ghi ${v.toLocaleString("vi-VN")} bước hôm nay`, at: Date.now() }); }
+    const n = new URLSearchParams(sp); n.delete("buoc"); setSp(n, { replace: true });
   }, [ready, sp, setSp, setToast]);
   // ?can=1 (từ thông báo nhắc cân / nút ở Hôm nay) → mở tab Ăn uống, đặt con trỏ vào ô cân
   useEffect(() => {

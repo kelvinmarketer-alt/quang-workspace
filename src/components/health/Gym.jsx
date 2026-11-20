@@ -1,22 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Dumbbell, Plus, Trash2, Check, Timer, Trophy, Pencil, X, TrendingUp, Play, Flag, Image as ImageIcon, ExternalLink, ArrowUpCircle, Lock } from "lucide-react";
 import { Card, SectionTitle } from "../ui.jsx";
 import { ask } from "../ConfirmDialog.jsx";
-import { PLAN_TEMPLATES, planFromTemplate, DOW, lastSession, suggest, exHistory, exNames, isRecord, sessionVolume, dowOf, dayKeyOf, dm, vnNum, uid, exInfo, exImgs, exVideoUrl, LEVELS, planFromLevel, levelProgress } from "../../lib/health.js";
+import { PLAN_TEMPLATES, planFromTemplate, DOW, lastSession, suggest, exHistory, exNames, isRecord, sessionVolume, dowOf, dayKeyOf, dm, vnNum, uid, exInfo, exImgs, exVideoUrl, LEVELS, planFromLevel, levelProgress, WARMUP, STRETCH, extraImgs, planImgs } from "../../lib/health.js";
 import { setCfg, setGym } from "../../lib/healthStore.js";
-import { num, inputCls, btnPrimary, btnGhost, LineChart, Field } from "./bits.jsx";
+import { num, inputCls, btnPrimary, btnGhost, LineChart, Field, ExPhoto, beep } from "./bits.jsx";
+const Focus = lazy(() => import("./Focus.jsx"));
 
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // hiển thị T2 → CN
-
-function beep() {
-  try { navigator.vibrate?.([200, 100, 200]); } catch { /* máy không rung được */ }
-  try {
-    const A = window.AudioContext || window.webkitAudioContext; if (!A) return;
-    const ctx = new A(), o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.value = 880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.15, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-    o.start(); o.stop(ctx.currentTime + 0.5); setTimeout(() => ctx.close(), 800);
-  } catch { /* không phát được tiếng */ }
-}
 
 // Đồng hồ nghỉ giữa hiệp (đếm ngược, hết giờ rung + kêu)
 function RestTimer({ end, total, onStop, onAdd }) {
@@ -53,14 +44,8 @@ export function ExGuide({ name, onClose }) {
         </div>
         {info ? (
           <>
-            <div className="grid grid-cols-2 gap-2">
-              {imgs.map((src, i) => (
-                <figure key={src} className="overflow-hidden rounded-xl bg-slate-100">
-                  <img src={src} alt={`${name} — ${i ? "tư thế kết thúc" : "tư thế bắt đầu"}`} className="aspect-[3/2] w-full object-cover" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
-                  <figcaption className="px-2 py-1 text-center text-[11.5px] font-bold text-slate-600">{i ? "2. Kết thúc" : "1. Bắt đầu"}</figcaption>
-                </figure>
-              ))}
-            </div>
+            <ExPhoto imgs={imgs} alt={name} className="aspect-[3/2] w-full" />
+            <p className="mt-1 text-center text-[11.5px] text-slate-400">Hình tự chuyển giữa tư thế bắt đầu và kết thúc</p>
             <ol className="mt-3 space-y-1.5 text-[13.5px] text-slate-700">{info.cues.map((c, i) => <li key={i} className="flex gap-2"><span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">{i + 1}</span><span>{c}</span></li>)}</ol>
           </>
         ) : <p className="text-[13px] text-slate-500">Bài này anh tự thêm nên chưa có hình mẫu. Bấm nút dưới để xem video hướng dẫn.</p>}
@@ -76,6 +61,41 @@ function GuideButton({ name, onOpen }) {
     <button onClick={() => onOpen(name)} aria-label={`Xem cách tập ${name}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-50 py-1 pl-1 pr-2.5 text-[12px] font-bold text-indigo-700 ring-1 ring-slate-200 hover:ring-indigo-300">
       {imgs[0] ? <img src={imgs[0]} alt="" loading="lazy" className="h-8 w-10 rounded-lg object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <ImageIcon size={15} className="ml-1.5" />}Xem động tác
     </button>
+  );
+}
+
+// Danh sách động tác khởi động / giãn cơ (gập lại được), mỗi động tác có hình
+function MoveList({ title, hint, items, open }) {
+  return (
+    <details open={open} className="rounded-2xl bg-slate-50 px-3 py-2.5">
+      <summary className="cursor-pointer text-[13.5px] font-bold text-slate-800">{title} <span className="font-medium text-slate-500">· {hint}</span></summary>
+      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+        {items.map((w) => (
+          <li key={w.name} className="flex items-center gap-2.5">
+            <ExPhoto imgs={extraImgs(w.img)} alt={w.name} className="h-14 w-20 shrink-0" />
+            <span className="min-w-0 text-[12.5px] leading-snug text-slate-600"><b className="block text-slate-900">{w.name}</b>{w.how}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+const FEEL = [["nhe", "Nhẹ", "Buổi sau app sẽ gợi ý tăng khi đủ hiệp"], ["vua", "Vừa sức", "Đúng mức, cứ giữ nhịp này"], ["nang", "Nặng", "Buổi sau giữ nguyên mức, chưa tăng"]];
+function AfterSession({ gym, todayKey }) {
+  const up = (patch) => setGym(todayKey, (g) => ({ ...g, ...patch }));
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="rounded-2xl p-3 ring-1 ring-slate-200">
+        <div className="text-[13.5px] font-bold text-slate-900">Buổi hôm nay thấy thế nào?</div>
+        <div className="mt-2 grid grid-cols-3 gap-2" role="group" aria-label="Cảm nhận buổi tập">
+          {FEEL.map(([k, l]) => <button key={k} onClick={() => up({ feel: k })} aria-pressed={gym.feel === k} className={`rounded-xl py-2.5 text-sm font-bold ring-1 ${gym.feel === k ? "bg-indigo-600 text-white ring-indigo-600" : "text-slate-700 ring-slate-200 hover:bg-slate-50"}`}>{l}</button>)}
+        </div>
+        {gym.feel && <p className="mt-1.5 text-[12.5px] text-slate-500">{FEEL.find(([k]) => k === gym.feel)[2]}.</p>}
+        <label className="mt-2 flex items-center gap-2 text-[13px] text-slate-700"><input type="checkbox" checked={!!gym.pain} onChange={(e) => up({ pain: e.target.checked || undefined })} /> Có đau ở khớp (gối, vai, lưng dưới…), không phải mỏi cơ</label>
+        {gym.pain && <p className="mt-1.5 rounded-xl bg-rose-50 px-3 py-2 text-[12.5px] font-semibold text-rose-700">Buổi sau app sẽ giảm một bậc tạ cho các bài hôm nay. Đau kéo dài quá 3 ngày hoặc đau nhói thì nên nghỉ và đi khám.</p>}
+      </div>
+      <MoveList title="Giãn cơ 5 phút" hint="giảm đau mỏi ngày mai" items={STRETCH} open={!gym.feel} />
+    </div>
   );
 }
 
@@ -234,6 +254,13 @@ export default function Gym({ cfg, days, todayKey }) {
   const [addName, setAddName] = useState("");
   const [pick, setPick] = useState("");
   const [guide, setGuide] = useState(null); // tên bài đang xem hình mẫu
+  const [focus, setFocus] = useState(false); // chế độ đang tập toàn màn hình
+  // Còn mạng thì tải sẵn ảnh của lịch đang dùng vào máy (trình duyệt tự giữ lại) → vào phòng tập mất sóng vẫn xem được
+  useEffect(() => {
+    if (!plan.routines.length || typeof Image === "undefined" || navigator.onLine === false) return undefined;
+    const t = setTimeout(() => { for (const u of planImgs(plan)) { const im = new Image(); im.src = u; } }, 2500);
+    return () => clearTimeout(t);
+  }, [plan]);
   const [more, setMore] = useState(false);
   const pickLevel = async (lv) => {
     if (has && !(await ask(`Đổi sang lịch tập Cấp ${lv}?\nLịch tuần hiện tại sẽ được thay bằng lịch của cấp này. Các buổi đã ghi vẫn giữ nguyên.`, { ok: "Đổi lịch" }))) return;
@@ -241,9 +268,9 @@ export default function Gym({ cfg, days, todayKey }) {
   };
   const restSec = Math.max(15, Number(cfg.gym.restSec) || 90);
 
-  const begin = (r) => setGym(todayKey, () => ({ rid: r?.id || null, name: r?.name || "Buổi tự do", start: Date.now(), ex: (r?.ex || []).map((e) => ({ name: e.name, n: e.sets, reps: e.reps, step: e.step, sets: [] })) }));
+  const begin = (r) => { setFocus(true); setGym(todayKey, () => ({ rid: r?.id || null, name: r?.name || "Buổi tự do", start: Date.now(), ex: (r?.ex || []).map((e) => ({ name: e.name, n: e.sets, reps: e.reps, step: e.step, sets: [] })) })); };
   const upEx = (i, next) => setGym(todayKey, (g) => ({ ...g, ex: g.ex.map((e, j) => (j === i ? next : e)) }));
-  const finish = () => { setGym(todayKey, (g) => ({ ...g, end: Date.now() })); setRest(null); };
+  const finish = () => { setGym(todayKey, (g) => ({ ...g, end: Date.now() })); setRest(null); setFocus(false); };
   const dropSession = async () => { if (await ask("Xoá buổi tập hôm nay?\nCác hiệp đã ghi của hôm nay sẽ mất.", { ok: "Xoá buổi", danger: true })) { setGym(todayKey, () => null); setRest(null); } };
 
   const names = useMemo(() => exNames(days), [days]);
@@ -315,7 +342,7 @@ export default function Gym({ cfg, days, todayKey }) {
         <Card>
           <SectionTitle>{planned ? `Hôm nay: ${planned.name}` : "Hôm nay là ngày nghỉ"}</SectionTitle>
           {planned
-            ? <><ul className="-mt-1 mb-3 space-y-1.5">{planned.ex.map((e) => <li key={e.name} className="flex items-center justify-between gap-2 text-[13px] text-slate-700"><span className="min-w-0"><b className="text-slate-900">{e.name}</b> — {e.sets} hiệp × {e.reps}</span><GuideButton name={e.name} onOpen={setGuide} /></li>)}</ul><button onClick={() => begin(planned)} className={btnPrimary}><Play size={16} /> Bắt đầu buổi tập</button></>
+            ? <><ul className="-mt-1 mb-3 space-y-1.5">{planned.ex.map((e) => <li key={e.name} className="flex items-center justify-between gap-2 text-[13px] text-slate-700"><span className="min-w-0"><b className="text-slate-900">{e.name}</b> — {e.sets} hiệp × {e.reps}</span><GuideButton name={e.name} onOpen={setGuide} /></li>)}</ul><div className="mb-3"><MoveList title="Khởi động 5 phút trước khi tập" hint="làm nóng khớp, tránh chấn thương" items={WARMUP} /></div><button onClick={() => begin(planned)} className={btnPrimary + " w-full py-3.5 text-base sm:w-auto"}><Play size={18} /> Bắt đầu buổi tập</button></>
             : <p className="-mt-2 mb-3 text-[13px] text-slate-500">Nghỉ để cơ hồi phục cũng là một phần của tập. Muốn tập thêm thì chọn buổi bên dưới.</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {plan.routines.filter((r) => r.id !== planned?.id).map((r) => <button key={r.id} onClick={() => begin(r)} className={btnGhost}>Tập: {r.name.split("(")[0].trim()}</button>)}
@@ -324,7 +351,8 @@ export default function Gym({ cfg, days, todayKey }) {
         </Card>
       )}
 
-      {gym && (
+      {gym && active && focus && gym.ex.length > 0 && <Suspense fallback={null}><Focus gym={gym} days={days} todayKey={todayKey} restSec={restSec} onClose={() => setFocus(false)} onFinish={finish} /></Suspense>}
+      {gym && !(active && focus && gym.ex.length > 0) && (
         <Card>
           <SectionTitle action={<button onClick={dropSession} className="text-[12.5px] font-bold text-slate-400 hover:text-rose-600">Xoá buổi</button>}>{gym.name}{gym.end ? " — đã xong" : ""}</SectionTitle>
           {gym.end && (
@@ -335,6 +363,7 @@ export default function Gym({ cfg, days, todayKey }) {
               <button onClick={() => setGym(todayKey, (g) => ({ ...g, end: undefined }))} className="ml-auto font-bold text-emerald-700 underline">Ghi thêm</button>
             </div>
           )}
+          {active && gym.ex.length > 0 && <button onClick={() => setFocus(true)} className={btnPrimary + " -mt-1 mb-3 w-full py-3"}><Play size={16} /> Tiếp tục ở chế độ đang tập (toàn màn hình)</button>}
           <div className="space-y-3">
             {gym.ex.map((e, i) => active
               ? <ExerciseCard key={e.name + i} ex={e} idx={i} days={days} dayKey={todayKey} onChange={(next) => upEx(i, next)} onRemove={() => setGym(todayKey, (g) => ({ ...g, ex: g.ex.filter((_, j) => j !== i) }))} onRest={() => setRest({ end: Date.now() + restSec * 1000, total: restSec })} onGuide={setGuide} />
@@ -350,10 +379,11 @@ export default function Gym({ cfg, days, todayKey }) {
               <button onClick={finish} disabled={!setsDone} className={btnPrimary + " mt-3 w-full"}><Flag size={16} /> Kết thúc buổi tập</button>
             </>
           )}
+          {gym.end && <AfterSession gym={gym} todayKey={todayKey} />}
         </Card>
       )}
 
-      {rest && active && <RestTimer end={rest.end} total={rest.total} onStop={() => setRest(null)} onAdd={() => setRest((r) => ({ end: r.end + 30000, total: r.total + 30 }))} />}
+      {rest && active && !focus && <RestTimer end={rest.end} total={rest.total} onStop={() => setRest(null)} onAdd={() => setRest((r) => ({ end: r.end + 30000, total: r.total + 30 }))} />}
 
       <Card>
         <SectionTitle>Tiến bộ theo bài</SectionTitle>

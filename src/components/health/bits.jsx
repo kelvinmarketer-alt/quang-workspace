@@ -74,3 +74,46 @@ export function LineChart({ series, count, height = 150, unit = "", labels = [] 
     </svg>
   );
 }
+
+// Tiếng + rung báo hết giờ nghỉ
+export function beep() {
+  try { navigator.vibrate?.([200, 100, 200]); } catch { /* máy không rung được */ }
+  try {
+    const A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+    const ctx = new A(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0.15, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    o.start(); o.stop(ctx.currentTime + 0.5); setTimeout(() => ctx.close(), 800);
+  } catch { /* không phát được tiếng */ }
+}
+
+// Ảnh động tác: 2 ảnh (bắt đầu / kết thúc) tự chuyển qua lại như hình động. Người tắt hiệu ứng chuyển động thì bấm để đổi ảnh.
+import { useEffect as _useEffect, useState as _useState } from "react";
+export function ExPhoto({ imgs, alt, className = "" }) {
+  const [b, setB] = _useState(false);
+  const still = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  _useEffect(() => { if (still) return undefined; const t = setInterval(() => setB((v) => !v), 1300); return () => clearInterval(t); }, [still]);
+  if (!imgs?.length) return null;
+  return (
+    <div className={`relative overflow-hidden rounded-xl bg-slate-100 ${className}`} onClick={() => setB((v) => !v)}>
+      <img src={imgs[0]} alt={`${alt} — tư thế bắt đầu`} className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+      <img src={imgs[1]} alt={`${alt} — tư thế kết thúc`} className="absolute inset-0 h-full w-full object-cover" style={{ opacity: b ? 1 : 0, transition: "opacity .45s ease" }} onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+      <span className="absolute bottom-1.5 left-1.5 rounded-full bg-slate-900/75 px-2 py-0.5 text-[11px] font-bold text-white">{b ? "2. Kết thúc" : "1. Bắt đầu"}</span>
+    </div>
+  );
+}
+
+// Ô số có nút − / + to (bấm bằng ngón cái lúc đang tập)
+export function Stepper({ label, value, onChange, step = 1, ariaLabel, mode = "decimal" }) {
+  const cur = num(value);
+  const fmt = (v) => String(Math.max(0, Math.round(v * 100) / 100)).replace(".", ",");
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="mb-1 text-center text-[11.5px] font-semibold text-slate-500">{label}</div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onChange(fmt(cur - step))} aria-label={`Giảm ${label}`} className="grid h-12 w-11 shrink-0 place-items-center rounded-xl text-xl font-bold text-slate-700 ring-1 ring-slate-300 active:bg-slate-100">−</button>
+        <input inputMode={mode} value={value} onChange={(e) => onChange(e.target.value)} onFocus={(e) => e.target.select()} aria-label={ariaLabel} className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white text-center text-xl font-extrabold tabular-nums text-slate-900" />
+        <button type="button" onClick={() => onChange(fmt(cur + step))} aria-label={`Tăng ${label}`} className="grid h-12 w-11 shrink-0 place-items-center rounded-xl text-xl font-bold text-slate-700 ring-1 ring-slate-300 active:bg-slate-100">+</button>
+      </div>
+    </div>
+  );
+}

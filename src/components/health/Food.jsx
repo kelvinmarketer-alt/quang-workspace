@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
-import { Plus, X, Search, ChevronLeft, ChevronRight, Star, Utensils, Hourglass, Scale, Minus } from "lucide-react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
+import { Plus, X, Search, ChevronLeft, ChevronRight, Star, Utensils, Hourglass, Scale, Minus, Camera, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Card, SectionTitle } from "../ui.jsx";
-import { targets, mealTotals, fastState, searchFoods, MEAL_SLOTS, slotByHour, weightSeries, weightTrend, trendNote, dm, vnNum, uid, GOALS } from "../../lib/health.js";
+import { dayTargets, kcalProposal, mealPlan, dayKeyOf, mealTotals, fastState, searchFoods, MEAL_SLOTS, slotByHour, weightSeries, weightTrend, trendNote, dm, vnNum, uid, GOALS } from "../../lib/health.js";
 import { addMeal, removeMeal, setCfg, setWeight } from "../../lib/healthStore.js";
 import { num, inputCls, btnPrimary, btnGhost, Bar, LineChart, Field } from "./bits.jsx";
+import { foodFromPhoto } from "../../lib/healthAi.js";
+const BodyTrack = lazy(() => import("./BodyTrack.jsx"));
 
 const DAY = 86400000;
 const hourVN = () => new Date(Date.now() + 7 * 3600000).getUTCHours();
@@ -13,6 +15,14 @@ function AddMeal({ slot, cfg, onAdd, onClose }) {
   const [q, setQ] = useState(""), [sel, setSel] = useState(null), [qty, setQty] = useState(1);
   const [manual, setManual] = useState(false), [m, setM] = useState({ name: "", kcal: "", p: "", c: "", f: "", keep: true });
   const list = useMemo(() => searchFoods(q, cfg.foods), [q, cfg.foods]);
+  const [ai, setAi] = useState(null); // { busy } | { items, note, on: Set } | { error }
+  const camRef = useRef(null);
+  const shoot = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    setAi({ busy: true });
+    try { const r = await foodFromPhoto(f); setAi({ ...r, on: new Set(r.items.map((_, i) => i)) }); } catch (x) { setAi({ error: x.message || "Chưa đọc được ảnh" }); }
+  };
+  const putAi = () => { ai.items.forEach((it, i) => ai.on.has(i) && onAdd({ slot, ...it, q: 1, ai: true })); onClose(); };
   const groups = useMemo(() => { const g = new Map(); for (const x of list) { if (!g.has(x.g)) g.set(x.g, []); g.get(x.g).push(x); } return [...g]; }, [list]);
   const put = () => { onAdd({ slot, name: sel.name, unit: sel.unit, kcal: sel.kcal, p: sel.p, c: sel.c, f: sel.f, q: qty }); onClose(); };
   const putManual = () => {
@@ -26,7 +36,26 @@ function AddMeal({ slot, cfg, onAdd, onClose }) {
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-2xl bg-white p-4 shadow-2xl sm:rounded-2xl sm:p-5" role="dialog" aria-label="Thêm món ăn">
         <div className="mb-3 flex items-center justify-between"><h3 className="text-lg font-extrabold text-slate-900">Thêm món — bữa {MEAL_SLOTS.find(([k]) => k === slot)?.[1].toLowerCase()}</h3><button aria-label="Đóng" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={18} /></button></div>
-        {sel ? (
+        {ai ? (
+          <div>
+            {ai.busy && <div className="flex items-center justify-center gap-2 py-10 text-sm font-semibold text-slate-600"><Loader2 size={18} className="animate-spin" /> AI đang xem ảnh, khoảng 5–10 giây…</div>}
+            {ai.error && <p className="rounded-xl bg-rose-50 px-3 py-2 text-[13px] font-semibold text-rose-700">{ai.error}</p>}
+            {ai.items && (ai.items.length ? (
+              <>
+                <p className="mb-2 text-[12.5px] text-slate-500">AI ước lượng từ ảnh, có thể lệch 20–30%. Bỏ chọn món sai trước khi thêm.</p>
+                {ai.items.map((it, i) => (
+                  <label key={i} className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50">
+                    <input type="checkbox" checked={ai.on.has(i)} onChange={() => setAi((v) => { const on = new Set(v.on); on.has(i) ? on.delete(i) : on.add(i); return { ...v, on }; })} />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-800">{it.name}</span><span className="block text-[12px] text-slate-500">{it.unit} · đạm {it.p} g</span></span>
+                    <span className="shrink-0 text-sm font-bold tabular-nums text-slate-700">{it.kcal} kcal</span>
+                  </label>
+                ))}
+                {ai.note && <p className="mt-1 text-[12px] text-slate-500">Ghi chú của AI: {ai.note}</p>}
+              </>
+            ) : <p className="py-4 text-center text-[13px] text-slate-600">{ai.note || "AI không nhận ra món nào trong ảnh."}</p>)}
+            {!ai.busy && <div className="mt-4 flex gap-2"><button onClick={() => setAi(null)} className={btnGhost}>Quay lại</button>{ai.items?.length > 0 && <button onClick={putAi} disabled={!ai.on.size} className={btnPrimary + " flex-1"}>Thêm {ai.on.size} món · {ai.items.reduce((t, it, i) => t + (ai.on.has(i) ? it.kcal : 0), 0)} kcal</button>}</div>}
+          </div>
+        ) : sel ? (
           <div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="font-extrabold text-slate-900">{sel.name}</div>
@@ -70,7 +99,11 @@ function AddMeal({ slot, cfg, onAdd, onClose }) {
               ))}
               {!list.length && <p className="py-6 text-center text-[13px] text-slate-500">Không có "{q}" trong danh sách. Bấm "Nhập món khác" bên dưới.</p>}
             </div>
-            <button onClick={() => { setManual(true); setM((v) => ({ ...v, name: q })); }} className={btnGhost + " mt-3"}><Plus size={15} /> Nhập món khác</button>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <input ref={camRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={shoot} aria-label="Chụp ảnh món ăn" />
+              <button onClick={() => camRef.current?.click()} className={btnGhost}><Camera size={15} /> Chụp ảnh món ăn</button>
+              <button onClick={() => { setManual(true); setM((v) => ({ ...v, name: q })); }} className={btnGhost}><Plus size={15} /> Nhập món khác</button>
+            </div>
             <p className="mt-2 text-[11.5px] text-slate-400">Số calo là ước lượng cho một phần thường gặp, có thể lệch khoảng 15% tuỳ quán.</p>
           </>
         )}
@@ -103,7 +136,11 @@ export default function Food({ cfg, days, todayKey }) {
   const day = days[key] || {};
   const profile = cfg.profile;
   const latestW = useMemo(() => { const k = Object.keys(days).filter((x) => days[x]?.weight).sort().pop(); return k ? days[k].weight : profile?.weightKg; }, [days, profile]);
-  const tg = useMemo(() => targets(profile ? { ...profile, weightKg: latestW || profile.weightKg } : null), [profile, latestW]);
+  const tg = useMemo(() => dayTargets(cfg, latestW), [cfg, latestW]);
+  const prop = useMemo(() => kcalProposal(cfg, days), [cfg, days]);
+  const [rank, setRank] = useState(0), [showPlan, setShowPlan] = useState(false);
+  const plan = useMemo(() => (showPlan ? mealPlan(tg, rank) : null), [showPlan, tg, rank]);
+  const answerProp = (yes) => setCfg((c) => ({ ...c, kcalAdj: (Number(c.kcalAdj) || 0) + (yes ? prop.delta : 0), kcalAdjAt: dayKeyOf(Date.now()) }));
   const tot = mealTotals(day);
   const isToday = key === todayKey;
   const shift = (d) => { const ms = new Date(key + "T00:00:00Z").getTime() + d * DAY; const k = new Date(ms).toISOString().slice(0, 10); if (k <= todayKey) setKey(k); };
@@ -134,8 +171,15 @@ export default function Food({ cfg, days, todayKey }) {
             <div className="mb-3 rounded-2xl bg-amber-50 px-4 py-3">
               <div className="text-[12px] font-bold uppercase tracking-wide text-amber-700">{left >= 0 ? "Còn được ăn" : "Đã vượt mức"}</div>
               <div className="text-3xl font-extrabold tabular-nums text-slate-900">{Math.abs(left)} <span className="text-base font-bold text-slate-500">kcal</span></div>
-              <div className="text-[12.5px] text-slate-600">Mục tiêu {tg.kcal} kcal ({(GOALS[profile.goal] || GOALS.recomp).label.toLowerCase()}) · đã ăn {tot.kcal} kcal</div>
+              <div className="text-[12.5px] text-slate-600">Mục tiêu {tg.kcal} kcal ({(GOALS[profile.goal] || GOALS.recomp).label.toLowerCase()}{tg.adj ? `, đã chỉnh ${tg.adj > 0 ? "+" : ""}${tg.adj}` : ""}) · đã ăn {tot.kcal} kcal</div>
             </div>
+            {prop && isToday && (
+              <div className="mb-3 rounded-2xl bg-indigo-50 px-4 py-3">
+                <div className="text-[13.5px] font-bold text-slate-900">Đề xuất chỉnh mục tiêu: {prop.delta > 0 ? "thêm" : "bớt"} {Math.abs(prop.delta)} kcal mỗi ngày</div>
+                <div className="text-[12.5px] text-slate-600">{prop.text} ({prop.trend > 0 ? "+" : ""}{vnNum(prop.trend, 2)} kg mỗi tuần). {prop.delta < 0 ? "Bớt khoảng nửa bát cơm hoặc một ly nước ngọt mỗi ngày." : "Thêm một bữa phụ nhỏ mỗi ngày."} Lượng đạm giữ nguyên.</div>
+                <div className="mt-2 flex gap-2"><button onClick={() => answerProp(true)} className={btnPrimary + " py-2"}>Đồng ý, đổi thành {tg.kcal + prop.delta} kcal</button><button onClick={() => answerProp(false)} className={btnGhost}>Giữ nguyên</button></div>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-3">
               <Bar label="Đạm" value={tot.p} max={tg.protein} unit="g" color="#10b981" />
               <Bar label="Tinh bột" value={tot.c} max={tg.carb} unit="g" color="#f59e0b" />
@@ -144,6 +188,23 @@ export default function Food({ cfg, days, todayKey }) {
             {isToday && tot.kcal > 0 && tot.p < tg.protein * 0.6 && hourVN() >= 15 && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-[12.5px] font-semibold text-emerald-800">Đạm hôm nay còn thiếu {tg.protein - tot.p} g. Gợi ý bữa tối: 150 g ức gà (46 g đạm) hoặc 2 quả trứng + 1 hộp sữa chua + 1 muỗng whey.</p>}
           </>
         ) : <p className="-mt-2 mb-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-600">Nhập chỉ số cơ thể ở tab <b>Cài đặt</b> để app tính lượng calo và đạm cần ăn mỗi ngày. Chưa nhập vẫn ghi bữa được: hôm nay đã ăn <b>{tot.kcal} kcal</b>, {tot.p} g đạm.</p>}
+
+        {tg && isToday && (
+          <div className="mt-4 rounded-2xl p-3 ring-1 ring-slate-100">
+            <button onClick={() => setShowPlan((v) => !v)} aria-expanded={showPlan} className="flex w-full items-center justify-between gap-2 text-left text-[13.5px] font-bold text-slate-900"><span className="inline-flex items-center gap-1.5"><Sparkles size={15} className="text-indigo-600" /> Hôm nay ăn gì cho đủ {tg.kcal} kcal và {tg.protein} g đạm?</span><span className="text-indigo-600">{showPlan ? "Ẩn" : "Xem gợi ý"}</span></button>
+            {plan && (
+              <div className="mt-2 space-y-2">
+                {plan.slots.map((sl) => (
+                  <div key={sl.slot} className="flex items-start justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                    <div className="min-w-0 text-[13px]"><b className="text-slate-900">{MEAL_SLOTS.find(([k]) => k === sl.slot)[1]}</b> <span className="text-slate-500">· {Math.round(sl.items.reduce((t, it) => t + it.kcal * it.q, 0))} kcal</span><div className="text-slate-600">{sl.items.map((it) => `${it.q !== 1 ? vnNum(it.q) + " × " : ""}${it.name}`).join(", ")}</div></div>
+                    <button onClick={() => sl.items.forEach((it) => addMeal({ slot: sl.slot, ...it }, key))} className="shrink-0 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-1.5 text-[12px] font-bold text-white">Ghi bữa này</button>
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-slate-500"><span>Cả ngày: <b className="text-slate-900">{plan.kcal} kcal · {plan.p} g đạm</b></span><button onClick={() => setRank((r) => (r + 1) % 6)} className="inline-flex items-center gap-1 font-bold text-indigo-600"><RefreshCw size={13} /> Gợi ý khác</button></div>
+              </div>
+            )}
+          </div>
+        )}
 
         {cfg.favs.length > 0 && (
           <div className="mt-4">
@@ -202,6 +263,7 @@ export default function Food({ cfg, days, todayKey }) {
           </>
         ) : <p className="mt-3 text-[13px] text-slate-500">Mỗi sáng cân một lần lúc mới ngủ dậy. Sau vài ngày biểu đồ xu hướng sẽ hiện ở đây.</p>}
       </Card>
+      <Suspense fallback={null}><BodyTrack days={days} todayKey={todayKey} /></Suspense>
       {adding && <AddMeal slot={adding} cfg={cfg} onAdd={(m) => addMeal(m, key)} onClose={() => setAdding(null)} />}
     </div>
   );

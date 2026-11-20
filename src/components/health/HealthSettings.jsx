@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { BellRing, Check, Info } from "lucide-react";
+import { BellRing, Check, Info, Send, ChevronDown } from "lucide-react";
 import { Card, SectionTitle } from "../ui.jsx";
 import { useAuth } from "../../lib/auth.jsx";
 import { useData } from "../../lib/store.jsx";
 import { targets, waterGoal, GOALS, ACTIVITY, fastState } from "../../lib/health.js";
 import { setCfg } from "../../lib/healthStore.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../../lib/push.js";
-import { num, inputCls, btnPrimary, Toggle, Field } from "./bits.jsx";
+import { supabase } from "../../lib/supabase.js";
+import { num, inputCls, btnPrimary, btnGhost, Toggle, Field } from "./bits.jsx";
 
 // Form chỉ số cơ thể — dùng ở Cài đặt và ở màn hình chào lần đầu
 export function ProfileForm({ profile, onSaved, compact }) {
@@ -46,7 +47,16 @@ function PushStatus() {
   const [on, setOn] = useState(null), [busy, setBusy] = useState(false);
   useEffect(() => { let alive = true; if (!pushSupported()) { setOn(false); return undefined; } isSubscribed().then((v) => alive && setOn(v)).catch(() => alive && setOn(false)); return () => { alive = false; }; }, []);
   if (on === null) return null;
-  if (on && permission() === "granted") return <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800"><Check size={15} /> Máy này đã bật thông báo, sẽ nhận được lời nhắc.</p>;
+  const test = async () => {
+    setBusy(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qws-send-push", { body: { user_id: user.id, title: "💧 Uống nước nào (gửi thử)", body: "Lời nhắc thật sẽ trông như thế này. Uống xong bấm vào đây để ghi 1 ly.", url: "/suc-khoe?uong=250", tag: "sk-nuoc" } });
+      if (error) throw error;
+      setToast?.({ text: data?.sent ? `Đã gửi tới ${data.sent} máy. Chưa thấy trong 10 giây thì kiểm tra chế độ Không làm phiền.` : "Chưa có máy nào bật thông báo cho tài khoản này.", at: Date.now() });
+    } catch { setToast?.({ text: "Chưa gửi được lời nhắc thử, kiểm tra mạng rồi thử lại.", at: Date.now() }); }
+    setBusy(false);
+  };
+  if (on && permission() === "granted") return <div className="flex flex-wrap items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2"><p className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-semibold text-emerald-800"><Check size={15} /> Máy này đã bật thông báo, sẽ nhận được lời nhắc.</p><button onClick={test} disabled={busy} className={btnGhost + " py-1.5"}><Send size={14} /> {busy ? "Đang gửi…" : "Gửi thử lời nhắc"}</button></div>;
   const enable = async () => { setBusy(true); try { await enablePush(user.id); setOn(true); } catch (e) { setToast?.({ text: e.message || "Chưa bật được thông báo", at: Date.now() }); } setBusy(false); };
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 px-3 py-2.5">
@@ -58,6 +68,15 @@ function PushStatus() {
 }
 
 const timeCls = inputCls + " tabular-nums";
+// Nhóm cài đặt gập lại được: tiêu đề + tóm tắt giá trị đang đặt
+function Fold({ title, sub, children, open }) {
+  return (
+    <details open={open} className="card group p-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5"><span className="min-w-0"><span className="block text-base font-extrabold tracking-tight text-slate-900">{title}</span><span className="block truncate text-[12.5px] text-slate-500">{sub}</span></span><ChevronDown size={18} className="shrink-0 text-slate-400 transition group-open:rotate-180" /></summary>
+      <div className="px-4 pb-4 sm:px-5 sm:pb-5">{children}</div>
+    </details>
+  );
+}
 export default function HealthSettings({ cfg }) {
   const up = (path, v) => setCfg((c) => {
     const next = JSON.parse(JSON.stringify(c)); let o = next; const ks = path.split(".");
@@ -94,20 +113,32 @@ export default function HealthSettings({ cfg }) {
           </div>
           <Toggle id="sk-r-week" on={cfg.weekly.on} onChange={(v) => up("weekly.on", v)} label="Tổng kết tuần" hint="20 giờ tối Chủ nhật: số ngày uống đủ nước, số buổi tập, cân trung bình thay đổi bao nhiêu" />
         </div>
-        <p className="mt-4 flex gap-2 text-[12px] text-slate-500"><Info size={14} className="mt-0.5 shrink-0" /> Máy chủ kiểm tra 15 phút một lần, nên lời nhắc có thể tới trễ vài phút so với giờ đặt.</p>
+        <p className="mt-4 flex gap-2 text-[12px] text-slate-500"><Info size={14} className="mt-0.5 shrink-0" /> Máy chủ kiểm tra 5 phút một lần, nên lời nhắc có thể tới trễ tối đa 5 phút so với giờ đặt.</p>
       </Card>
 
-      <Card>
-        <SectionTitle>Nước</SectionTitle>
-        <div className="-mt-1 grid gap-3 sm:grid-cols-2">
+      <Fold title="Nước" sub={`${cfg.water.goalMl || auto} ml mỗi ngày · ly ${cfg.water.glassMl} ml`}>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Mục tiêu mỗi ngày (ml)" hint={`Để trống = tự tính theo cân nặng (${auto} ml, ngày có tập cộng 500 ml)`}><input inputMode="numeric" value={cfg.water.goalMl || ""} onChange={(e) => up("water.goalMl", Math.round(num(e.target.value)))} className={inputCls} placeholder={String(auto)} /></Field>
           <Field label="Một ly của anh"><select value={cfg.water.glassMl} onChange={(e) => up("water.glassMl", Number(e.target.value))} className={inputCls}>{[150, 200, 250, 300, 350, 500].map((m) => <option key={m} value={m}>{m} ml</option>)}</select></Field>
         </div>
-      </Card>
+      </Fold>
 
-      <Card>
-        <SectionTitle>Nhịn ăn theo giờ</SectionTitle>
-        <div className="-mt-1 space-y-3">
+      <Fold title="Bước chân" sub={`mục tiêu ${(Number(cfg.stepsGoal) || 8000).toLocaleString("vi-VN")} bước mỗi ngày`}>
+        <div className="sm:max-w-[220px]"><Field label="Mục tiêu mỗi ngày"><select value={Number(cfg.stepsGoal) || 8000} onChange={(e) => up("stepsGoal", Number(e.target.value))} className={inputCls}>{[5000, 6000, 8000, 10000, 12000].map((m) => <option key={m} value={m}>{m.toLocaleString("vi-VN")} bước</option>)}</select></Field></div>
+        <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-[12.5px] leading-relaxed text-slate-600">
+          <b className="text-slate-900">Tự gửi số bước từ iPhone (làm một lần):</b>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>Mở app <b>Phím tắt</b> → tab Tự động hoá → dấu + → chọn "Thời gian trong ngày", đặt 21:00, hằng ngày, "Chạy ngay".</li>
+            <li>Thêm tác vụ <b>Tìm mẫu sức khoẻ</b>: loại "Số bước", ngày bắt đầu "là hôm nay".</li>
+            <li>Thêm tác vụ <b>Tính số liệu thống kê</b>: "Tổng" của kết quả trên.</li>
+            <li>Thêm tác vụ <b>Mở URL</b>: <code className="rounded bg-white px-1">https://boss.2bkin.io.vn/suc-khoe?buoc=</code> rồi chèn biến "Số liệu thống kê" vào cuối.</li>
+          </ol>
+          <p className="mt-1">Lần đầu link mở bằng Safari, anh đăng nhập một lần ở đó. Chưa cài thì cứ nhập tay ở tab Hôm nay.</p>
+        </div>
+      </Fold>
+
+      <Fold title="Nhịn ăn theo giờ" sub={cfg.fast.on ? `đang bật · ăn ${fs.start}–${fs.end}` : "đang tắt"}>
+        <div className="space-y-3">
           <Toggle id="sk-fast" on={cfg.fast.on} onChange={(v) => up("fast.on", v)} label="Bật nhịn ăn theo giờ" hint="Chỉ ăn trong một khung giờ mỗi ngày, ngoài giờ đó chỉ uống nước, trà, cà phê đen" />
           {cfg.fast.on && (
             <>
@@ -120,7 +151,7 @@ export default function HealthSettings({ cfg }) {
             </>
           )}
         </div>
-      </Card>
+      </Fold>
       <p className="px-1 text-[12px] text-slate-400">Đây là công cụ ghi chép và nhắc nhở, không thay cho lời khuyên của bác sĩ. Có bệnh nền (huyết áp, tiểu đường, dạ dày…) nên hỏi bác sĩ trước khi ăn kiêng hoặc nhịn ăn.</p>
     </div>
   );

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Droplets, Flame, Dumbbell, Plus } from "lucide-react";
 import { useHealth, addWater } from "../../lib/healthStore.js";
-import { waterTotal, waterGoal, mealTotals, targets, dayKeyOf, dowOf, vnNum } from "../../lib/health.js";
+import { waterTotal, waterGoal, mealTotals, dayTargets, dayKeyOf, dowOf, vnNum } from "../../lib/health.js";
 
 // Dải Sức khoẻ ở Tổng quan (chỉ chủ, chỉ hiện khi đã nhập chỉ số): nước + nút uống 1 ly, calo, buổi tập hôm nay
 export default function HealthStrip() {
@@ -9,7 +9,7 @@ export default function HealthStrip() {
   if (!ready || !rawCfg?.profile) return null;
   const key = dayKeyOf(Date.now()), day = days[key] || {};
   const drunk = waterTotal(day), goal = waterGoal(cfg, day), glass = cfg.water.glassMl || 250;
-  const tot = mealTotals(day), tg = targets(cfg.profile);
+  const tot = mealTotals(day), tg = dayTargets(cfg);
   const planned = cfg.plan.routines.find((r) => r.id === cfg.plan.week[String(dowOf(Date.now()))]);
   const gym = day.gym;
   const gymText = gym?.end ? "Đã tập xong" : gym ? "Đang tập" : planned ? planned.name.split("(")[0].trim() : "Ngày nghỉ";

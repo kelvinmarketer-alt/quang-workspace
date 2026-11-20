@@ -21,7 +21,8 @@ async function mount(path, seed) {
   const Health = (await import("../src/pages/Health.jsx")).default;
   let r;
   await act(async () => { r = render(<MemoryRouter initialEntries={[path]}><Suspense fallback={null}><Health /></Suspense></MemoryRouter>); });
-  await act(async () => { await new Promise((ok) => setTimeout(ok, 60)); });
+  // chờ các tab tải riêng (lazy) hiện xong — máy chạy kiểm thử chậm có thể cần hơn 60 ms
+  for (let i = 0; i < 40; i++) { await act(async () => { await new Promise((ok) => setTimeout(ok, 50)); }); if (i > 0 && !document.querySelector(".animate-spin")) break; }
   return r;
 }
 
@@ -42,7 +43,7 @@ describe("Sức khoẻ — trang", () => {
     const btn = screen.getByRole("button", { name: /Uống 1 ly \(250 ml\)/ });
     await act(async () => { fireEvent.click(btn); fireEvent.click(btn); });
     expect(waterTotal(cached().days[today()])).toBe(500);
-    expect(screen.getByText(/Còn/).textContent).toContain("2150 ml");
+    expect(screen.getByText("2150 ml")).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Bỏ ly vừa ghi/ })); });
     expect(waterTotal(cached().days[today()])).toBe(250);
   });
@@ -53,6 +54,17 @@ describe("Sức khoẻ — trang", () => {
     expect(waterTotal(cached().days[today()])).toBe(250);
   });
 
+  it("Phím tắt iPhone mở ?buoc=8500 → ghi số bước; lần đầu có 4 bước hướng dẫn, bấm Đã hiểu thì ẩn", async () => {
+    await mount("/suc-khoe?buoc=8500", { cfg: { profile } });
+    await act(async () => { await new Promise((ok) => setTimeout(ok, 30)); });
+    expect(cached().days[today()].steps).toBe(8500);
+    expect(screen.getByText(/4 việc mỗi ngày/)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Đã hiểu" })); });
+    expect(screen.queryByText(/4 việc mỗi ngày/)).toBeNull();
+    expect(cached().cfg.introDone).toBe(true);
+    expect(screen.getByRole("list", { name: "Huy hiệu" }).children.length).toBe(8);
+  });
+
   it("tab Tập gym: chọn mẫu → bắt đầu buổi → ghi hiệp → kết thúc", async () => {
     const plan = planFromTemplate(PLAN_TEMPLATES[0]);
     const dow = new Date(Date.now() + 7 * 3600000).getUTCDay();
@@ -60,13 +72,22 @@ describe("Sức khoẻ — trang", () => {
     await mount("/suc-khoe?tab=gym", { cfg: { profile, plan } });
     expect(screen.getByText(/Hôm nay: Đẩy/)).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Bắt đầu buổi tập/ })); });
+    for (let i = 0; i < 40 && !document.querySelector('[role="dialog"][aria-label="Chế độ đang tập"]'); i++) await act(async () => { await new Promise((ok) => setTimeout(ok, 50)); }); // chế độ đang tập tải riêng
     fireEvent.change(screen.getByLabelText("Mức tạ Đẩy ngực tạ đòn"), { target: { value: "50" } });
     await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: /Xong hiệp 1/ })[0]); });
     expect(cached().days[today()].gym.ex[0].sets).toEqual([{ kg: 50, reps: 8 }]);
     expect(screen.getByRole("timer")).toBeTruthy(); // đồng hồ nghỉ giữa hiệp
+    expect(screen.getByRole("dialog", { name: "Chế độ đang tập" })).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Bỏ qua nghỉ" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Tăng Mức tạ (kg)" })); }); // nút + cộng đúng một bậc 2,5 kg
+    expect(screen.getByLabelText("Mức tạ Đẩy ngực tạ đòn").value).toBe("52,5");
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Kết thúc buổi tập/ })); });
     expect(cached().days[today()].gym.end).toBeGreaterThan(0);
     expect(screen.getByText(/Hoàn thành/)).toBeTruthy();
+    // sau buổi: hỏi cảm nhận + giãn cơ; báo "Nặng" → lưu để buổi sau không tăng tạ
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Nặng" })); });
+    expect(cached().days[today()].gym.feel).toBe("nang");
+    expect(screen.getByText(/Giãn cơ 5 phút/)).toBeTruthy();
   });
 
   it("tab Tập gym: buổi trước đủ 4×8 ở 50 kg → gợi ý 52,5 kg", async () => {
@@ -76,6 +97,7 @@ describe("Sức khoẻ — trang", () => {
     const prev = dayKeyOf(Date.now() - 7 * 86400000);
     await mount("/suc-khoe?tab=gym", { cfg: { profile, plan }, days: { [prev]: { gym: { ex: [{ name: "Đẩy ngực tạ đòn", sets: [8, 8, 8, 8].map((reps) => ({ kg: 50, reps })) }] } } } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Bắt đầu buổi tập/ })); });
+    for (let i = 0; i < 40 && !document.querySelector('[role="dialog"][aria-label="Chế độ đang tập"]'); i++) await act(async () => { await new Promise((ok) => setTimeout(ok, 50)); }); // chế độ đang tập tải riêng
     expect(screen.getByText(/tăng lên 52,5 kg/)).toBeTruthy();
     expect(screen.getByLabelText("Mức tạ Đẩy ngực tạ đòn").value).toBe("52,5");
   });

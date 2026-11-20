@@ -1,7 +1,7 @@
 // SỨC KHOẺ (20/11/2026) — tính toán thuần (không gọi mạng) cho trang /suc-khoe. Phần dùng chung với máy chủ nhắc nằm ở
 // supabase/functions/qws-health-remind/logic.js (một nguồn duy nhất — sửa công thức thì sửa ở đó).
 export * from "../../supabase/functions/qws-health-remind/logic.js";
-import { dayKeyOf } from "../../supabase/functions/qws-health-remind/logic.js";
+import { dayKeyOf, targets, waterTotal, waterGoal } from "../../supabase/functions/qws-health-remind/logic.js";
 
 const n = (v) => Number(v) || 0;
 export const uid = () => Math.random().toString(36).slice(2, 9);
@@ -143,7 +143,7 @@ export function lastSession(days, exName, beforeKey) {
   const keys = Object.keys(days || {}).filter((k) => !beforeKey || k < beforeKey).sort().reverse();
   for (const k of keys) {
     const e = (days[k]?.gym?.ex || []).find((x) => x.name === exName && (x.sets || []).length);
-    if (e) return { key: k, sets: e.sets };
+    if (e) return { key: k, sets: e.sets, feel: days[k].gym.feel || null, pain: !!days[k].gym.pain };
   }
   return null;
 }
@@ -156,6 +156,9 @@ export function suggest(last, ex) {
   const atTop = sets.filter((s) => n(s.kg) === top);
   const full = sets.length >= n(ex.sets) && atTop.length >= n(ex.sets) && atTop.every((s) => n(s.reps) >= n(ex.reps));
   const step = n(ex.step);
+  // Buổi trước báo đau khớp → lùi một bậc; báo "nặng" → chưa tăng dù đã đủ hiệp (người mới: an toàn trước)
+  if (last.pain && top && step) { const kg = Math.max(0, top - step); return { kg, reps: n(ex.reps), up: false, text: `Buổi trước có đau khớp → giảm xuống ${vnNum(kg)} kg, tập chậm và đúng động tác` }; }
+  if (last.feel === "nang" && full && top && step) return { kg: top, reps: n(ex.reps), up: false, text: `Buổi trước đủ hiệp nhưng thấy nặng → giữ ${vnNum(top)} kg thêm một buổi` };
   if (!top || !step) {
     const best = Math.max(...sets.map((s) => n(s.reps)));
     return full ? { kg: top || 0, reps: best + 1, up: true, text: `Lần trước đủ ${n(ex.sets)}×${n(ex.reps)} → thử ${best + 1} mỗi hiệp` } : { kg: top || 0, reps: n(ex.reps), up: false, text: `Giữ mục tiêu ${n(ex.reps)} mỗi hiệp` };
@@ -215,8 +218,8 @@ export function trendNote(perWeek, weightKg, goal) {
 }
 
 // ===== HÌNH MẪU + CÁCH TẬP TỪNG ĐỘNG TÁC (20/11, sếp: người mới cần hình để học theo) =====
-// Ảnh: bộ Free Exercise DB (phạm vi công cộng — Unlicense), 2 ảnh mỗi bài: tư thế bắt đầu và kết thúc. Ghim theo 1 phiên bản để link không đổi.
-const IMG_BASE = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/";
+// Ảnh: bộ Free Exercise DB (phạm vi công cộng — Unlicense, bản f00c92c), 2 ảnh mỗi bài: tư thế bắt đầu và kết thúc.
+const IMG_BASE = "/health/ex/"; // 20/11: ảnh đã tải vào app (public/health/ex, thu nhỏ 640px) → xem được cả khi mất mạng
 const G = (img, muscle, cues) => ({ img, muscle, cues });
 export const EX_INFO = {
   "Đi bộ nhanh (phút)": G("Walking_Treadmill", "Tim mạch, khởi động", ["Đi nhanh tới mức hơi thở gấp nhưng vẫn nói chuyện được", "Vung tay tự nhiên, lưng thẳng, mắt nhìn trước", "Trên máy chạy: tốc độ 5–6, có thể thêm dốc 2–3"]),
@@ -306,4 +309,99 @@ export function levelProgress(plan, days) {
   const from = plan.levelAt || "";
   const done = Object.keys(days || {}).filter((k) => k >= from && days[k]?.gym?.ex?.some((e) => (e.sets || []).length)).length;
   return { level: L, done, need: L.need, ready: L.need > 0 && done >= L.need, next: levelOf(L.lv + 1) };
+}
+
+// ===== KHỞI ĐỘNG + GIÃN CƠ (có hình) =====
+const W = (name, img, how) => ({ name, img, how });
+export const WARMUP = [
+  W("Xoay vai, xoay tay", "Arm_Circles", "Dang tay ngang, xoay vòng nhỏ rồi to dần, 15 vòng mỗi chiều"),
+  W("Xoay hông", "Standing_Hip_Circles", "Tay chống hông, xoay hông vòng rộng 10 vòng mỗi chiều"),
+  W("Xoay gối", "Knee_Circles", "Chụm chân, tay đặt lên gối, xoay nhẹ 10 vòng mỗi chiều"),
+  W("Mèo – bò (làm mềm lưng)", "Cat_Stretch", "Chống tay và gối, cong lưng lên rồi võng xuống chậm, 10 lần"),
+];
+export const STRETCH = [
+  W("Giãn ngực và vai trước", "Chest_And_Front_Of_Shoulder_Stretch", "Giữ 20–30 giây mỗi bên, thở đều"),
+  W("Giãn vai", "Shoulder_Stretch", "Kéo tay ngang ngực, giữ 20–30 giây mỗi bên"),
+  W("Giãn đùi sau và bắp chân", "Standing_Hamstring_and_Calf_Stretch", "Giữ 20–30 giây mỗi chân, không nhún"),
+  W("Giãn đùi trước", "Standing_Elevated_Quad_Stretch", "Giữ 20–30 giây mỗi chân"),
+  W("Tư thế em bé (thả lỏng lưng)", "Childs_Pose", "Quỳ, ngồi lên gót, vươn tay ra trước, giữ 30–40 giây"),
+];
+export const extraImgs = (img) => [0, 1].map((k) => `${IMG_BASE}${img}/${k}.jpg`);
+// Mọi ảnh của một lịch tập (để tải sẵn vào máy khi còn mạng)
+export const planImgs = (plan) => [...new Set([...(plan?.routines || []).flatMap((r) => r.ex.flatMap((e) => exImgs(e.name))), ...[...WARMUP, ...STRETCH].flatMap((w) => extraImgs(w.img))])];
+
+// ===== MỤC TIÊU TRONG NGÀY (có phần tự chỉnh calo do người dùng đồng ý) =====
+export function dayTargets(cfg, weightKg) {
+  if (!cfg?.profile) return null;
+  const t = targets({ ...cfg.profile, weightKg: weightKg || cfg.profile.weightKg });
+  if (!t) return null;
+  const adj = n(cfg.kcalAdj);
+  if (!adj) return { ...t, adj: 0 };
+  const floor = cfg.profile.sex === "f" ? 1200 : 1500;
+  const kcal = Math.max(floor, t.kcal + adj);
+  return { ...t, kcal, carb: Math.max(0, Math.round((kcal - t.protein * 4 - t.fat * 9) / 4)), adj: kcal - t.kcal };
+}
+// Đề xuất chỉnh calo theo xu hướng cân: cần ≥10 lần cân trong 21 ngày, và cách lần chỉnh trước ≥14 ngày. Trả null nếu chưa nên đổi.
+export function kcalProposal(cfg, days, nowMs = Date.now()) {
+  if (!cfg?.profile) return null;
+  const keys = lastKeys(21, nowMs);
+  if (keys.filter((k) => n(days?.[k]?.weight) > 0).length < 10) return null;
+  if (cfg.kcalAdjAt && cfg.kcalAdjAt > dayKeyOf(nowMs - 14 * DAY)) return null;
+  const series = weightSeries(days, 21, nowMs), tr = weightTrend(series);
+  if (tr == null) return null;
+  const w = series.filter((x) => x.avg != null).pop().avg, pct = (tr / w) * 100, goal = cfg.profile.goal || "recomp";
+  const cur = dayTargets(cfg, w), floor = cfg.profile.sex === "f" ? 1200 : 1500;
+  const mk = (delta, why) => (delta < 0 && cur.kcal + delta < floor ? null : { delta, trend: tr, text: why });
+  if (goal === "bulk") return tr < 0.05 ? mk(150, "3 tuần qua cân gần như không tăng") : pct > 0.5 ? mk(-150, "Cân tăng nhanh hơn mức cần, dễ lên mỡ") : null;
+  if (goal === "keep") return tr > 0.25 ? mk(-150, "3 tuần qua cân đang nhích lên") : tr < -0.25 ? mk(150, "3 tuần qua cân đang giảm") : null;
+  return tr > -0.1 ? mk(-150, "3 tuần qua cân gần như không giảm") : pct < -1 ? mk(150, "Cân giảm nhanh hơn 1% mỗi tuần, dễ mất cơ") : null;
+}
+
+// ===== GỢI Ý THỰC ĐƠN 1 NGÀY (món Việt, sát calo + đủ đạm) =====
+const M = (name, q = 1) => ({ name, q });
+const MENU = {
+  sang: [[M("Phở gà")], [M("Bánh mì trứng ốp la"), M("Sữa tươi không đường")], [M("Yến mạch"), M("Trứng gà luộc", 2), M("Chuối")], [M("Phở bò")], [M("Bánh cuốn"), M("Trứng gà luộc", 2)]],
+  trua: [[M("Cơm trắng"), M("Ức gà luộc / áp chảo", 1.5), M("Rau luộc"), M("Canh rau")], [M("Cơm trắng"), M("Cá kho", 1.5), M("Rau luộc"), M("Canh rau")], [M("Bún chả")], [M("Cơm trắng", 1.5), M("Thịt lợn nạc", 1.5), M("Rau xào"), M("Canh rau")], [M("Cơm trắng"), M("Thịt bò nạc", 1.5), M("Rau luộc")]],
+  toi: [[M("Cơm trắng"), M("Tôm luộc", 1.5), M("Canh chua cá"), M("Rau luộc")], [M("Salad ức gà"), M("Khoai lang luộc", 2)], [M("Cơm trắng"), M("Đậu phụ luộc", 2), M("Trứng ốp la", 2), M("Rau luộc")], [M("Cơm trắng"), M("Cá hồi", 1.5), M("Rau luộc")], [M("Cơm trắng", 0.5), M("Ức gà luộc / áp chảo", 1.5), M("Rau xào")]],
+  phu: [[M("Sữa chua không đường"), M("Chuối")], [M("Whey protein"), M("Táo")], [M("Trứng gà luộc", 2)], [M("Sữa đậu nành không đường"), M("Hạt điều")], [M("Whey protein"), M("Sữa tươi không đường")], []],
+};
+const foodOf = (name) => FOODS.find((f) => f.name === name);
+const sumItems = (items) => items.reduce((t, it) => { const f = foodOf(it.name); return { kcal: t.kcal + f.kcal * it.q, p: t.p + f.p * it.q }; }, { kcal: 0, p: 0 });
+// rank: 0 = sát nhất, 1, 2… = phương án kế tiếp (nút "Gợi ý khác"). Mỗi phương án khác bữa trưa hoặc bữa tối so với phương án trước.
+export function mealPlan(tg, rank = 0) {
+  if (!tg) return null;
+  const all = [];
+  MENU.sang.forEach((a, i) => MENU.trua.forEach((b, j) => MENU.toi.forEach((c, k) => MENU.phu.forEach((d, l) => {
+    const t = sumItems([...a, ...b, ...c, ...d]);
+    const score = Math.abs(t.kcal - tg.kcal) / tg.kcal + 1.5 * Math.max(0, tg.protein - t.p) / tg.protein;
+    all.push({ ids: [i, j, k, l], score, kcal: Math.round(t.kcal), p: Math.round(t.p) });
+  }))));
+  all.sort((x, y) => x.score - y.score);
+  const picked = [];
+  for (const c of all) { if (!picked.some((x) => x.ids[1] === c.ids[1] && x.ids[2] === c.ids[2])) picked.push(c); if (picked.length > rank) break; }
+  const best = picked[Math.min(rank, picked.length - 1)];
+  const slots = ["sang", "trua", "toi", "phu"].map((slot, x) => ({ slot, items: MENU[slot][best.ids[x]].map((it) => { const f = foodOf(it.name); return { name: f.name, unit: f.unit, kcal: f.kcal, p: f.p, c: f.c, f: f.f, q: it.q }; }) })).filter((x) => x.items.length);
+  return { slots, kcal: best.kcal, p: best.p };
+}
+
+// ===== CHUỖI NGÀY + HUY HIỆU =====
+const dayHasAny = (d) => !!d && (waterTotal(d) > 0 || (d.meals || []).length > 0 || n(d.weight) > 0 || d.gym?.ex?.some((e) => (e.sets || []).length));
+const trained = (d) => !!d?.gym?.ex?.some((e) => (e.sets || []).length);
+export function streaks(cfg, days, nowMs = Date.now()) {
+  // chuỗi tính tới hôm nay; hôm nay chưa đạt thì tính tới hôm qua (không mất chuỗi giữa ngày)
+  const run = (ok) => { let c = 0; for (let i = 0; i < 400; i++) { const k = dayKeyOf(nowMs - i * DAY); if (ok(days?.[k])) c++; else if (i > 0) break; } return c; };
+  const water = run((d) => !!d && waterTotal(d) >= waterGoal(cfg, d));
+  const log = run(dayHasAny);
+  const sessions = Object.values(days || {}).filter(trained).length;
+  // số tuần liên tiếp (7 ngày một, tính lùi từ hôm nay) có ít nhất 2 buổi tập
+  let weeks = 0;
+  for (let w = 0; w < 52; w++) { let c = 0; for (let i = 0; i < 7; i++) if (trained(days?.[dayKeyOf(nowMs - (w * 7 + i) * DAY)])) c++; if (c >= 2) weeks++; else if (w > 0) break; }
+  const weighs = Object.values(days || {}).filter((d) => n(d?.weight) > 0).length;
+  const badges = [
+    { id: "w3", icon: "💧", label: "3 ngày đủ nước", got: water >= 3 }, { id: "w7", icon: "🌊", label: "7 ngày đủ nước liên tiếp", got: water >= 7 },
+    { id: "g1", icon: "👟", label: "Buổi tập đầu tiên", got: sessions >= 1 }, { id: "g9", icon: "🥉", label: "9 buổi — xong Cấp 1", got: sessions >= 9 },
+    { id: "g25", icon: "🥈", label: "25 buổi tập", got: sessions >= 25 }, { id: "gw4", icon: "🔥", label: "4 tuần liền đủ buổi", got: weeks >= 4 },
+    { id: "c14", icon: "⚖️", label: "Cân đủ 14 ngày", got: weighs >= 14 }, { id: "l30", icon: "📅", label: "Ghi chép 30 ngày liên tiếp", got: log >= 30 },
+  ];
+  return { water, log, weeks, sessions, badges };
 }

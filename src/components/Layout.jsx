@@ -70,7 +70,7 @@ const NAV = [
   { to: "/fanpage", label: "Hiệu quả Fanpage", icon: ThumbsUp, feat: "fanpage", group: "biz" },
   { to: "/tai-khoan", label: "Tài khoản & Thẻ", icon: KeyRound, ownerOnly: true, group: "me" },
   { to: "/kho-tai-lieu", label: "Kho tài liệu", icon: Library, feat: "library", group: "me" },
-  { to: "/suc-khoe", label: "Sức khoẻ", icon: Dumbbell, ownerOnly: true, group: "life" }, // 20/11: uống nước, tập gym, ăn uống (dữ liệu riêng của chủ)
+  { to: "/suc-khoe", label: "Sức khoẻ", icon: Dumbbell, ownerOnly: true, group: "me" }, // 20/11: uống nước, tập gym, ăn uống (dữ liệu riêng của chủ)
   // 16/11/2026 đợt 2 gộp: Văn phòng AI là 1 nhóm menu đủ trang (mở ngay trong app, /van-phong/…)
   // 17/11/2026 sếp duyệt gộp 7 → 4 (bên văn phòng: Bảng việc, Tiến độ & đội ngũ, Kết nối thành tab đầu trang của mục cùng loại)
   { href: OFFICE_URL, label: "Văn phòng AI", icon: Building2, office: true, group: "ai" },
@@ -83,8 +83,7 @@ const NAV = [
 const NAV_GROUPS = [
   { id: "biz", label: "Kinh doanh", order: ["/", "/cong-viec", "/bao-cao", "/khach-hang"] },
   { id: "fin", label: "Tài chính", order: ["/ke-toan", "/coin"] },
-  { id: "me", label: "Lưu trữ", order: ["/kho-tai-lieu"] },
-  { id: "life", label: "Cá nhân", order: ["/suc-khoe"] },
+  { id: "me", label: "Cá nhân", order: ["/kho-tai-lieu", "/suc-khoe"] }, // 20/11: gộp nhóm Lưu trữ + Sức khoẻ thành một nhóm
   { id: "ai", label: "Văn phòng AI", order: [OFFICE_URL, `${OFFICE_URL}du-an`, `${OFFICE_URL}kien-thuc`, `${OFFICE_URL}suc-khoe`] },
   { id: "sys", label: "Hệ thống", order: ["/cai-dat"] },
 ];
