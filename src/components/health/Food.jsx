@@ -1,10 +1,11 @@
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { Plus, X, Search, ChevronLeft, ChevronRight, Star, Utensils, Hourglass, Scale, Minus, Camera, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Card, SectionTitle } from "../ui.jsx";
-import { dayTargets, kcalProposal, mealPlan, dayKeyOf, mealTotals, fastState, searchFoods, MEAL_SLOTS, slotByHour, weightSeries, weightTrend, trendNote, dm, vnNum, uid, GOALS } from "../../lib/health.js";
+import { dayTargets, kcalProposal, mealPlan, dayKeyOf, minOfDay, hmToMin, mealTotals, fastState, searchFoods, MEAL_SLOTS, slotByHour, weightSeries, weightTrend, trendNote, dm, vnNum, uid, GOALS } from "../../lib/health.js";
 import { addMeal, removeMeal, setCfg, setWeight } from "../../lib/healthStore.js";
-import { num, inputCls, btnPrimary, btnGhost, Bar, LineChart, Field } from "./bits.jsx";
+import { num, inputCls, btnPrimary, btnGhost, LineChart, Field } from "./bits.jsx";
 import { foodFromPhoto } from "../../lib/healthAi.js";
+import { FastDial, FlameMeter, Capsule } from "./fx.jsx";
 const BodyTrack = lazy(() => import("./BodyTrack.jsx"));
 
 const DAY = 86400000;
@@ -117,12 +118,13 @@ function FastCard({ fast }) {
   const h = Math.floor(st.left / 60), mi = st.left % 60;
   return (
     <Card className={st.eating ? "" : "bg-violet-50"}>
-      <div className="flex items-center gap-3">
-        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${st.eating ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700"}`}>{st.eating ? <Utensils size={20} /> : <Hourglass size={20} />}</span>
+      <div className="flex items-center gap-4">
+        <FastDial startMin={hmToMin(fast.start, 720)} hours={Number(fast.hours) || 8} nowMin={minOfDay(Date.now())} eating={st.eating} size={92} />
         <div className="min-w-0 flex-1">
           <div className="text-[12px] font-bold uppercase tracking-wide text-slate-400">Nhịn ăn theo giờ · ăn {st.start}–{st.end}</div>
-          <div className="text-lg font-extrabold text-slate-900">{st.eating ? "Đang trong giờ ăn" : "Đang nhịn"} <span className="font-semibold text-slate-500">· còn {h ? `${h} giờ ` : ""}{mi} phút</span></div>
-          <div className="text-[12.5px] text-slate-500">{st.eating ? `Hết giờ ăn lúc ${st.until}` : `Được ăn lại lúc ${st.until}. Nước lọc, trà, cà phê đen vẫn uống được.`}</div>
+          <div className="text-lg font-extrabold text-slate-900">{st.eating ? "🍽️ Đang trong giờ ăn" : "🌙 Đang nhịn"}</div>
+          <div className="text-[26px] font-extrabold leading-tight tracking-tight text-slate-900 sk-num">{h ? `${h} giờ ` : ""}{mi} phút</div>
+          <div className="text-[12.5px] text-slate-500">{st.eating ? `nữa là hết giờ ăn (${st.until})` : `nữa được ăn lại (${st.until}). Nước lọc, trà, cà phê đen vẫn uống được.`}</div>
         </div>
       </div>
     </Card>
@@ -168,11 +170,11 @@ export default function Food({ cfg, days, todayKey }) {
           </div>}>Ăn uống</SectionTitle>
         {tg ? (
           <>
-            <div className="mb-3 rounded-2xl bg-amber-50 px-4 py-3">
+            <div className="mb-3 flex items-center gap-3 rounded-2xl bg-amber-50 px-3 py-3"><FlameMeter kcal={tot.kcal} target={tg.kcal} size={84} /><div className="min-w-0">
               <div className="text-[12px] font-bold uppercase tracking-wide text-amber-700">{left >= 0 ? "Còn được ăn" : "Đã vượt mức"}</div>
               <div className="text-3xl font-extrabold tabular-nums text-slate-900">{Math.abs(left)} <span className="text-base font-bold text-slate-500">kcal</span></div>
               <div className="text-[12.5px] text-slate-600">Mục tiêu {tg.kcal} kcal ({(GOALS[profile.goal] || GOALS.recomp).label.toLowerCase()}{tg.adj ? `, đã chỉnh ${tg.adj > 0 ? "+" : ""}${tg.adj}` : ""}) · đã ăn {tot.kcal} kcal</div>
-            </div>
+            </div></div>
             {prop && isToday && (
               <div className="mb-3 rounded-2xl bg-indigo-50 px-4 py-3">
                 <div className="text-[13.5px] font-bold text-slate-900">Đề xuất chỉnh mục tiêu: {prop.delta > 0 ? "thêm" : "bớt"} {Math.abs(prop.delta)} kcal mỗi ngày</div>
@@ -181,9 +183,9 @@ export default function Food({ cfg, days, todayKey }) {
               </div>
             )}
             <div className="grid gap-3 sm:grid-cols-3">
-              <Bar label="Đạm" value={tot.p} max={tg.protein} unit="g" color="#10b981" />
-              <Bar label="Tinh bột" value={tot.c} max={tg.carb} unit="g" color="#f59e0b" />
-              <Bar label="Chất béo" value={tot.f} max={tg.fat} unit="g" color="#8b5cf6" />
+              <Capsule label="Đạm" value={tot.p} max={tg.protein} color="#10b981" />
+              <Capsule label="Tinh bột" value={tot.c} max={tg.carb} color="#f59e0b" />
+              <Capsule label="Chất béo" value={tot.f} max={tg.fat} color="#8b5cf6" />
             </div>
             {isToday && tot.kcal > 0 && tot.p < tg.protein * 0.6 && hourVN() >= 15 && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-[12.5px] font-semibold text-emerald-800">Đạm hôm nay còn thiếu {tg.protein - tot.p} g. Gợi ý bữa tối: 150 g ức gà (46 g đạm) hoặc 2 quả trứng + 1 hộp sữa chua + 1 muỗng whey.</p>}
           </>

@@ -40,10 +40,11 @@ describe("Sức khoẻ — trang", () => {
 
   it("bấm 'Uống 1 ly' cộng 250 ml; 'Bỏ ly vừa ghi' trừ lại", async () => {
     await mount("/suc-khoe", { cfg: { profile } });
-    const btn = screen.getByRole("button", { name: /Uống 1 ly \(250 ml\)/ });
+    const btn = screen.getByRole("button", { name: /^Uống 1 ly$/ }); // nút to bên cạnh bể nước
     await act(async () => { fireEvent.click(btn); fireEvent.click(btn); });
     expect(waterTotal(cached().days[today()])).toBe(500);
     expect(screen.getByText("2150 ml")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Bể nước: 500 trên 2\.650 ml/ })).toBeTruthy(); // bể nước dâng theo
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Bỏ ly vừa ghi/ })); });
     expect(waterTotal(cached().days[today()])).toBe(250);
   });

@@ -1,3 +1,4 @@
+import "./fx.css";
 // Mảnh giao diện nhỏ dùng chung cho trang Sức khoẻ
 export const num = (v) => { const x = parseFloat(String(v ?? "").replace(",", ".")); return isFinite(x) ? x : 0; };
 export const inputCls = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900";
@@ -64,7 +65,8 @@ export function LineChart({ series, count, height = 150, unit = "", labels = [] 
         const pts = s.points.filter((p) => p.y != null);
         return (
           <g key={si}>
-            {!s.dotsOnly && pts.length > 1 && <polyline fill="none" stroke={s.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={pts.map((p) => `${X(p.x)},${Y(p.y)}`).join(" ")} />}
+            {!s.dotsOnly && pts.length > 1 && <polyline className="sk-draw" pathLength="1" fill="none" stroke={s.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={pts.map((p) => `${X(p.x)},${Y(p.y)}`).join(" ")} />}
+            {!s.dotsOnly && pts.length > 1 && <circle className="sk-endpulse" cx={X(pts[pts.length - 1].x)} cy={Y(pts[pts.length - 1].y)} r="4" fill={s.color} />}
             {(s.dots || s.dotsOnly || pts.length === 1) && pts.map((p) => <circle key={p.x} cx={X(p.x)} cy={Y(p.y)} r={s.dotsOnly ? 2.6 : 3.2} fill={s.color} opacity={s.dotsOnly ? 0.45 : 1} />)}
           </g>
         );

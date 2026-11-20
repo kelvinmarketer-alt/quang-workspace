@@ -5,6 +5,7 @@ import { ask } from "../ConfirmDialog.jsx";
 import { PLAN_TEMPLATES, planFromTemplate, DOW, lastSession, suggest, exHistory, exNames, isRecord, sessionVolume, dowOf, dayKeyOf, dm, vnNum, uid, exInfo, exImgs, exVideoUrl, LEVELS, planFromLevel, levelProgress, WARMUP, STRETCH, extraImgs, planImgs } from "../../lib/health.js";
 import { setCfg, setGym } from "../../lib/healthStore.js";
 import { num, inputCls, btnPrimary, btnGhost, LineChart, Field, ExPhoto, beep } from "./bits.jsx";
+import { Burst, Barbell } from "./fx.jsx";
 const Focus = lazy(() => import("./Focus.jsx"));
 
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // hiển thị T2 → CN
@@ -270,7 +271,8 @@ export default function Gym({ cfg, days, todayKey }) {
 
   const begin = (r) => { setFocus(true); setGym(todayKey, () => ({ rid: r?.id || null, name: r?.name || "Buổi tự do", start: Date.now(), ex: (r?.ex || []).map((e) => ({ name: e.name, n: e.sets, reps: e.reps, step: e.step, sets: [] })) })); };
   const upEx = (i, next) => setGym(todayKey, (g) => ({ ...g, ex: g.ex.map((e, j) => (j === i ? next : e)) }));
-  const finish = () => { setGym(todayKey, (g) => ({ ...g, end: Date.now() })); setRest(null); setFocus(false); };
+  const [burst, setBurst] = useState(0);
+  const finish = () => { setGym(todayKey, (g) => ({ ...g, end: Date.now() })); setRest(null); setFocus(false); setBurst(Date.now()); };
   const dropSession = async () => { if (await ask("Xoá buổi tập hôm nay?\nCác hiệp đã ghi của hôm nay sẽ mất.", { ok: "Xoá buổi", danger: true })) { setGym(todayKey, () => null); setRest(null); } };
 
   const names = useMemo(() => exNames(days), [days]);
@@ -355,6 +357,7 @@ export default function Gym({ cfg, days, todayKey }) {
       {gym && !(active && focus && gym.ex.length > 0) && (
         <Card>
           <SectionTitle action={<button onClick={dropSession} className="text-[12.5px] font-bold text-slate-400 hover:text-rose-600">Xoá buổi</button>}>{gym.name}{gym.end ? " — đã xong" : ""}</SectionTitle>
+          {gym.end && <div className="relative -mt-1 mb-3 py-2"><Burst fire={burst} /><Barbell done={setsDone} total={setsDone} finished /></div>}
           {gym.end && (
             <div className="-mt-2 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl bg-emerald-50 px-4 py-3 text-[13px] font-semibold text-emerald-800">
               <span className="inline-flex items-center gap-1.5"><Flag size={15} /> Hoàn thành</span>
@@ -363,6 +366,7 @@ export default function Gym({ cfg, days, todayKey }) {
               <button onClick={() => setGym(todayKey, (g) => ({ ...g, end: undefined }))} className="ml-auto font-bold text-emerald-700 underline">Ghi thêm</button>
             </div>
           )}
+          {active && <div className="-mt-1 mb-3 py-1"><Barbell done={setsDone} total={gym.ex.reduce((t, e) => t + (e.n || 0), 0)} /></div>}
           {active && gym.ex.length > 0 && <button onClick={() => setFocus(true)} className={btnPrimary + " -mt-1 mb-3 w-full py-3"}><Play size={16} /> Tiếp tục ở chế độ đang tập (toàn màn hình)</button>}
           <div className="space-y-3">
             {gym.ex.map((e, i) => active

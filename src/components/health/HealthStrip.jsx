@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Droplets, Flame, Dumbbell, Plus } from "lucide-react";
 import { useHealth, addWater } from "../../lib/healthStore.js";
+import "./fx.css";
 import { waterTotal, waterGoal, mealTotals, dayTargets, dayKeyOf, dowOf, vnNum } from "../../lib/health.js";
 
 // Dải Sức khoẻ ở Tổng quan (chỉ chủ, chỉ hiện khi đã nhập chỉ số): nước + nút uống 1 ly, calo, buổi tập hôm nay
@@ -20,7 +21,7 @@ export default function HealthStrip() {
         <Droplets size={16} className="shrink-0 text-sky-500" />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-bold tabular-nums text-slate-800">{vnNum(drunk / 1000, 2)} / {vnNum(goal / 1000, 2)} lít</div>
-          <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-sky-500" style={{ width: `${Math.min(100, (drunk / goal) * 100)}%`, transition: "width .4s" }} /></div>
+          <div className="sk-capsule mt-0.5" style={{ height: 8 }}><span style={{ width: `${Math.min(100, (drunk / goal) * 100)}%`, backgroundColor: "#0ea5e9" }} /></div>
         </div>
         <button onClick={() => addWater(glass)} aria-label={`Uống 1 ly ${glass} ml`} title={`Uống 1 ly ${glass} ml`} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sky-500 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-sky-600"><Plus size={14} /> 1 ly</button>
       </div>
