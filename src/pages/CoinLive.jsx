@@ -6,6 +6,7 @@ import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { supabase } from "../lib/supabase.js";
+import { bookedPart } from "../lib/botPart.js";
 import { ask } from "../components/ConfirmDialog.jsx";
 import { useData } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -107,6 +108,21 @@ export default function CoinLive({ active }) {
   const hasSt = !!st;
   useEffect(() => { if (!active || hasSt) return undefined; const t = setTimeout(() => setSlow(true), 20000); return () => clearTimeout(t); }, [active, hasSt]);
   useEffect(() => { if (!note) return undefined; const t = setTimeout(() => setNote(null), 12000); return () => clearTimeout(t); }, [note]);
+  // 21/11: lệnh đã chốt 1/3 → lấy khớp lệnh THẬT trên sàn (lãi + phí) qua hàm qws-binance, mỗi 60 giây (chỉ chủ, chỉ tiền thật)
+  const [fills, setFills] = useState(null);
+  const fillKey = Object.entries(st?.active || {}).filter(([, a]) => a.stage === "open" && a.partDone && a.openedAt).map(([s, a]) => `${s}:${a.openedAt}`).sort().join(",");
+  useEffect(() => {
+    if (!active || !isOwner || !fillKey || st?.mode !== "live") return undefined;
+    let dead = false;
+    const run = async () => {
+      if (document.hidden) return;
+      const items = fillKey.split(",").map((x) => { const [symbol, t] = x.split(":"); return { symbol, since: Number(t) - 60000 }; });
+      const { data, error } = await supabase.functions.invoke("qws-binance", { body: { action: "botFills", items } }).catch((e) => ({ error: e }));
+      if (!dead && !error && data?.botFills) setFills(data);
+    };
+    run(); const t = setInterval(run, 60000);
+    return () => { dead = true; clearInterval(t); };
+  }, [active, isOwner, fillKey, st?.mode]);
   // Kết quả Demo (dùng chung bộ đệm 5 phút + bộ nhớ máy) → điều kiện "testnet khớp Demo" trước khi bật tiền thật
   const [demoFin, setDemoFin] = useState(null);
   useEffect(() => {
@@ -171,8 +187,8 @@ export default function CoinLive({ active }) {
 
   const online = Date.now() - st.at < 120000, stopped = !!(cmd?.stop || st.stopped);
   const act = Object.entries(st.active || {}).map(([sym, a]) => ({ sym, ...a }));
-  // Lãi 1/3 đã chốt của lệnh SW3 (tính từ sự kiện "partial": giá chốt − giá vào × khối lượng chốt, chưa trừ phí) — để thẻ lệnh hiện cả phần đã chốt, không chỉ 2/3 còn lại
-  const partOf = (a) => { if (!a.partDone || a.adopt) return null; const e = (st.events || []).find((x) => x.ev === "partial" && x.id === a.id); if (!(e?.qty > 0) || !(e?.price > 0)) return null; const entry = st.posPnl?.[a.sym]?.entry ?? a.lim; return (e.price - entry) * e.qty * a.side; };
+  // Lãi 1/3 đã chốt (ĐÃ TRỪ PHÍ) — mọi lệnh đã chốt 1/3 đều có dòng này; số sàn khi có, không thì ước tính (xem lib/botPart.js)
+  const partOf = (a) => bookedPart(a, { fills: fills?.botFills?.[a.sym]?.fills, bnbPx: fills?.bnbPx, uPnl: st.posPnl?.[a.sym]?.uPnl, ev: (st.events || []).find((x) => x.ev === "partial" && x.id === a.id) });
   const nPos = Object.keys(st.positions || {}).length, nLeft = Math.max(act.length, nPos);
   const closes = (st.events || []).filter((e) => e.ev === "close" && e.setup !== "TEST" && !String(e.id || "").startsWith("test-")), wins = closes.filter((e) => e.pnl > 0).length; // bỏ lệnh thử
   const realT = (Array.isArray(hist?.trades) ? hist.trades : []).filter((t) => t && t.setup !== "TEST" && (!t.mode || t.mode === st.mode));
@@ -253,10 +269,16 @@ export default function CoinLive({ active }) {
 
       <Card className="!p-3">
         <Title right={pxOn && act.length ? <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />giá realtime</span> : null}>Lệnh chờ & vị thế ({act.length})</Title>
-        {act.length ? <div className="space-y-1.5">{act.map((a) => { const part = a.stage === "open" ? partOf(a) : null, u = st.posPnl?.[a.sym]?.uPnl, total = part != null && u != null ? part + u : null; return (
+        {act.length ? <div className="space-y-1.5">{act.map((a) => { const bp = partOf(a), u = st.posPnl?.[a.sym]?.uPnl, total = bp?.total ?? null; return (
           <div key={a.sym} className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 text-[12px]">
             <div className="flex items-center gap-2 whitespace-nowrap">{side(a.side)}<b>{a.coin} {TF[a.tf] || a.tf}</b><Badge tone={a.stage === "open" ? "emerald" : "amber"}>{a.stage === "open" ? "Đang mở" : "Lệnh chờ"}</Badge>{a.stage === "open" && st.posPnl?.[a.sym] && (total != null ? <span className="ml-auto flex items-baseline gap-1"><span className="text-[10.5px] font-semibold text-slate-400">tổng lệnh</span><b className={`text-[13.5px] tabular-nums ${tone(total)}`}>{fmtUsdSigned(total)}</b></span> : <b className={`ml-auto text-[13.5px] tabular-nums ${tone(u)}`}>{fmtUsdSigned(u)}</b>)}</div>
-            {total != null && <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-emerald-50/70 px-2 py-1 text-[11.5px] tabular-nums text-slate-600"><span>Đã chốt 1/3: <b className={tone(part)}>{fmtUsdSigned(part)}</b></span><span>2/3 còn lại: <b className={tone(u)}>{fmtUsdSigned(u)}</b></span><span className="text-[10.5px] text-slate-400">lãi đã chốt chưa trừ phí · vào lịch sử khi đóng hết lệnh</span></div>}
+            {bp && <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-lg bg-emerald-50/70 px-2 py-1 text-[11.5px] tabular-nums text-slate-600">
+              <span className="font-bold text-emerald-700">✓ Đã chốt 1/3</span>
+              {bp.src === "demo" ? <span>Demo chốt trước khi bot vào — bot giữ toàn bộ khối lượng, không có lãi phần này</span>
+                : bp.part == null ? <span className="text-slate-400">đang lấy lãi đã chốt từ sàn…</span>
+                : <><span>Lãi đã chốt: <b className={tone(bp.part)}>{fmtUsdSigned(bp.part)}</b> <span className="text-slate-400">(đã trừ phí {fmtUsd(bp.fees)})</span></span>{bp.rest != null && <span>2/3 còn lại: <b className={tone(bp.rest)}>{fmtUsdSigned(bp.rest)}</b></span>}</>}
+              {bp.src !== "demo" && bp.part != null && <span className="text-[10.5px] text-slate-400">{bp.src === "san" ? "số thật từ sàn Binance" : "ước tính phí 0,02%"} · vào lịch sử khi đóng hết lệnh</span>}
+            </div>}
             <div className="mt-1 flex items-center gap-2 whitespace-nowrap">{livePx[a.sym] && <span className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 font-extrabold tabular-nums ${livePx[a.sym].dir > 0 ? "bg-emerald-50 text-emerald-700" : livePx[a.sym].dir < 0 ? "bg-rose-50 text-rose-700" : "bg-slate-100 text-slate-700"}`} title="Giá hiện tại trên sàn (Binance Futures), cập nhật mỗi giây">Giá {fmtPx(livePx[a.sym].c)}{livePx[a.sym].dir !== 0 && <span className="text-[10px]">{livePx[a.sym].dir > 0 ? "▲" : "▼"}</span>}{pxOn && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}</span>}<span className="ml-auto tabular-nums text-slate-500">rủi ro {fmtUsd(a.riskUsd)}</span></div>
             <div className="mt-1 flex flex-wrap gap-x-3 tabular-nums text-slate-600"><span>Vào {fmtPx(a.lim)}</span><span className="text-rose-500">Cắt lỗ {fmtPx(a.sl)}</span><span className="text-emerald-600">{a.sw3 ? (a.adopt && a.partDone ? `Demo đã chốt 1/3 ở ${fmtPx(a.tp)} (trước khi bot vào)` : `Chốt 1/3 ${fmtPx(a.tp)}${a.partDone ? " ✓" : ""}`) : `Chốt lời ${fmtPx(a.tp)}`}</span><span>Khối lượng {fmtQty(a.filledQty ?? a.qty)}</span>{a.stage === "entry" && a.until && <span className="text-slate-400"><b className="font-bold text-amber-600">{timeLeft(a.until)}</b> · huỷ nếu chưa khớp lúc {new Date(a.until).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>}</div>
             {a.sw3 && a.stage === "open" && (() => { const g = sw3Targets(a.lim, a.side, a.dist); return g && <div className="mt-1 flex flex-wrap gap-x-3 text-[11.5px] tabular-nums"><span className="text-emerald-600"><Term k="tpExp">Chốt lời kỳ vọng</Term> <b>{fmtPx(g.avg)}</b> (+{SW3_TP.avgR.toLocaleString("vi-VN")}R)</span><span className="text-teal-600"><Term k="tpFar" align="right" /> {fmtPx(g.far)} (+{SW3_TP.farR.toLocaleString("vi-VN")}R)</span></div>; })()}

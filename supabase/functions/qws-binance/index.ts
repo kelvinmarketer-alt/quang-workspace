@@ -279,6 +279,22 @@ Deno.serve(async (req) => {
   // 01/11 sếp chốt: thành viên KHÔNG xem tiền coin → ví Binance chỉ chủ (bỏ quyền "Đầu tư" của thành viên)
   if (email !== OWNER) return json({ error: "Chi chu workspace duoc xem vi" }, 403);
 
+  // Bot thật (21/11): khớp lệnh Futures của vị thế đang mở → lãi 1/3 đã chốt + phí THẬT sàn thu (thẻ lệnh tab Bot thật). Chỉ đọc.
+  let body = null;
+  try { body = req.method === "POST" ? await req.clone().json() : null; } catch (_) { body = null; }
+  if (body && body.action === "botFills") {
+    const items = (Array.isArray(body.items) ? body.items : []).filter((x) => x && /^[A-Z0-9]{2,20}$/.test(String(x.symbol || "")) && Number(x.since) > 0).slice(0, 12);
+    const bnbPx = await fetch(SPOT + "/api/v3/ticker/price?symbol=BNBUSDT").then((r) => r.json()).then((d) => num(d && d.price) || null).catch(() => null);
+    const botFills = {};
+    await pool(items, 4, async (x) => {
+      const r = await signedGet("/fapi/v1/userTrades", "symbol=" + x.symbol + "&startTime=" + Math.floor(Number(x.since)) + "&limit=1000", KEY, SECRET, FAPI);
+      botFills[x.symbol] = r.ok && Array.isArray(r.data)
+        ? { fills: r.data.map((t) => ({ side: t.side, qty: num(t.qty), price: num(t.price), pnl: num(t.realizedPnl), fee: num(t.commission), feeAsset: t.commissionAsset, time: t.time })) }
+        : { error: bErr(r) };
+    });
+    return json({ botFills, bnbPx, at: Date.now() });
+  }
+
   const debug = new URL(req.url).searchParams.get("debug") === "1";
   try {
     // Mọi nguồn độc lập chạy SONG SONG (mỗi nguồn tự bắt lỗi) → nhanh hơn, 1 nguồn lỗi không làm hỏng cả phản hồi
