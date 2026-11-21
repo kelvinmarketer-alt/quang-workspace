@@ -377,7 +377,7 @@ function lowBalance(found: { key: string; text: string }[], today: string, id: s
   const k = (t: string) => `${today}|${id}|${t}`;
   if (bal.balance <= 0) found.push({ key: k("balance0"), text: `🛑 ${name}: HẾT tiền quảng cáo (số dư ${fmt(bal.balance)}) — nạp ngay` });
   else if (bal.daysLeft != null && bal.daysLeft < 2)
-    found.push({ key: k("balance"), text: `💰 ${name}: số dư còn ${fmt(bal.balance)} ≈ ${bal.daysLeft.toFixed(1)} ngày chạy (TB ${fmt(bal.avgDaily)}/ngày) — sắp hết` });
+    found.push({ key: k("balance"), text: `💰 ${name}: còn ${fmt(bal.balance)} — sắp hết tiền, cần nạp tiền` });
 }
 
 // ----- Cảnh báo chi phí / kết quả (sếp chốt 21/11/2026: FB = chi phí / tin nhắn, / lead, / SĐT · Google = chi phí / chuyển đổi) -----
@@ -465,7 +465,7 @@ async function watch() {
     else if (a.spendCap > 0 && b && !b.error) {
       const div = ZERO_DEC.has(String(a.currency || "").toUpperCase()) ? 1 : 100;
       const left = (a.spendCap - a.amountSpent) / div, perDay = b.totals.spend / 7;
-      if (perDay > 0 && left / perDay < 3) found.push({ key: k("cap_days"), text: `⏳ ${a.name}: giới hạn chi tiêu còn ${fmt(Math.max(0, left))} ≈ ${Math.max(0, left / perDay).toFixed(1)} ngày chạy (TB ${fmt(perDay)}/ngày) — nâng giới hạn trước khi quảng cáo dừng` });
+      if (perDay > 0 && left / perDay < 3) found.push({ key: k("cap_days"), text: `⏳ ${a.name}: giới hạn chi tiêu chỉ còn ${fmt(Math.max(0, left))} — cần nâng giới hạn` });
     }
     // Sếp chốt 21/11/2026: KHÔNG báo CPM / CPC / tần suất — chỉ báo biến động chi phí / tin nhắn, chi phí / lead (dưới) và chi phí / SĐT (theo giờ).
   });
@@ -509,7 +509,7 @@ async function watch() {
     const gb = a.bal;
     // chỉ báo khi còn < 7 ngày chạy (21/11: XKLD còn 27 ngày mà vẫn bị báo vì ngân sách cộng dồn lớn → nhiễu)
     if (gb?.source === "google_budget" && num(gb.limit) > 0 && gb.balance > 0 && gb.balance / num(gb.limit) < 0.1 && gb.daysLeft != null && gb.daysLeft >= 2 && gb.daysLeft < 7)
-      found.push({ key: k("budget10"), text: `💰 ${a.name}: ngân sách tài khoản còn ${fmt(gb.balance)} ≈ ${gb.daysLeft.toFixed(1)} ngày chạy (TB ${fmt(gb.avgDaily)}/ngày) — chuẩn bị nạp / tăng ngân sách` });
+      found.push({ key: k("budget10"), text: `💰 ${a.name}: còn ${fmt(gb.balance)} — cần nạp tiền` });
     if (hourVN >= 9 && (!a.lastSync || Date.now() - Date.parse(a.lastSync) > 3 * 3600000))
       found.push({ key: k("stale"), text: `⏸ ${a.name}: script Google Ads chưa đẩy số >3 giờ — kiểm tra lịch chạy script` });
     if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 chuyển đổi (Google có thể trễ vài giờ)` });
