@@ -83,7 +83,8 @@ grant execute on function public.qws_ads_check_cron_key(text) to service_role;
 - **Facebook — chi phí / SĐT**: hôm qua cao hơn 30% so với TB các ngày trước đó trong 7 ngày (SĐT khách để lại do Pancake gắn theo quảng cáo, máy chính đồng bộ về) · soát mỗi giờ, cần nền ≥ 3 SĐT.
 - **Google — chi phí / chuyển đổi**: hôm nay cao hơn 30% so với TB 7 ngày · hoặc tiêu ≥100k mà 0 chuyển đổi.
 - **Mọi tài khoản**: tài khoản bị khoá / Google không ở trạng thái ENABLED · quảng cáo bị từ chối/hạn chế · đã tiêu >90% giới hạn chi tiêu
-  · **số dư còn < 2 ngày chạy** hoặc **hết tiền** · Google: script ngừng đẩy >3 giờ.
+  · **số dư còn < 2 ngày chạy** hoặc **hết tiền** · Facebook: giới hạn chi tiêu còn < 3 ngày chạy · Google: ngân sách tài khoản còn < 10%, script ngừng đẩy >3 giờ.
+- Từ 21/11/2026 sếp CHỈ nhận cảnh báo QC từ QWS (văn phòng AI đã tắt chuông/push cảnh báo QC).
 - Số dư: Google có "ngân sách tài khoản" thì tự đọc; TK nạp trước (Google/Meta) thì nhập **Số dư hiện tại** + **Vừa nạp thêm** trong thẻ tài khoản (mục Quảng cáo) — app tự trừ chi phí.
 
 ## 3b. Bảng Google Ads — SQL Editor → Run
