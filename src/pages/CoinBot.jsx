@@ -580,6 +580,9 @@ export default function CoinBot({ active: visible = true }) {
     if (bad) return setErr(`${bad[1]} phải trong khoảng ${bad[3]}–${bad[4]}`);
     nv.maxOpen = Math.round(nv.maxOpen); nv.maxLev = Math.round(nv.maxLev);
     const ch = RISK_F.filter(([k]) => Number(cfg[k]) !== nv[k]).map(([k, l, u]) => `${l.replace(/ \(.*\)/, "")}: ${cfg[k]}${u} → ${nv[k]}${u}`);
+    // 22/11 sếp: mọi mã chạm SL thua bằng nhau → bỏ mức rủi ro riêng theo mã (rỗng = mọi mã dùng chung "Rủi ro / lệnh")
+    const hadByCoin = Object.keys(cfg.riskByCoin || {}).length > 0;
+    if (editRisk.same && hadByCoin) { nv.riskByCoin = {}; ch.push(`Mọi mã cùng rủi ro ${nv.riskPct}% (bỏ mức riêng ${Object.keys(cfg.riskByCoin).length} mã)`); }
     if (!ch.length) return setEditRisk(null);
     if (!(await confirmLiveFollow(session.cfg, { ...(session.cfg || {}), ...nv }))) return;
     const ans = await ask(`Lưu rủi ro & giới hạn?\n${ch.map((x) => "• " + x).join("\n")}\nDemo tính lại từ ${dt(session.startAt)} (giữ nguyên ngày bắt đầu); bot thật đang "theo Demo" áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do (không bắt buộc)…" });
@@ -792,6 +795,7 @@ export default function CoinBot({ active: visible = true }) {
                 <label key={k} className="block min-w-0"><span className="mb-0.5 block text-[11.5px] font-semibold text-slate-500">{l}</span>
                   <span className="flex items-center gap-1"><input id={`risk-${k}`} type="number" inputMode="decimal" min={lo} max={hi} step={st} value={editRisk[k] ?? ""} onChange={(e) => setEditRisk((o) => ({ ...o, [k]: e.target.value }))} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" /><span className="text-[11px] text-slate-400">{u}</span></span></label>
               ))}</div>
+              {Object.keys(cfg.riskByCoin || {}).length > 0 && <label className="mt-2 flex items-start gap-2 text-[12px] text-slate-700"><input id="risk-same" type="checkbox" checked={!!editRisk.same} onChange={(e) => setEditRisk((o) => ({ ...o, same: e.target.checked }))} className="mt-0.5" /><span><b>Mọi mã cùng mức rủi ro</b> — chạm SL thua bằng nhau. Hiện {Object.keys(cfg.riskByCoin).join(", ")} đang để riêng {fmtNum(Math.min(cfg.riskPct, Object.values(cfg.riskByCoin)[0]), 2, 0)}%.</span></label>}
               <div className="mt-1 text-[11px] leading-snug text-slate-500">Đòn bẩy là trần khối lượng; bot thật tự hạ đòn bẩy trên sàn từng lệnh để giá thanh lý luôn xa hơn SL.</div>
               <div className="mt-2 flex gap-2">
                 <button onClick={() => setEditRisk(null)} className="flex-1 rounded-lg border border-slate-200 bg-white py-2 text-[12px] font-bold text-slate-600">Huỷ</button>
