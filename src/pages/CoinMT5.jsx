@@ -12,11 +12,18 @@ import { useUsdVnd } from "../lib/coinShared.js";
 // 07/11/2026 — Tab "EA MT5" (chỉ chủ): theo dõi EA QWS_Gop chạy trong MT5 trên máy bàn (tài khoản demo IC Markets).
 // Cầu nối C:\mt5-research\bridge\mt5_bridge.py ghi bảng Supabase qws_mt5_bot: 'status' (~30 giây), 'history' (lịch sử lệnh + đường vốn).
 // App ghi dòng 'command' ({stop}) → cầu nối chuyển cho EA. App KHÔNG giao dịch.
+// 21/11/2026: sếp thay QWS_Gop bằng EA Victor V5 nguyên bản (8 mã, 2,72% × hệ số mã, magic 5700–5735). Nhận biết qua status.ea.ea === "Victor V5";
+// lệnh Victor có slot = -1, tên "V5 phá đỉnh XAUUSD"…; thống kê theo mã (sym). Lịch sử QWS cũ (slot 0–5) vẫn còn, tách riêng. Không có trường ea → hiển thị QWS_Gop như cũ.
 const T = "qws_mt5_bot";
 const SLOTS = ["D vàng", "D BTC", "D ETH", "US500 sốc", "Nikkei sốc", "Russell lệch"];
 const SYMS = ["XAUUSD", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"];
+const V_SYMS = ["XAUUSD", "XAGUSD", "XTIUSD", "USDJPY", "US500", "USTEC", "JP225", "US2000"];
+const V_NAME = { XAUUSD: "Vàng", XAGUSD: "Bạc", XTIUSD: "Dầu", USDJPY: "Yên Nhật", US500: "S&P 500", USTEC: "Nasdaq", JP225: "Nikkei", US2000: "Russell" };
 // Kết quả Strategy Tester 01/2018 → 11/2026, vốn 1.000$ (mt5-research/reports/von_1000.html, mục 0)
 const BT = { cagr: 25.1, month: 2.03, mdd: 9.4, win: 57.4, perMonth: 6.6, pf: 2.0 };
+// Victor luật gốc 2,72%, vốn 1.000$, 2018 → 20/11/2026 — mô phỏng Python (mt5-research/reports/victor_1k.html mục 01, 04, 05)
+const BT_V = { mdd: 77.2, low: 297, win: 52, perMonth: 55 };
+const isQws = (x) => x.slot >= 0;
 const START_BAL = 1000;
 const ago = (t) => { if (!t) return "—"; const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "vừa xong" : m < 60 ? `${m} phút trước` : m < 2880 ? `${Math.round(m / 60)} giờ trước` : `${Math.round(m / 1440)} ngày trước`; };
 const dt = (t) => { if (!t) return "—"; const d = new Date(t); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -33,15 +40,24 @@ async function writeCmd(patch) {
   return supabase.from(T).upsert(row);
 }
 
-export function mt5Stats(trades = []) {
-  const done = trades.filter((x) => x.closed);
-  const bySlot = SLOTS.map((name, k) => {
-    const g = done.filter((x) => x.slot === k), rs = g.map((x) => x.R).filter((r) => r != null && isFinite(r));
-    return { k, name, n: g.length, win: g.length ? (g.filter((x) => x.pnl > 0).length / g.length) * 100 : null, pnl: g.reduce((s, x) => s + (x.pnl || 0), 0), avgR: rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : null };
-  });
+const grp = (g) => { const rs = g.map((x) => x.R).filter((r) => r != null && isFinite(r)); return { n: g.length, win: g.length ? (g.filter((x) => x.pnl > 0).length / g.length) * 100 : null, pnl: g.reduce((s, x) => s + (x.pnl || 0), 0), avgR: rs.length ? rs.reduce((s, r) => s + r, 0) / rs.length : null }; };
+const total = (done) => {
   const n = done.length, wins = done.filter((x) => x.pnl > 0).length;
   const gp = done.filter((x) => x.pnl > 0).reduce((s, x) => s + x.pnl, 0), gl = -done.filter((x) => x.pnl < 0).reduce((s, x) => s + x.pnl, 0);
-  return { n, win: n ? (wins / n) * 100 : null, pnl: done.reduce((s, x) => s + (x.pnl || 0), 0), pf: gl > 0 ? gp / gl : null, bySlot };
+  return { n, win: n ? (wins / n) * 100 : null, pnl: done.reduce((s, x) => s + (x.pnl || 0), 0), pf: gl > 0 ? gp / gl : null };
+};
+
+// vSlots (status.ea.slots của Victor V5) → thống kê theo mã cho lệnh Victor (slot < 0); lịch sử QWS cũ gom vào `old`.
+export function mt5Stats(trades = [], vSlots = null) {
+  const done = trades.filter((x) => x.closed);
+  if (vSlots) {
+    const vic = done.filter((x) => !isQws(x));
+    const syms = vSlots.length ? vSlots.map((s) => s.sym) : V_SYMS;
+    const bySlot = syms.map((sym, k) => ({ k, sym, name: V_NAME[sym] || sym, ...grp(vic.filter((x) => x.sym === sym)) }));
+    return { ...total(vic), bySlot, old: total(done.filter(isQws)) };
+  }
+  const bySlot = SLOTS.map((name, k) => ({ k, name, ...grp(done.filter((x) => x.slot === k)) }));
+  return { ...total(done), bySlot };
 }
 
 export default function CoinMT5({ active }) {
@@ -60,12 +76,23 @@ export default function CoinMT5({ active }) {
   useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, 20000); return () => clearInterval(t); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!note) return undefined; const t = setTimeout(() => setNote(""), 12000); return () => clearTimeout(t); }, [note]);
   const trades = hist?.trades || [];
-  const S = useMemo(() => mt5Stats(trades), [trades]);
+  const isV = st?.ea?.ea === "Victor V5";
+  const vSlots = isV ? (st.ea.slots || []) : null;
+  const vKey = vSlots ? vSlots.map((s) => s.sym).join(",") : "";
+  const S = useMemo(() => mt5Stats(trades, vSlots), [trades, vKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const eq = useMemo(() => (hist?.equity || []).map((p) => ({ t: p.t, eq: p.eq, bal: p.bal })), [hist]);
   const vnd = useUsdVnd();
-  // 13/11: lịch lãi/lỗ theo ngày đóng lệnh (t_out, ms), tách theo chiến lược (slot) — chỉ ĐỌC lịch sử cầu nối gửi lên
-  const calItems = useMemo(() => trades.filter((x) => x.closed && x.t_out && x.pnl != null).map((x) => ({ t: x.t_out < 1e12 ? x.t_out * 1000 : x.t_out, v: +x.pnl, src: x.slot, label: `${x.side === 1 ? "MUA" : "BÁN"} ${x.sym || SYMS[x.slot] || ""} · ${SLOTS[x.slot] || ""}` })), [trades]);
-  const calSources = useMemo(() => SLOTS.map((l, k) => ({ k, l })).filter((s) => calItems.some((x) => x.src === s.k)), [calItems]);
+  // 13/11: lịch lãi/lỗ theo ngày đóng lệnh (t_out, ms), tách theo chiến lược — chỉ ĐỌC lịch sử cầu nối gửi lên.
+  // 21/11: khoá nguồn "q<slot>" cho QWS cũ, "v:<mã>" cho Victor V5.
+  const calItems = useMemo(() => trades.filter((x) => x.closed && x.t_out && x.pnl != null).map((x) => {
+    const q = isQws(x);
+    return { t: x.t_out < 1e12 ? x.t_out * 1000 : x.t_out, v: +x.pnl, src: q ? `q${x.slot}` : `v:${x.sym}`, label: `${x.side === 1 ? "MUA" : "BÁN"} ${x.sym || (q ? SYMS[x.slot] : "") || ""} · ${q ? `${isV ? "QWS " : ""}${SLOTS[x.slot] || ""}` : x.name || ""}` };
+  }), [trades, isV]);
+  const calSources = useMemo(() => {
+    const vs = [...V_SYMS, ...new Set(trades.filter((x) => !isQws(x) && x.sym && !V_SYMS.includes(x.sym)).map((x) => x.sym))].map((s) => ({ k: `v:${s}`, l: `V5 ${V_NAME[s] || s}` }));
+    const qs = SLOTS.map((l, k) => ({ k: `q${k}`, l: isV ? `QWS ${l}` : l }));
+    return (isV ? [...vs, ...qs] : [...qs, ...vs]).filter((s) => calItems.some((x) => x.src === s.k));
+  }, [calItems, trades, isV]);
 
   const setStop = async (stop) => {
     const ok = await ask(stop ? "Dừng EA MT5?\nEA huỷ lệnh CHỜ và không mở lệnh mới. Vị thế đang mở vẫn giữ nguyên SL/TP." : "Cho EA MT5 chạy lại?\nEA tiếp tục vào lệnh theo tín hiệu mới.", { ok: stop ? "Dừng EA" : "Chạy lại", danger: stop });
@@ -82,7 +109,7 @@ export default function CoinMT5({ active }) {
       <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12.5px] leading-snug text-slate-600">
         <li>Chạy file <b>supabase/SETUP-MT5-BOT.sql</b> (repo quang-workspace) ở Supabase → SQL Editor để tạo bảng <code>qws_mt5_bot</code>.</li>
         <li>Trên máy bàn: bấm <b>C:\mt5-research\bridge\cai-cau-noi.bat</b> (cầu nối tự chạy mỗi khi đăng nhập Windows).</li>
-        <li>MT5 mở sẵn, EA <b>QWS_Gop</b> gắn trên chart, bật Algo Trading. Quay lại đây: trạng thái hiện trong ~30 giây.</li>
+        <li>MT5 mở sẵn, EA <b>Victor V5</b> (VictorMT5v5_QWS) gắn trên chart, bật Algo Trading. Quay lại đây: trạng thái hiện trong ~30 giây.</li>
       </ol>
     </Card>
   );
@@ -94,18 +121,23 @@ export default function CoinMT5({ active }) {
   const eaFresh = st.eaAgeS != null && st.eaAgeS < 180;
   const peak = ea.peak || a.balance, dd = peak ? (1 - a.balance / peak) * 100 : null;
   const stopped = ea.stop ?? cmd?.stop;
-  const days = trades.length ? Math.max(1, (Date.now() - Math.min(...trades.map((x) => x.t_in))) / 864e5) : null;
+  const spanDays = (g) => (g.length ? Math.max(1, (Date.now() - Math.min(...g.map((x) => x.t_in))) / 864e5) : null);
+  const days = spanDays(trades);
+  const vTrades = isV ? trades.filter((x) => !isQws(x)) : trades;
+  const rateDays = spanDays(vTrades); // số lệnh/tháng chỉ tính EA đang chạy
   const growth = a.balance ? (a.balance / START_BAL - 1) * 100 : null;
   const open = st.positions || [], pend = st.orders || [];
-  const brake = ea.brake;
+  const brake = isV ? 1 : ea.brake;
   const brakeTxt = brake == null ? "—" : brake >= 1 ? "không phanh" : brake <= 0 ? "DỪNG 30 ngày" : `rủi ro ×${fmtNum(brake, 2)}`;
+  const riskBase = ea.riskBase ?? 2.72;
 
   return (
     <div className="space-y-3">
       <Card className="!p-3 sm:!p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Cpu size={18} className="text-indigo-500" />
-          <div className="text-[15px] font-extrabold text-slate-800">EA QWS_Gop · MT5</div>
+          <div className="text-[15px] font-extrabold text-slate-800">{isV ? "EA Victor V5 · MT5" : "EA QWS_Gop · MT5"}</div>
+          {isV && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">{(ea.slots || []).length || 8} mã · {fmtNum(riskBase, 2)}% × hệ số</span>}
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${online ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>{online ? `đang chạy · ${ago(st.ts)}` : st.online === false ? (st.reason || "MT5 không chạy") : `mất liên lạc · ${ago(st.ts)}`}</span>
           {a.demo != null && <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${a.demo ? "bg-sky-50 text-sky-700" : "bg-amber-100 text-amber-800"}`}>{a.demo ? "DEMO" : "TIỀN THẬT"} · {a.login} · {a.server}</span>}
           {online && st.algo === false && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">Algo Trading đang TẮT</span>}
@@ -122,10 +154,12 @@ export default function CoinMT5({ active }) {
         <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-200 sm:grid-cols-4 lg:grid-cols-6">
           <Num label="Số dư" v={fmtUsd(a.balance)} sub={`vốn đầu ${fmtUsd(START_BAL, 0)} · ${growth != null ? `${growth >= 0 ? "+" : ""}${fmtNum(growth, 2)}%` : "—"}`} t={tone(growth)} />
           <Num label="Equity" v={fmtUsd(a.equity)} sub={`lãi/lỗ đang mở ${fmtUsdSigned((a.equity || 0) - (a.balance || 0))}`} t={tone((a.equity || 0) - (a.balance || 0))} />
-          <Num label="Sụt từ đỉnh" v={dd != null ? `${fmtNum(dd, 2)}%` : "—"} sub={`đỉnh ${fmtUsd(peak)} · giới hạn 10%`} t={dd >= 6 ? "text-rose-600" : "text-slate-900"} />
-          <Num label="Phanh sụt vốn" v={brakeTxt} sub="6% → ½ · 8% → ¼ · 10% → dừng" t={brake != null && brake < 1 ? "text-amber-600" : "text-slate-900"} />
-          <Num label="Hôm nay" v={fmtUsdSigned(ea.todayPnl)} sub={`dừng ngày khi lỗ ${fmtNum(ea.dailyStop ?? 2, 1)}%`} t={tone(ea.todayPnl)} />
-          <Num label="Lệnh đã đóng" v={S.n} sub={S.n ? `thắng ${fmtNum(S.win, 0)}% · PF ${S.pf != null ? fmtNum(S.pf, 2) : "—"}` : "chưa có"} />
+          <Num label="Sụt từ đỉnh" v={dd != null ? `${fmtNum(dd, 2)}%` : "—"} sub={`đỉnh ${fmtUsd(peak)} · ${isV ? `kiểm thử từng sụt ${fmtNum(BT_V.mdd, 0)}%` : "giới hạn 10%"}`} t={dd >= (isV ? 20 : 6) ? "text-rose-600" : "text-slate-900"} />
+          {isV
+            ? <Num label="Rủi ro / lệnh" v={`${fmtNum(riskBase, 2)}% × hệ số`} sub="không phanh sụt vốn · không trần lệnh mở" />
+            : <Num label="Phanh sụt vốn" v={brakeTxt} sub="6% → ½ · 8% → ¼ · 10% → dừng" t={brake != null && brake < 1 ? "text-amber-600" : "text-slate-900"} />}
+          <Num label="Hôm nay" v={fmtUsdSigned(ea.todayPnl)} sub={isV || ea.dailyStop === 0 ? "không dừng theo ngày" : `dừng ngày khi lỗ ${fmtNum(ea.dailyStop ?? 2, 1)}%`} t={tone(ea.todayPnl)} />
+          <Num label={isV ? "Lệnh Victor đã đóng" : "Lệnh đã đóng"} v={S.n} sub={S.n ? `thắng ${fmtNum(S.win, 0)}% · PF ${S.pf != null ? fmtNum(S.pf, 2) : "—"}` : "chưa có"} />
         </div>
       </Card>
 
@@ -133,7 +167,7 @@ export default function CoinMT5({ active }) {
 
       <Card className="!p-3 sm:!p-4">
         <Title icon={ListChecks} right={<span className="text-[11px] text-slate-400">{open.length} vị thế · {pend.length} lệnh chờ</span>}>Lệnh đang mở</Title>
-        {!open.length && !pend.length ? <div className="py-3 text-center text-[12.5px] text-slate-400">Không có lệnh nào — EA đang chờ tín hiệu (trung bình ~{BT.perMonth} lệnh/tháng).</div> : (
+        {!open.length && !pend.length ? <div className="py-3 text-center text-[12.5px] text-slate-400">Không có lệnh nào — EA đang chờ tín hiệu (trung bình ~{isV ? BT_V.perMonth : BT.perMonth} lệnh/tháng).</div> : (
           <div className="space-y-1.5">
             {open.map((p) => (
               <div key={p.ticket} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-slate-100 px-2.5 py-1.5 text-[12.5px]">
@@ -172,8 +206,30 @@ export default function CoinMT5({ active }) {
       </Card>
 
       <Card className="!p-3 sm:!p-4">
-        <Title icon={GitCompare}>Từng ngăn & so với kiểm thử</Title>
-        <div className="overflow-x-auto">
+        <Title icon={GitCompare}>{isV ? "Từng mã & so với kiểm thử" : "Từng ngăn & so với kiểm thử"}</Title>
+        {isV ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-[12.5px]">
+              <thead><tr className="text-left text-[10.5px] uppercase text-slate-400"><th className="py-1">Mã</th><th className="text-right">Rủi ro/lệnh</th><th className="text-right">Tối đa</th><th className="text-right">Đang mở</th><th className="text-right">Lệnh</th><th className="text-right">Thắng</th><th className="text-right">R TB</th><th className="text-right">Lãi</th></tr></thead>
+              <tbody>
+                {S.bySlot.map((s) => {
+                  const sl = (ea.slots || []).find((z) => z.sym === s.sym) || {};
+                  return (
+                    <tr key={s.sym} className="border-t border-slate-100">
+                      <td className="py-1.5"><b>{s.sym}</b> <span className="text-[11px] text-slate-400">{s.name}</span></td>
+                      <td className="text-right tabular-nums">{sl.risk != null ? `${fmtNum(sl.risk, 2)}%` : "—"}</td>
+                      <td className="text-right tabular-nums">{sl.max ?? "—"}</td>
+                      <td className={`text-right tabular-nums ${sl.open ? "font-bold text-indigo-600" : ""}`}>{sl.open ?? "—"}</td>
+                      <td className="text-right tabular-nums">{s.n}</td><td className="text-right tabular-nums">{s.win != null ? `${fmtNum(s.win, 0)}%` : "—"}</td>
+                      <td className={`text-right tabular-nums ${tone(s.avgR)}`}>{fmtR(s.avgR)}</td><td className={`text-right font-bold tabular-nums ${tone(s.pnl)}`}>{s.n ? fmtUsdSigned(s.pnl) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="mt-1 text-[11px] leading-snug text-slate-400">Rủi ro/lệnh = {fmtNum(riskBase, 2)}% số dư × hệ số mã. Tối đa = số lệnh cùng mã được mở cùng lúc.{S.old?.n ? ` Lịch sử QWS_Gop trước 21/11: ${S.old.n} lệnh, ${fmtUsdSigned(S.old.pnl)} — không tính vào bảng này.` : ""}</div>
+          </div>
+        ) : <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] text-[12.5px]">
             <thead><tr className="text-left text-[10.5px] uppercase text-slate-400"><th className="py-1">Ngăn</th><th>Mã</th><th className="text-right">Rủi ro/lệnh</th><th className="text-right">Lệnh</th><th className="text-right">Thắng</th><th className="text-right">R TB</th><th className="text-right">Lãi</th><th className="text-right">Trạng thái</th></tr></thead>
             <tbody>
@@ -192,14 +248,18 @@ export default function CoinMT5({ active }) {
               })}
             </tbody>
           </table>
-        </div>
+        </div>}
         <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-200 sm:grid-cols-4">
-          <Num label="Kiểm thử 2018–2026" v={`+${BT.cagr}%/năm`} sub={`~${fmtNum(BT.month, 1)}%/tháng · sụt tối đa ${fmtNum(BT.mdd, 1)}%`} />
-          <Num label="Thực tế: tăng trưởng" v={growth != null ? `${growth >= 0 ? "+" : ""}${fmtNum(growth, 2)}%` : "—"} sub={days ? `sau ${fmtNum(days, 0)} ngày` : "chưa có lệnh"} t={tone(growth)} />
-          <Num label="Thắng" v={S.win != null ? `${fmtNum(S.win, 0)}%` : "—"} sub={`kiểm thử ${fmtNum(BT.win, 0)}%`} />
-          <Num label="Số lệnh / tháng" v={days ? fmtNum((S.n / days) * 30.4, 1) : "—"} sub={`kiểm thử ~${BT.perMonth}`} />
+          {isV
+            ? <Num label="Kiểm thử luật gốc 2018–2026" v={`sụt tối đa ${fmtNum(BT_V.mdd, 0)}%`} sub={`1.000$ có lúc còn ${BT_V.low}$ · mô phỏng`} t="text-rose-600" />
+            : <Num label="Kiểm thử 2018–2026" v={`+${BT.cagr}%/năm`} sub={`~${fmtNum(BT.month, 1)}%/tháng · sụt tối đa ${fmtNum(BT.mdd, 1)}%`} />}
+          <Num label="Thực tế: tăng trưởng" v={growth != null ? `${growth >= 0 ? "+" : ""}${fmtNum(growth, 2)}%` : "—"} sub={days ? `sau ${fmtNum(days, 0)} ngày${isV ? " (cả QWS cũ)" : ""}` : "chưa có lệnh"} t={tone(growth)} />
+          <Num label="Thắng" v={S.win != null ? `${fmtNum(S.win, 0)}%` : "—"} sub={`kiểm thử ${fmtNum(isV ? BT_V.win : BT.win, 0)}%`} />
+          <Num label="Số lệnh / tháng" v={rateDays ? fmtNum((S.n / rateDays) * 30.4, 1) : "—"} sub={`kiểm thử ~${isV ? BT_V.perMonth : BT.perMonth}`} />
         </div>
-        <div className="mt-2 flex items-start gap-1.5 text-[11.5px] leading-snug text-slate-500"><ShieldAlert size={13} className="mt-0.5 shrink-0 text-amber-500" />Cần vài tháng (≥ 30–50 lệnh) mới so được với kiểm thử; vài tuần đầu lệch nhiều là bình thường. Kết quả quá khứ không đảm bảo tương lai.</div>
+        <div className="mt-2 flex items-start gap-1.5 text-[11.5px] leading-snug text-slate-500"><ShieldAlert size={13} className="mt-0.5 shrink-0 text-amber-500" />{isV
+          ? "Victor vào lệnh dày (~55 lệnh/tháng) nên vài tuần đã có đủ lệnh để so. Số kiểm thử Victor là mô phỏng Python (chưa chạy Strategy Tester); luật gốc không phanh, không dừng ngày nên sụt vốn có thể rất sâu. Kết quả quá khứ không đảm bảo tương lai."
+          : "Cần vài tháng (≥ 30–50 lệnh) mới so được với kiểm thử; vài tuần đầu lệch nhiều là bình thường. Kết quả quá khứ không đảm bảo tương lai."}</div>
       </Card>
 
       <Card className="!p-3 sm:!p-4">
