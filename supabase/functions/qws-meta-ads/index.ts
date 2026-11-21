@@ -6,7 +6,7 @@
 //   "report" (mặc định) — app gọi khi mở module: { since, until, compare } → số liệu từng tài khoản.
 //                         Chỉ CHỦ workspace (email == OWNER_EMAIL).
 //   "watch"  — pg_cron 15 phút/lần: soát số HÔM NAY → cảnh báo (Web Push + Telegram nếu có).
-//   "daily"  — pg_cron 6h sáng: tóm tắt HÔM QUA + cảnh báo tần suất.
+//   "daily"  — pg_cron 6h sáng: tóm tắt HÔM QUA (chi phí / tin nhắn, / lead, Google chi phí / chuyển đổi — không CPM/CPC, sếp chốt 21/11).
 //   "config_list" / "config_discover" / "config_save" / "config_update" / "config_delete" — quản lý TKQC + token (chỉ CHỦ).
 //   watch/daily xác thực bằng header x-cron-key, so với khoá trong Vault (RPC qws_ads_check_cron_key).
 //
@@ -380,6 +380,71 @@ function lowBalance(found: { key: string; text: string }[], today: string, id: s
     found.push({ key: k("balance"), text: `💰 ${name}: số dư còn ${fmt(bal.balance)} ≈ ${bal.daysLeft.toFixed(1)} ngày chạy (TB ${fmt(bal.avgDaily)}/ngày) — sắp hết` });
 }
 
+// ----- Cảnh báo chi phí / kết quả (sếp chốt 21/11/2026: FB = chi phí / tin nhắn, / lead, / SĐT · Google = chi phí / chuyển đổi) -----
+type Bucket = { spend: number; n: number };
+// Số theo chiến dịch (tiền + tin nhắn + lead) trong 1 kỳ
+async function campaignResults(acc: any, since: string, until: string) {
+  const rows = await gall("act_" + acc.id + "/insights", { level: "campaign", fields: "campaign_id,objective,spend,actions", limit: "200", ...timeArgs(since, until) }, acc.token, 3);
+  return rows.map((r: any) => ({ id: String(r.campaign_id), objective: String(r.objective || ""), spend: num(r.spend), msgs: act(r, MSG), leads: act(r, "lead") || act(r, "onsite_conversion.lead_grouped") }));
+}
+// Chiến dịch ra tin nhắn → nhóm tin nhắn, ra lead → nhóm lead (có cả hai thì theo cái nhiều hơn); chưa có kết quả nào thì theo mục tiêu chiến dịch.
+// Tiền nhóm nào chỉ chia cho kết quả nhóm đó (chiến dịch lead không đẩy giá tin nhắn lên).
+function splitByType(today: any[], base: any[]) {
+  const seen: Record<string, { m: number; l: number; o: string }> = {};
+  for (const r of [...base, ...today]) { const x = (seen[r.id] ||= { m: 0, l: 0, o: r.objective }); x.m += r.msgs; x.l += r.leads; }
+  const typeOf = (id: string) => {
+    const x = seen[id];
+    if (!x) return null;
+    if (x.m || x.l) return x.m >= x.l ? "msg" : "lead";
+    if (/LEAD/i.test(x.o)) return "lead";
+    if (/ENGAGEMENT|MESSAGES/i.test(x.o)) return "msg";
+    return null;
+  };
+  const sum = (rows: any[]) => {
+    const s: Record<"msg" | "lead", Bucket> = { msg: { spend: 0, n: 0 }, lead: { spend: 0, n: 0 } };
+    for (const r of rows) { const t = typeOf(r.id); if (!t) continue; s[t].spend += r.spend; s[t].n += t === "msg" ? r.msgs : r.leads; }
+    return s;
+  };
+  return { today: sum(today), base: sum(base) };
+}
+// Giá 1 kết quả tăng > 30% so kỳ nền (nền ≥ 3 kết quả, kỳ này chi ≥ 50k) · hoặc đã chi ≥ 100k (và ≥ 1,5 lần giá TB) mà chưa có kết quả nào
+function costAlert(found: { key: string; text: string }[], key: string, name: string, unit: string, baseLabel: string, cur: Bucket, base: Bucket, when = "hôm nay") {
+  if (base.n < 3 || base.spend <= 0) return;
+  const avg = base.spend / base.n;
+  if (cur.n === 0) {
+    if (cur.spend >= Math.max(100000, avg * 1.5)) found.push({ key, text: `⚠️ ${name}: ${when} đã chi ${fmt(cur.spend)} nhưng chưa có ${unit} nào (${baseLabel} ${fmt(avg)} / ${unit})` });
+    return;
+  }
+  const c = cur.spend / cur.n;
+  if (cur.spend >= 50000 && c > avg * 1.3)
+    found.push({ key, text: `📈 ${name}: chi phí / ${unit} ${when} ${fmt(c)} (+${Math.round((c / avg - 1) * 100)}% so với ${baseLabel} ${fmt(avg)}) · ${cur.n} ${unit}` });
+}
+// SĐT theo TK quảng cáo: máy chính đếm từ Pancake (Pancake tự gắn hội thoại với mã quảng cáo) → office_client_extra (detail_today / detail_yesterday / detail_7).
+// Chỉ dùng page đã đồng bộ trong hôm nay. Nền = 7 ngày − hôm qua − hôm nay = các ngày trọn từ đầu kỳ 7 ngày tới hôm kia.
+async function phoneAlerts(found: { key: string; text: string }[], ACCOUNTS: any[], today: string) {
+  const { data } = await admin().from("office_client_extra").select("ref_id,key,data").eq("kind", "pancake").in("key", ["detail_today", "detail_yesterday", "detail_7"]);
+  const pages: Record<string, Record<string, any>> = {};
+  for (const r of data || []) (pages[r.ref_id] ||= {})[r.key] = r.data;
+  const ph: Record<string, { y: number; w: number; t: number; from: string }> = {};
+  for (const p of Object.values(pages)) {
+    if (p.detail_today?.range?.cur?.[0] !== today || !p.detail_7?.range || !p.detail_yesterday) continue;
+    const from = String(p.detail_7.range.cur[0]);
+    const add = (d: any, f: "y" | "w" | "t") => { for (const a of d?.ads || []) { if (!a?.[1]) continue; const o = (ph[String(a[1])] ||= { y: 0, w: 0, t: 0, from }); o[f] += num(a[2]); } };
+    add(p.detail_yesterday, "y"); add(p.detail_7, "w"); add(p.detail_today, "t");
+  }
+  const y = addDays(today, -1), d2 = addDays(today, -2);
+  await Promise.all(ACCOUNTS.map(async (acc: any) => {
+    const p = ph[String(acc.id)];
+    if (!p || !acc.token || p.from > d2) return;
+    const baseN = p.w - p.y - p.t;
+    if (baseN < 3) return; // nền quá ít SĐT (vd page khách nước ngoài Pancake không nhận số) → không so
+    const days = await gall("act_" + acc.id + "/insights", { level: "account", fields: "spend", time_increment: "1", time_range: JSON.stringify({ since: p.from, until: y }) }, acc.token, 1);
+    const spendOf = (pred: (d: string) => boolean) => days.filter((d: any) => pred(d.date_start)).reduce((s: number, d: any) => s + num(d.spend), 0);
+    const nDays = Math.round((Date.parse(d2) - Date.parse(p.from)) / 86400000) + 1;
+    costAlert(found, `${today}|${acc.id}|cpr_sdt`, acc.name, "SĐT", `TB ${nDays} ngày trước`, { spend: spendOf((d) => d === y), n: p.y }, { spend: spendOf((d) => d <= d2), n: baseN }, "hôm qua");
+  }));
+}
+
 async function watch() {
   const ACCOUNTS = await loadAccounts();
   const today = isoOf(vnNow());
@@ -396,18 +461,28 @@ async function watch() {
     if (a.status && a.status !== 1) found.push({ key: k("status"), text: `⛔ ${a.name}: tài khoản không hoạt động (mã ${a.status})` });
     if (a.issues?.length) found.push({ key: k("issues"), text: `🚫 ${a.name}: ${a.issues.length} quảng cáo bị từ chối/có vấn đề` });
     if (a.spendCap > 0 && a.amountSpent / a.spendCap > 0.9) found.push({ key: k("cap"), text: `💸 ${a.name}: đã tiêu ${Math.round((a.amountSpent / a.spendCap) * 100)}% giới hạn chi tiêu` });
-    const bm0 = b && !b.error ? b.totals.cpm : 0;
-    if (bm0 && t.cpm && t.spend >= 50000 && t.cpm > bm0 * 1.3)
-      found.push({ key: k("cpm"), text: `📈 ${a.name}: CPM hôm nay ${fmt(t.cpm)} (+${Math.round((t.cpm / bm0 - 1) * 100)}% so với TB 7 ngày ${fmt(bm0)})` });
-    if (a.group === "brand" && b && !b.error && b.totals.frequency > 3)
-      found.push({ key: k("freq"), text: `🔁 ${a.name}: tần suất 7 ngày ${b.totals.frequency.toFixed(2)} (>3) — khách xem lặp, nên đổi mẫu/mở rộng tệp` });
-    if (a.group === "conv") {
-      if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 tin nhắn/lead` });
-      const bc = b && !b.error ? b.totals.cpr : null;
-      if (bc && t.cpr && t.spend >= 50000 && t.cpr > bc * 1.3)
-        found.push({ key: k("cpr"), text: `📈 ${a.name}: giá/kết quả hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / bc - 1) * 100)}% so với TB 7 ngày ${fmt(bc)})` });
-    }
+    // Sếp chốt 21/11/2026: KHÔNG báo CPM / CPC / tần suất — chỉ báo biến động chi phí / tin nhắn, chi phí / lead (dưới) và chi phí / SĐT (theo giờ).
   });
+  // Chi phí / tin nhắn và chi phí / lead: hôm nay so TB 7 ngày, tách tiền theo chiến dịch (tiền chiến dịch lead không bị tính vào giá tin nhắn và ngược lại)
+  await Promise.all(ACCOUNTS.map(async (acc: any, i: number) => {
+    const a: any = now[i], b: any = base[i];
+    if (a.error || acc.group !== "conv") return;
+    const k = (type: string) => `${today}|${acc.id}|${type}`;
+    try {
+      const [tRows, bRows] = await Promise.all([campaignResults(acc, "today", "today"), campaignResults(acc, from, to)]);
+      const s = splitByType(tRows, bRows);
+      costAlert(found, k("cpr_msg"), acc.name, "tin nhắn", "TB 7 ngày", s.today.msg, s.base.msg);
+      costAlert(found, k("cpr_lead"), acc.name, "lead", "TB 7 ngày", s.today.lead, s.base.lead);
+    } catch (_) {
+      // không tách được theo chiến dịch → so cả tài khoản (tin nhắn + lead) như trước
+      const t = a.totals, bt = b && !b.error ? b.totals : null;
+      if (bt) costAlert(found, k("cpr"), acc.name, "kết quả", "TB 7 ngày", { spend: t.spend, n: t.results }, { spend: bt.spend, n: bt.results });
+    }
+  }));
+  // Chi phí / SĐT: hôm qua so TB các ngày trước đó (SĐT khách để lại, Pancake gắn theo quảng cáo) — soát 1 lần mỗi giờ, mỗi TK tối đa 1 lần/ngày
+  if (vnNow().getUTCMinutes() < 15) {
+    try { await phoneAlerts(found, ACCOUNTS, today); } catch (_) { /* phụ: thiếu số Pancake thì bỏ qua */ }
+  }
   // Hạn token Meta (13/11): báo trước 7 ngày, mỗi ngày tối đa 1 lần/token
   try { tokenAlerts(found, today, await tokenHealth(ACCOUNTS)); } catch (_) { /* phụ */ }
   // Số dư Meta (TK trả trước có sổ nạp tiền)
@@ -423,14 +498,12 @@ async function watch() {
     const t = a.totals, b = gBase[i]?.totals, k = (type: string) => `${today}|${a.id}|${type}`;
     if (a.issues.length) found.push({ key: k("issues"), text: `🚫 ${a.name}: ${a.issues[0].name}` });
     if (a.status && a.status !== "ENABLED") found.push({ key: k("status"), text: `⛔ ${a.name}: tài khoản Google ở trạng thái ${a.status}` });
-    if (b?.cpc && t.cpc && t.clicks >= 10 && t.cpc > b.cpc * 1.3)
-      found.push({ key: k("cpc"), text: `📈 ${a.name}: CPC hôm nay ${fmt(t.cpc)} (+${Math.round((t.cpc / b.cpc - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpc)})` });
     lowBalance(found, today, a.id, a.name, a.bal);
     if (hourVN >= 9 && (!a.lastSync || Date.now() - Date.parse(a.lastSync) > 3 * 3600000))
       found.push({ key: k("stale"), text: `⏸ ${a.name}: script Google Ads chưa đẩy số >3 giờ — kiểm tra lịch chạy script` });
     if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 chuyển đổi (Google có thể trễ vài giờ)` });
     if (b?.cpr && t.cpr && t.spend >= 50000 && t.cpr > b.cpr * 1.3)
-      found.push({ key: k("cpr"), text: `📈 ${a.name}: CPA hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / b.cpr - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpr)})` });
+      found.push({ key: k("cpr"), text: `📈 ${a.name}: chi phí / chuyển đổi hôm nay ${fmt(t.cpr)} (+${Math.round((t.cpr / b.cpr - 1) * 100)}% so với TB 7 ngày ${fmt(b.cpr)}) · ${Math.round(t.results * 10) / 10} chuyển đổi` });
   });
   const fresh = new Set(await freshKeys(found));
   const lines = found.filter((f) => fresh.has(f.key)).map((f) => f.text);
@@ -452,17 +525,20 @@ async function daily() {
     lines.push(group === "conv" ? "🎯 CHUYỂN ĐỔI" : "📣 THƯƠNG HIỆU");
     for (const g of gDay) if (g.group === group) {
       const t = g.totals;
-      lines.push(`• ${g.name} (Google): ${fmt(t.spend)} · ${Math.round(t.results * 10) / 10} CĐ · ${t.cpr ? fmt(t.cpr) + "/CĐ" : "—"} · CPC ${fmt(t.cpc)}`);
+      lines.push(`• ${g.name} (Google): ${fmt(t.spend)} · ${Math.round(t.results * 10) / 10} CĐ · ${t.cpr ? fmt(t.cpr) + " / chuyển đổi" : "—"}`);
     }
     day.forEach((a: any, i: number) => {
       if (a.group !== group) return;
       if (a.error) { lines.push(`• ${a.name}: lỗi — ${a.error}`); return; }
       const t = a.totals;
-      if (group === "conv") lines.push(`• ${a.name}: ${fmt(t.spend)} · ${t.results} KQ · ${t.cpr ? fmt(t.cpr) + "/KQ" : "—"} · CPM ${fmt(t.cpm)}`);
+      if (group === "conv") {
+        const per = (n: number, unit: string) => (n ? `${n} ${unit} (${fmt(t.spend / n)} / ${unit})` : "");
+        lines.push(`• ${a.name}: ${fmt(t.spend)} · ${[per(t.msgs, "tin nhắn"), per(t.leads, "lead")].filter(Boolean).join(" · ") || "0 kết quả"}`);
+      }
       else {
         const w: any = week[i];
         const f = w && !w.error ? w.totals.frequency : 0;
-        lines.push(`• ${a.name}: ${fmt(t.spend)} · tiếp cận ${t.reach.toLocaleString("vi-VN")} · CPM ${fmt(t.cpm)} · tần suất 7N ${f.toFixed(2)}${f > 3 ? " ⚠️" : ""}`);
+        lines.push(`• ${a.name}: ${fmt(t.spend)} · tiếp cận ${t.reach.toLocaleString("vi-VN")} · tần suất 7N ${f.toFixed(2)}`);
       }
     });
     lines.push("");

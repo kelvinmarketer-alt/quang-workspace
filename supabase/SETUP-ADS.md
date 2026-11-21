@@ -78,10 +78,12 @@ grant execute on function public.qws_ads_check_cron_key(text) to service_role;
 
 ## Cảnh báo tự động
 
-- **Chuyển đổi**: tiêu ≥100k trong ngày mà 0 tin/lead · giá/kết quả hôm nay cao hơn 30% so với TB 7 ngày.
-- **Thương hiệu**: CPM hôm nay cao hơn 30% so với TB 7 ngày · tần suất 7 ngày > 3 (trong bản tóm tắt 6h sáng).
+(Sếp chốt 21/11/2026: chỉ báo biến động chi phí cho 1 kết quả — KHÔNG báo CPM, CPC, tần suất.)
+- **Facebook — chi phí / tin nhắn** và **chi phí / lead**: hôm nay cao hơn 30% so với TB 7 ngày (tiền tách theo chiến dịch: chiến dịch ra tin nhắn chỉ chia cho tin nhắn, ra lead chỉ chia cho lead) · hoặc đã chi ≥100k mà chưa có tin nhắn / lead nào.
+- **Facebook — chi phí / SĐT**: hôm qua cao hơn 30% so với TB các ngày trước đó trong 7 ngày (SĐT khách để lại do Pancake gắn theo quảng cáo, máy chính đồng bộ về) · soát mỗi giờ, cần nền ≥ 3 SĐT.
+- **Google — chi phí / chuyển đổi**: hôm nay cao hơn 30% so với TB 7 ngày · hoặc tiêu ≥100k mà 0 chuyển đổi.
 - **Mọi tài khoản**: tài khoản bị khoá / Google không ở trạng thái ENABLED · quảng cáo bị từ chối/hạn chế · đã tiêu >90% giới hạn chi tiêu
-  · **số dư còn < 2 ngày chạy** hoặc **hết tiền** · CPM tăng >30% · Google: CPC tăng >30%, script ngừng đẩy >3 giờ.
+  · **số dư còn < 2 ngày chạy** hoặc **hết tiền** · Google: script ngừng đẩy >3 giờ.
 - Số dư: Google có "ngân sách tài khoản" thì tự đọc; TK nạp trước (Google/Meta) thì nhập **Số dư hiện tại** + **Vừa nạp thêm** trong thẻ tài khoản (mục Quảng cáo) — app tự trừ chi phí.
 
 ## 3b. Bảng Google Ads — SQL Editor → Run
