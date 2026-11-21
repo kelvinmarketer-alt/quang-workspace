@@ -507,8 +507,9 @@ async function watch() {
     lowBalance(found, today, a.id, a.name, a.bal);
     // Ngân sách tài khoản Google còn < 10% (còn > 0 và chưa bị báo "sắp hết" theo số ngày) — chuyển từ văn phòng sang 21/11/2026
     const gb = a.bal;
-    if (gb?.source === "google_budget" && num(gb.limit) > 0 && gb.balance > 0 && gb.balance / num(gb.limit) < 0.1 && !(gb.daysLeft != null && gb.daysLeft < 2))
-      found.push({ key: k("budget10"), text: `💰 ${a.name}: ngân sách tài khoản còn ${fmt(gb.balance)} (${Math.round((gb.balance / num(gb.limit)) * 100)}% của ${fmt(num(gb.limit))})${gb.daysLeft != null ? ` ≈ ${gb.daysLeft.toFixed(1)} ngày chạy` : ""} — chuẩn bị nạp / tăng ngân sách` });
+    // chỉ báo khi còn < 7 ngày chạy (21/11: XKLD còn 27 ngày mà vẫn bị báo vì ngân sách cộng dồn lớn → nhiễu)
+    if (gb?.source === "google_budget" && num(gb.limit) > 0 && gb.balance > 0 && gb.balance / num(gb.limit) < 0.1 && gb.daysLeft != null && gb.daysLeft >= 2 && gb.daysLeft < 7)
+      found.push({ key: k("budget10"), text: `💰 ${a.name}: ngân sách tài khoản còn ${fmt(gb.balance)} ≈ ${gb.daysLeft.toFixed(1)} ngày chạy (TB ${fmt(gb.avgDaily)}/ngày) — chuẩn bị nạp / tăng ngân sách` });
     if (hourVN >= 9 && (!a.lastSync || Date.now() - Date.parse(a.lastSync) > 3 * 3600000))
       found.push({ key: k("stale"), text: `⏸ ${a.name}: script Google Ads chưa đẩy số >3 giờ — kiểm tra lịch chạy script` });
     if (t.spend >= 100000 && t.results === 0) found.push({ key: k("noresult"), text: `⚠️ ${a.name}: hôm nay tiêu ${fmt(t.spend)} nhưng 0 chuyển đổi (Google có thể trễ vài giờ)` });
