@@ -14,7 +14,7 @@ import { fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct, downloadCSV, timeL
 import { pushSupported, permission, isSubscribed, enablePush } from "../lib/push.js";
 import { runSessionAsync } from "../lib/botRunner.js";
 import { finalize, cfgOf } from "../lib/paperBot.js";
-import { normLive, liveSummary, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
+import { normLive, liveSummary, outcomeOf, compareDemoLive, cfgDiff, rulesText, setupName } from "../lib/liveStats.js";
 import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet, mergeCmd, useUsdVnd } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 import PnlCalendar from "../components/PnlCalendar.jsx";
@@ -26,7 +26,7 @@ const TF = { "5m": "M5", "15m": "M15", "1h": "H1", "4h": "H4" };
 const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "vừa xong" : m < 60 ? `${m} phút trước` : `${Math.round(m / 60)} giờ trước`; };
 const dt = (t) => { if (t == null) return "—"; const d = new Date(t); return isNaN(d) ? "—" : `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 const fmtR = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2)}R`);
-const rTone = (r) => (r != null && isFinite(r) && Math.abs(r) <= 0.05 ? "text-slate-400" : tone(r)); // |R| ≤ 0,05 = hoà (khớp cách đếm thắng/thua)
+const oTone = (t) => { const o = outcomeOf(t); return o == null ? tone(t?.r) : o === 0 ? "text-slate-400" : o > 0 ? "text-emerald-600" : "text-rose-600"; }; // 22/11: màu theo lãi/lỗ $ sau phí (khớp cách đếm thắng/thua)
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-900" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const side = (s) => <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold text-white ${s === 1 ? "bg-emerald-500" : "bg-rose-500"}`}>{s === 1 ? "MUA" : "BÁN"}</span>;
 const EV = { placed: "Đặt lệnh chờ", open: "Khớp lệnh", close: "Đóng lệnh", expired: "Huỷ (giá không về)", skip: "Bỏ tín hiệu", error: "Lỗi", closeAll: "Đóng hết vị thế", moveSl: "Dời cắt lỗ", partial: "Chốt 1/3", test: "Lệnh thử" };
@@ -416,12 +416,12 @@ function LiveResults({ hist, st, session }) {
   const streams = useMemo(() => [...new Set(list.map((t) => `${t.coin}|${t.tf}`))].sort(), [list]);
   const shown = useMemo(() => list
     .filter((t) => pair === "all" || t.coin === pair || `${t.coin}|${t.tf}` === pair)
-    .filter((t) => filter === "all" || (t.r != null && (filter === "win" ? t.r > 0.05 : t.r < -0.05)))
+    .filter((t) => filter === "all" || (t.r != null && outcomeOf(t) === (filter === "win" ? 1 : -1)))
     .filter((t) => mon === "all" || monthOf(t.exitAt ?? t.entryAt) === mon)
     .sort((a, b) => (b.exitAt ?? b.entryAt ?? 0) - (a.exitAt ?? a.entryAt ?? 0)), [list, pair, filter, mon]);
   const months = useMemo(() => {
     const mm = new Map();
-    for (const t of list) { if (!(pair === "all" || t.coin === pair || `${t.coin}|${t.tf}` === pair) || t.exitAt == null) continue; const k = monthOf(t.exitAt), x = mm.get(k) || { k, n: 0, win: 0, loss: 0, pnl: 0 }; x.n++; if (t.r > 0.05) x.win++; else if (t.r < -0.05) x.loss++; x.pnl += t.pnl || 0; mm.set(k, x); }
+    for (const t of list) { if (!(pair === "all" || t.coin === pair || `${t.coin}|${t.tf}` === pair) || t.exitAt == null) continue; const k = monthOf(t.exitAt), x = mm.get(k) || { k, n: 0, win: 0, loss: 0, pnl: 0 }; x.n++; const o = outcomeOf(t); if (o === 1) x.win++; else if (o === -1) x.loss++; x.pnl += t.pnl || 0; mm.set(k, x); }
     return [...mm.values()].sort((a, b) => (a.k < b.k ? 1 : -1));
   }, [list, pair]);
   const exportCsv = () => downloadCSV(`lich-su-lenh-that-${m}-${new Date().toISOString().slice(0, 10)}`, [
@@ -506,7 +506,7 @@ function LiveResults({ hist, st, session }) {
           <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[12.5px] sm:gap-2">
             {side(t.side)}<b>{t.coin}</b><span className="text-slate-400">{TF[t.tf] || t.tf}</span><span className="hidden min-w-0 truncate text-slate-500 sm:inline">{setupName(t.setup)}</span>
             {t.exitAt == null && <span className="shrink-0 rounded bg-amber-100 px-1.5 text-[10.5px] font-bold text-amber-700">ĐANG MỞ</span>}
-            <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${rTone(t.r)}`}>{fmtR(t.r)}{t.r != null && Math.abs(t.r) <= 0.05 ? " · hoà" : ""}</span>
+            <span className={`ml-auto shrink-0 font-extrabold tabular-nums ${oTone(t)}`}>{fmtR(t.r)}{t.r != null && outcomeOf(t) === 0 ? " · hoà" : ""}</span>
             <span className={`shrink-0 text-right sm:w-[84px] font-extrabold tabular-nums ${tone(t.pnl)}`}>{t.pnl == null ? "—" : fmtUsdSigned(t.pnl)}</span>
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] tabular-nums text-slate-500">
