@@ -259,8 +259,9 @@ export default function CoinLive({ active }) {
       {isOwner && <BotSettings st={st} cmd={cmd} session={session} onSaved={() => { setFastUntil(Date.now() + 120000); load(); }} defaultOpen={!!st.waiting} liveChecks={liveChecks} />}
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
-        {st.wallet ? <Num label="Số dư ví Futures" v={fmtUsd(st.wallet.balance + st.wallet.uPnl)} t={st.wallet.uPnl ? tone(st.wallet.uPnl) : undefined}
-          sub={`${st.wallet.uPnl ? `đang mở ${fmtUsdSigned(st.wallet.uPnl)} · ` : ""}khả dụng ${fmtUsd(st.wallet.avail)}${st.lastScan?.eq != null && Math.abs(st.lastScan.eq - st.wallet.balance - st.wallet.uPnl) > 0.5 ? ` · tính lệnh ${fmtUsd(st.lastScan.eq)}` : ""}`} />
+        {/* 22/11 sếp: thêm "Số dư ký quỹ" = ví + lãi đang chạy, khớp số to trên Binance. Bot gửi wallet.uPnl = 0 → cộng lãi từng vị thế (posPnl) */}
+        {st.wallet ? (() => { const up = Number(st.wallet.uPnl) || Object.values(st.posPnl || {}).reduce((s, p) => s + (Number(p?.uPnl) || 0), 0); return <Num label="Số dư ví Futures" v={fmtUsd(st.wallet.balance)}
+          sub={<>{up ? <span className="block font-bold text-slate-600">Ký quỹ (gồm lãi đang chạy) {fmtUsd(st.wallet.balance + up)} <span className={tone(up)}>({fmtUsdSigned(up)})</span></span> : null}khả dụng {fmtUsd(st.wallet.avail)}{st.lastScan?.eq != null && Math.abs(st.lastScan.eq - st.wallet.balance - up) > 0.5 ? ` · tính lệnh ${fmtUsd(st.lastScan.eq)}` : ""}</>} />; })()
           : <Num label="Vốn tính lệnh" v={fmtUsd(st.lastScan?.eq)} sub="số dư ví hiện sau khi bot cập nhật bản mới" />}
         <Num label="Lãi/lỗ hôm nay" v={todayPnl == null ? "—" : fmtUsdSigned(todayPnl)} t={tone(todayPnl)} />
         <Num label="Lệnh chờ / đang mở" v={`${act.filter((a) => a.stage === "entry").length} / ${act.filter((a) => a.stage === "open").length}`} />
