@@ -92,4 +92,13 @@ describe("mt5Source", () => {
     expect(eaMatch("XAUUSDm", "XAUUSD")).toBe(true); expect(eaMatch("US500Cash", "US500")).toBe(false); expect(eaMatch("EURUSD", "XAUUSD")).toBe(false);
     expect(eaOverlay({}, "XAUUSD", H)).toMatchObject({ marks: [], lines: [], stat: { n: 0 } });
   });
+  it("22/11: danh sách mặc định có đủ 8 mã EA Victor V5 (XAGUSD, XTIUSD, USTEC…), khớp cầu nối bridge/mt5_market.py", async () => {
+    const { FX_DEFAULT, EA_SYMS } = await import("../src/lib/mt5Source.js");
+    expect(EA_SYMS).toHaveLength(8);
+    for (const s of EA_SYMS) expect(FX_DEFAULT).toContain(s);
+    const fs = await import("node:fs"), path = await import("node:path");
+    const py = fs.readFileSync(path.join(process.cwd(), "bridge", "mt5_market.py"), "utf8");
+    const line = py.split(/\r?\n/).find((l) => l.startsWith("DEFAULT = ["));
+    expect(JSON.parse(line.slice(line.indexOf("["), line.indexOf("]") + 1))).toEqual(FX_DEFAULT);
+  });
 });

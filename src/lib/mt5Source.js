@@ -10,7 +10,9 @@ import { supabase } from "./supabase.js";
 import { fmtNum } from "./format.js";
 
 const T = "qws_mt5_bot";
-export const FX_DEFAULT = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"]; // = 6 mã của EA + 3 cặp chính; bridge/mt5_market.py giữ cùng danh sách
+// 22/11/2026: EA demo đổi sang Victor V5 (8 mã) → thêm XAGUSD, XTIUSD, USTEC; giữ EURUSD/GBPUSD/BTCUSD/ETHUSD đang xem. bridge/mt5_market.py giữ cùng danh sách
+export const EA_SYMS = ["XAUUSD", "XAGUSD", "XTIUSD", "USDJPY", "US500", "USTEC", "JP225", "US2000"]; // mã EA Victor V5 giao dịch
+export const FX_DEFAULT = ["XAUUSD", "XAGUSD", "XTIUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "US500", "USTEC", "JP225", "US2000"];
 
 const rowId = (sym, tf) => `mk|${sym}|${tf}`;
 const errNo = (msg, extra) => Object.assign(new Error(msg), extra);

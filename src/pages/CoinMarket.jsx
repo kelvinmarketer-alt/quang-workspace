@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Term } from "../components/Term.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
-import { fxDigits, FX_DEFAULT, useMt5Feed, useEaTrades, eaOverlay } from "../lib/mt5Source.js";
+import { fxDigits, FX_DEFAULT, EA_SYMS, useMt5Feed, useEaTrades, eaOverlay } from "../lib/mt5Source.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, toggleEma, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
 import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
 import { Card } from "../components/ui.jsx";
@@ -695,7 +695,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 <Bot size={13} className="text-violet-500" /> Hiện lệnh EA MT5
               </label>
               {eaOn && !eaData.loaded ? <span className="flex items-center gap-1 text-slate-400"><Loader2 size={11} className="animate-spin" /> Đang tải lệnh EA…</span>
-                : eaOn && eaView && (eaView.stat.n + eaView.stat.pend === 0 ? <span className="text-slate-400">EA chưa có lệnh nào ở {sym}{["XAUUSD", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"].includes(sym) ? "" : " (EA chỉ giao dịch XAUUSD, BTCUSD, ETHUSD, US500, JP225, US2000)"}.</span>
+                : eaOn && eaView && (eaView.stat.n + eaView.stat.pend === 0 ? <span className="text-slate-400">EA chưa có lệnh nào ở {sym}{EA_SYMS.includes(sym) ? "" : ` (EA chỉ giao dịch ${EA_SYMS.join(", ")})`}.</span>
                 : <span className="text-slate-500">{eaView.stat.n} lệnh {sym}: <b className="text-emerald-600">{eaView.stat.win} thắng</b> · <b className="text-rose-600">{eaView.stat.loss} thua</b>{eaView.stat.open ? <> · <b className="text-violet-600">{eaView.stat.open} đang mở</b></> : null}{eaView.stat.pend ? <> · <b className="text-amber-600">{eaView.stat.pend} lệnh chờ</b></> : null} · tổng <b className={eaView.stat.sumR >= 0 ? "text-emerald-600" : "text-rose-600"}>{sR(eaView.stat.sumR, 1)}</b></span>)}
             </div>
           )}

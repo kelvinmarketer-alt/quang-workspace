@@ -23,7 +23,7 @@ except ImportError:  # cho phép import để chạy test với mt5 giả
     mt5 = None
 
 VERSION = 1
-DEFAULT = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "US500", "JP225", "US2000"]  # = FX_DEFAULT trong app
+DEFAULT = ["XAUUSD", "XAGUSD", "XTIUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "ETHUSD", "US500", "USTEC", "JP225", "US2000"]  # = FX_DEFAULT trong app (22/11: thêm XAGUSD, XTIUSD, USTEC của EA Victor V5)
 TF = {  # khoá app -> (tên hằng MT5, số nến lưu)
     "5m": ("TIMEFRAME_M5", 400), "15m": ("TIMEFRAME_M15", 600), "1h": ("TIMEFRAME_H1", 1000), "4h": ("TIMEFRAME_H4", 1000),
     "1d": ("TIMEFRAME_D1", 1000), "1w": ("TIMEFRAME_W1", 600), "1M": ("TIMEFRAME_MN1", 200),
