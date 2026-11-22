@@ -1,12 +1,13 @@
 // Dải so sánh Demo ↔ Bot thật (09/11) — nằm đầu tab "Trade COIN" cho cả hai công tắc.
 // Số liệu cùng nguồn với tab Tổng quan: bảng qws_live_bot (trạng thái bot) + phiên Demo chạy lại trong Web Worker (nhớ 5 phút).
+import { statsMoney } from "../lib/liveStats.js";
 import { useEffect, useState } from "react";
 import { Bot, Radio, ArrowLeftRight } from "lucide-react";
 import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { fmtUsd, fmtUsdSigned, fmtNum, fmtPct } from "../lib/format.js";
 import { demoResult, demoCacheGet } from "../lib/coinShared.js";
-import { cfgOf, statsOf } from "../lib/paperBot.js";
+import { cfgOf } from "../lib/paperBot.js";
 import { finalize } from "../lib/paperBot.js";
 
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-800" : v >= 0 ? "text-emerald-600" : "text-rose-600");
@@ -36,7 +37,7 @@ export default function TradeCompare({ active, go, canDemo, canLive }) {
 
   const cfg = session ? cfgOf(session) : null;
   const dT = demo ? demo.portfolio.trades.filter((t) => t.status === "done" || t.status === "open") : [];
-  const dOpen = dT.filter((t) => t.status === "open").length, dS = demo ? statsOf(dT.filter((t) => t.status === "done")) : null;
+  const dOpen = dT.filter((t) => t.status === "open").length, dS = demo ? statsMoney(dT.filter((t) => t.status === "done")) : null;
   const dEq = demo && cfg ? demo.portfolio.equity + (demo.portfolio.unrealized || 0) : null;
   const online = st && Date.now() - st.at < 180000;
   const nPos = Object.keys(st?.positions || {}).length, nAct = Object.keys(st?.active || {}).length, nWait = Math.max(0, nAct - nPos);

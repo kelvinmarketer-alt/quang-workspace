@@ -1,8 +1,9 @@
 // Đánh giá từng cặp × khung của bot Demo (21/10): cặp nào đang kéo lỗ để sếp quyết định tắt.
 // Số liệu = đúng lệnh Demo (cùng luật bot thật). Tắt cặp = bỏ khỏi danh sách cặp (Demo chạy lại, bot thật áp dụng ~5 phút) — luật rủi ro giữ nguyên.
+import { statsMoney } from "../lib/liveStats.js";
 import { Scale, PowerOff, Power } from "lucide-react";
 import { Card } from "./ui.jsx";
-import { TFS, statsOf } from "../lib/paperBot.js";
+import { TFS } from "../lib/paperBot.js";
 import { fmtNum, fmtUsd } from "../lib/format.js";
 
 const rr = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 2, 2)}R`);
@@ -16,10 +17,10 @@ export default function PairReview({ cfg, list, ptrades, canEdit, onRemoveCoin, 
   const pnlOf = (f) => ptrades.filter((t) => t.status !== "skip" && t.pnl != null && f(t)).reduce((a, t) => a + t.pnl, 0);
   const total = pnlOf(() => true);
   const coins = cfg.coins.map((coin) => {
-    const s = statsOf(list.filter((t) => t.coin === coin)), pnl = pnlOf((t) => t.coin === coin);
+    const s = statsMoney(list.filter((t) => t.coin === coin)), pnl = pnlOf((t) => t.coin === coin);
     const tfs = cfg.tfs.map((tf) => {
       const L = list.filter((t) => t.coin === coin && t.tf === tf);
-      return { tf, s: statsOf(L), r30: statsOf(L.filter((t) => t.entryAt >= since30)), pnl: pnlOf((t) => t.coin === coin && t.tf === tf) };
+      return { tf, s: statsMoney(L), r30: statsMoney(L.filter((t) => t.entryAt >= since30)), pnl: pnlOf((t) => t.coin === coin && t.tf === tf) };
     });
     return { coin, s, pnl, tfs };
   }).sort((a, b) => a.pnl - b.pnl);

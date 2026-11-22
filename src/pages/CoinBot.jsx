@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { statsMoney, outcomeOf } from "../lib/liveStats.js";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Term, GlossaryButton } from "../components/Term.jsx";
 import { viReason } from "../lib/glossary.js";
@@ -13,7 +14,7 @@ import { ask } from "../components/ConfirmDialog.jsx";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { runSessionAsync } from "../lib/botRunner.js";
 import { fmtUsd, fmtPx, fmtNum, timeLeft } from "../lib/format.js";
-import { finalize, statsOf, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE, SW3D_DEFAULT, SW3D_MANAGE } from "../lib/paperBot.js";
+import { finalize, cfgOf, loadKlines, MIN_RR, SETUPS, TFS, LEVELS, symOf, MAX_COINS, SW3_DEFAULT, SW3_RULES, SW3_MANAGE, SW3D_DEFAULT, SW3D_MANAGE } from "../lib/paperBot.js";
 import { monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet, demoCacheSet, useUsdVnd } from "../lib/coinShared.js";
 import { supabase } from "../lib/supabase.js";
 
@@ -519,7 +520,7 @@ function RulesLog({ log, list }) {
       {!rows0.length ? <div className="text-[12px] text-slate-400">Chưa có thay đổi nào được ghi. Từ nay mỗi lần tắt/bật cặp, khung, sửa cặp, tạo phiên mới hay dừng phiên đều được ghi lại ở đây.</div> : (
         <div className="divide-y divide-slate-100">
           {(all ? rows : rows.slice(0, 8)).map((r, i) => {
-            const after = statsOf(list.filter((t) => t.entryAt >= r.at));
+            const after = statsMoney(list.filter((t) => t.entryAt >= r.at));
             return (
               <div key={r.at + "-" + i} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-[12px]">
                 <span className="tabular-nums text-slate-400">{dt(r.at)}</span>
@@ -697,9 +698,9 @@ export default function CoinBot({ active: visible = true }) {
   }, [res]);
   useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(null), 9000); return () => clearTimeout(t); }, [toast]);
 
-  const all = useMemo(() => statsOf(list), [list]);
-  const sAuto = useMemo(() => (res ? statsOf(res.trades) : null), [res]), sBase = useMemo(() => (res ? statsOf(res.baseTrades) : null), [res]), sRej = useMemo(() => (res ? statsOf(res.rejected) : null), [res]);
-  const by = (key, vals, label = (x) => x) => vals.map((v) => [label(v), statsOf(list.filter((t) => t[key] === v))]);
+  const all = useMemo(() => statsMoney(list), [list]);
+  const sAuto = useMemo(() => (res ? statsMoney(res.trades) : null), [res]), sBase = useMemo(() => (res ? statsMoney(res.baseTrades) : null), [res]), sRej = useMemo(() => (res ? statsMoney(res.rejected) : null), [res]);
+  const by = (key, vals, label = (x) => x) => vals.map((v) => [label(v), statsMoney(list.filter((t) => t[key] === v))]);
   const curveA = useMemo(() => (res ? res.portfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
   const curveB = useMemo(() => (res ? res.basePortfolio.curve.map((p) => ({ t: p.t, eq: Math.round(p.eq * 100) / 100 })) : []), [res]);
   // mở biểu đồ đúng luồng của lệnh được chọn
@@ -716,7 +717,7 @@ export default function CoinBot({ active: visible = true }) {
   const taken = useMemo(() => {
     if (!P) return [];
     const src = filter === "reject" ? res.rejected.map((t) => ({ ...t, status: "reject" })) : P.trades;
-    return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => hMonth === "all" || monthOf(t.entryAt) === hMonth).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && (filter === "win" ? t.r > 0.05 : t.r < -0.05))).sort((a, b) => b.entryAt - a.entryAt);
+    return src.filter((t) => hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream).filter((t) => hMonth === "all" || monthOf(t.entryAt) === hMonth).filter((t) => (filter === "all" ? t.status !== "skip" : filter === "open" ? t.status === "open" : filter === "skip" ? t.status === "skip" : filter === "reject" ? true : t.status === "done" && outcomeOf(t) === (filter === "win" ? 1 : -1))).sort((a, b) => b.entryAt - a.entryAt);
   }, [P, res, filter, hStream, hMonth]);
   // 13/11: lịch lãi/lỗ theo ngày đóng lệnh (kiểu Binance), tách theo setup
   const calItems = useMemo(() => (P ? P.trades.filter((t) => t.status === "done" && t.exitAt != null && t.pnl != null).map((t) => ({ t: t.exitAt, v: t.pnl, src: t.setup, label: `${t.side === 1 ? "LONG" : "SHORT"} ${t.coin} ${TFS[t.tf]?.label || t.tf} · ${setupName(t.setup)}` })) : []), [P]);
@@ -728,7 +729,7 @@ export default function CoinBot({ active: visible = true }) {
     for (const t of P.trades) {
       if (t.status === "skip" || !(hStream === "all" || `${t.coin}|${t.tf}` === hStream || t.coin === hStream)) continue;
       const k = monthOf(t.entryAt), x = m.get(k) || { k, n: 0, win: 0, done: 0, pnl: 0 };
-      x.n++; if (t.status === "done") { x.done++; if (t.r > 0.05) x.win++; x.pnl += t.pnl || 0; }
+      x.n++; if (t.status === "done") { x.done++; if (outcomeOf(t) === 1) x.win++; x.pnl += t.pnl || 0; }
       m.set(k, x);
     }
     return [...m.values()].sort((a, b) => (a.k < b.k ? 1 : -1));
@@ -766,7 +767,7 @@ export default function CoinBot({ active: visible = true }) {
   const open = P ? P.trades.filter((t) => t.status === "open") : [];
   const done = P ? P.trades.filter((t) => t.status === "done") : [];
   const expUsd = done.length ? done.reduce((s, t) => s + t.pnl, 0) / done.length : null;
-  const longS = statsOf(list.filter((t) => t.side === 1)), shortS = statsOf(list.filter((t) => t.side === -1));
+  const longS = statsMoney(list.filter((t) => t.side === 1)), shortS = statsMoney(list.filter((t) => t.side === -1));
   const net = P ? P.equity - cfg.capital : 0, recovery = P && P.maxDDUsd > 0 ? net / P.maxDDUsd : null;
   const st = { live: ["bg-emerald-500 animate-pulse", "Realtime"], connecting: ["bg-amber-400", "Đang nối giá…"], reconnect: ["bg-amber-500 animate-pulse", "Mất kết nối, đang nối lại…"], off: ["bg-slate-300", "Không realtime"] }[status];
   const optOn = res?.optState.filter((o) => o.take && o.level >= 0).length || 0, optOff = res?.optState.filter((o) => !o.take).length || 0;
@@ -1110,7 +1111,7 @@ export default function CoinBot({ active: visible = true }) {
                 <th className="py-1.5 pr-2">Khung</th><th className="py-1.5 pr-2 text-right">Lệnh (gốc)</th><th className="py-1.5 pr-2 text-right">Thắng</th><th className="py-1.5 pr-2 text-right"><Term k="avgR" align="right">R TB</Term></th><th className="py-1.5 pr-2 text-right"><Term k="pf" align="right">Hệ số lãi</Term></th><th className="py-1.5 pr-2 text-right">Phí TB</th><th className="py-1.5 pr-2 text-right">Lãi/lỗ gốc</th>{cfg.adaptive && <><th className="py-1.5 pr-2 text-right text-violet-600">Tự tối ưu</th><th className="py-1.5">Bot hiện tại</th></>}
               </tr></thead>
               <tbody>{(() => {
-                const rows = cfg.tfs.map((tf) => ({ tf, b: statsOf(res.baseTrades.filter((t) => t.tf === tf)), a: statsOf(res.trades.filter((t) => t.tf === tf)), usdB: res.basePortfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), usdA: res.portfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), st: res.tfState?.find((x) => x.tf === tf) }));
+                const rows = cfg.tfs.map((tf) => ({ tf, b: statsMoney(res.baseTrades.filter((t) => t.tf === tf)), a: statsMoney(res.trades.filter((t) => t.tf === tf)), usdB: res.basePortfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), usdA: res.portfolio.trades.filter((t) => t.tf === tf && t.status !== "skip").reduce((x, t) => x + t.pnl, 0), st: res.tfState?.find((x) => x.tf === tf) }));
                 const best = rows.filter((r) => r.b.n >= 10).sort((x, y) => y.b.avgR - x.b.avgR)[0]?.tf;
                 return rows.map(({ tf, b, a, usdB, usdA, st }) => (
                   <tr key={tf} className={`border-b border-slate-50 ${tf === best ? "bg-emerald-50/60" : ""}`}>
@@ -1132,7 +1133,7 @@ export default function CoinBot({ active: visible = true }) {
         </Card>
 
         {rawOld && (() => {
-          const o = oldFin, so = statsOf(o.baseTrades), sb = statsOf(res.baseTrades), sa = statsOf(res.trades);
+          const o = oldFin, so = statsMoney(o.baseTrades), sb = statsMoney(res.baseTrades), sa = statsMoney(res.trades);
           const cols = [["Bot (luật mới + tối ưu)", sa, res.portfolio, "text-violet-700"], ["Luật mới (cố định)", sb, res.basePortfolio, "text-emerald-700"], ["Bản cũ (chưa lọc vào đẹp)", so, o.basePortfolio, "text-slate-500"]].filter((c, i) => i || cfg.adaptive);
           return (
             <Card className="!p-3">

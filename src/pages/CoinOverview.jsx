@@ -1,4 +1,5 @@
 // Tab "Tổng quan" của module Coin (chỉ chủ): mở ra là nắm hết — tài sản, bot thật, demo, cảnh báo giá, tiến độ lệnh tháng này.
+import { statsMoney } from "../lib/liveStats.js";
 import { useEffect, useMemo, useState } from "react";
 import { Coins, Radio, Bot, BellRing, ChevronRight, TrendingUp, TrendingDown, Target, Loader2 } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
@@ -6,7 +7,7 @@ import { useData } from "../lib/store.jsx";
 import { supabase } from "../lib/supabase.js";
 import { fmtUsd, fmtUsdSigned, fmtNum, fmtPct, fmtPx, formatVND } from "../lib/format.js";
 import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet } from "../lib/coinShared.js";
-import { cfgOf, statsOf, TFS, finalize } from "../lib/paperBot.js";
+import { cfgOf, TFS, finalize } from "../lib/paperBot.js";
 
 const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-800" : v >= 0 ? "text-emerald-600" : "text-rose-600");
@@ -92,7 +93,7 @@ export default function CoinOverview({ active, go, noAssets = false }) { // noAs
   const cfg = session ? cfgOf(session) : null;
   const dTrades = demo ? demo.portfolio.trades.filter((t) => t.status === "done" || t.status === "open") : [];
   const dDone = dTrades.filter((t) => t.status === "done");
-  const dStats = demo ? statsOf(dDone) : null;
+  const dStats = demo ? statsMoney(dDone) : null;
   const dMonth = dTrades.filter((t) => monthOf(t.entryAt) === month);
   const dOpen = dTrades.filter((t) => t.status === "open");
   const dEq = demo ? demo.portfolio.equity + (demo.portfolio.unrealized || 0) : null;
@@ -180,7 +181,7 @@ export default function CoinOverview({ active, go, noAssets = false }) { // noAs
       {(() => {
         const vnNow = new Date(Date.now() + 7 * 3600000), dow = (vnNow.getUTCDay() + 6) % 7; // 0 = thứ Hai
         const wk = Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate() - dow) - 7 * 3600000;
-        const dW = dTrades.filter((t) => t.entryAt >= wk), dWs = statsOf(dW.filter((t) => t.status === "done")), dPnl = dW.reduce((x, t) => x + (t.pnl || 0), 0);
+        const dW = dTrades.filter((t) => t.entryAt >= wk), dWs = statsMoney(dW.filter((t) => t.status === "done")), dPnl = dW.reduce((x, t) => x + (t.pnl || 0), 0);
         const lW = live.filter((t) => t.exitAt && t.exitAt >= wk), lPnl = lW.reduce((x, t) => x + (Number(t.pnl) || 0), 0);
         const weak = demo && cfg ? weakStreams(demo.portfolio.trades, cfg) : { tfs: [], pairs: [] };
         const chg = (Array.isArray(settings.paperBotLog) ? settings.paperBotLog : []).filter((x) => x.at >= wk);

@@ -25,23 +25,29 @@ export function normLive(t, fallbackMode) {
 // Thống kê theo R (statsOf) + theo $: tổng lãi/lỗ, sụt vốn lớn nhất ($ và %), đường vốn.
 // eqNow (vốn hiện tại bot báo) → vốn trước lệnh đầu ≈ eqNow − tổng lãi/lỗ (ước tính, để tính sụt vốn %).
 // 22/11 sếp: "lệnh lãi dương sau khi trừ chi phí mà lại phán là hoà, vô lý" → lệnh thật chấm thắng/thua theo TIỀN sau phí:
-// lãi > 0 (từ 1 xu) = thắng · lỗ = thua · đúng $0,00 = hoà. Không có số tiền thì theo R (>0 / <0). Demo giữ cách cũ (statsOf ±0,05R).
+// lãi > 0 (từ 1 xu) = thắng · lỗ = thua · đúng $0,00 = hoà. Không có số tiền thì theo R (>0 / <0, R đã trừ phí).
 export function outcomeOf(t) {
   const v = fin(t?.pnl) ? Math.round(+t.pnl * 100) / 100 : fin(t?.r) ? +t.r : null;
   return v == null ? null : v > 0 ? 1 : v < 0 ? -1 : 0;
 }
 
-export function liveSummary(list, eqNow) {
+// 22/11 (sếp: "sửa luôn demo chấm theo tiền phí"): statsOf (paperBot.js) chấm ±0,05R — KHÔNG sửa paperBot.js vì mã luật bot = hash cả file.
+// statsMoney = statsOf rồi chấm lại thắng/thua/hoà theo outcomeOf (tiền sau phí). Dùng cho MỌI chỗ hiển thị (Demo + Bot thật).
+export function statsMoney(list) {
   const s = { ...statsOf(list) };
-  { // chấm lại thắng/thua/hoà theo tiền sau phí (ghi đè phần statsOf chấm theo ±0,05R)
-    const rd = list.filter((t) => t.r != null), W = rd.filter((t) => outcomeOf(t) === 1), L = rd.filter((t) => outcomeOf(t) === -1);
-    const sumW = W.reduce((x, t) => x + t.r, 0), sumL = -L.reduce((x, t) => x + t.r, 0);
-    let st = 0, worst = 0, ws = 0, best = 0;
-    for (const t of [...rd].sort((a, b) => a.exitAt - b.exitAt)) { const o = outcomeOf(t); if (o === -1) { st++; worst = Math.max(worst, st); ws = 0; } else if (o === 1) { st = 0; ws++; best = Math.max(best, ws); } }
-    Object.assign(s, { wins: W.length, losses: L.length, bes: rd.length - W.length - L.length, winRate: rd.length ? (W.length / rd.length) * 100 : null,
-      pf: sumL ? sumW / sumL : sumW ? Infinity : null, worstStreak: worst, bestStreak: best,
-      avgWin: W.length ? sumW / W.length : null, avgLoss: L.length ? -sumL / L.length : null, payoff: W.length && L.length ? sumW / W.length / (sumL / L.length) : null });
-  }
+  const rd = list.filter((t) => t.r != null), W = rd.filter((t) => outcomeOf(t) === 1), L = rd.filter((t) => outcomeOf(t) === -1);
+  const sumW = W.reduce((x, t) => x + t.r, 0), sumL = -L.reduce((x, t) => x + t.r, 0);
+  const avg = (a, f) => (a.length ? a.reduce((x, t) => x + f(t), 0) / a.length : null);
+  let st = 0, worst = 0, ws = 0, best = 0;
+  for (const t of [...rd].sort((a, b) => a.exitAt - b.exitAt)) { const o = outcomeOf(t); if (o === -1) { st++; worst = Math.max(worst, st); ws = 0; } else if (o === 1) { st = 0; ws++; best = Math.max(best, ws); } }
+  return Object.assign(s, { wins: W.length, losses: L.length, bes: rd.length - W.length - L.length, winRate: rd.length ? (W.length / rd.length) * 100 : null,
+    pf: sumL ? sumW / sumL : sumW ? Infinity : null, worstStreak: worst, bestStreak: best,
+    avgWin: W.length ? sumW / W.length : null, avgLoss: L.length ? -sumL / L.length : null, payoff: W.length && L.length ? sumW / W.length / (sumL / L.length) : null,
+    mfeLoss: avg(L, (t) => t.mfe || 0), maeWin: avg(W, (t) => t.mae || 0) });
+}
+
+export function liveSummary(list, eqNow) {
+  const s = statsMoney(list);
   const done = list.filter((t) => t.exitAt != null && t.pnl != null).sort((a, b) => a.exitAt - b.exitAt);
   const total = done.reduce((x, t) => x + t.pnl, 0);
   const base = fin(eqNow) && eqNow - total > 0 ? eqNow - total : null;
