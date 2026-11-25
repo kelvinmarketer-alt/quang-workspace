@@ -9,7 +9,7 @@
 export const TFS = { "5m": { label: "M5", ms: 300000, htf: "1h" }, "15m": { label: "M15", ms: 900000, htf: "4h" }, "1h": { label: "H1", ms: 3600000, htf: "4h" }, "4h": { label: "H4", ms: 14400000, htf: "1d" }, "1d": { label: "D1", ms: 86400000 }, "1w": { label: "W1", ms: 604800000 } };
 export const SYMBOLS = { BTC: "BTCUSDT", ETH: "ETHUSDT", XAU: "XAUUSDT" }; // cặp mặc định; cặp do user thêm = <MÃ>USDT (Binance USDⓈ-M)
 export const symOf = (c) => SYMBOLS[c] || `${String(c || "").toUpperCase()}USDT`;
-export const MAX_COINS = 18; // 06/11: phương án D chạy 18 mã
+export const MAX_COINS = 40; // 25/11: phương án B+ chạy 38 mã (18 cũ + 20 mã mới) — trước 18
 export const SETUPS = {
   TREND: { label: "Thuận xu hướng (TREND_CONFIRM)", desc: "Giá trên/dưới EMA200 + EMA50 cùng hướng, ADX ≥ 20; hồi về EMA50 → nến tín hiệu (engulfing/nến lớn ≥0.8 ATR, volume > TB20) → nến xác nhận đóng vượt nến tín hiệu." },
   SFP: { label: "Quét thanh khoản (SFP)", desc: "Râu quét qua đỉnh/đáy swing (cao nhất/thấp nhất 20 nến) rồi đóng cửa quay lại, râu ≥40% thân nến, volume ≥ 1.5× TB20." },
@@ -140,15 +140,26 @@ async function idbSet(k, v) { try { const d = await idb(); await new Promise((ok
 
 // mảng nến: [openTime, open, high, low, close, volume] — chỉ nến ĐÃ ĐÓNG
 const MEM = new Map();
+// 25/11 (B+ 38 mã): tải song song dễ chạm giới hạn Binance (2.400 điểm/phút/IP; 1 lượt 1.500 nến = 10 điểm) → bị chặn IP (418), kéo theo
+// cả bot thật nếu chung mạng → tối đa 2 lượt cùng lúc, mỗi lượt bắt đầu cách nhau ≥ 350 ms (≤ ~170 lượt/phút ≈ 1.700 điểm)
+let NET = 0, NEXT = 0; const NETQ = [];
+const netGet = async (url) => {
+  while (NET >= 2) await new Promise((ok) => NETQ.push(ok));
+  NET++;
+  try { const t = Date.now(), at = Math.max(t, NEXT); NEXT = at + 350; if (at > t) await new Promise((ok) => setTimeout(ok, at - t)); return await fetch(url, { signal: AbortSignal.timeout(30000) }); }
+  finally { NET--; NETQ.shift()?.(); }
+};
 async function getJson(url, tries = 4) {
   let r;
-  try { r = await fetch(url, { signal: AbortSignal.timeout(30000) }); } catch (e) { // mạng chập chờn / treo quá 30 giây → thử lại
+  try { r = await netGet(url); } catch (e) { // mạng chập chờn / treo quá 30 giây → thử lại
     if (tries <= 1) throw new Error("Không tải được dữ liệu Binance (mạng): " + (e.message || e));
     await new Promise((ok) => setTimeout(ok, 2000)); return getJson(url, tries - 1);
   }
-  if (r.status === 429 || r.status === 418) { // Binance giới hạn tần suất → chờ rồi thử lại
+  if (r.status === 418) { NEXT = Math.max(NEXT, Date.now() + 120000); throw new Error("Binance đang tạm chặn IP mạng này vì tải quá nhiều — dừng tải, thử lại sau vài phút"); } // KHÔNG thử lại khi bị chặn (thử lại làm sàn chặn lâu hơn)
+  if (r.status === 429) { // Binance giới hạn tần suất → cả hàng đợi cùng nghỉ rồi thử lại
     if (tries <= 1) throw new Error("Binance đang giới hạn tần suất, thử lại sau 1 phút");
-    await new Promise((ok) => setTimeout(ok, (Number(r.headers.get("retry-after")) || 5) * 1000));
+    const wait = (Number(r.headers.get("retry-after")) || 30) * 1000; NEXT = Math.max(NEXT, Date.now() + wait);
+    await new Promise((ok) => setTimeout(ok, wait));
     return getJson(url, tries - 1);
   }
   if (!r.ok) throw new Error(`Binance ${r.status}`);

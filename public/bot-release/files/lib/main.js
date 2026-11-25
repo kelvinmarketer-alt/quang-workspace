@@ -134,7 +134,7 @@ const clamp = (v, lo, hi, d) => (isFinite(Number(v)) && v !== null && v !== "" ?
 function riskFrom(c) {
   const f = c.followDemo !== false && demoCfg;
   RISK = clamp(f ? demoCfg.riskPct : num(c.riskPct, ENV("RISK_PCT", 2)), 0.1, 5, 2);
-  MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 10, 3)); // phương án D: tối đa 10 lệnh
+  MAX_OPEN = Math.round(clamp(f ? demoCfg.maxOpen : num(c.maxOpen, ENV("MAX_OPEN", 3)), 1, 20, 3)); // 25/11 phương án B+: tối đa 15 lệnh (trần an toàn 20; D cũ 10)
   DAILY_STOP = clamp(f ? demoCfg.dailyStopPct : num(c.dailyStopPct, ENV("DAILY_STOP_PCT", 6)), 0, 20, 6); // 0 = không dừng ngày (SW3)
   MAX_LEV = Math.round(clamp(f ? demoCfg.maxLev : num(c.maxLev, ENV("MAX_LEV", 20)), 1, 125, 20)); // 14/11: cho tới 125x như Demo (chỉ là trần khối lượng)
 }

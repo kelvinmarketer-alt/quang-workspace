@@ -1,7 +1,5 @@
 // Gọi bot demo qua Web Worker; trình duyệt không hỗ trợ / worker lỗi → chạy ngay trên luồng chính (như cũ).
-import { runSession as runMain } from "./paperBot.js";
-// 25/11: phiên Demo B (session.lab) chạy bằng bản sao paperBotLab.js — bot thật không dùng bản này
-const runSession = (s, p) => (s?.lab ? import("./paperBotLab.js").then((m) => m.runSession(s, p)) : runMain(s, p));
+import { runSession } from "./paperBot.js";
 let worker = null, broken = false, seq = 0;
 const waiting = new Map();
 function getWorker() {

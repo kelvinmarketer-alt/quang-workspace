@@ -1,7 +1,7 @@
 {
-  "sha": "f2392f3dbccf4e1777cc0aeb12972730d18c7f21",
-  "date": "2026-11-14T22:28:47+07:00",
-  "msg": "Phản hồi nút trong app nhanh: lúc nghỉ dò mốc sửa lệnh mỗi 3 giây (chỉ đọc updated_at), vừa xử lý Dừng/Chạy lại/Đóng hết thì báo trạng thái ngay; Vốn tính lệnh > 0 → rủi ro tính đúng theo số đó (kể cả ví ít hơn)",
+  "sha": "10d39876f36be95931acd21fa77dd5936a02173c",
+  "date": "2026-11-25T09:15:37+07:00",
+  "msg": "Phương án B+ (sếp chốt 25/11): trần lệnh mở 20 (B+ dùng 15) + chép luật app — 38 mã, tải nến giãn nhịp 2 lượt/≥350 ms, gặp 418 thì dừng không thử lại",
   "files": [
     {
       "path": "README.md",
@@ -29,11 +29,11 @@
     },
     {
       "path": "lib/main.js",
-      "sha": "ab98577ac2a0d0591fc5ebd5a3f645c89e1023ab"
+      "sha": "c4353a21cbc4539e895a65239a023592fd98a699"
     },
     {
       "path": "lib/paperBot.js",
-      "sha": "3a2e7accf55280dc2b8873e4684349173c1c8626"
+      "sha": "ac5833ac7cbe19786e426b2b0830ca7ba7a9739c"
     },
     {
       "path": "lib/pushText.js",

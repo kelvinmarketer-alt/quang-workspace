@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck, Cpu, FlaskConical } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck, Cpu } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
@@ -80,7 +80,7 @@ export default function Coin() {
   const { isOwner, perms = [] } = useData();
   // Tab theo quyền (21/10): chủ thấy hết; thành viên thấy tab được cấp (Tổng quan Coin luôn chỉ chủ)
   const allowTab = { overview: isOwner, invest: !isOwner && perms.includes("coinInvest"), /* 10/11: chủ — Đầu tư gộp vào Tổng quan; tài khoản phụ có quyền Đầu tư vẫn thấy tab riêng */ market: isOwner || perms.includes("coinMarket"), trade: isOwner || perms.includes("coinDemo") || perms.includes("coinLive"), forex: isOwner };
-  const allowSub = { bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive"), lab: isOwner }; // 25/11: lab = Demo B (thử), chỉ chủ
+  const allowSub = { bot: isOwner || perms.includes("coinDemo"), live: isOwner || perms.includes("coinLive") };
   // ?tab=live|bot|mt5|trade|forex|market|invest (vd link từ thông báo đẩy) → mở đúng tab; không có thì nhớ tab lần trước
   const [sp, setSp] = useSearchParams();
   const qTab = sp.get("tab");
@@ -90,7 +90,7 @@ export default function Coin() {
     return r || { tab: "overview" };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState(first.tab);
-  const [sub, setSub] = useState(() => { if (first.sub) return first.sub; try { const v = localStorage.getItem("qws_trade_sub"); return v === "live" || v === "lab" ? v : "bot"; } catch { return "bot"; } });
+  const [sub, setSub] = useState(() => { if (first.sub) return first.sub; try { return localStorage.getItem("qws_trade_sub") === "live" ? "live" : "bot"; } catch { return "bot"; } });
   const [mSub, setMSub] = useState(() => { if (first.msub) return first.msub; try { return localStorage.getItem("qws_market_sub") === "forex" ? "forex" : "coin"; } catch { return "coin"; } });
   // Tab đã mở thì GIỮ mounted (ẩn bằng class hidden) → Demo tự động/Thị trường không phải tính lại khi quay lại
   const [seen, setSeen] = useState(() => ({ [first.tab]: true, ...(first.tab === "trade" ? { [first.sub || "bot"]: true } : {}), ...(first.msub ? { ["m_" + first.msub]: true } : {}) }));
@@ -152,9 +152,8 @@ export default function Coin() {
       {allowTab.trade && (seen.trade || cur === "trade") && (
         <div className={cur === "trade" ? "space-y-3" : "hidden"}>
           <TradeCompare active={cur === "trade"} go={pick} canDemo={allowSub.bot} canLive={allowSub.live} />
-          <SubSwitch value={subCur} onChange={pickSub} items={[...(allowSub.bot ? [["bot", "Demo tự động", Bot]] : []), ...(allowSub.lab ? [["lab", "Demo B (thử)", FlaskConical]] : []), ...(allowSub.live ? [["live", "Bot thật", Radio]] : [])]} />
+          <SubSwitch value={subCur} onChange={pickSub} items={[...(allowSub.bot ? [["bot", "Demo tự động", Bot]] : []), ...(allowSub.live ? [["live", "Bot thật", Radio]] : [])]} />
           {allowSub.bot && (seen.bot || subCur === "bot") && <div className={subCur === "bot" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot active={cur === "trade" && subCur === "bot"} /></Suspense></div>}
-          {allowSub.lab && (seen.lab || subCur === "lab") && <div className={subCur === "lab" ? "" : "hidden"}><Suspense fallback={fb}><CoinBot skey="paperBotLab" active={cur === "trade" && subCur === "lab"} /></Suspense></div>}
           {allowSub.live && (seen.live || subCur === "live") && <div className={subCur === "live" ? "" : "hidden"}><Suspense fallback={fb}><CoinLive active={cur === "trade" && subCur === "live"} /></Suspense></div>}
         </div>
       )}

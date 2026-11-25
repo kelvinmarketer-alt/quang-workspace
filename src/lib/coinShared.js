@@ -111,13 +111,12 @@ export function weakStreams(trades, cfg, days = 30) {
 
 // ---------- Bộ nhớ đệm kết quả Demo trong máy (IndexedDB) → mở tab hiện NGAY kết quả lần trước, tính lại ngầm ----------
 const CDB = "qws-demo-cache";
-const slotOf = (s) => (s?.lab ? "lab" : "last"); // 25/11: Demo B lưu ô riêng, không đè kết quả Demo chính
 const cdb = () => new Promise((ok, no) => { const r = indexedDB.open(CDB, 1); r.onupgradeneeded = () => r.result.createObjectStore("raw"); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
 export async function demoCacheGet(session) {
   try {
     const key = demoKey(session); if (!key) return null;
     const db = await cdb();
-    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get(slotOf(session)); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
+    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get("last"); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
     return v && v.key === key ? v.raw : null; // chỉ dùng khi đúng phiên (cùng luật) — đổi luật thì bỏ
   } catch { return null; }
 }
@@ -126,7 +125,7 @@ export async function demoFromCache(session) {
   try {
     const key = demoKey(session); if (!key) return null;
     const db = await cdb();
-    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get(slotOf(session)); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
+    const v = await new Promise((ok) => { const q = db.transaction("raw").objectStore("raw").get("last"); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); });
     return v && v.key === key ? { fin: finalize(v.raw, null), at: v.at || 0 } : null;
   } catch { return null; }
 }
@@ -136,7 +135,7 @@ export async function demoCacheSet(session, raw) {
   try {
     const key = demoKey(session); if (!key || !raw) return;
     const db = await cdb();
-    db.transaction("raw", "readwrite").objectStore("raw").put({ key, raw, at: Date.now() }, slotOf(session));
+    db.transaction("raw", "readwrite").objectStore("raw").put({ key, raw, at: Date.now() }, "last");
   } catch { /* chế độ riêng tư / hết chỗ → bỏ qua */ }
 }
 
