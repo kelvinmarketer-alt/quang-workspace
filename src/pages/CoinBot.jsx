@@ -544,19 +544,41 @@ function RulesLog({ log, list }) {
   );
 }
 
-export default function CoinBot({ active: visible = true }) {
+// 25/11/2026: Demo B (thử) — phương án đề xuất sau khi kiểm 2019–2026 (báo cáo ~/Desktop/Kiem-tra-chien-luoc-coin.html).
+// 38 mã · rủi ro 1,5% (20 mã mới 0,75%) · tối đa 15 lệnh · chốt 20% ở +0,75R · chỉ vào khi phá vỡ ≥ 0,5 ATR. Chạy song song, so với Demo chính.
+const LAB_COINS2 = ["FIL", "AAVE", "APT", "ARB", "OP", "INJ", "SUI", "ICP", "HBAR", "ALGO", "VET", "SAND", "AXS", "EGLD", "THETA", "GRT", "CRV", "LDO", "RUNE", "ZEC"];
+function labPreset(base) {
+  const b = cfgOf(base || { cfg: { ...SW3D_DEFAULT } });
+  return { cfg: { ...b, coins: [...new Set([...b.coins, ...LAB_COINS2])], riskPct: 1.5, riskByCoin: Object.fromEntries(LAB_COINS2.map((c) => [c, 0.75])), maxOpen: 15, sw: { ...b.sw, partFrac: 0.2, brkAtr: 0.5 } }, startAt: base?.startAt || Date.now() - 90 * 86400000, createdAt: Date.now(), lab: true };
+}
+function LabStart({ base, onStart }) {
+  const p = labPreset(base);
+  return (
+    <Card>
+      <div className="text-[14px] font-extrabold text-slate-800">Demo B (thử) — chạy song song phương án đề xuất</div>
+      <div className="mt-1 text-[12.5px] leading-relaxed text-slate-600">Cùng cách vào lệnh như Demo chính, khác 5 điểm: <b>38 mã</b> (thêm 20 mã), <b>rủi ro 1,5%</b> (20 mã mới 0,75%), <b>tối đa 15 lệnh mở</b>, <b>chốt 20%</b> thay 1/3 ở +0,75R, <b>chỉ vào khi phá vỡ ≥ 0,5 ATR</b>. Chạy từ <b>{dt(p.startAt)}</b> (cùng ngày bắt đầu Demo chính) để so sánh ngay.</div>
+      <div className="mt-1 text-[12px] text-amber-700">Bot thật không theo phiên này. Muốn bot thật dùng phương án B phải đổi luật riêng.</div>
+      <div className="mt-1 text-[12px] text-slate-500">Lần đầu tải nến 38 mã mất khoảng 2–3 phút (tải chậm có chủ ý để Binance không chặn mạng); các lần sau mở nhanh.</div>
+      <button onClick={() => onStart(labPreset(base))} className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-[13px] font-bold text-white"><Play size={14} /> Tạo Demo B</button>
+    </Card>
+  );
+}
+
+export default function CoinBot({ active: visible = true, skey = "paperBot" }) {
   const { settings = {}, setSettings, isOwner, perms = [], myEmail } = useData();
+  // 25/11: skey="paperBotLab" = "Demo B (thử)" — phiên riêng, chạy bằng paperBotLab.js (38 mã); bot thật KHÔNG đọc phiên này
+  const lab = skey !== "paperBot", arcKey = `${skey}Archive`;
   const follow = useLiveFollow();
   // Nhật ký thay đổi luật (21/10): mỗi lần tắt/bật cặp, khung, sửa cặp, phiên mới, dừng → ghi ai đổi, lúc nào, kèm số liệu LÚC ĐỔI
   // để sau đối chiếu "sau khi đổi" tốt lên hay xấu đi. Giữ 100 dòng gần nhất (settings.paperBotLog).
   const saveWithLog = (paperBot, what, reason = "") => {
     let snap = null;
     try { snap = { n: all.n, winRate: all.winRate, avgR: all.avgR, eq: eqNow }; } catch { /* chưa có kết quả */ }
-    const row = { at: Date.now(), by: myEmail || "", what, snap, ...(reason ? { reason: String(reason).slice(0, 200) } : {}) };
-    setSettings({ paperBot, paperBotLog: [row, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
+    const row = { at: Date.now(), by: myEmail || "", what: lab ? `Demo B (thử): ${what}` : what, snap, ...(reason ? { reason: String(reason).slice(0, 200) } : {}) };
+    setSettings({ [skey]: paperBot, paperBotLog: [row, ...(Array.isArray(settings.paperBotLog) ? settings.paperBotLog : [])].slice(0, 100) });
   };
   const canView = isOwner || perms.includes("coinDemo"); // thành viên được cấp quyền: CHỈ XEM (không dừng / phiên mới / sửa cặp)
-  const session = settings.paperBot || null;
+  const session = settings[skey] || null;
   const [raw, setRaw] = useState(null);
   const [rawOld, setRawOld] = useState(null); // bản cũ: cùng phiên nhưng chưa có luật vào đẹp — để so sánh
   const [busy, setBusy] = useState("");
@@ -573,7 +595,7 @@ export default function CoinBot({ active: visible = true }) {
   const [showRules, setShowRules] = useState(false), [editCoins, setEditCoins] = useState(null), [editTfs, setEditTfs] = useState([]);
   const tfName = (l) => l.map((x) => TFS[x]?.label || x).join(", ");
   // 14/11: sửa rủi ro & giới hạn ngay trên phiên đang chạy (giữ ngày bắt đầu) — Demo tính lại, bot thật "theo Demo" áp dụng ~5 phút
-  const RISK_F = [["riskPct", "Rủi ro / lệnh", "%", 0.1, 5, 0.25], ["maxOpen", "Tối đa lệnh mở", "", 1, 10, 1], ["dailyStopPct", "Dừng ngày khi lỗ (0 = không dừng)", "%", 0, 20, 0.5], ["maxLev", "Đòn bẩy tối đa", "x", 1, 125, 1]];
+  const RISK_F = [["riskPct", "Rủi ro / lệnh", "%", 0.1, 5, 0.25], ["maxOpen", "Tối đa lệnh mở", "", 1, lab ? 20 : 10, 1], ["dailyStopPct", "Dừng ngày khi lỗ (0 = không dừng)", "%", 0, 20, 0.5], ["maxLev", "Đòn bẩy tối đa", "x", 1, 125, 1]];
   const [editRisk, setEditRisk] = useState(null);
   const saveRisk = async () => {
     const nv = Object.fromEntries(RISK_F.map(([k]) => [k, Number(editRisk[k])]));
@@ -585,7 +607,7 @@ export default function CoinBot({ active: visible = true }) {
     const hadByCoin = Object.keys(cfg.riskByCoin || {}).length > 0;
     if (editRisk.same && hadByCoin) { nv.riskByCoin = {}; ch.push(`Mọi mã cùng rủi ro ${nv.riskPct}% (bỏ mức riêng ${Object.keys(cfg.riskByCoin).length} mã)`); }
     if (!ch.length) return setEditRisk(null);
-    if (!(await confirmLiveFollow(session.cfg, { ...(session.cfg || {}), ...nv }))) return;
+    if (!lab && !(await confirmLiveFollow(session.cfg, { ...(session.cfg || {}), ...nv }))) return;
     const ans = await ask(`Lưu rủi ro & giới hạn?\n${ch.map((x) => "• " + x).join("\n")}\nDemo tính lại từ ${dt(session.startAt)} (giữ nguyên ngày bắt đầu); bot thật đang "theo Demo" áp dụng trong ~5 phút.`, { ok: "Lưu & chạy lại", input: "Lý do (không bắt buộc)…" });
     if (!ans) return;
     saveWithLog({ ...session, cfg: { ...(session.cfg || {}), ...nv }, createdAt: Date.now() }, `Rủi ro & giới hạn: ${ch.join(" · ")}`, ans.text);
@@ -621,7 +643,7 @@ export default function CoinBot({ active: visible = true }) {
   const [sel, setSel] = useState({ coin: "BTC", tf: "15m" });
   const [toast, setToast] = useState(null);
   const running = useRef(false), lastRun = useRef(0), hits = useRef(new Map()), prevSt = useRef(null), debounce = useRef(null);
-  const cfg = cfgOf(session);
+  const cfg = lab && session ? { ...cfgOf(session), coins: [...(session.cfg?.coins || [])] } : cfgOf(session); // Demo B: cfgOf của app cắt 18 mã → giữ đủ 38 mã để hiện/đọc giá
   const active = !!session && !session.stoppedAt && canView && visible; // tab ẩn → tắt giá realtime + tính lại (đỡ tốn pin)
 
   const sessRef = useRef(session); sessRef.current = session;
@@ -643,7 +665,7 @@ export default function CoinBot({ active: visible = true }) {
 
   // Nâng phiên đang chạy lên v4 theo yêu cầu (20/10): chạy lại 3 tháng gần nhất, bỏ H4 (kiểm tra: bỏ H4 tốt hơn nhẹ)
   useEffect(() => {
-    if (!isOwner || !session || session.stoppedAt || (session.cfg?.cfgVer || 1) >= 4) return;
+    if (lab || !isOwner || !session || session.stoppedAt || (session.cfg?.cfgVer || 1) >= 4) return;
     const c = cfgOf(session), tfs = c.tfs.filter((x) => x !== "4h");
     setSettings({ paperBot: { ...session, startAt: Date.now() - 90 * 86400000, createdAt: Date.now(), cfg: { ...c, tfs: tfs.length ? tfs : c.tfs } } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -752,14 +774,15 @@ export default function CoinBot({ active: visible = true }) {
   if (!canView) return <Card><div className="text-sm text-slate-500">Bạn chưa được cấp quyền xem Demo tự động.</div></Card>;
   if (!isOwner && !session) return <Card><div className="py-8 text-center text-sm text-slate-500">Chủ workspace chưa tạo phiên Demo.</div></Card>;
   // 06/11: xoá lịch sử Demo (sếp yêu cầu, làm lại phương pháp mới) — giữ 1 bản dự phòng ẩn settings.paperBotArchive để khôi phục nếu bấm nhầm
-  const archive = isOwner && !session ? settings.paperBotArchive : null;
-  const restore = async () => { if (await ask(`Khôi phục phiên Demo đã xoá lúc ${dt(archive.removedAt)}?`, { ok: "Khôi phục" })) { saveWithLog(archive.session, "Khôi phục lịch sử Demo"); setSettings({ paperBotArchive: null }); } };
-  if (!session || (config && isOwner)) return <>{archive?.session && <Card className="!p-3 mb-3"><div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-500"><History size={14} className="text-slate-400" /> Đã xoá lịch sử Demo lúc <b className="text-slate-700">{dt(archive.removedAt)}</b> — app còn giữ 1 bản dự phòng. <button onClick={restore} className="font-bold text-indigo-600">Khôi phục</button></div></Card>}<SetupForm initial={session?.cfg} follow={follow} onStart={async (s) => { if (!(await confirmLiveFollow(session?.cfg, s.cfg))) return; if (session && isOwner) setSettings({ paperBotArchive: { session, removedAt: Date.now() } }); /* 06/11: phiên mới không xoá mất phiên cũ — giữ bản dự phòng */ saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} /></>;
+  const archive = isOwner && !session ? settings[arcKey] : null;
+  const restore = async () => { if (await ask(`Khôi phục phiên Demo đã xoá lúc ${dt(archive.removedAt)}?`, { ok: "Khôi phục" })) { saveWithLog(archive.session, "Khôi phục lịch sử Demo"); setSettings({ [arcKey]: null }); } };
+  if (lab && !session && !archive?.session) return <LabStart base={settings.paperBot} onStart={(s) => saveWithLog(s, "Tạo phiên Demo B (thử) theo đề xuất 25/11")} />;
+  if (!session || (config && isOwner)) return <>{archive?.session && <Card className="!p-3 mb-3"><div className="flex flex-wrap items-center gap-2 text-[12px] text-slate-500"><History size={14} className="text-slate-400" /> Đã xoá lịch sử Demo lúc <b className="text-slate-700">{dt(archive.removedAt)}</b> — app còn giữ 1 bản dự phòng. <button onClick={restore} className="font-bold text-indigo-600">Khôi phục</button></div></Card>}<SetupForm initial={session?.cfg} follow={follow} onStart={async (s) => { if (!lab && !(await confirmLiveFollow(session?.cfg, s.cfg))) return; if (session && isOwner) setSettings({ [arcKey]: { session, removedAt: Date.now() } }); /* 06/11: phiên mới không xoá mất phiên cũ — giữ bản dự phòng */ saveWithLog(s, `Phiên mới: ${(s.cfg?.coins || []).join("/")} · ${(s.cfg?.tfs || []).map((x) => TFS[x]?.label || x).join(" ")} · rủi ro ${s.cfg?.riskPct ?? "?"}%`); setConfig(false); }} onCancel={session ? () => setConfig(false) : null} /></>;
 
   const wipe = async () => {
     const n = P ? P.trades.filter((t) => t.status !== "skip").length : null;
     if (!(await ask(`Xoá lịch sử giao dịch Demo?\n${n != null ? `${n} lệnh` : "Toàn bộ lệnh"} từ ${dt(session.startAt)} sẽ không hiện nữa (Demo, Tổng quan Coin, biểu đồ). Bot thật không bị ảnh hưởng.\nApp giữ 1 bản dự phòng ẩn — bấm "Khôi phục" nếu cần lấy lại.`, { ok: "Xoá lịch sử", danger: true }))) return;
-    setSettings({ paperBotArchive: { session, removedAt: Date.now() } });
+    setSettings({ [arcKey]: { session, removedAt: Date.now() } });
     saveWithLog(null, "Xoá lịch sử Demo");
   };
   const stop = async () => { const ans = await ask("Dừng phiên demo?\nBot ngừng mở lệnh mới; lệnh đang mở được tính lãi/lỗ theo giá lúc dừng. Kết quả giữ lại để xem, bấm “Phiên mới” để chạy lại.\nBot thật KHÔNG dừng theo — muốn dừng bot thật vào tab Bot thật.", { ok: "Dừng phiên", danger: true, input: "Lý do (không bắt buộc)…" }); if (ans) saveWithLog({ ...session, stoppedAt: Date.now() }, "Dừng phiên Demo", ans.text); };
@@ -777,8 +800,8 @@ export default function CoinBot({ active: visible = true }) {
       <Card className="!p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Bot size={18} className="text-emerald-500" />
-          <span className="text-[14px] font-extrabold text-slate-800">Bot demo · Futures</span>
-          {isOwner && <FollowNote mode={follow} compact />}
+          <span className="text-[14px] font-extrabold text-slate-800">{lab ? "Demo B (thử) · Futures" : "Bot demo · Futures"}</span>
+          {lab ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-700">Chỉ để thử · bot thật không theo phiên này</span> : isOwner && <FollowNote mode={follow} compact />}
           {session.stoppedAt ? <Badge tone="slate">Đã dừng</Badge> : <span className="flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" /> Đang chạy</span>}
           {cfg.adaptive && <span className="flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700"><Brain size={11} /> Tự tối ưu</span>}
           <div className="ml-auto flex gap-1.5">
