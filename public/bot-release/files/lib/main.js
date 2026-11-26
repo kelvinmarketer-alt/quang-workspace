@@ -9,9 +9,9 @@
 import fs from "node:fs";
 import { fillText, pendingText, partialText, closeText } from "./pushText.js";
 import crypto from "node:crypto";
-import { makeClient, MAIN, sleep } from "./binance.js";
+import { makeClient, MAIN, sleep, noteBan, banLeft, banReason, isBanMsg } from "./binance.js";
 import { runSession, cfgOf, SYMBOLS, TFS, symOf, finalize, statsOf } from "./paperBot.js";
-import { pushStatus, readCommand, readDemoSession, readRulesLog, readStatus, pushHistory, notify, lastPush_, commandStamp } from "./report.js";
+import { pushStatus, pushAlive, readCommand, readDemoSession, readRulesLog, readStatus, pushHistory, notify, lastPush_, commandStamp } from "./report.js";
 import { checkUpdate, markHealthy, updateInfo, rolledBack } from "./updater.js";
 
 const DRY = process.argv.includes("--dry"), ONCE = process.argv.includes("--once");
@@ -733,8 +733,21 @@ async function main() {
   // Canh treo: 1 vòng chạy quá 10 phút (mạng/sàn treo) → thoát để run-bot.cmd khởi động lại sạch (vị thế vẫn có SL/TP trên sàn)
   let beat = now();
   if (!ONCE) setInterval(() => { if (now() - beat > 600000) { log("⚠ Vòng chạy treo quá 10 phút → khởi động lại bot"); process.exit(1); } }, 60000).unref();
+  let errRun = 0;
   for (;;) {
-    try { await cycle(state); await maybeUpdate(lastCmd); } catch (e) { log("Lỗi vòng lặp:", e.message); }
+    if (banLeft() > 0) { // 26/11: Binance đang chặn IP → nghỉ hẳn, không gọi sàn; vẫn báo app bot còn sống + giờ chạy lại
+      const until = new Date(now() + banLeft()).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+      await pushAlive({ waiting: `${banReason() || "Binance tạm chặn IP mạng này"} — bot nghỉ, không gọi sàn đến ${until} rồi tự chạy lại (lệnh đang mở vẫn có SL/TP trên sàn)` }).catch(() => {});
+      await maybeUpdate(lastCmd).catch(() => {});
+    } else {
+      try { await cycle(state); await maybeUpdate(lastCmd); errRun = 0; } catch (e) {
+        errRun++;
+        log("Lỗi vòng lặp:", e.message);
+        if (isBanMsg(e.message)) noteBan(120000, "Binance tạm chặn IP mạng này"); // lỗi chặn từ phần tải nến (paperBot) → cũng nghỉ
+        if (errRun === 3) note("⚠ Bot gặp lỗi liên tục", `${String(e.message).slice(0, 140)} · bot vẫn chạy và tự thử lại`, "qws-bot-errloop");
+        await pushAlive({ waiting: banLeft() > 0 ? null : `Vòng quét lỗi (${errRun} lần liền): ${String(e.message).slice(0, 160)} — bot vẫn chạy, tự thử lại`, lastError: { at: now(), msg: String(e.message).slice(0, 300), run: errRun } }).catch(() => {});
+      }
+    }
     beat = now();
     if (ONCE) { log("Xong 1 vòng (--once)."); break; }
     await waitCmd(15000);

@@ -4,6 +4,14 @@ import crypto from "node:crypto";
 const BASES = { testnet: "https://testnet.binancefuture.com", live: "https://fapi.binance.com" };
 export const MAIN = BASES.live; // dữ liệu nến/giá thật luôn lấy từ sàn thật
 
+// 26/11: Binance chặn IP (418) / báo quá tải (429) → NGHỈ HẲN tới hết hạn, không gọi sàn nữa (gọi tiếp làm sàn chặn lâu hơn).
+// SL/TP đã nằm sẵn trên sàn nên vị thế vẫn được bảo vệ trong lúc nghỉ.
+let banUntil = 0, banWhy = "";
+export function noteBan(ms, why) { const t = Date.now() + Math.max(30000, ms || 0); if (t > banUntil) { banUntil = t; banWhy = why || banWhy; } }
+export const banLeft = () => Math.max(0, banUntil - Date.now());
+export const banReason = () => banWhy;
+export const isBanMsg = (m) => /tạm chặn IP|\(418\)|\(429\)|\(-1003\)|Way too many requests|banned/i.test(String(m || ""));
+
 export function makeClient({ mode = "testnet", key, secret }) {
   const base = BASES[mode];
   if (!base) throw new Error(`MODE không hợp lệ: ${mode} (chỉ testnet | live)`);
@@ -15,6 +23,7 @@ export function makeClient({ mode = "testnet", key, secret }) {
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) p.set(k, String(v));
     if (signed) { p.set("timestamp", String(Date.now() + offset)); p.set("recvWindow", "10000"); p.set("signature", sign(p.toString())); }
     const url = `${base}${path}${method === "GET" || method === "DELETE" ? `?${p}` : ""}`;
+    if (banLeft() > 0) { const err = new Error(`Binance đang tạm chặn IP — bot nghỉ thêm ${Math.ceil(banLeft() / 1000)} giây, chưa gọi ${path}`); err.ban = true; throw err; }
     let r;
     try {
       r = await fetch(url, { method, headers: { "X-MBX-APIKEY": key || "", ...(method === "POST" || method === "PUT" ? { "Content-Type": "application/x-www-form-urlencoded" } : {}) }, body: method === "POST" || method === "PUT" ? p.toString() : undefined, signal: AbortSignal.timeout(20000) }); // treo quá 20 giây → thử lại
@@ -23,7 +32,11 @@ export function makeClient({ mode = "testnet", key, secret }) {
       throw new Error(`Mạng lỗi khi gọi ${path}: ${e.message}`);
     }
     const j = await r.json().catch(() => ({}));
-    if (r.status === 429 || r.status === 418) { if (tries > 1) { await sleep(5000); return req(method, path, params, signed, tries - 1); } }
+    if (r.status === 429 || r.status === 418) { // không thử lại: ghi thời gian nghỉ theo Retry-After của sàn (tối thiểu 2 phút với 418, 30 giây với 429)
+      const ra = Number(r.headers.get("retry-after")) || 0;
+      noteBan(Math.max(ra * 1000, r.status === 418 ? 120000 : 30000), r.status === 418 ? "Binance tạm chặn IP mạng này (418)" : "Binance báo gọi quá nhiều (429)");
+      const err = new Error(`Binance ${path}: ${j.msg || r.status} (${r.status})`); err.code = j.code; err.ban = true; throw err;
+    }
     if (j && j.code === -1021 && tries > 1) { await syncTime(); return req(method, path, params, signed, tries - 1); } // lệch giờ
     if (!r.ok || (j && j.code && j.code < 0)) { const err = new Error(`Binance ${path}: ${j.msg || r.status} (${j.code ?? r.status})`); err.code = j.code; throw err; }
     return j;

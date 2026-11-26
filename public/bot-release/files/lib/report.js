@@ -2,12 +2,17 @@
 // Không cấu hình SUPABASE_SERVICE_KEY → bỏ qua (bot vẫn chạy, chỉ ghi log trong máy).
 const URL_ = (process.env.SUPABASE_URL || "").trim(), KEY = (process.env.SUPABASE_SERVICE_KEY || "").trim();
 const H = () => ({ apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" });
-let lastPush = 0, missing = false;
+let lastPush = 0, missing = false, lastData = null;
 export async function pushStatus(status, force = false) {
   if (!URL_ || !KEY || missing || (!force && Date.now() - lastPush < 30000) || (force === true && Date.now() - lastPush < 10000)) return; // force "now" = báo ngay (vừa xử lý nút bấm trong app)
   lastPush = Date.now();
+  if (!status?.alive) lastData = status; // nhớ bản đầy đủ gần nhất → lúc vòng quét lỗi vẫn báo "còn sống" mà không làm trống thẻ trong app
   const r = await fetch(`${URL_}/rest/v1/qws_live_bot`, { method: "POST", headers: { ...H(), Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: "status", data: status, updated_at: new Date().toISOString() }), signal: AbortSignal.timeout(20000) });
   if (r.status === 404) { missing = true; console.log("(Chưa có bảng qws_live_bot trên Supabase — chạy file supabase.sql để bot báo về app)"); }
+}
+// 26/11: vòng quét lỗi (mạng / Binance chặn IP) → vẫn báo app "bot còn chạy" + lý do, giữ nguyên các số của lần báo đầy đủ trước
+export async function pushAlive(extra = {}) {
+  return pushStatus({ ...(lastData || {}), ...extra, at: Date.now(), alive: true });
 }
 // Trạng thái lần trước (đọc lúc khởi động → biết bot đã im lặng bao lâu)
 export async function readStatus() {

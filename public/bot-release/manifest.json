@@ -1,7 +1,7 @@
 {
-  "sha": "10d39876f36be95931acd21fa77dd5936a02173c",
-  "date": "2026-11-25T09:15:37+07:00",
-  "msg": "Phương án B+ (sếp chốt 25/11): trần lệnh mở 20 (B+ dùng 15) + chép luật app — 38 mã, tải nến giãn nhịp 2 lượt/≥350 ms, gặp 418 thì dừng không thử lại",
+  "sha": "c91822c40cafde87017040cda5cf9c721e9a9df9",
+  "date": "2026-11-26T08:03:27+07:00",
+  "msg": "Bot bền hơn khi lỗi: vòng quét lỗi vẫn báo app 'còn chạy' + lý do (giữ số lần báo trước); Binance 418/429 → nghỉ hẳn theo Retry-After (≥2 phút), không thử lại, không gọi sàn trong lúc nghỉ; lỗi 3 vòng liền → báo điện thoại",
   "files": [
     {
       "path": "README.md",
@@ -25,11 +25,11 @@
     },
     {
       "path": "lib/binance.js",
-      "sha": "c76edf74ff070a7179a3b7e84fe933030ca88eec"
+      "sha": "8761a76d81d8c6b08a1999153dc11a814ff61697"
     },
     {
       "path": "lib/main.js",
-      "sha": "c4353a21cbc4539e895a65239a023592fd98a699"
+      "sha": "4ec98edc28b556c850901e228bf130fd12bf9133"
     },
     {
       "path": "lib/paperBot.js",
@@ -41,7 +41,7 @@
     },
     {
       "path": "lib/report.js",
-      "sha": "0893b31aa1dfe7d98b92d04009d3e1f41054c70a"
+      "sha": "92536b75b3f69be348e2ff8f2ffbc4bf095316b8"
     },
     {
       "path": "lib/updater.js",
