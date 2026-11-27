@@ -9,6 +9,7 @@ import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAler
 import { Card } from "../components/ui.jsx";
 import { makeScale, TOOL_KEYS } from "../lib/chartDraw.js";
 import ReplayTrainer from "../components/ReplayTrainer.jsx";
+import RuleBacktest from "../components/RuleBacktest.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
 import BotView, { useSw3Now, sw3Brief } from "../components/BotView.jsx";
 import { useData } from "../lib/store.jsx";
@@ -630,6 +631,8 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
 
   // Tua lại nến + tự trade (27/11): thay biểu đồ thường bằng ReplayTrainer; phiên đã lưu ở settings.replaySessions (cloud, 30 phiên)
   const [replay, setReplay] = useState(false);
+  const [btMode, setBtMode0] = useState(() => (ls.get("qws_bt_mode", "manual") === "rule" ? "rule" : "manual")); // kiểu backtest: tua lại tay | theo luật tự động
+  const setBtMode = (m) => { setBtMode0(m); ls.set("qws_bt_mode", m); };
   const replaySaved = useMemo(() => (Array.isArray(settings.replaySessions) ? settings.replaySessions : []).filter((x) => (x.market === "mt5") === fx), [settings.replaySessions, fx]);
   const saveReplay = (sm) => { if (!isOwner) return; const prev = Array.isArray(settingsRef.current?.replaySessions) ? settingsRef.current.replaySessions : []; setSettings({ replaySessions: [sm, ...prev.filter((x) => x.id !== sm.id)].slice(0, 30) }); };
 
@@ -792,9 +795,9 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
               </>)}
               {full && isOwner && <AlertPop store={alertStore} pair={pairOf(sym)} market={usedMkt} price={price} fx={fx} />}
-              <button onClick={() => setReplay((r) => !r)} aria-pressed={replay} title={replay ? "Thoát chế độ tua lại nến" : "Tua lại nến + tự trade (backtest tay)"}
+              <button onClick={() => setReplay((r) => !r)} aria-pressed={replay} title={replay ? "Thoát backtest, về biểu đồ thường" : "Backtest: tua lại nến tự trade, hoặc chạy luật tự động"}
                 className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${replay ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
-                <Rewind size={14} /><span className="hidden sm:inline">Tua lại</span>
+                <Rewind size={14} /><span className="hidden sm:inline">Backtest</span>
               </button>
               <button onClick={full ? exitFull : enterFull} title={full ? "Thoát toàn màn hình (Esc)" : "Biểu đồ toàn màn hình"} aria-label={full ? "Thoát toàn màn hình" : "Biểu đồ toàn màn hình"}
                 className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${full ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
@@ -803,7 +806,19 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
             </div>
           </div>
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} onUndo={() => undoDraw(sym)} canUndo={undoN >= 0 && !!undoRef.current[sym]?.length} scale={drawScale} /></div>}
-          {replay ? (
+          {replay && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <div role="tablist" className="flex rounded-lg bg-slate-100 p-0.5">
+                {[["manual", "Tua lại nến · tự trade"], ["rule", "Theo luật · tự động"]].map(([k, l]) => (
+                  <button key={k} role="tab" aria-selected={btMode === k} onClick={() => setBtMode(k)} className={`rounded-md px-2.5 py-1 text-[12px] font-bold ${btMode === k ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}</button>
+                ))}
+              </div>
+              <button onClick={() => setReplay(false)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-bold text-slate-500 hover:bg-slate-100"><X size={13} /> Về biểu đồ thường</button>
+            </div>
+          )}
+          {replay && btMode === "rule" ? (
+            <RuleBacktest sym={sym} tf={tf} market={usedMkt} fx={fx} watch={watch} tags={tags} onEma={() => toggleEma(setTags)} full={full} />
+          ) : replay ? (
             <ReplayTrainer key={`${sym}-${tf}-${usedMkt}`} sym={sym} tf={tf} market={usedMkt} fx={fx} draw={drawFor({ sym, tf })} tags={tags} onEma={() => toggleEma(setTags)} onExit={() => setReplay(false)} onSave={isOwner ? saveReplay : undefined} saved={replaySaved} full={full} />
           ) : multi ? (
             <div className="mt-2">
