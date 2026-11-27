@@ -4,8 +4,9 @@ import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
 import { fxDigits, FX_DEFAULT, EA_SYMS, useMt5Feed, useEaTrades, eaOverlay } from "../lib/mt5Source.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, toggleEma, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
-import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus } from "lucide-react";
+import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus, Maximize2, Minimize2 } from "lucide-react";
 import { Card } from "../components/ui.jsx";
+import { makeScale, TOOL_KEYS } from "../lib/chartDraw.js";
 import CoinSignal from "../components/CoinSignal.jsx";
 import BotView, { useSw3Now, sw3Brief } from "../components/BotView.jsx";
 import { useData } from "../lib/store.jsx";
@@ -363,6 +364,48 @@ function Mt5FeedBar({ feed }) {
   );
 }
 
+// Chọn mã ngay trong biểu đồ toàn màn hình (27/11): bấm tên mã → ô tìm + danh sách theo dõi; gõ mã mới + Enter → kiểm tra sàn rồi chuyển
+function SymPicker({ sym, watch, fx, onPick, onSearch, busy, err }) {
+  const [open, setOpen] = useState(false), [q, setQ] = useState("");
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown", off);
+    return () => document.removeEventListener("pointerdown", off);
+  }, [open]);
+  useEffect(() => { setOpen(false); }, [sym]); // gõ mã mới → kiểm tra sàn xong, đổi mã → đóng danh sách
+  const k = q.trim().toUpperCase(), list = watch.filter((w) => !k || w.includes(k));
+  const go = (w) => { onPick(w); setOpen(false); setQ(""); };
+  return (
+    <div ref={box} className="relative">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="listbox" title="Đổi mã"
+        className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[14px] font-extrabold text-slate-800 hover:border-indigo-300">
+        {fx ? sym : `${sym}/USDT`}<ChevronDown size={14} className={`text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-[95] mt-1 w-64 rounded-xl border border-slate-200 bg-white p-2 shadow-2xl">
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5">
+            <Search size={14} className="shrink-0 text-slate-400" />
+            <input id="fs-sym-search" autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { if (list.length === 1 && !watch.includes(k)) go(list[0]); else if (watch.includes(k)) go(k); else if (k) { onSearch(k); setQ(""); } } if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } }}
+              placeholder={fx ? "Tìm hoặc gõ mã MT5 + Enter" : "Tìm hoặc gõ mã coin + Enter"} className="w-full bg-transparent text-[13px] uppercase outline-none placeholder:normal-case" />
+            {busy && <Loader2 size={13} className="shrink-0 animate-spin text-slate-400" />}
+          </div>
+          {err && <div className="mt-1 text-[11.5px] font-semibold text-rose-600">{err}</div>}
+          <div role="listbox" className="mt-1.5 grid max-h-[50vh] grid-cols-3 gap-1 overflow-y-auto">
+            {list.map((w) => (
+              <button key={w} role="option" aria-selected={w === sym} onClick={() => go(w)}
+                className={`truncate rounded-md px-1.5 py-1.5 text-[12px] font-bold ${w === sym ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-amber-100"}`}>{w}</button>
+            ))}
+            {!list.length && k && <button onClick={() => { onSearch(k); setQ(""); }} className="col-span-3 rounded-md bg-indigo-50 px-2 py-1.5 text-left text-[12px] font-bold text-indigo-600">Mở mã {k} →</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CoinMarket({ active = true, venue = "coin" }) {
   const fx = venue === "forex"; // 09/11: cùng trang, nguồn nến = MT5 (Forex/CFD) thay Binance — mọi khoá lưu trên máy tách riêng (qws_fx_*)
   const K = fx ? { sym: "qws_fx_sym", tf: "qws_fx_tf", ai: "qws_fx_ai", watch: "qws_fx_watch" } : { sym: "qws_mkt_sym", tf: "qws_mkt_tf", ai: "qws_mkt_ai", watch: "qws_mkt_watch" };
@@ -527,14 +570,47 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
   const [selDraw, setSelDraw] = useState(null);
   const [drawHidden, setDrawHidden] = useState(() => ls.get("qws_mkt_draw_hidden", false) === true);
   const setHidden = (v) => { setDrawHidden(v); ls.set("qws_mkt_draw_hidden", v); if (v) setTool("cursor"); };
-  const saveDrawings = (coin, list) => {
+  const undoRef = useRef({}); // hoàn tác (27/11): các bản danh sách hình trước đó theo mã, chỉ trong phiên này
+  const [undoN, setUndoN] = useState(0);
+  const saveDrawings = (coin, list, noUndo = false) => {
     const cur = settingsRef.current?.coinDrawings || {};
+    if (!noUndo) { const h = undoRef.current[coin] || []; h.push(Array.isArray(cur[coin]) ? cur[coin] : []); undoRef.current[coin] = h.slice(-40); setUndoN((n) => n + 1); }
     const next = { ...cur, [coin]: list };
     if (!list.length) delete next[coin];
     settingsRef.current = { ...settingsRef.current, coinDrawings: next }; // 2 lần sửa liền nhau không đè nhau
     setSettings({ coinDrawings: next });
   };
+  const undoDraw = (coin) => { const h = undoRef.current[coin]; if (!h?.length) return; saveDrawings(coin, h.pop(), true); setSelDraw(null); setUndoN((n) => n + 1); };
   const drawingsOf = (coin) => (settings.coinDrawings && Array.isArray(settings.coinDrawings[coin]) ? settings.coinDrawings[coin] : NONE);
+  const drawScale = useMemo(() => makeScale(data.ltf || []), [data.ltf]);
+
+  // Toàn màn hình (27/11): biểu đồ phủ cả màn hình + chọn mã ngay trong biểu đồ. Có API toàn màn hình thì dùng (ẩn cả thanh trình duyệt), iPhone không có → chỉ phủ trang
+  const [full, setFull] = useState(false);
+  const fsApi = useRef(false), toolRef = useRef(tool); toolRef.current = tool;
+  const enterFull = () => { setFull(true); const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().then(() => { fsApi.current = true; }).catch(() => {}); };
+  const exitFull = () => { setFull(false); if (fsApi.current && document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); fsApi.current = false; };
+  useEffect(() => {
+    if (!full) return;
+    const onFs = () => { if (!document.fullscreenElement && fsApi.current) { fsApi.current = false; setFull(false); } }; // Esc của trình duyệt thoát toàn màn hình → thoát luôn chế độ phủ
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    document.addEventListener("fullscreenchange", onFs);
+    return () => { document.removeEventListener("fullscreenchange", onFs); document.body.style.overflow = prev; };
+  }, [full]);
+  // Phím tắt vẽ (1 chỗ cho cả lưới nhiều ô): Ctrl/⌘+Z hoàn tác, Alt+chữ chọn công cụ, Esc thoát toàn màn hình
+  const symRef = useRef(sym); symRef.current = sym;
+  const fullRef = useRef(full); fullRef.current = full;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e) => {
+      if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      if (e.key === "Escape" && fullRef.current && (!isOwner || toolRef.current === "cursor")) { exitFull(); return; }
+      if (!isOwner) return;
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.code === "KeyZ") { e.preventDefault(); undoDraw(symRef.current); return; }
+      if (e.altKey && !e.ctrlKey && !e.metaKey && TOOL_KEYS[e.code]) { e.preventDefault(); setTool(TOOL_KEYS[e.code]); if (drawHidden) setHidden(false); return; }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
   const drawFor = (c) => (isOwner ? { items: drawingsOf(c.sym), tool, setTool, sel: selDraw, setSel: setSelDraw, hidden: drawHidden, tf: c.tf, onChange: (list) => saveDrawings(c.sym, list) } : undefined);
 
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi
@@ -638,11 +714,12 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
 
       <div className="grid gap-3 xl:grid-cols-3">
         {/* Biểu đồ */}
-        <Card className={`!p-3 min-w-0 ${multi ? "xl:col-span-3" : "xl:col-span-2"}`}>
+        <Card className={full ? "!p-3 fixed inset-0 z-[90] flex min-w-0 flex-col overflow-y-auto !rounded-none pt-[max(0.75rem,env(safe-area-inset-top))]" : `!p-3 min-w-0 ${multi ? "xl:col-span-3" : "xl:col-span-2"}`}>
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-extrabold text-slate-400">{fx ? sym : `${sym}/USDT`}{multi ? ` · ${TF[tf].label} (ô đang chọn)` : ""}</span>
+                {full ? <SymPicker sym={sym} watch={watch} fx={fx} onPick={setSym} onSearch={pickSym} busy={qBusy} err={qErr} />
+                  : <span className="text-[12px] font-extrabold text-slate-400">{fx ? sym : `${sym}/USDT`}{multi ? ` · ${TF[tf].label} (ô đang chọn)` : ""}</span>}
                 {fx ? <span className="rounded-md bg-slate-100 px-1.5 py-px text-[10.5px] font-extrabold text-indigo-600" title="Nguồn giá: MT5 trên máy bàn (IC Markets), cầu nối gửi lên 6 giây/lần">MT5 · IC Markets</span> : (
                 <div className="flex rounded-md bg-slate-100 p-0.5" title="Nguồn giá Binance (bot giao dịch trên Futures)">
                   {COIN_MARKETS.map((m) => <button key={m} onClick={() => setMkt(m)} className={`rounded px-1.5 py-px text-[10.5px] font-extrabold ${mkt === m ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{MARKETS[m].label}</button>)}
@@ -664,21 +741,25 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 </div>
                 <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
               </>)}
+              <button onClick={full ? exitFull : enterFull} title={full ? "Thoát toàn màn hình (Esc)" : "Biểu đồ toàn màn hình"} aria-label={full ? "Thoát toàn màn hình" : "Biểu đồ toàn màn hình"}
+                className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${full ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}<span className={full ? "" : "hidden sm:inline"}>{full ? "Thoát" : "Toàn màn hình"}</span>
+              </button>
             </div>
           </div>
-          {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} /></div>}
+          {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} onUndo={() => undoDraw(sym)} canUndo={undoN >= 0 && !!undoRef.current[sym]?.length} scale={drawScale} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid extraFor={fx && isOwner && eaOn ? (c, t) => eaOverlay(eaData, c, TF[t].ms / 1000) : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
+              <ChartGrid full={full} extraFor={fx && isOwner && eaOn ? (c, t) => eaOverlay(eaData, c, TF[t].ms / 1000) : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />} />
               {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />}
             </div>
           ) : err ? (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-6 text-sm font-semibold text-rose-600"><AlertTriangle size={16} /> {err}</div>
           ) : (
-            <div className="relative mt-2">
+            <div className={full ? "relative mt-2 flex flex-col sm:min-h-0 sm:flex-1" : "relative mt-2"}>
               {stale && loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl bg-white/70 text-[13px] font-bold text-slate-500 backdrop-blur-[1px]"><Loader2 size={16} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-              <CandleChart onEma={() => toggleEma(setTags)} candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={fx ? eaView?.marks || NONE : botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className="h-[380px] w-full sm:h-[560px]" />
+              <CandleChart onEma={() => toggleEma(setTags)} candles={data.ltf} e20={ta?.series.e20 || NONE} e50={ta?.series.e50 || NONE} events={ta?.series.events || NONE} marks={fx ? eaView?.marks || NONE : botMarks} lines={lines} precision={prec} fitKey={data.key} tags={tags} draw={drawFor({ sym, tf })} flow={flow} className={full ? "h-full min-h-[calc(100dvh-250px)] w-full sm:min-h-[260px]" : "h-[380px] w-full sm:h-[560px]"} wrapClass={full ? "relative w-full sm:min-h-0 sm:flex-1" : undefined} />
               <TagBar tags={tags} setTags={setTags} extra={<>
                 {eaView && eaView.marks.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh EA L/S · ● thoát ±R{eaView.stat.open > 0 && <> · <span className="text-violet-500">━</span> EA đang mở</>}</span>}
                 {botList.length > 0 && <span><span className="text-emerald-500">▲</span><span className="text-rose-500">▼</span> lệnh bot L/S · ● thoát ±R{botStat.open > 0 && <> · <span className="text-violet-500">━</span> Bot vào</>}</span>}

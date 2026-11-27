@@ -4,8 +4,9 @@
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, MousePointer2, Minus, Slash, Square, Type, Trash2, Eye, EyeOff, Pencil, Focus, Spline } from "lucide-react";
-import { DrawLayer, makeDrawing, moveDrawing, TOOLS, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, Trash2, Eye, EyeOff, Pencil, Focus, Spline, Lock, Unlock, Copy, Undo2 } from "lucide-react";
+import { DrawLayer, makeDrawing, moveDrawing, stagePoint, setPoint, cloneDrawing, clicksOf, TOOLS, HINT, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
+import { DrawIcon } from "./DrawIcons.jsx";
 import { ask } from "./ConfirmDialog.jsx";
 import { TF, fetchKlines, analyze } from "../lib/ta.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
@@ -143,7 +144,7 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 const VN = 7 * 3600;
 // draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
 const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
-export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]" }) {
+export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]", wrapClass = "relative w-full" }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
@@ -189,7 +190,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     const el = box.current;
     let pend = null, drag = null;
     const local = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-    const lock = (on) => chart.applyOptions({ handleScroll: on ? false : SCROLL, handleScale: !on });
+    const lock = (on) => { chart.applyOptions({ handleScroll: on ? false : SCROLL, handleScale: !on }); el.style.touchAction = on ? "none" : ""; }; // đang vẽ trên điện thoại: chạm không cuộn trang
     a.lock = lock;
     const commit = (list) => drawRef.current?.onChange(list.slice(-MAX_PER_COIN));
     const onAxis = (x) => x > el.clientWidth - (chart.priceScale("right").width() || 0);
@@ -201,62 +202,85 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     };
     const axisDbl = (e) => { const r = el.getBoundingClientRect(); if (onAxis(e.clientX - r.left)) a.refit(); };
     el.addEventListener("dblclick", axisDbl);
+    // pend = hình đang vẽ dở { d, stage (số điểm đã chốt), brush }
+    const finish = (d) => {
+      const D = drawRef.current; pend = null; layer.preview = null; layer.update();
+      if (!D || !d) return;
+      commit([...D.items, d]); D.setSel(d.id); D.setTool("cursor");
+      if (d.type === "text" || d.type === "callout") { const p = d.type === "callout" ? d.p2 : d.p1; const x = layer.x(p.t), y = layer.y(p.price); setEdit({ id: d.id, x: x ?? 20, y: y ?? 40, value: "" }); }
+    };
     const down = (e) => {
       const D = drawRef.current;
       if (!D || D.hidden || e.button > 0) return;
       const [x, y] = local(e), C = candlesRef.current;
       if (onAxis(x) || !C.length) return;
       if (D.tool !== "cursor") {
-        const p = layer.pointAt(x, y, C); if (!p) return;
+        const n = clicksOf(D.tool);
+        const p = layer.pointAt(x, y, C, n !== "drag"); if (!p) return;
         e.preventDefault(); e.stopPropagation();
-        if (D.tool === "hline" || D.tool === "text") {
-          const d = makeDrawing(D.tool, p, null, D.tf);
-          commit([...D.items, d]); D.setSel(d.id); D.setTool("cursor");
-          if (D.tool === "text") setEdit({ id: d.id, x, y, value: "" });
-          return;
+        if (!pend) {
+          const d = makeDrawing(D.tool, p, D.tf);
+          if (n === 1) { finish(d); return; }
+          pend = { d, stage: 1, brush: n === "drag" };
+          layer.preview = d; layer.sel = d.id; layer.update(); return;
         }
-        if (!pend) { pend = makeDrawing(D.tool, p, p, D.tf); layer.preview = pend; layer.sel = pend.id; layer.update(); return; }
-        const d = { ...pend, p2: p }; pend = null; layer.preview = null;
-        commit([...D.items, d]); D.setSel(d.id); D.setTool("cursor");
+        if (n === "multi") { // gấp khúc: bấm lại gần điểm cuối = xong
+          const last = pend.d.pts[pend.stage - 1], lx = layer.x(last.t), ly = layer.y(last.price);
+          if (pend.stage >= 2 && lx != null && Math.hypot(x - lx, y - ly) < 9) { finish({ ...pend.d, pts: pend.d.pts.slice(0, pend.stage) }); return; }
+          pend.d = stagePoint(pend.d, pend.stage, p, layer.scale); pend.stage++;
+          layer.preview = pend.d; layer.update(); return;
+        }
+        pend.d = stagePoint(pend.d, pend.stage, p, layer.scale); pend.stage++;
+        if (pend.stage >= n) finish(pend.d); else { layer.preview = pend.d; layer.update(); }
         return;
       }
       const h = layer.hit(x, y);
       if (!h) { if (D.sel && D.items.some((d) => d.id === D.sel)) D.setSel(null); return; }
       e.preventDefault(); e.stopPropagation(); // không để biểu đồ kéo nến theo
       D.setSel(h.id); layer.sel = h.id; layer.update();
-      const d0 = D.items.find((d) => d.id === h.id); if (!d0) return;
+      const d0 = D.items.find((d) => d.id === h.id); if (!d0 || d0.lock) return; // hình đã khoá: chỉ chọn, không dời
       drag = { h, d0, l0: chart.timeScale().coordinateToLogical(x), p0: candle.coordinateToPrice(y), moved: false };
       lock(true);
     };
     const move = (e) => {
       const D = drawRef.current; if (!D) return;
       const [x, y] = local(e), C = candlesRef.current;
-      if (pend) { const p = layer.pointAt(x, y, C); if (p) { layer.preview = { ...pend, p2: p }; layer.update(); } return; }
+      if (pend) {
+        const p = layer.pointAt(x, y, C, !pend.brush); if (!p) return;
+        if (pend.brush) { // bút vẽ: thêm điểm khi đã đi ≥ 3px
+          const last = pend.d.pts[pend.d.pts.length - 1], lx = layer.x(last.t), ly = layer.y(last.price);
+          if (lx == null || Math.hypot(x - lx, y - ly) >= 3) { pend.d = stagePoint(pend.d, 0, p); layer.preview = pend.d; layer.update(); }
+          return;
+        }
+        layer.preview = stagePoint(pend.d, pend.stage, p, layer.scale); layer.update(); return;
+      }
       if (!drag) { if (e.target && el.contains(e.target)) el.style.cursor = D.hidden ? "" : D.tool !== "cursor" ? "crosshair" : layer.hit(x, y) ? "move" : ""; return; }
       let d;
       if (drag.h.part === "body") {
         const l = chart.timeScale().coordinateToLogical(x), p = candle.coordinateToPrice(y);
         if (l == null || p == null || drag.l0 == null || drag.p0 == null) return;
         d = moveDrawing(drag.d0, l - drag.l0, p - drag.p0, layer.scale);
-      } else { const p = layer.pointAt(x, y, C); if (!p) return; d = { ...drag.d0, [drag.h.part]: p }; }
+      } else { const p = layer.pointAt(x, y, C); if (!p) return; d = setPoint(drag.d0, drag.h.part, p); }
       drag.moved = true; layer.preview = d; layer.update();
     };
     const up = () => {
+      if (pend?.brush) { if (pend.d.pts.length >= 2) finish(pend.d); else { pend = null; layer.preview = null; layer.update(); } return; }
       if (!drag) return;
       const D = drawRef.current, d = layer.preview;
       lock(D && D.tool !== "cursor");
       if (drag.moved && d && D) commit(D.items.map((x) => (x.id === d.id ? d : x)));
       layer.preview = null; drag = null; layer.update();
     };
-    const dbl = (e) => { // bấm đúp vào hình → sửa chữ ghi chú
-      const D = drawRef.current; if (!D || D.hidden) return;
+    const dbl = (e) => { // bấm đúp vào hình → sửa chữ (ghi chú, chú thích, đường ngang, tia ngang, hộp)
+      const D = drawRef.current; if (!D || D.hidden || D.tool !== "cursor") return;
       const [x, y] = local(e), h = layer.hit(x, y); if (!h) return;
-      const d = D.items.find((v) => v.id === h.id); if (!d || d.type === "trend" || d.type === "fib") return;
+      const d = D.items.find((v) => v.id === h.id); if (!d || !["text", "callout", "hline", "hray", "rect"].includes(d.type)) return;
       e.stopPropagation(); D.setSel(d.id); setEdit({ id: d.id, x, y, value: d.text || "" });
     };
     const key = (e) => {
       const D = drawRef.current; if (!D) return;
       if (/INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "") || e.target?.isContentEditable) return;
+      if (pend && pend.d.type === "path" && (e.key === "Enter" || e.key === "Escape")) { if (pend.stage >= 2) finish({ ...pend.d, pts: pend.d.pts.slice(0, pend.stage) }); else { pend = null; layer.preview = null; layer.update(); D.setTool("cursor"); } return; }
       if (e.key === "Escape" && (pend || D.tool !== "cursor")) { pend = null; layer.preview = null; layer.update(); D.setTool("cursor"); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && D.sel && D.items.some((d) => d.id === D.sel)) { e.preventDefault(); commit(D.items.filter((d) => d.id !== D.sel)); D.setSel(null); }
     };
@@ -345,7 +369,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   }, [linesSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="relative w-full">
+    <div className={wrapClass}>
       <div ref={box} className={className} />
       <div className="absolute bottom-7 right-16 z-10 flex items-center gap-1">
         {onEma && (
@@ -371,38 +395,47 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   );
 }
 
-// Thanh công cụ vẽ (chỉ chủ): chọn công cụ, màu / sửa chữ / xoá hình đang chọn, ẩn tất cả, xoá hết của coin
-const TOOL_ICON = { cursor: MousePointer2, hline: Minus, trend: Slash, rect: Square, fib: null, text: Type };
-export function DrawBar({ tool, setTool, sel, setSel, hidden, setHidden, items, onChange, sym }) {
+// Thanh công cụ vẽ (chỉ chủ): chọn công cụ (18 loại, kiểu TradingView), chỉnh hình đang chọn (màu, độ dày, nét, khoá, nhân bản, xoá),
+// hoàn tác, ẩn tất cả, xoá hết của mã. 27/11: thêm 13 công cụ + chỉnh kiểu nét.
+const WIDTHS = [1, 2, 3], DASHES = [["solid", "Nét liền"], ["dash", "Nét đứt"], ["dot", "Nét chấm"]];
+const NO_LINE = new Set(["text", "callout", "long", "short", "measure", "vrp"]);
+export function DrawBar({ tool, setTool, sel, setSel, hidden, setHidden, items, onChange, sym, onUndo, canUndo, scale }) {
   const d = items.find((x) => x.id === sel);
-  const recolor = (c) => onChange(items.map((x) => (x.id === sel ? { ...x, color: c } : x)));
+  const patch = (o) => onChange(items.map((x) => (x.id === sel ? { ...x, ...o } : x)));
   const clearAll = async () => {
     if (items.length && await ask(`Xoá hết ${items.length} hình vẽ của ${sym}?`, { ok: "Xoá hết", danger: true })) { onChange([]); setSel(null); }
   };
+  const btn = "flex shrink-0 items-center justify-center rounded-md p-1";
+  const hint = tool === "cursor" ? null : HINT[tool] || HINT[clicksOf(tool)];
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
-      <div className="flex rounded-lg bg-slate-100 p-0.5">
-        {TOOLS.map(([k, label]) => {
-          const I = TOOL_ICON[k];
-          return (
-            <button key={k} onClick={() => { setTool(k); if (hidden && k !== "cursor") setHidden(false); }} title={label} aria-label={label} aria-pressed={tool === k}
-              className={`flex items-center gap-1 rounded-md px-1.5 py-1 ${tool === k ? "bg-white text-indigo-600 shadow" : "text-slate-500 hover:text-slate-700"}`}>
-              {I ? <I size={13} /> : <span className="text-[10.5px] font-extrabold">Fib</span>}
-              {k !== "cursor" && k !== "fib" && <span className="hidden lg:inline">{label}</span>}
-            </button>
-          );
-        })}
+      <div className="flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="toolbar" aria-label="Công cụ vẽ">
+        {TOOLS.map(([k, label, keys]) => (
+          <button key={k} onClick={() => { setTool(tool === k && k !== "cursor" ? "cursor" : k); if (hidden && k !== "cursor") setHidden(false); }} title={`${label}${keys ? ` (${keys})` : ""}`} aria-label={label} aria-pressed={tool === k}
+            className={`${btn} h-7 w-7 ${tool === k ? "bg-white text-indigo-600 shadow" : "text-slate-500 hover:bg-white/60 hover:text-slate-800"}`}>
+            <DrawIcon k={k} />
+          </button>
+        ))}
       </div>
+      <button onClick={onUndo} disabled={!canUndo} title="Hoàn tác (Ctrl+Z)" aria-label="Hoàn tác" className={`${btn} h-7 w-7 text-slate-500 hover:text-slate-800 disabled:opacity-30`}><Undo2 size={14} /></button>
       {d && (
-        <div className="flex items-center gap-1 rounded-lg bg-slate-100 px-1.5 py-0.5">
-          {COLORS.map((c) => <button key={c} onClick={() => recolor(c)} aria-label={`Màu ${c}`} className={`h-3.5 w-3.5 rounded-full ring-offset-1 ${d.color === c ? "ring-2 ring-indigo-400" : ""}`} style={{ background: c }} />)}
-          <button onClick={() => { onChange(items.filter((x) => x.id !== sel)); setSel(null); }} title="Xoá hình đang chọn (phím Delete)" aria-label="Xoá hình đang chọn" className="ml-0.5 rounded p-0.5 text-slate-500 hover:text-rose-600"><Trash2 size={13} /></button>
+        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 px-1.5 py-0.5">
+          {COLORS.map((c) => <button key={c} onClick={() => patch({ color: c })} aria-label={`Màu ${c}`} className={`h-3.5 w-3.5 rounded-full ring-offset-1 ${d.color === c ? "ring-2 ring-indigo-400" : ""}`} style={{ background: c }} />)}
+          {!NO_LINE.has(d.type) && (<>
+            <span className="mx-0.5 h-4 w-px bg-slate-300" />
+            {WIDTHS.map((w) => <button key={w} onClick={() => patch({ w })} title={`Độ dày ${w}`} aria-label={`Độ dày ${w}`} aria-pressed={(d.w || 1) === w} className={`${btn} h-6 w-6 ${(d.w || 1) === w ? "bg-white shadow" : ""}`}><span className="block w-3.5 rounded-full bg-slate-600" style={{ height: w + 0.5 }} /></button>)}
+            {DASHES.map(([k, label]) => <button key={k} onClick={() => patch({ dash: k })} title={label} aria-label={label} aria-pressed={(d.dash || "solid") === k} className={`${btn} h-6 w-6 ${(d.dash || "solid") === k ? "bg-white shadow" : ""}`}><svg width="16" height="4" aria-hidden="true"><line x1="1" y1="2" x2="15" y2="2" stroke="currentColor" strokeWidth="2" strokeDasharray={k === "dash" ? "4 3" : k === "dot" ? "1.5 2.5" : undefined} strokeLinecap="round" className="text-slate-600" /></svg></button>)}
+          </>)}
+          <span className="mx-0.5 h-4 w-px bg-slate-300" />
+          <button onClick={() => patch({ lock: !d.lock })} title={d.lock ? "Đang khoá (không kéo lệch được). Bấm để mở khoá" : "Khoá hình (tránh kéo lệch)"} aria-label={d.lock ? "Mở khoá" : "Khoá"} aria-pressed={!!d.lock} className={`${btn} h-6 w-6 ${d.lock ? "text-amber-600" : "text-slate-500"} hover:text-slate-800`}>{d.lock ? <Lock size={13} /> : <Unlock size={13} />}</button>
+          <button onClick={() => { const c = cloneDrawing(d, scale); onChange([...items, c]); setSel(c.id); }} title="Nhân bản" aria-label="Nhân bản" className={`${btn} h-6 w-6 text-slate-500 hover:text-slate-800`}><Copy size={13} /></button>
+          <button onClick={() => { onChange(items.filter((x) => x.id !== sel)); setSel(null); }} title="Xoá hình đang chọn (phím Delete)" aria-label="Xoá hình đang chọn" className={`${btn} h-6 w-6 text-slate-500 hover:text-rose-600`}><Trash2 size={13} /></button>
         </div>
       )}
       <button onClick={() => setHidden(!hidden)} aria-pressed={hidden} title={hidden ? "Hiện hình vẽ" : "Ẩn hình vẽ"} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-slate-500 hover:text-slate-700">{hidden ? <EyeOff size={13} /> : <Eye size={13} />}<span className="hidden sm:inline">{items.length} hình</span></button>
       {items.length > 0 && <button onClick={clearAll} className="rounded-md px-1.5 py-1 text-slate-400 hover:text-rose-600">Xoá hết {sym}</button>}
       <span className="ml-auto hidden text-[10.5px] font-semibold text-slate-400 md:inline">
-        {tool === "cursor" ? <><Pencil size={10} className="inline" /> bấm hình để chọn, kéo để dời · bấm đúp sửa chữ · Delete xoá</> : tool === "hline" || tool === "text" ? "bấm 1 lần vào biểu đồ · Esc huỷ" : "bấm điểm đầu rồi điểm cuối · Esc huỷ"}
+        {hint ? `${TOOLS.find((t) => t[0] === tool)?.[1]}: ${hint} · Esc huỷ` : <><Pencil size={10} className="inline" /> bấm hình để chọn, kéo để dời · bấm đúp sửa chữ · Delete xoá · Ctrl+Z hoàn tác</>}
       </span>
     </div>
   );
@@ -502,13 +535,16 @@ export function LayoutPicker({ n, setN }) {
   );
 }
 
-export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn, extraFor }) {
+export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFor, drawFor, onActive, flowOn, extraFor, full = false }) {
   const { n, cells, link, labels } = grid;
   const [focus, setFocus] = useState(null);
   const scroller = useRef(null);
   const compact = n >= 4 && !labels && focus == null;
   const list = cells.slice(0, n);
-  const height = focus != null ? "h-[340px] sm:h-[calc(100vh-280px)] sm:min-h-[460px]" : n === 2 ? "h-[300px] sm:h-[420px]" : n === 4 ? "h-[300px] sm:h-[310px]" : "h-[300px] sm:h-[260px]";
+  // full = chế độ toàn màn hình (27/11): ô cao theo màn hình thay vì số px cố định
+  const height = full
+    ? (focus != null || n === 2 ? "h-[calc(100dvh-215px)]" : "h-[calc(100dvh-215px)] sm:h-[calc(50dvh-118px)]")
+    : focus != null ? "h-[340px] sm:h-[calc(100vh-280px)] sm:min-h-[460px]" : n === 2 ? "h-[300px] sm:h-[420px]" : n === 4 ? "h-[300px] sm:h-[310px]" : "h-[300px] sm:h-[260px]";
   const cols = focus != null ? "" : n === 2 ? "sm:grid-cols-2" : n === 4 ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3";
   const change = (i, patch) => {
     const next = cells.map((c, j) => (j === i || (link && patch.sym) ? { ...c, ...(j === i ? patch : { sym: patch.sym }) } : c));
