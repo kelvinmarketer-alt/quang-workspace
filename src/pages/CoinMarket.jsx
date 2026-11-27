@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Term } from "../components/Term.jsx";
 import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
@@ -364,6 +365,9 @@ function Mt5FeedBar({ feed }) {
   );
 }
 
+// Toàn màn hình: đưa khung biểu đồ ra thẳng <body> (27/11 — nằm trong trang thì thanh đầu trang / thanh bên có thể đè lên)
+function FullPortal({ on, children }) { return on && typeof document !== "undefined" ? createPortal(children, document.body) : children; }
+
 // Chọn mã ngay trong biểu đồ toàn màn hình (27/11): bấm tên mã → ô tìm + danh sách theo dõi; gõ mã mới + Enter → kiểm tra sàn rồi chuyển
 function SymPicker({ sym, watch, fx, onPick, onSearch, busy, err }) {
   const [open, setOpen] = useState(false), [q, setQ] = useState("");
@@ -714,7 +718,8 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
 
       <div className="grid gap-3 xl:grid-cols-3">
         {/* Biểu đồ */}
-        <Card className={full ? "!p-3 fixed inset-0 z-[90] flex min-w-0 flex-col overflow-y-auto !rounded-none pt-[max(0.75rem,env(safe-area-inset-top))]" : `!p-3 min-w-0 ${multi ? "xl:col-span-3" : "xl:col-span-2"}`}>
+        <FullPortal on={full}>
+        <Card className={full ? "chart-full !p-3 fixed inset-0 z-[90] flex min-w-0 flex-col overflow-y-auto !rounded-none pt-[max(0.75rem,env(safe-area-inset-top))]" : `!p-3 min-w-0 ${multi ? "xl:col-span-3" : "xl:col-span-2"}`}>
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -802,6 +807,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
             </div>
           )}
         </Card>
+        </FullPortal>
 
         {/* Cột phải: AI kết luận + phiếu lệnh (nhiều ô → xuống dưới lưới, hết chiều ngang) */}
         <Card className={`!p-3 ${multi ? "xl:col-span-3" : ""}`}>

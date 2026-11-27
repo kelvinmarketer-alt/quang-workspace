@@ -534,6 +534,13 @@ html.theme-dark[data-skin="terminal"] body, html.theme-dark[data-skin="terminal"
 html.theme-dark[data-skin="terminal"] .card { background: #0b101c; border: 1px solid #1a2337; box-shadow: none; }
 html.theme-dark[data-skin="terminal"] .qws-full .bento .card { border-radius: 10px; }
 html.theme-dark[data-skin="terminal"] .bento .card:hover { border-color: rgba(255,178,36,.4); box-shadow: none; }
+/* 27/11: biểu đồ TOÀN MÀN HÌNH phải có nền ĐẶC — bộ Aurora dùng thẻ kính trong suốt → nhìn xuyên thấy trang phía sau (sếp báo lỗi) */
+.card.chart-full { background: #fff; border-radius: 0; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+html.theme-dark .card.chart-full { background: #0a1120; }
+html.theme-dark[data-skin="neon"] .card.chart-full { background: #0a1120; border: 0; }
+html.theme-dark[data-skin="graphite"] .card.chart-full { background: #121418; border: 0; }
+html.theme-dark[data-skin="aurora"] .card.chart-full { background: #0d0b1f; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; }
+html.theme-dark[data-skin="terminal"] .card.chart-full { background: #0b101c; border: 0; }
 html.theme-dark[data-skin="terminal"] :is(.tab-active, .nav-active) { background: rgba(255,178,36,.1) !important; color: #ffb224 !important; box-shadow: inset 0 -2px 0 #ffb224 !important; text-shadow: none; }
 html.theme-dark[data-skin="terminal"] .bento .bg-slate-900:not(.tab-active) { background: #ffb224 !important; color: #1a1000 !important; }
 html.theme-dark[data-skin="terminal"] .bento .bg-slate-900:not(.tab-active) :is(.text-white, svg), html.theme-dark[data-skin="terminal"] .bento .bg-slate-900.text-white:not(.tab-active) { color: #1a1000 !important; }
