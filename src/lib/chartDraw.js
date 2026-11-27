@@ -16,6 +16,7 @@ export const TOOLS = [
   ["long", "Vị thế Mua (Long)", "Alt+L"], ["short", "Vị thế Bán (Short)", "Alt+S"],
   ["measure", "Đo khoảng giá / thời gian", "Alt+M"], ["vrp", "Hồ sơ khối lượng vùng chọn", ""],
   ["text", "Ghi chú chữ", "Alt+N"], ["callout", "Chú thích có mũi chỉ", ""],
+  ["alert", "Đặt cảnh báo giá (bấm vào mức giá)", "Alt+A"], // không phải hình vẽ: tạo cảnh báo giá (command.priceAlerts), máy chủ gửi thông báo đẩy
 ];
 export const TOOL_KEYS = Object.fromEntries(TOOLS.filter((t) => t[2].startsWith("Alt+")).map(([k, , s]) => [`Key${s.slice(4)}`, k]));
 // Số lần bấm để vẽ xong: 1 điểm, 2 điểm, 3 điểm (kênh), nhiều điểm (gấp khúc: bấm lại điểm cuối / Enter để xong), kéo (bút vẽ)
@@ -24,6 +25,7 @@ export const clicksOf = (t) => CLICKS[t] ?? 2;
 export const HINT = {
   1: "bấm 1 lần vào biểu đồ", 2: "bấm điểm đầu rồi điểm cuối", 3: "bấm 2 điểm của đường, điểm thứ 3 để chọn độ rộng kênh",
   multi: "bấm từng điểm · bấm lại điểm cuối hoặc Enter để xong", drag: "giữ chuột / ngón tay và kéo để vẽ",
+  alert: "bấm vào mức giá muốn được báo (cao hơn giá hiện tại = báo khi lên, thấp hơn = báo khi xuống)",
   long: "bấm điểm vào lệnh rồi bấm mức cắt lỗ (chốt lời tự đặt 2R, kéo để chỉnh)", short: "bấm điểm vào lệnh rồi bấm mức cắt lỗ (chốt lời tự đặt 2R, kéo để chỉnh)",
 };
 export const COLORS = ["#f59e0b", "#38bdf8", "#a78bfa", "#34d399", "#fb7185", "#facc15", "#e2e8f0", "#64748b"];

@@ -149,6 +149,8 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
   const [edit, setEdit] = useState(null); // ô gõ chữ ghi chú: { id, x, y, value }
+  const [note, setNote] = useState(null); // dòng báo ngắn trên biểu đồ (đặt cảnh báo giá xong / lỗi)
+  useEffect(() => { if (note?.ok == null) return undefined; const t = setTimeout(() => setNote(null), 3500); return () => clearTimeout(t); }, [note]);
   const me = useRef(Math.random().toString(36).slice(2));
   const syncRef = useRef(syncKey); syncRef.current = syncKey;
   const compactRef = useRef(compact); compactRef.current = compact;
@@ -214,6 +216,14 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
       if (!D || D.hidden || e.button > 0) return;
       const [x, y] = local(e), C = candlesRef.current;
       if (onAxis(x) || !C.length) return;
+      if (D.tool === "alert") { // công cụ chuông: tạo cảnh báo giá tại mức bấm, không phải hình vẽ
+        const p = layer.pointAt(x, y, C, false); if (!p) return;
+        e.preventDefault(); e.stopPropagation(); D.setTool("cursor");
+        const now = C[C.length - 1]?.close, fmtP = layer.fmt(p.price), op = now && p.price < now ? "≤" : "≥";
+        setNote({ text: `Đang đặt cảnh báo ${op} ${fmtP}…`, ok: null });
+        Promise.resolve(D.onAlert?.(p.price, now)).then((ok) => setNote({ text: ok ? `Đã đặt cảnh báo ${op} ${fmtP} — máy chủ báo về điện thoại khi chạm` : `Chưa đặt được cảnh báo ${op} ${fmtP} — xem thẻ Cảnh báo giá`, ok: !!ok }));
+        return;
+      }
       if (D.tool !== "cursor") {
         const n = clicksOf(D.tool);
         const p = layer.pointAt(x, y, C, n !== "drag"); if (!p) return;
@@ -383,6 +393,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
           <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
         </button>
       </div>
+      {note && <div role="status" className={`pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-lg px-2.5 py-1 text-[11.5px] font-bold shadow ${note.ok === false ? "bg-rose-600 text-white" : "bg-amber-500 text-white"}`}>{note.text}</div>}
       {flow?.badge && <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex flex-wrap gap-1 text-[10.5px] font-bold tabular-nums">{flow.badge}</div>}
       {edit && (
         <input autoFocus defaultValue={edit.value} maxLength={80} placeholder="Gõ ghi chú rồi Enter"

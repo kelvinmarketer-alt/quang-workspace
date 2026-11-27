@@ -19,6 +19,7 @@ const ICONS = {
   measure: <><rect x="2.5" y="2.5" width="13" height="13" rx="1.5" {...P} /><path {...P} d="M9 5v8M6.8 7.2L9 5l2.2 2.2M5 9h8M10.8 6.8L13 9l-2.2 2.2" /></>,
   vrp: <><path {...P} d="M2.5 2v14" /><path d="M3.5 3h4.5v2H3.5zM3.5 6h9v2h-9zM3.5 9h12v2h-12zM3.5 12h6v2h-6z" fill="currentColor" opacity="0.55" /></>,
   text: <path {...P} d="M4 4.5h10M9 4.5V15M6.8 15h4.4" />,
+  alert: <><path {...P} d="M9 2.5c-2.6 0-4.4 2-4.4 4.6v3.2L3 12.6h12l-1.6-2.3V7.1C13.4 4.5 11.6 2.5 9 2.5z" /><path {...P} d="M7.3 14.6a1.8 1.8 0 003.4 0" /></>,
   callout: <><path {...P} d="M2.5 3.5h13v8.5H8.5L5 15v-3H2.5z" /><path {...P} d="M5.5 6.6h7M5.5 9h4.5" /></>,
 };
 export function DrawIcon({ k, size = 18 }) {

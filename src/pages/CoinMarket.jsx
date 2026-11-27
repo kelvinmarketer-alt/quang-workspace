@@ -246,12 +246,11 @@ function AiHistory({ recs, active, sym, symKey, onOpen, className = "" }) {
 
 // Cảnh báo giá (chỉ chủ): lưu ở Supabase qws_live_bot, dòng 'command' → data.priceAlerts. Máy chủ (Worker Cloudflare qws-monitor) kiểm tra 5 phút/lần và gửi thông báo đẩy.
 // Ghi: LUÔN đọc lại dòng command mới nhất rồi ghi gộp {...data, priceAlerts} → không mất khoá/cấu hình/stop của bot thật.
-function PriceAlerts({ active, pair, market, price, fx = false }) {
+// Kho cảnh báo giá dùng chung (27/11): thẻ "Cảnh báo giá", đường cảnh báo trên biểu đồ, công cụ chuông, ô cảnh báo ở toàn màn hình
+// — cùng 1 nguồn command.priceAlerts (máy chủ qws-bot kiểm tra 5 phút/lần rồi gửi thông báo đẩy)
+function usePriceAlerts(active) {
   const [alerts, setAlerts] = useState(null);
   const [err, setErr] = useState(""), [missing, setMissing] = useState(false), [busy, setBusy] = useState(false);
-  const [op, setOp] = useState(">="), [opTouched, setOpTouched] = useState(false), [val, setVal] = useState(""), [note, setNote] = useState("");
-  const [push, setPush] = useState(null);
-  const prefilled = useRef("");
   const readCmd = async () => {
     const { data, error } = await supabase.from("qws_live_bot").select("data").eq("id", "command").maybeSingle();
     if (error) { if (/qws_live_bot|relation|does not exist|schema cache/i.test(error.message)) setMissing(true); throw error; }
@@ -265,16 +264,6 @@ function PriceAlerts({ active, pair, market, price, fx = false }) {
     const t = setInterval(() => { if (!document.hidden) load(); }, 120000); // xem cảnh báo nào máy chủ vừa báo
     return () => clearInterval(t);
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { // máy này đã bật thông báo đẩy chưa (serviceWorker.ready có thể treo nếu chưa đăng ký → chờ tối đa 3 giây)
-    let off = false;
-    Promise.race([isSubscribed(), new Promise((ok) => setTimeout(() => ok(null), 3000))]).then((v) => { if (!off) setPush(v); }, () => { if (!off) setPush(false); });
-    return () => { off = true; };
-  }, []);
-  useEffect(() => { // đổi coin → điền sẵn giá hiện tại
-    if (price && prefilled.current !== pair) { prefilled.current = pair; setVal(String(price)); setOp(">="); setOpTouched(false); }
-  }, [pair, price]);
-  const num = parseNum(val);
-  useEffect(() => { if (!opTouched && num > 0 && price) setOp(num >= price ? ">=" : "<="); }, [num, price, opTouched]);
   const write = async (fn) => {
     setBusy(true); setErr("");
     try {
@@ -286,10 +275,28 @@ function PriceAlerts({ active, pair, market, price, fx = false }) {
     } catch (e) { setErr(e.message || String(e)); return false; }
     finally { setBusy(false); }
   };
+  const add = ({ symbol, market, op, price, note = "" }) => write((list) => [...list, { id: `pa_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, symbol, market, op, price, note: String(note).trim().slice(0, 120), createdAt: Date.now(), firedAt: null }]);
+  return { alerts, err, setErr, missing, busy, load, write, add };
+}
+
+function PriceAlerts({ store, pair, market, price, fx = false, className = "!p-3" }) {
+  const { alerts, err, setErr, missing, busy, write } = store;
+  const [op, setOp] = useState(">="), [opTouched, setOpTouched] = useState(false), [val, setVal] = useState(""), [note, setNote] = useState("");
+  const [push, setPush] = useState(null);
+  const prefilled = useRef("");
+  useEffect(() => { // máy này đã bật thông báo đẩy chưa (serviceWorker.ready có thể treo nếu chưa đăng ký → chờ tối đa 3 giây)
+    let off = false;
+    Promise.race([isSubscribed(), new Promise((ok) => setTimeout(() => ok(null), 3000))]).then((v) => { if (!off) setPush(v); }, () => { if (!off) setPush(false); });
+    return () => { off = true; };
+  }, []);
+  useEffect(() => { // đổi coin → điền sẵn giá hiện tại
+    if (price && prefilled.current !== pair) { prefilled.current = pair; setVal(String(price)); setOp(">="); setOpTouched(false); }
+  }, [pair, price]);
+  const num = parseNum(val);
+  useEffect(() => { if (!opTouched && num > 0 && price) setOp(num >= price ? ">=" : "<="); }, [num, price, opTouched]);
   const add = async () => {
     if (!(num > 0)) { setErr("Nhập giá hợp lệ"); return; }
-    const rec = { id: `pa_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, symbol: pair, market, op, price: num, note: note.trim().slice(0, 120), createdAt: Date.now(), firedAt: null };
-    if (await write((list) => [...list, rec])) setNote("");
+    if (await store.add({ symbol: pair, market, op, price: num, note })) setNote("");
   };
   const del = async (a) => {
     if (await ask(`Xoá cảnh báo ${a.symbol} ${a.op === ">=" ? "≥" : "≤"} ${px(a.price)}?`, { ok: "Xoá", danger: true })) write((list) => list.filter((x) => x.id !== a.id));
@@ -299,7 +306,7 @@ function PriceAlerts({ active, pair, market, price, fx = false }) {
   const sorted = (alerts || []).filter((a) => a && (a.market === "mt5") === fx).sort((a, b) => (!a.firedAt === !b.firedAt ? (b.createdAt || 0) - (a.createdAt || 0) : a.firedAt ? 1 : -1));
   const nActive = sorted.filter((a) => !a.firedAt).length;
   return (
-    <Card className="!p-3">
+    <Card className={className}>
       <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><Bell size={13} className="text-amber-500" /> Cảnh báo giá{alerts ? ` · ${nActive} đang chờ` : ""}</div>
       {missing ? (
         <div className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[12px] text-amber-800">Chưa có bảng <b>qws_live_bot</b> trên Supabase — xem hướng dẫn ở tab <b>Bot thật</b>.</div>
@@ -361,6 +368,28 @@ function Mt5FeedBar({ feed }) {
       {!online && <span>Máy bàn / MT5 đang tắt — biểu đồ hiện dữ liệu lần cuối.</span>}
       {online && q.live === false && <span>Chợ đang đóng cửa (cuối tuần / ngoài giờ) — giá là phiên cuối.</span>}
       {online && q.live !== false && <span className="text-emerald-700/70">Khối lượng là tick volume (không phải khối lượng khớp thật) · không có mua/bán chủ động</span>}
+    </div>
+  );
+}
+
+// Nút chuông ở biểu đồ toàn màn hình (27/11): mở ô Cảnh báo giá (thêm / xem / xoá) mà không phải thoát ra
+function AlertPop({ store, pair, market, price, fx }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e) => { if (box.current && !box.current.contains(e.target) && !e.target.closest?.('[role="dialog"]')) setOpen(false); };
+    document.addEventListener("pointerdown", off);
+    return () => document.removeEventListener("pointerdown", off);
+  }, [open]);
+  const n = (store.alerts || []).filter((a) => a && !a.firedAt && (a.market === "mt5") === fx).length;
+  return (
+    <div ref={box} className="relative">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} title="Cảnh báo giá" aria-label="Cảnh báo giá"
+        className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${open ? "border-amber-300 bg-amber-50 text-amber-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+        <Bell size={14} />{n > 0 && <span className="tabular-nums">{n}</span>}
+      </button>
+      {open && <div className="absolute right-0 top-full z-[95] mt-1 max-h-[75dvh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl shadow-2xl"><PriceAlerts store={store} pair={pair} market={market} price={price} fx={fx} className="pop-solid !p-3" /></div>}
     </div>
   );
 }
@@ -538,15 +567,25 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
   const [eaOn, setEaOn] = useState(() => ls.get("qws_fx_ea", true) !== false);
   const eaData = useEaTrades(fx && isOwner && active && eaOn);
   const eaView = useMemo(() => (fx && isOwner && eaOn ? eaOverlay(eaData, sym, TF[tf].ms / 1000) : null), [fx, isOwner, eaOn, eaData, sym, tf]);
+  // Cảnh báo giá (27/11): kho chung + đường cảnh báo đang chờ trên biểu đồ (mọi ô cùng mã)
+  const alertStore = usePriceAlerts(isOwner && active);
+  const pairOf = (x) => (fx ? x : `${x}USDT`);
+  const alertLines = (x) => (alertStore.alerts || []).filter((a) => a && !a.firedAt && (a.market === "mt5") === fx && a.symbol === pairOf(x))
+    .map((a) => ({ price: a.price, color: "#f59e0b", title: `Cảnh báo ${a.op === ">=" ? "≥" : "≤"}${a.note ? ` · ${a.note.slice(0, 16)}` : ""}`, style: 1, width: 1 }));
+  const addAlertAt = async (x, at, now, mk) => { // công cụ chuông: bấm vào mức giá → cảnh báo (giá cao hơn hiện tại = báo khi lên ≥, thấp hơn = báo khi xuống ≤)
+    if (!(at > 0)) return false;
+    return alertStore.add({ symbol: pairOf(x), market: fx ? "mt5" : mk || usedMkt, op: now && at < now ? "<=" : ">=", price: at });
+  };
   const lines = useMemo(() => {
     const out = buildLines({ levels: ta?.series.levels || [], ai, tags });
     if (eaView) out.push(...eaView.lines);
+    out.push(...alertLines(sym));
     for (const t of botList) if (t.open) {
       out.push({ price: t.entry, color: "#8b5cf6", title: `Bot ${t.side === 1 ? "LONG" : "SHORT"}`, style: 0, width: 2 });
       out.push({ price: t.sl, color: "#e11d48", title: "Bot SL", style: 2 }, { price: t.tp, color: "#059669", title: "Bot TP", style: 2 });
     }
     return out;
-  }, [ai, ta, botList, tags, eaView]);
+  }, [ai, ta, botList, tags, eaView, alertStore.alerts, sym]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Nhiều biểu đồ (1 / 2 / 4 / 6 ô): ô đang chọn = coin + khung của cả trang (AI, chỉ báo, cảnh báo giá bên dưới)
   const [grid, setGridState] = useState(() => loadGrid(fx));
@@ -615,7 +654,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }); // eslint-disable-line react-hooks/exhaustive-deps
-  const drawFor = (c) => (isOwner ? { items: drawingsOf(c.sym), tool, setTool, sel: selDraw, setSel: setSelDraw, hidden: drawHidden, tf: c.tf, onChange: (list) => saveDrawings(c.sym, list) } : undefined);
+  const drawFor = (c) => (isOwner ? { items: drawingsOf(c.sym), tool, setTool, sel: selDraw, setSel: setSelDraw, hidden: drawHidden, tf: c.tf, onChange: (list) => saveDrawings(c.sym, list), onAlert: (at, now) => addAlertAt(c.sym, at, now) } : undefined);
 
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi
   const pickSym = async (v) => {
@@ -746,6 +785,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 </div>
                 <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
               </>)}
+              {full && isOwner && <AlertPop store={alertStore} pair={pairOf(sym)} market={usedMkt} price={price} fx={fx} />}
               <button onClick={full ? exitFull : enterFull} title={full ? "Thoát toàn màn hình (Esc)" : "Biểu đồ toàn màn hình"} aria-label={full ? "Thoát toàn màn hình" : "Biểu đồ toàn màn hình"}
                 className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${full ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
                 {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}<span className={full ? "" : "hidden sm:inline"}>{full ? "Thoát" : "Toàn màn hình"}</span>
@@ -755,7 +795,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} onUndo={() => undoDraw(sym)} canUndo={undoN >= 0 && !!undoRef.current[sym]?.length} scale={drawScale} /></div>}
           {multi ? (
             <div className="mt-2">
-              <ChartGrid full={full} extraFor={fx && isOwner && eaOn ? (c, t) => eaOverlay(eaData, c, TF[t].ms / 1000) : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
+              <ChartGrid full={full} extraFor={isOwner ? (c, t) => { const e = fx && eaOn ? eaOverlay(eaData, c, TF[t].ms / 1000) : null; return { marks: e?.marks || NONE, lines: [...(e?.lines || []), ...alertLines(c)] }; } : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />} />
               {!fx && <FlowBar on={flowOn} setOn={setFlowOn} fut={flowFut} w={whale} grid={grid.n >= 4} />}
             </div>
@@ -909,7 +949,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
       {/* Lịch sử phân tích AI (cloud, tự chấm) + cảnh báo giá (chủ) */}
       <div className="grid items-start gap-3 xl:grid-cols-3">
         <AiHistory recs={analyses} active={active} sym={sym} symKey={fx ? sym : `${sym}USDT`} onOpen={openAnalysis} className={isOwner ? "xl:col-span-2" : "xl:col-span-3"} />
-        {isOwner && <PriceAlerts active={active} pair={fx ? sym : `${sym}USDT`} market={usedMkt} price={price} fx={fx} />}
+        {isOwner && <PriceAlerts store={alertStore} pair={fx ? sym : `${sym}USDT`} market={usedMkt} price={price} fx={fx} />}
       </div>
     </div>
   );
