@@ -144,7 +144,7 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 const VN = 7 * 3600;
 // draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
 const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
-export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]", wrapClass = "relative w-full" }) {
+export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]", wrapClass = "relative w-full", follow = false }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
@@ -348,8 +348,11 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     if (fitted.current !== fitKey) { // đổi coin/khung → zoom ~120 nến gần nhất
       fitted.current = fitKey;
       a.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - (compact ? 90 : 120)), to: candles.length + 6 });
+    } else if (follow) { // tua lại nến: đang xem sát mép phải → cuộn theo nến mới (đang kéo xem nến cũ thì để yên)
+      const ts = a.chart.timeScale(), r = ts.getVisibleLogicalRange();
+      if (r && r.to < candles.length + 2 && r.to > candles.length - 12) ts.setVisibleLogicalRange({ from: r.from + (candles.length + 6 - r.to), to: candles.length + 6 });
     }
-  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact, flow?.marks, flow?.delta]);
+  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact, flow?.marks, flow?.delta, follow]);
 
   // Tầng phụ dòng tiền: CVD (tầng 2) + OI (tầng 3) — dựng lại khi bật/tắt, cập nhật dữ liệu khi có nến mới
   const hasCvd = !!flow?.cvd, hasOi = !!flow?.oi;

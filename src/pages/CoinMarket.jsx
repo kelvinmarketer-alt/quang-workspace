@@ -5,9 +5,10 @@ import InfoTip from "../components/InfoTip.jsx";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
 import { fxDigits, FX_DEFAULT, EA_SYMS, useMt5Feed, useEaTrades, eaOverlay } from "../lib/mt5Source.js";
 import { CandleChart, TagBar, ChartGrid, GridOptions, LayoutPicker, DrawBar, FlowBar, toggleEma, loadTags, loadFlows, useFlow, buildLines, loadGrid, saveGrid, precisionOf, px } from "../components/CoinCharts.jsx";
-import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus, Maximize2, Minimize2 } from "lucide-react";
+import { RefreshCw, Sparkles, Loader2, AlertTriangle, Search, Target, ShieldAlert, TrendingUp, TrendingDown, Minus, Settings as SettingsIcon, X, BookOpen, ChevronDown, Radar, Bot, Bell, History, Trash2, Plus, Maximize2, Minimize2, Rewind } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import { makeScale, TOOL_KEYS } from "../lib/chartDraw.js";
+import ReplayTrainer from "../components/ReplayTrainer.jsx";
 import CoinSignal from "../components/CoinSignal.jsx";
 import BotView, { useSw3Now, sw3Brief } from "../components/BotView.jsx";
 import { useData } from "../lib/store.jsx";
@@ -627,6 +628,11 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
   const drawingsOf = (coin) => (settings.coinDrawings && Array.isArray(settings.coinDrawings[coin]) ? settings.coinDrawings[coin] : NONE);
   const drawScale = useMemo(() => makeScale(data.ltf || []), [data.ltf]);
 
+  // Tua lại nến + tự trade (27/11): thay biểu đồ thường bằng ReplayTrainer; phiên đã lưu ở settings.replaySessions (cloud, 30 phiên)
+  const [replay, setReplay] = useState(false);
+  const replaySaved = useMemo(() => (Array.isArray(settings.replaySessions) ? settings.replaySessions : []).filter((x) => (x.market === "mt5") === fx), [settings.replaySessions, fx]);
+  const saveReplay = (sm) => { if (!isOwner) return; const prev = Array.isArray(settingsRef.current?.replaySessions) ? settingsRef.current.replaySessions : []; setSettings({ replaySessions: [sm, ...prev.filter((x) => x.id !== sm.id)].slice(0, 30) }); };
+
   // Toàn màn hình (27/11): biểu đồ phủ cả màn hình + chọn mã ngay trong biểu đồ. Có API toàn màn hình thì dùng (ẩn cả thanh trình duyệt), iPhone không có → chỉ phủ trang
   const [full, setFull] = useState(false);
   const fsApi = useRef(false), toolRef = useRef(tool); toolRef.current = tool;
@@ -786,6 +792,10 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
               </>)}
               {full && isOwner && <AlertPop store={alertStore} pair={pairOf(sym)} market={usedMkt} price={price} fx={fx} />}
+              <button onClick={() => setReplay((r) => !r)} aria-pressed={replay} title={replay ? "Thoát chế độ tua lại nến" : "Tua lại nến + tự trade (backtest tay)"}
+                className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${replay ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                <Rewind size={14} /><span className="hidden sm:inline">Tua lại</span>
+              </button>
               <button onClick={full ? exitFull : enterFull} title={full ? "Thoát toàn màn hình (Esc)" : "Biểu đồ toàn màn hình"} aria-label={full ? "Thoát toàn màn hình" : "Biểu đồ toàn màn hình"}
                 className={`flex items-center gap-1 rounded-lg border p-1.5 text-[12px] font-bold ${full ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
                 {full ? <Minimize2 size={14} /> : <Maximize2 size={14} />}<span className={full ? "" : "hidden sm:inline"}>{full ? "Thoát" : "Toàn màn hình"}</span>
@@ -793,7 +803,9 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
             </div>
           </div>
           {isOwner && <div className="mt-2"><DrawBar tool={tool} setTool={setTool} sel={selDraw} setSel={setSelDraw} hidden={drawHidden} setHidden={setHidden} items={drawingsOf(sym)} onChange={(list) => saveDrawings(sym, list)} sym={sym} onUndo={() => undoDraw(sym)} canUndo={undoN >= 0 && !!undoRef.current[sym]?.length} scale={drawScale} /></div>}
-          {multi ? (
+          {replay ? (
+            <ReplayTrainer key={`${sym}-${tf}-${usedMkt}`} sym={sym} tf={tf} market={usedMkt} fx={fx} draw={drawFor({ sym, tf })} tags={tags} onEma={() => toggleEma(setTags)} onExit={() => setReplay(false)} onSave={isOwner ? saveReplay : undefined} saved={replaySaved} full={full} />
+          ) : multi ? (
             <div className="mt-2">
               <ChartGrid full={full} extraFor={isOwner ? (c, t) => { const e = fx && eaOn ? eaOverlay(eaData, c, TF[t].ms / 1000) : null; return { marks: e?.marks || NONE, lines: [...(e?.lines || []), ...alertLines(c)] }; } : undefined} onEma={() => toggleEma(setTags)} grid={grid} setGrid={setGrid} mkt={fx ? "mt5" : mkt} watch={watch} tags={tags} active={active} aiFor={aiFor} drawFor={drawFor} onActive={onActiveCell} flowOn={flowOn} />
               <TagBar tags={tags} setTags={setTags} compact={grid.n >= 4 && !grid.labels} extra={<GridOptions grid={grid} setGrid={applyPreset} sym={sym} tf={tf} forex={fx} />} />
