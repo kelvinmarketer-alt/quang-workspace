@@ -219,7 +219,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
         const p = layer.pointAt(x, y, C, n !== "drag"); if (!p) return;
         e.preventDefault(); e.stopPropagation();
         if (!pend) {
-          const d = makeDrawing(D.tool, p, D.tf);
+          const d = makeDrawing(D.tool, p, null, D.tf);
           if (n === 1) { finish(d); return; }
           pend = { d, stage: 1, brush: n === "drag" };
           layer.preview = d; layer.sel = d.id; layer.update(); return;

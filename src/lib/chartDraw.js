@@ -322,16 +322,16 @@ export class DrawLayer {
   }
 }
 
-// Tạo hình mới từ điểm đầu tiên (các điểm sau đặt bằng stagePoint)
-export function makeDrawing(type, p1, tf) {
+// Tạo hình mới: (loại, điểm 1, điểm 2 | null, khung). Đang vẽ thì truyền null rồi đặt các điểm sau bằng stagePoint
+export function makeDrawing(type, p1, p2, tf) {
   const base = { id: uid(), type, color: DEF_COLOR[type], tf, at: Date.now(), ...(type === "brush" ? { w: 2 } : {}) };
   if (type === "hline") return { ...base, price: p1.price };
   if (type === "text") return { ...base, p1, text: "" };
   if (type === "hray" || type === "vline") return { ...base, p1 };
   if (type === "path" || type === "brush") return { ...base, pts: [p1] };
   if (type === "channel" || LONGPOS[type]) return { ...base, p1, p2: p1, p3: p1 };
-  if (type === "callout") return { ...base, p1, p2: p1, text: "" };
-  return { ...base, p1, p2: p1 };
+  if (type === "callout") return { ...base, p1, p2: p2 || p1, text: "" };
+  return { ...base, p1, p2: p2 || p1 };
 }
 // Đặt điểm tiếp theo khi đang vẽ: stage = số điểm đã chốt
 export function stagePoint(d, stage, p, scale) {

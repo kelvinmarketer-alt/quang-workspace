@@ -164,3 +164,35 @@ describe("phương án D (06/11): SW3 + lệnh chờ M15 + 18 mã", async () => 
     expect(l.riskUsd).toBeCloseTo(1000 * 0.0045, 6); // lệnh BTC chưa đóng lúc LINK vào → vốn vẫn 1.000$
   });
 });
+
+describe("công cụ vẽ thêm (27/11)", async () => {
+  const { makeScale, makeDrawing, stagePoint, setPoint, moveDrawing, volProfile, durText } = await import("../src/lib/chartDraw.js");
+  const C = Array.from({ length: 40 }, (_, i) => ({ time: i * 3600, open: 100, high: 100 + (i % 5), low: 95, close: 100, volume: 10 }));
+  const sc = makeScale(C);
+  it("vị thế Mua: điểm 2 = cắt lỗ, chốt lời tự đặt 2R, rộng ít nhất 12 nến", () => {
+    const d = stagePoint(makeDrawing("long", { t: 0, price: 100 }, null, "1h"), 1, { t: 3600, price: 95 }, sc);
+    expect(d.p2.price).toBe(95);
+    expect(d.p3.price).toBe(110);
+    expect(d.p2.t).toBe(12 * 3600);
+    const k = setPoint(d, "p3", { t: 20 * 3600, price: 115 });
+    expect([k.p2.t, k.p3.t, k.p2.price, k.p3.price]).toEqual([72000, 72000, 95, 115]);
+  });
+  it("kênh song song / gấp khúc / dời hình nhiều điểm", () => {
+    let ch = makeDrawing("channel", { t: 0, price: 100 }, null, "1h");
+    ch = stagePoint(ch, 1, { t: 7200, price: 104 }, sc); ch = stagePoint(ch, 2, { t: 3600, price: 98 }, sc);
+    expect([ch.p2.price, ch.p3.price]).toEqual([104, 98]);
+    let pa = makeDrawing("path", { t: 0, price: 1 }, null, "1h");
+    pa = stagePoint(pa, 1, { t: 3600, price: 2 }, sc); pa = stagePoint(pa, 2, { t: 7200, price: 3 }, sc);
+    expect(pa.pts.map((p) => p.price)).toEqual([1, 2, 3]);
+    const m = moveDrawing(pa, 1, 1, sc);
+    expect(m.pts.map((p) => [p.t, p.price])).toEqual([[3600, 2], [7200, 3], [10800, 4]]);
+  });
+  it("hồ sơ khối lượng + chữ khoảng thời gian", () => {
+    const vp = volProfile(C, 0, 39 * 3600);
+    expect(vp.n).toBe(40);
+    expect(vp.bins.reduce((s, v) => s + v, 0)).toBeCloseTo(400, 6);
+    expect(vp.va.has(vp.poc)).toBe(true);
+    expect(durText(2 * 86400 + 4 * 3600)).toBe("2 ngày 4 giờ");
+    expect(durText(45 * 60)).toBe("45 phút");
+  });
+});
