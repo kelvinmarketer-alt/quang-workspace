@@ -1,6 +1,7 @@
 // Tách từ pages/CoinMarket.jsx (28/11/2026) — chỉ di chuyển mã, logic giữ nguyên.
 import { AlertTriangle, BookOpen, ChevronDown, History } from "lucide-react";
 import { Card } from "../ui.jsx";
+import { useFoldState } from "../Fold.jsx";
 import { KNOWLEDGE, KNOWLEDGE_SOURCES } from "../../lib/tradeKnowledge.js";
 import { MARKETS, TF } from "../../lib/ta.js";
 import { cachedGrade, gradeRecord, gradeSummary } from "../../lib/aiGrade.js";
@@ -117,6 +118,7 @@ export function AiHistory({ recs, active, sym, symKey, onOpen, className = "" })
   const [grades, setGrades] = useState(() => Object.fromEntries(recs.map((r) => [r.id, cachedGrade(r)]).filter(([, g]) => g)));
   const [only, setOnly] = useState(false);
   const [showN, setShowN] = useState(8);
+  const [open, setOpen] = useFoldState("qws_mkt_open", "aiHist", false); // 28/11: gập sẵn (≈1.300px trên điện thoại), nhớ lựa chọn
   useEffect(() => {
     if (seen) return undefined;
     if (typeof IntersectionObserver === "undefined" || !box.current) { setSeen(true); return undefined; }
@@ -149,8 +151,13 @@ export function AiHistory({ recs, active, sym, symKey, onOpen, className = "" })
   const shown = list.filter((r) => grades[r.id]?.outcome !== "miss");
   return (
     <Card className={`!p-3 ${className}`}>
-      <div ref={box} className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><History size={13} className="text-indigo-500" /> Lịch sử phân tích AI ({shown.length})</div>
+      <button ref={box} type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-2 text-left">
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><History size={13} className="text-indigo-500" /> Lịch sử phân tích AI ({shown.length})</span>
+        <span className="min-w-0 truncate text-[11px] font-semibold text-slate-400">{list.length ? `Đúng ${sum.ok} · Sai ${sum.bad}${sum.winRate != null ? ` · đúng ${fmtPct(sum.winRate, 0)}` : ""}` : ""}</span>
+        <ChevronDown size={15} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <>
+      <div className="mt-2 flex">
         <div className="ml-auto flex rounded-md bg-slate-100 p-0.5 text-[10.5px] font-bold">
           {[[false, "Tất cả"], [true, sym]].map(([k, l]) => <button key={String(k)} onClick={() => { setOnly(k); setShowN(8); }} className={`rounded px-1.5 py-0.5 ${only === k ? "bg-white text-indigo-600 shadow" : "text-slate-500"}`}>{l}</button>)}
         </div>
@@ -194,7 +201,8 @@ export function AiHistory({ recs, active, sym, symKey, onOpen, className = "" })
         </ul>
       )}
       {shown.length > showN && <button onClick={() => setShowN((n) => n + 12)} className="mt-1 w-full rounded-lg bg-slate-50 py-1.5 text-[12px] font-bold text-slate-600 hover:bg-slate-100">Xem thêm {Math.min(12, shown.length - showN)} lần</button>}
-      <div className="mt-2 text-[10.5px] leading-snug text-slate-400">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung), chỉ tính khi giá đã về điểm vào: khớp rồi chạm TP1 = đúng, khớp rồi chạm SL = sai; giá chạy tới TP/SL trước khi khớp = không vào lệnh → ẩn, không tính; nến khớp lệnh chỉ xét SL, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
+      <div className="mt-2 text-[10.5px] leading-snug text-slate-400 [text-wrap-style:pretty]">Tự chấm theo nến sau lúc phân tích (tối đa 100 nến cùng khung), chỉ tính khi giá đã về điểm vào: khớp rồi chạm TP1 = đúng, khớp rồi chạm SL = sai; giá chạy tới TP/SL trước khi khớp = không vào lệnh → ẩn, không tính; nến khớp lệnh chỉ xét SL, cùng 1 nến chạm cả hai → tính SL. R = (TP1 − vào) ÷ (vào − SL). Lưu 60 lần gần nhất trên cloud, mọi máy đều thấy.</div>
+      </>}
     </Card>
   );
 }

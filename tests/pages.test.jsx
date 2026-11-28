@@ -223,6 +223,8 @@ describe("Cảnh báo giá Forex (09/11)", () => {
     await act(async () => { await new Promise((ok) => setTimeout(ok, 120)); });
     expect(localStorage.getItem("qws_coin_tab")).toBe("market");
     expect(localStorage.getItem("qws_market_sub")).toBe("forex");
+    // 28/11: chờ tới khi có nội dung (tối đa 5 giây) thay vì chờ cố định — chạy song song cả bộ kiểm thử thì máy chậm hơn
+    await act(async () => { await vi.waitFor(() => expect(document.body.textContent).toMatch(/XAUUSD ≥ 2\.700/), { timeout: 5000, interval: 50 }); });
     const txt = document.body.textContent;
     expect(txt).toMatch(/XAUUSD/);
     expect(txt).toMatch(/Cảnh báo giá · 1 đang chờ/); // 2 cảnh báo trên cloud, tab Forex chỉ đếm cảnh báo MT5
@@ -244,6 +246,7 @@ describe("Thị trường Forex · lệnh EA MT5 trên biểu đồ (09/11)", ()
     localStorage.removeItem("qws_fx_ea"); localStorage.removeItem("qws_fx_grid"); localStorage.setItem("qws_fx_sym", JSON.stringify("XAUUSD"));
     const M = (await import("../src/pages/CoinMarket.jsx")).default;
     const { errors, container } = await mount(<M venue="forex" />, "/coin");
+    await act(async () => { await vi.waitFor(() => expect(container.textContent).toMatch(/lệnh EA L\/S/), { timeout: 5000, interval: 50 }); });
     expect(container.textContent).toMatch(/Hiện lệnh EA MT5/);
     expect(container.textContent).toMatch(/3 lệnh XAUUSD:\s*1 thắng\s*·\s*1 thua\s*·\s*1 đang mở/);
     expect(container.textContent).toMatch(/lệnh EA L\/S/);
