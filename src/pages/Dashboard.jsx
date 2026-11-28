@@ -112,7 +112,7 @@ export default function Dashboard() {
   }, [myEmail]);
   const repUnsent = health.filter((r) => !(settings.reportLog || {})[r.id]?.[today.slice(0, 7)]).length;
   const recvN = T.has("customers") ? T.receivables.length : 0, taskN = T.has("tasks") ? T.dueTasks.length : 0, renewN = T.has("ketoan") ? T.renewals.length : 0;
-  const headline = [isOwner && attention.length ? `${attention.length} thương hiệu cần chú ý` : null, recvN ? `${recvN} khoản cần thu` : null, taskN ? `${taskN} việc ${T.overdueCount ? `(${T.overdueCount} quá hạn)` : "hôm nay"}` : null].filter(Boolean).join(", ") || "Hôm nay không có gì gấp";
+  const headline = [isOwner && attention.length ? `${attention.length} thương hiệu cần chú ý` : null, recvN ? `${recvN} khoản cần thu` : null, taskN ? `${taskN} việc ${T.overdueCount ? `(${T.overdueCount} quá hạn)` : "hôm nay"}` : null].filter(Boolean).map((x) => x.replace(/ /g, "\u00a0")).join(", ") || "Hôm nay không có gì gấp";
   const urgent = [
     ...(T.has("tasks") ? T.dueTasks.slice(0, 2).map((t) => ({ k: "t" + t.id, to: "/cong-viec", tone: t.date < today ? "bg-rose-500" : "bg-emerald-500", title: t.title, sub: t.date < today ? `Quá hạn · ${fmtDateVI(t.date)}` : "Việc hôm nay" })) : []),
     ...(T.has("customers") ? T.receivables.slice(0, 2).map((x) => ({ k: "r" + x.projectId + x.id, to: "/khach-hang", tone: "bg-rose-500", title: `Thu ${x.customerName || "khách lẻ"} · ${formatShort(x.debt)}`, sub: `${x.projectName} · hạn ${fmtDateVI(x.date)}` })) : []),
