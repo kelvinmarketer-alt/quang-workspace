@@ -162,7 +162,7 @@ export default function Dashboard() {
             <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Việc của hôm nay</span>
             <button onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-[12.5px] font-bold text-white hover:bg-slate-700">{more ? "Thu gọn" : "Xem chi tiết hôm nay"} <ChevronDown size={14} className={more ? "rotate-180" : ""} /></button>
           </div>
-          <h2 className={`mt-1 text-balance text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px] ${repWait ? "max-sm:min-h-14" : ""}`}>{headline}</h2>
+          <h2 className={`mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px] ${repWait ? "max-sm:min-h-14" : ""}`}>{headline}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <MiniTile to="/khach-hang" icon={HandCoins} label="Cần thu" value={recvN ? formatShort(T.receivableTotal) : "0"} sub={recvN ? `${recvN} khoản` : "không có nợ tới hạn"} tone={recvN ? "text-rose-600" : "text-emerald-600"} />
             {tasksOn(settings, tasks)
