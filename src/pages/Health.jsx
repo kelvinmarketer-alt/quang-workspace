@@ -15,7 +15,7 @@ const Food = lazy(() => import("../components/health/Food.jsx"));
 const HealthSettings = lazy(() => import("../components/health/HealthSettings.jsx"));
 
 const TABS = [["today", "Hôm nay", Sun], ["gym", "Tập gym", Dumbbell], ["an", "Ăn uống", Utensils], ["caidat", "Cài đặt", Settings2]];
-const WATER = "#0ea5e9", KCAL = "#f59e0b", GYM = "#10b981";
+const GYM = "#10b981";
 const Loading = () => <div className="flex justify-center py-16"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>;
 
 function CloudChip({ cloud, pending }) {

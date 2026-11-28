@@ -92,7 +92,7 @@ function PersonCard({ p, customers, office, ownerId, onOfficeSaved, onRemove }) 
   const [title, setTitle] = useState(p.os?.title || "");
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState(null);
   useEffect(() => { setRole(roleOf(p.om, p.os)); }, [p.om, p.os]);
-  const mapped = useMemo(() => (scope ? mapBrands(scopeCusts, office.brands) : { ids: office.brands.map((b) => b.id), miss: [] }), [scope, scopeCusts, office.brands]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mapped = useMemo(() => (scope ? mapBrands(scopeCusts, office.brands) : { ids: office.brands.map((b) => b.id), miss: [] }), [scope, scopeCusts, office.brands]);  
 
   const saveOffice = async () => {
     setBusy(true); setMsg(null);

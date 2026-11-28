@@ -166,7 +166,7 @@ export default function CoinBot({ active: visible = true }) {
     return () => clearInterval(t); /* eslint-disable-next-line */
   }, [active, status, session?.createdAt]);
   useEffect(() => () => clearTimeout(debounce.current), []);
-  useEffect(() => { if (visible && session && Date.now() - lastRun.current > 60000) run(); /* eslint-disable-next-line */ }, [visible]); // mở lại tab → cập nhật ngay
+  useEffect(() => { if (visible && session && Date.now() - lastRun.current > 60000) run();   }, [visible]); // mở lại tab → cập nhật ngay
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const res = useMemo(() => finalize(raw, active ? live.current : null, hits.current), [raw, ver, active]);

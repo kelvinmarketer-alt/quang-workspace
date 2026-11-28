@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, Mail, MapPin, TrendingUp } from "lucide-react";
-import { Card, Badge, formatVND, formatShort } from "../components/ui.jsx";
+import { Search, X, Plus, MessageCircle, Trash2, Pencil, Users, CheckSquare, Square, ListPlus, Power, ChevronDown, Repeat, Sparkles, FolderPlus, ImagePlus, TrendingUp } from "lucide-react";
+import { Card, Badge, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
-import { projectMetrics, customerLastIncome, daysSince } from "../lib/selectors.js";
+import { projectMetrics, customerLastIncome } from "../lib/selectors.js";
 import { customerMonthly, monthName } from "../lib/ketoanMonthly.js";
 import { ProjectDrawer, ProjectModal } from "./Projects.jsx";
 import { AiImportModal } from "../components/AiImport.jsx";

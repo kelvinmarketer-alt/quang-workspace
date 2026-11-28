@@ -1,22 +1,20 @@
 // 10/11: tách tab "Đầu tư" khỏi Coin.jsx để thư viện biểu đồ (recharts ~350KB) chỉ tải khi mở tab này.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck, Cpu } from "lucide-react";
+import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Bot, ChevronDown, History, Info, ChartPie } from "lucide-react";
 import { Card, Badge } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "../lib/format.js";
 import { useBinance, useUsdVnd, depositInfo } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
-import { cfgOf } from "../lib/paperBot.js";
-import { supabase } from "../lib/supabase.js";
 
 const inputCls = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm";
 // Đọc số kiểu VN: phẩy = thập phân ("0,5"); chấm + đúng 3 số = phân cách nghìn ("60.000", "1.234.567");
 // 1 dấu chấm còn lại = thập phân ("0.5", "81234.5"); có cả 2 loại → dấu xuất hiện sau cùng là thập phân
 const n = (v) => {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  let s = String(v ?? "").replace(/\s/g, "").replace(/[^\d.,\-]/g, "");
+  let s = String(v ?? "").replace(/\s/g, "").replace(/[^\d.,-]/g, "");
   const neg = s.startsWith("-"); s = s.replace(/-/g, "");
   if (!s) return 0;
   const lc = s.lastIndexOf(","), ld = s.lastIndexOf(".");
@@ -284,7 +282,7 @@ export default function CoinInvest({ active = true, slot = null }) { // slot: kh
       if (Object.keys(map).length) setPrices((p) => ({ ...p, ...map }));
     } catch { /* giữ giá cũ */ }
   };
-  useEffect(() => { if (!active) return; loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t); /* eslint-disable-next-line */ }, [symKey, active]);
+  useEffect(() => { if (!active) return; loadPrices(); const t = setInterval(() => { if (!document.hidden) loadPrices(); }, 15000); return () => clearInterval(t);   }, [symKey, active]);
 
   // SỔ NẠP TIỀN CỘNG DỒN: Binance chỉ trả lịch sử P2P ~30 ngày gần nhất → khoản nạp cũ "rơi" khỏi tổng (đã nạp giảm dần).
   // Mỗi lần đồng bộ: lệnh nạp/rút nào đã thấy thì LƯU MÃI vào settings.coinDeposits (khoá = loại|thời điểm|số tiền), không bao giờ xoá.

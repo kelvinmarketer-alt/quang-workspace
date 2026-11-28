@@ -488,7 +488,7 @@ export function DataProvider({ children }) {
     return () => { document.removeEventListener("visibilitychange", onVisible); clearInterval(t); };
   }, [user?.id, synced]);
 
-  const api = useMemo(() => { // eslint-disable-line react-hooks/exhaustive-deps
+  const api = useMemo(() => {  
     const uid = () => Math.random().toString(36).slice(2, 9);
     const normUrl = (u) => { u = (u || "").trim(); return u && !/^https?:\/\//i.test(u) ? "https://" + u : u; };
     // Vault: kho riêng (đã mở khoá) hoặc kiểu cũ trong khối chung (khi chưa tạo bảng qws_private)

@@ -14,7 +14,6 @@ import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
 
 const CAT_TONE = { Web: "indigo", App: "sky", ADS: "rose", Coaching: "amber", Seo: "emerald", Landing: "sky", "Lương": "violet", Khác: "slate" };
 const STATUS = { doing: ["amber", "Đang làm"], done: ["emerald", "Hoàn thành"], paused: ["sky", "Tạm dừng"], cancel: ["rose", "Đã huỷ"] };
-const STATUS_ORDER = { doing: 0, paused: 1, done: 2, cancel: 3 }; // Đang làm lên đầu, Đã huỷ xuống cuối
 const num = (v) => Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
 // % phí: cho số thập phân (12,5) và 0% — trống mới dùng mặc định (01/11: trước "12,5" thành 125%, không đặt được 0%)
 const pct = (v) => { const s = String(v ?? "").trim().replace(",", "."); if (!s) return null; const n = parseFloat(s); return Number.isFinite(n) && n >= 0 ? n : null; };

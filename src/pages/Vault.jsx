@@ -4,7 +4,7 @@ import {
   KeyRound, CreditCard, Landmark, Lock, ShieldAlert, ExternalLink,
   Sparkles, ImagePlus, Loader2, Settings as SettingsIcon, LockKeyhole, Unlock,
 } from "lucide-react";
-import { Card, Badge } from "../components/ui.jsx";
+import { Card } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadVault, imageToDataUrl } from "../lib/ai.js";
 import { usePasteImages } from "../lib/paste.js";
@@ -455,7 +455,7 @@ function PinBar({ hasPin, setVaultPin, lockVault }) {
 }
 
 export default function Vault() {
-  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId, vaultLocked, vaultHasPin, vaultPrivate, unlockVault, setVaultPin, removeVaultPin, lockVault, resources = [], updateResource, addResource, customerList = [], setToast } = useData();
+  const { vault = [], addVaultItem, addVaultItems, updateVaultItem, deleteVaultItem, isOwner, ownerId, vaultLocked, vaultHasPin, vaultPrivate, unlockVault, setVaultPin, lockVault, resources = [], updateResource, addResource, customerList = [], setToast } = useData();
   // 11/11 sếp chốt: tài khoản của dự án/khách để ở Tài nguyên từng dự án, KHÔNG để ở Tài khoản & Thẻ (chỉ đồ cá nhân).
   // Bỏ nút "Chuyển về đây"; các mục đã chuyển trước đó (ghi chú "Chuyển từ Tài nguyên") tự trả mật khẩu về đúng tài nguyên rồi xoá khỏi đây.
   const movedBack = useRef(false);

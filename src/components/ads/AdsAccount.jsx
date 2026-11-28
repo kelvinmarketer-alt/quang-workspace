@@ -217,7 +217,7 @@ export function AdsTodo({ diag, onPick, who = "" }) {
   const top = items.sort((a, b) => b.w - a.w).slice(0, 3);
   // 11/11: ghi lại để Tổng quan hiện chung trong "Việc của hôm nay" (không phải tải lại số Meta ở Tổng quan)
   const sig = top.map((x) => x.t + x.s).join("|");
-  useEffect(() => { if (diag) lsSet("qws_ads_todo", JSON.stringify({ u: who, at: Date.now(), items: top.map((x) => ({ t: x.t, s: x.s })) })); /* eslint-disable-next-line */ }, [sig, !!diag, who]);
+  useEffect(() => { if (diag) lsSet("qws_ads_todo", JSON.stringify({ u: who, at: Date.now(), items: top.map((x) => ({ t: x.t, s: x.s })) }));   }, [sig, !!diag, who]);
   if (!top.length) return null;
   return (
     <Card className="!p-4">

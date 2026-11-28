@@ -17,7 +17,7 @@ async function sysNotify(title, body, tag) {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
     const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration?.());
     if (reg?.showNotification) { await reg.showNotification(title, { body, tag, data: { url: "/cong-viec" } }); return true; }
-    new Notification(title, { body, tag }); // eslint-disable-line no-new
+    new Notification(title, { body, tag });  
     return true;
   } catch { return false; }
 }

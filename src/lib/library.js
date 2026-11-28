@@ -92,7 +92,7 @@ export function toPlain(kind, text) {
       .replace(/^\s{0,3}#{1,6}\s+/gm, "").replace(/^\s*>+\s?/gm, "").replace(/^\s*([-*+]|\d+[.)])\s+/gm, "")
       .replace(/(\*\*|__|~~)/g, "").replace(/(^|[\s(])[*_]([^*_\n]+)[*_](?=[\s).,;:!?]|$)/g, "$1$2").replace(/`/g, "").replace(/\s*\|\s*/g, " ");
   }
-  return out.normalize("NFC").replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, MAX_PLAIN_CHARS);
+  return out.normalize("NFC").replace(/[ \t\u00a0]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, MAX_PLAIN_CHARS);
 }
 
 // ───────────────────────── Cây thư mục ─────────────────────────
@@ -164,6 +164,7 @@ function inline(src) {
   t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   t = t.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
   t = t.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  // eslint-disable-next-line no-control-regex -- \u0000 là dấu giữ chỗ cố ý (không thể có trong văn bản người gõ)
   return t.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
 }
 
@@ -215,11 +216,11 @@ export function renderMarkdown(src) {
         else break;
       }
       // Lồng 2 cấp theo thụt đầu dòng (đủ cho ghi chú học tập)
-      let html = "", open = 0;
+      let html = "";
       const tag = ordered ? "ol" : "ul";
       const base = Math.min(...items.map((x) => x.indent));
       let lvl = 0;
-      html += `<${tag}>`; open++;
+      html += `<${tag}>`;
       items.forEach((it, k) => {
         const deeper = it.indent > base;
         if (deeper && lvl === 0) { html += "<ul>"; lvl = 1; }
@@ -250,7 +251,7 @@ ul,ol{padding-left:1.4em}li{margin:.25em 0}pre.txt{white-space:pre-wrap;word-bre
 // Nội dung đưa vào khung đọc (iframe cách ly). HTML giữ nguyên; Markdown/văn bản bọc kiểu đọc sạch.
 // Mục lục trong tài liệu (<a href="#muc">): trong iframe srcdoc, href="#x" bị hiểu theo địa chỉ của app → mở cả app (đòi đăng nhập).
 // Chặn click và tự cuộn tới đúng mục ngay trong tài liệu.
-const ANCHOR_JS = `<script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";if(h.charAt(0)!=="#")return;e.preventDefault();var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=id?(document.getElementById(id)||document.getElementsByName(id)[0]):null;if(t)t.scrollIntoView({behavior:"smooth",block:"start"});else if(!id)window.scrollTo({top:0,behavior:"smooth"})},true);<\/script>`;
+const ANCHOR_JS = `<script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href")||"";if(h.charAt(0)!=="#")return;e.preventDefault();var id=h.slice(1);try{id=decodeURIComponent(id)}catch(x){}var t=id?(document.getElementById(id)||document.getElementsByName(id)[0]):null;if(t)t.scrollIntoView({behavior:"smooth",block:"start"});else if(!id)window.scrollTo({top:0,behavior:"smooth"})},true);</script>`;
 const withAnchors = (h) => (/<\/body>/i.test(h) ? h.replace(/<\/body>(?![\s\S]*<\/body>)/i, ANCHOR_JS + "</body>") : h + ANCHOR_JS);
 export function frameDoc(kind, content) {
   const head = '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';

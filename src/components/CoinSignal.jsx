@@ -179,7 +179,7 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
   const strength = b.dir === -1 ? 100 - b.buyPct : b.dir === 1 ? b.buyPct : Math.max(b.buyPct, 100 - b.buyPct);
   const word = b.dir === 1 ? "CHỈ BÁO NGHIÊNG MUA" : b.dir === -1 ? "CHỈ BÁO NGHIÊNG BÁN" : "CHỈ BÁO TRUNG TÍNH"; // nhãn trung tính: đây là chỉ báo, không phải lệnh
   const br = s.volume?.buyRatio20 != null ? Math.round(s.volume.buyRatio20 * 100) : null;
-  const tfLabel = (TFS_MTF.find(([k]) => k === tf) || [, tf.toUpperCase()])[1];
+  const tfLabel = (TFS_MTF.find(([k]) => k === tf) || [null, tf.toUpperCase()])[1];
   const agree = mtf ? mtf.filter((r) => !r.na && r.dir === b.dir && b.dir !== 0).length : 0, known = mtf ? mtf.filter((r) => !r.na).length : 0;
 
   return (
@@ -278,7 +278,7 @@ export default function CoinSignal({ sym, tf, market, summary: s, stale, active 
               : <span className="text-slate-500">Điểm này đúng bao nhiêu? Chạy lại trên ~700 nến quá khứ của {sym} {tfLabel}.</span>}
             {ver?.higher?.length > 0 && (
               <div className="basis-full text-[11.5px] text-slate-600">
-                Đồng thuận với khung lớn hơn ({ver.higher.map((k) => (TFS_MTF.find(([x]) => x === k) || [, k])[1]).join(", ")}):{" "}
+                Đồng thuận với khung lớn hơn ({ver.higher.map((k) => (TFS_MTF.find(([x]) => x === k) || [null, k])[1]).join(", ")}):{" "}
                 {[["cùng hướng hết", ver.agree], ["không cùng hướng", ver.notAgree]].map(([l, g]) => (
                   <span key={l} className="mr-3">{l}: {g ? <><b>{g.n}</b> lần · thắng <b className={g.win >= 34 ? "text-emerald-600" : "text-rose-600"}>{fmtNum(g.win, 0, 0)}%</b> · TB <b className={g.avgR >= 0 ? "text-emerald-600" : "text-rose-600"}>{g.avgR >= 0 ? "+" : ""}{fmtNum(g.avgR, 2, 2)}R</b></> : "—"}</span>
                 ))}

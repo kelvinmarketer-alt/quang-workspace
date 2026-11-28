@@ -9,7 +9,7 @@ import { fmtUsd, fmtUsdSigned, fmtNum, fmtPct, fmtPx, formatVND } from "../lib/f
 import { useBinance, useUsdVnd, depositInfo, fetchTickers, STABLES, demoResult, monthOf, monthLabel, MONTH_TARGET, weakStreams, demoCacheGet } from "../lib/coinShared.js";
 import { cfgOf, TFS, finalize } from "../lib/paperBot.js";
 
-const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
+const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null;  
 const tone = (v) => (v == null || !isFinite(v) ? "text-slate-800" : v >= 0 ? "text-emerald-600" : "text-rose-600");
 const sPct = (v) => (v == null || !isFinite(v) ? "" : `${v >= 0 ? "+" : ""}${fmtPct(v, 1)}`);
 const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? "vừa xong" : m < 60 ? `${m} phút trước` : m < 1440 ? `${Math.round(m / 60)} giờ trước` : `${Math.round(m / 1440)} ngày trước`; };

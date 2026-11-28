@@ -177,7 +177,6 @@ export default function Calendar() {
   const selLunar = solarToLunar(selDate.getDate(), selDate.getMonth() + 1, selDate.getFullYear());
   const selEvents = events[selected] || [];
 
-  const myEvents = family.map(normEvent);
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">

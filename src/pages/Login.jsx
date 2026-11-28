@@ -1,6 +1,6 @@
 import { useTheme } from "../lib/theme.js";
 import { useState } from "react";
-import { LineChart, Lock, Mail, Loader2, Moon, Sun } from "lucide-react";
+import { Lock, Mail, Loader2, Moon, Sun } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
 import { supabase } from "../lib/supabase.js";
 

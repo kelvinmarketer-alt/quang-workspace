@@ -73,7 +73,7 @@ export default function CoinMT5({ active }) {
       setSt(row("status")); setHist(row("history")); setCmd(row("command")); setLoaded(true);
     } catch (e) { setErr(e.message || String(e)); }
   };
-  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, 20000); return () => clearInterval(t); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, 20000); return () => clearInterval(t); }, [active]);  
   useEffect(() => { if (!note) return undefined; const t = setTimeout(() => setNote(""), 12000); return () => clearTimeout(t); }, [note]);
   const trades = hist?.trades || [];
   const isV = st?.ea?.ea === "Victor V5";

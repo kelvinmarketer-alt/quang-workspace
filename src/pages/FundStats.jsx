@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
-import { Receipt, Layers, Tag, Tags, ArrowUp, ArrowDown, PiggyBank, Wallet, Sparkles, Plus, Check, X, ChevronDown } from "lucide-react";
+import { Receipt, Layers, Tag, Tags, ArrowUp, ArrowDown, Wallet, Sparkles, Plus, Check, X, ChevronDown } from "lucide-react";
 import { Card, SectionTitle, formatVND, formatShort } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { fundSpends } from "../lib/selectors.js";

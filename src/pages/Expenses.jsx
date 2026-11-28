@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { Plus, X, Trash2, Pencil, Repeat, Power, CheckSquare, Square, CreditCard, TrendingDown, Layers, CalendarClock, ChevronDown } from "lucide-react";
-import { Card, StatCard, Badge, formatVND, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
+import { Card, StatCard, Badge, formatShort, MoneyInput, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
 import { EXPENSE_CATEGORIES } from "../data/seed.js";
 import { monthlyOperatingCost, expensesInRange } from "../lib/selectors.js";

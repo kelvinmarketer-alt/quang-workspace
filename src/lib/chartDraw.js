@@ -165,7 +165,6 @@ export class DrawLayer {
   // tìm hình dưới chuột: { id, part: "p1" | "p2" | "p3" | "k<i>" | "body" }
   hit(x, y) {
     const list = [...this.all()].reverse();
-    const W = this.chart?.timeScale().width() || 4000;
     for (const d of list) {
       if (d.id === this.sel) for (const [k, X, Y] of this.handles(d)) if (X != null && Y != null && Math.hypot(x - X, y - Y) < HIT + 2) return { id: d.id, part: k };
       const body = { id: d.id, part: "body" };

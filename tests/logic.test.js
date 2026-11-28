@@ -196,3 +196,13 @@ describe("công cụ vẽ thêm (27/11)", async () => {
     expect(durText(45 * 60)).toBe("45 phút");
   });
 });
+
+// 28/11: lint bắt được viReason chứa ký tự backspace thay cho \b → chưa từng đổi SL/TP sang tiếng Việt
+describe("viReason — lý do đóng lệnh hiển thị tiếng Việt", () => {
+  it("đổi SL/TP đứng riêng, không đụng chữ dính liền", async () => {
+    const { viReason } = await import("../src/lib/glossary.js");
+    expect(viReason("Dời SL theo đáy/đỉnh 20 nến")).toBe("Dời cắt lỗ theo đáy/đỉnh 20 nến");
+    expect(viReason("Chạm TP")).toBe("Chạm chốt lời");
+    expect(viReason("SLOW TP1")).toBe("SLOW TP1");
+  });
+});

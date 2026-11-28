@@ -1,7 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, BarChart3, MoreHorizontal, Users, ShoppingBag, CalendarDays, ListChecks,
-  LineChart, Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, PiggyBank, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, GraduationCap, HeartPulse, Dumbbell,
+  LayoutDashboard, BarChart3, MoreHorizontal, Users, CalendarDays, ListChecks,
+  Menu, X, Bell, BellRing, Search, Settings as SettingsIcon, FolderKanban, Calculator, CloudOff, RefreshCw, Coins, KeyRound, FolderOpen, Megaphone, Building2, ExternalLink, Pin, PinOff, Globe, ThumbsUp, Check, ChevronsLeft, ChevronsRight, Palette, Library, GraduationCap, HeartPulse, Dumbbell,
 } from "lucide-react";
 import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from "react";
 // 01/11: ô tìm kiếm ⌘K + đồng hồ Pomodoro tải thành phần riêng, song song sau khi app hiện (gói code đầu nhẹ hơn)

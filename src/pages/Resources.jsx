@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, X, Trash2, Pencil, Copy, Check, Search, ExternalLink, FolderKanban, Link2, Sparkles, ImagePlus, Loader2, KeyRound, Eye, EyeOff, ChevronDown, Users, ListPlus, Settings as SettingsIcon } from "lucide-react";
-import { Card, Badge } from "../components/ui.jsx";
+import { Card } from "../components/ui.jsx";
 import Combobox from "../components/Combobox.jsx";
 import { useData } from "../lib/store.jsx";
 import { aiReadResources, imageToDataUrl } from "../lib/ai.js";

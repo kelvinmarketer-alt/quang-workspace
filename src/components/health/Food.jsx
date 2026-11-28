@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
-import { Plus, X, Search, ChevronLeft, ChevronRight, Star, Utensils, Hourglass, Scale, Minus, Camera, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Plus, X, Search, ChevronLeft, ChevronRight, Star, Scale, Minus, Camera, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Card, SectionTitle } from "../ui.jsx";
 import { dayTargets, kcalProposal, mealPlan, dayKeyOf, minOfDay, hmToMin, mealTotals, fastState, searchFoods, MEAL_SLOTS, slotByHour, weightSeries, weightTrend, trendNote, dm, vnNum, uid, GOALS } from "../../lib/health.js";
 import { addMeal, removeMeal, setCfg, setWeight } from "../../lib/healthStore.js";

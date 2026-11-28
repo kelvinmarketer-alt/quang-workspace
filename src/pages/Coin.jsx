@@ -1,12 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, X, Trash2, Pencil, TrendingUp, TrendingDown, RefreshCw, Coins, AlertTriangle, Wallet, CandlestickChart, Loader2, Bot, Radio, ChevronDown, History, Info, ChartPie, LayoutDashboard, MonitorDot, Sun, ShieldCheck, Cpu } from "lucide-react";
-import { Card, Badge } from "../components/ui.jsx";
+import { Coins, Wallet, CandlestickChart, Loader2, Bot, Radio, LayoutDashboard, ShieldCheck, Cpu } from "lucide-react";
 import { useData } from "../lib/store.jsx";
-import { ask, guardClose, markDirty } from "../components/ConfirmDialog.jsx";
-import { formatVND, fmtUsd, fmtUsdSigned, fmtPx, fmtQty, fmtNum, fmtPct } from "../lib/format.js";
-import { useBinance, useUsdVnd, depositInfo } from "../lib/coinShared.js";
-import InfoTip from "../components/InfoTip.jsx";
+import { fmtNum } from "../lib/format.js";
 import { cfgOf } from "../lib/paperBot.js";
 import { supabase } from "../lib/supabase.js";
 import TradeCompare from "../components/TradeCompare.jsx";

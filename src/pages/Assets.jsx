@@ -37,7 +37,7 @@ export function assetSummary(assets, investVnd = 0) {
 }
 
 function AssetModal({ initial, onClose, onSave }) {
-  const [f, setF] = useState(() => ({ name: "", type: "bank", amount: "", note: "", ...initial, amount: initial?.amount ? String(initial.amount) : "" }));
+  const [f, setF] = useState(() => ({ name: "", type: "bank", note: "", ...initial, amount: initial?.amount ? String(initial.amount) : "" }));
   const ok = f.name.trim() && num(f.amount) > 0;
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4" onInputCapture={markDirty}>

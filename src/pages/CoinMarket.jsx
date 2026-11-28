@@ -261,7 +261,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }); // eslint-disable-line react-hooks/exhaustive-deps
+  });  
   const drawFor = (c) => (isOwner ? { items: drawingsOf(c.sym), tool, setTool, sel: selDraw, setSel: setSelDraw, hidden: drawHidden, tf: c.tf, onChange: (list) => saveDrawings(c.sym, list), onAlert: (at, now) => addAlertAt(c.sym, at, now) } : undefined);
 
   // Gõ mã mới → kiểm tra có cặp X/USDT trên sàn đang chọn (không có → thử sàn kia) rồi mới chuyển + thêm vào danh sách theo dõi

@@ -59,7 +59,7 @@ export default function Ads() {
     } catch (e) { if (id === reqRef.current && !silent) setErr(e.message || String(e)); }
     if (id === reqRef.current) { setLoading(false); setSyncing(false); }
   };
-  useEffect(() => { if (canView) load(); /* eslint-disable-next-line */ }, [rKey, canView]);
+  useEffect(() => { if (canView) load();   }, [rKey, canView]);
   // Kỳ có HÔM NAY → tự làm mới 5 phút/lần khi tab đang mở (Meta trễ ~15-30 phút so với thực tế)
   useEffect(() => {
     if (!canView || !live) return;

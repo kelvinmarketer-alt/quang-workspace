@@ -13,7 +13,7 @@ import { TONE_BG, TONE_GRAD, catTone, everyLabel, nextOcc, num, pendingOccs, pla
 function FundsMain() {
   const { canEdit } = useData();
   const canW = canEdit ? canEdit("ketoan") : true;
-  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTx, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFund, transferFundMany, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
+  const { funds, fundTx, fundSchedules, spendCats, projects, expenses, settings, addFund, updateFund, deleteFund, addFundTxMany, deleteFundTx, updateFundTx, allocateFromCompany, transferFundMany, addFundSchedule, updateFundSchedule, deleteFundSchedule, runFundSchedule, skipFundSchedule, addSpendCat, updateSpendCat, deleteSpendCat } = useData();
   const now = new Date();
   const curY = now.getFullYear();
   const today = todayISO();
@@ -476,7 +476,7 @@ const FUND_TABS = [["funds", "Quỹ", PiggyBank], ["recon", "Đối soát", Clip
 const fundTabLS = () => { try { const v = localStorage.getItem("qws_funds_tab"); return FUND_TABS.some(([k]) => k === v) ? v : "funds"; } catch { return "funds"; } };
 // 01/11: Quỹ gộp thành tab "Dòng tiền" trong Kế toán — thanh chuyển Quỹ / Thống kê chi tiêu dạng viên nhỏ cùng kiểu app
 export default function Funds({ initialTab }) {
-  const { fundSchedules, fundTx } = useData();
+  const { fundSchedules } = useData();
   // Có lịch chuyển quỹ đến hạn → mở tab Quỹ (banner xác nhận nằm ở đó, link từ "Hôm nay" trỏ về /quy)
   const hasDue = (fundSchedules || []).some((sc) => pendingOccs(sc, todayISO()).length > 0);
   const startTab = () => { if (initialTab && FUND_TABS.some(([k]) => k === initialTab)) return initialTab; if (hasDue) return "funds"; return fundTabLS(); };
@@ -484,7 +484,7 @@ export default function Funds({ initialTab }) {
   const [tab, setTab0] = useState(startTab);
   const setTab = (v) => { setTab0(v); try { localStorage.setItem("qws_funds_tab", v); } catch {} };
   // Mở từ link khác (vd /ke-toan → /chi-phi) khi trang đang mở sẵn → chuyển đúng tab
-  useEffect(() => { setTab0(startTab()); /* eslint-disable-next-line */ }, [initialTab]);
+  useEffect(() => { setTab0(startTab());   }, [initialTab]);
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-wrap gap-1.5 px-3 sm:px-0">

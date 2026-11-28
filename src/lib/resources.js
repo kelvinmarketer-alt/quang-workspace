@@ -1,5 +1,5 @@
 // Nhận diện loại tài nguyên online từ link + icon/màu tương ứng
-import { FileSpreadsheet, FileText, Presentation, HardDrive, Folder, Youtube, Facebook, Palette, BookOpen, Globe, Image, Link2 } from "lucide-react";
+import { FileSpreadsheet, FileText, Presentation, HardDrive, Folder, Youtube, Facebook, Palette, BookOpen, Globe, Image } from "lucide-react";
 
 export const RES_TYPES = {
   sheet: { label: "Google Sheet", icon: FileSpreadsheet, tone: "emerald" },

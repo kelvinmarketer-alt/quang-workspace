@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
-import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, CheckCircle2, Lightbulb, Search, MousePointerClick, Users, Target, Info, Download } from "lucide-react";
+import { Globe, RefreshCw, ArrowLeft, Sparkles, Loader2, AlertTriangle, TrendingUp, TrendingDown, EyeOff, Eye, ExternalLink, Lightbulb, Search, MousePointerClick, Users, Target, Info, Download } from "lucide-react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card, Badge, DateField } from "../components/ui.jsx";
 import { useData } from "../lib/store.jsx";
@@ -214,7 +214,7 @@ export const CsvButton = ({ onClick }) => (
 // csv(r) / csvH = giá trị / tiêu đề khi xuất, csvOnly = chỉ có trong CSV. csvName → hiện nút "Xuất CSV". resetKey đổi → bỏ xếp theo cột.
 export function Table({ rows, cols, empty = "Không có dữ liệu trong kỳ", csvName, resetKey }) {
   const [st, toggle, reset] = useSort();
-  useEffect(() => { reset(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resetKey]);
+  useEffect(() => { reset();   }, [resetKey]);
   if (!rows?.length) return <div className="py-4 text-center text-xs text-slate-400">{empty}</div>;
   const shown = cols.filter((c) => !c.csvOnly);
   const sc = st && shown[st.i]?.s ? shown[st.i] : null;

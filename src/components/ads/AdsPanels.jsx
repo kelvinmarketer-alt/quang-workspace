@@ -64,7 +64,7 @@ export function BalanceBox({ a, onChanged }) {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false); // 01/11: chặn bấm đôi "Lưu" (trước bấm 2 lần = nạp 2 lần)
   const load = async () => { try { setRows((await invoke({ mode: "balance_list", accountId: a.id })).rows || []); } catch (e) { setErr(e.message || String(e)); } };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [a.id]);
+  useEffect(() => { load();   }, [a.id]);
   const add = async () => {
     if (!f.amount || saving) return; setErr(""); setSaving(true);
     try { await invoke({ mode: "balance_add", accountId: a.id, kind: f.kind, amount: Number(f.amount) }); setF({ ...f, amount: "" }); await load(); onChanged?.(); }

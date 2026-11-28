@@ -67,7 +67,6 @@ function vevent({ uid, stamp, summary, desc, date, time, durMin = 60, alarms = [
 export function buildIcs({ tasks = [], family = [], projects = [], customers = [], opts = {}, today = new Date() } = {}) {
   const o = { ...ICAL_DEFAULTS, ...opts };
   const t0 = new Date(today); t0.setHours(0, 0, 0, 0);
-  const todayIso = isoOf(t0);
   const stamp = utcStamp(Date.UTC(t0.getFullYear(), t0.getMonth(), t0.getDate())); // cố định trong ngày
   const from = new Date(t0); from.setDate(from.getDate() - 30);
   const to = new Date(t0); to.setDate(to.getDate() + 730);

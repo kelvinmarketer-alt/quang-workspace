@@ -107,7 +107,7 @@ export default function CoinLive({ active }) {
   const [fastUntil, setFastUntil] = useState(0);
   const fast = fastUntil > Date.now();
   useEffect(() => { if (!fast) return undefined; const t = setTimeout(() => setFastUntil(0), fastUntil - Date.now()); return () => clearTimeout(t); }, [fastUntil]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, fast ? 3000 : 20000); return () => clearInterval(t); }, [active, fast]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!active) return undefined; load(); const t = setInterval(() => { if (!document.hidden) load(); }, fast ? 3000 : 20000); return () => clearInterval(t); }, [active, fast]);  
   // Bảng có rồi mà ~20 giây chưa thấy bot báo trạng thái → hiện hướng dẫn kiểm tra (không quay vòng mãi)
   const hasSt = !!st;
   useEffect(() => { if (!active || hasSt) return undefined; const t = setTimeout(() => setSlow(true), 20000); return () => clearTimeout(t); }, [active, hasSt]);
@@ -320,7 +320,7 @@ export default function CoinLive({ active }) {
 }
 
 // ---------- Luật bot đang chạy + phiên bản, so với phiên Demo ----------
-const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
+const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null;  
 const RISK_KEYS = [["riskPct", "Rủi ro / lệnh", (v) => `${fmtNum(v, 2, 0)}%`], ["maxOpen", "Tối đa lệnh mở", (v) => `${v}`], ["dailyStopPct", "Dừng ngày", (v) => `-${fmtNum(v, 2, 0)}%`], ["maxLev", "Đòn bẩy tối đa", (v) => `${v}x`]];
 function RulesCard({ st, session, cmd }) {
   const [open, setOpen] = useFoldState(NS, "rules", false);
