@@ -37,6 +37,7 @@ describe("Bot thật · mục gập/mở", () => {
     // tóm tắt trên dòng tiêu đề
     expect(head("Lịch sử lệnh").textContent).toMatch(/1 lệnh/);
     expect(head("Nhật ký bot").textContent).toMatch(/1 mục/);
+    expect(head("Demo và Thật")).toBeTruthy();
   });
 
   it("bấm mở → hiện nội dung và nhớ cho lần sau; bấm lại → gập", async () => {

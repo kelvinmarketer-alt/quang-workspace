@@ -36,7 +36,7 @@ const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").re
 const Title = ({ icon: I, children, right }) => <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{I && <I size={13} className="text-indigo-500" />}{children}{right && <span className="ml-auto normal-case tracking-normal">{right}</span>}</div>;
 // 28/11 sếp: trang dài → các mục phụ gập sẵn (luôn mở: số dư, lệnh đang chạy, nút Dừng/Đóng hết); nhớ mục đang mở trên máy
 const NS = "qws_live_open";
-const evAt = (e) => (typeof e?.at === "number" ? (e.at > 1e9 ? dt(e.at) : "") : String(e?.at || "").slice(5, 16));
+const evAt = (e) => { if (typeof e?.at === "number") return e.at > 1e9 ? dt(e.at) : ""; const m = String(e?.at || "").match(/^\d{4}-(\d\d)-(\d\d)[ T](\d\d:\d\d)/); return m ? `${m[2]}/${m[1]} ${m[3]}` : String(e?.at || ""); };
 const Num = ({ label, v, sub, t = "text-slate-900" }) => <div className="min-w-0 bg-white px-3 py-2.5"><div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`break-words text-lg font-extrabold leading-snug tabular-nums ${t}`}>{v}</div>{sub && <div className="break-words text-[11px] leading-snug text-slate-400">{sub}</div>}</div>;
 
 // Bản bot đang chạy so với bản mới nhất đã phát hành trên web app (/bot-release/manifest.json) — thấy ngay ở đầu trang
@@ -291,7 +291,7 @@ export default function CoinLive({ active }) {
             {a.sw3 && a.stage === "open" && !(a.adopt && a.partDone) && <div className="mt-1 rounded-lg bg-indigo-50/70 px-2 py-1 text-[11px] leading-snug text-slate-600"><b>{a.partDone ? "2/3 còn lại" : "Sau khi chốt 1/3"}:</b> không đặt mức chốt lời cố định — cắt lỗ trên sàn tự dời theo {a.side === 1 ? "đáy" : "đỉnh"} 20 nến H4 sau mỗi nến đóng{a.partDone ? " (đã về hoà vốn trở lên)" : ""}, giữ tới khi chạm cắt lỗ.</div>}
           </div>
         ); })}</div> : <div className="py-3 text-center text-[12px] text-slate-400">Chưa có lệnh — bot đang chờ tín hiệu đạt đủ luật (trung bình vài lệnh mỗi tuần). Lệnh chờ / đang chạy sẽ hiện ngay tại đây.
-          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "BÁN" : "MUA"} · {viReason(lastT.reason) || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Kết quả lệnh thật" bên dưới</div>}
+          {lastT && <div className="mt-1.5 text-slate-500">Lệnh gần nhất: <b className="text-slate-700">{lastT.coin} {TF[lastT.tf] || lastT.tf}</b> {Number(lastT.side) === -1 ? "BÁN" : "MUA"} · {viReason(lastT.reason) || "đã đóng"} <b className={tone(Number(lastT.pnl))}>{fmtUsdSigned(Number(lastT.pnl))}</b> · đóng {dt(Number(lastT.exitAt))} — chi tiết ở "Lịch sử lệnh" bên dưới</div>}
         </div>}
       </Card>
 
@@ -564,7 +564,7 @@ function DemoVsLive({ session, list, others, events }) {
   return (
     <Card className="!p-3">
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800">
-        <GitCompare size={16} className="shrink-0 text-indigo-500" /> Demo và Thật
+        <GitCompare size={16} className="shrink-0 text-indigo-500" /> <span className="shrink-0 whitespace-nowrap">Demo và Thật</span>
         <span className="min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{res ? `${res.nBoth} tín hiệu trùng · chênh ${fmtR(res.diffR)}` : "so từng tín hiệu: R, trượt giá, lệnh bỏ lỡ"}</span>
         <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
       </button>
