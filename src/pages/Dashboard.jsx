@@ -124,7 +124,7 @@ export default function Dashboard() {
   ].slice(0, 6);
   // 28/11 (đo CLS lần mở mới trên 4G): số kênh chưa về → giữ sẵn chỗ 2 dòng "thương hiệu cần chú ý" bằng dòng chờ mờ,
   // số về thì thay đúng chỗ đó → trang không bị đẩy xuống (lần mở mới trên điện thoại không có bộ nhớ phiên)
-  const repWait = ownerUi && !rep.data?.at && !rep.data?.errors?.length;
+  const repWait = ownerUi && (!isOwner || (!rep.data?.at && !rep.data?.errors?.length)); // chờ xác nhận chủ app cũng giữ chỗ
   // 28/11: giữ đúng số dòng lần trước (nhớ trên máy) thay vì cố định 2 → số về không đẩy trang thêm
   const urgKey = `qws_dash_urg_${myEmail}`;
   const urgPrev = (() => { try { const v = parseInt(localStorage.getItem(urgKey), 10); return Number.isFinite(v) ? v : null; } catch { return null; } })();
