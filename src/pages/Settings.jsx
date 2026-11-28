@@ -148,7 +148,7 @@ export default function Settings() {
               <div className={`flex items-center gap-1 text-[11px] font-semibold ${syncStatus === "error" ? "text-rose-600" : syncStatus === "saving" ? "text-amber-600" : "text-emerald-600"}`}><Cloud size={12} /> {syncStatus === "error" ? "Chưa lưu được lên đám mây — app đang tự thử lại" : syncStatus === "saving" ? "Đang lưu lên đám mây…" : "Đã đồng bộ đám mây (Supabase)"}</div>
             </div>
           </div>
-          <button onClick={async () => { if (await ask("Đăng xuất khỏi máy này?")) signOut(); }} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600"><LogOut size={15} /> Đăng xuất</button>
+          <button onClick={async () => { if (await ask("Đăng xuất khỏi máy này?")) signOut(); }} className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-rose-600"><LogOut size={15} /> Đăng xuất</button>
         </div>
         <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mb-1 text-xs font-bold uppercase text-slate-400">Đổi mật khẩu</div>

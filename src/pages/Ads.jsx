@@ -223,7 +223,7 @@ function AlertsPanel({ tick }) {
   const [openG, setOpenG] = useState(null);
   const [err, setErr] = useState("");
   const [retry, setRetry] = useState(0);
-  useEffect(() => { setErr(""); invoke({ mode: "alerts_list" }).then((d) => setList(d.alerts || [])).catch((e) => setErr(e.message || String(e))); }, [tick, retry]);
+  useEffect(() => { setErr(""); invoke({ mode: "alerts_list" }).then((d) => setList(d?.alerts || [])).catch((e) => setErr(e.message || String(e))); }, [tick, retry]);
   // 10/11: gom theo tài khoản / thương hiệu (trước liệt kê rời 30+ dòng). Loại nặng (hết / sắp hết tiền, bị từ chối, lỗi) lên đầu.
   const groups = useMemo(() => {
     const m = new Map();
