@@ -5,20 +5,23 @@ export const hsRemembered = () => { try { return localStorage.getItem(HS_KEY) ==
 export const hsRemember = (on) => { try { localStorage.setItem(HS_KEY, on ? "1" : "0"); } catch { /* bỏ qua */ } };
 
 const Bar = ({ w }) => <span className={`inline-block h-[1em] animate-pulse rounded bg-slate-100 align-middle ${w}`} />;
+// Dùng ĐÚNG loại thẻ của dải thật (link / nút — không bấm được, không lấy được tiêu điểm) để mọi quy tắc CSS (vd ô bấm ≥ 24px
+// trên màn hình cảm ứng) áp y hệt → khung cao đúng bằng dải thật (đo 28/11: 56,8px máy tính, 122px điện thoại).
+const off = { tabIndex: -1, onClick: (e) => e.preventDefault() };
 export default function HealthStripGhost() {
   return (
     <div className="card flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3" aria-hidden="true">
-      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Sức khoẻ</span>
+      <a href="/suc-khoe" {...off} className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Sức khoẻ</a>
       <div className="flex min-w-[170px] flex-1 items-center gap-2">
         <span className="h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="text-[13px] font-bold"><Bar w="w-24" /></div>
-          <div className="mt-0.5 h-2 rounded-full bg-slate-100" />
+          <div className="sk-capsule mt-0.5 rounded-full bg-slate-100" style={{ height: 8 }} />
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-transparent"><span className="h-3.5 w-3.5" /> 1 ly</span>
+        <button type="button" disabled {...off} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-[12.5px] font-bold text-transparent"><span className="h-3.5 w-3.5" /> 1 ly</button>
       </div>
-      <span className="flex items-center gap-1.5 text-[13px] font-bold"><span className="h-4 w-4" /><Bar w="w-24" /></span>
-      <span className="flex items-center gap-1.5 text-[13px] font-bold"><span className="h-4 w-4" /><Bar w="w-16" /></span>
+      <a href="/suc-khoe" {...off} className="flex items-center gap-1.5 text-[13px] font-bold"><span className="h-4 w-4" /><Bar w="w-24" /></a>
+      <a href="/suc-khoe" {...off} className="flex items-center gap-1.5 text-[13px] font-bold"><span className="h-4 w-4" /><Bar w="w-16" /></a>
     </div>
   );
 }
