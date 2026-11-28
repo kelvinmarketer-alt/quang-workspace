@@ -2,12 +2,17 @@ import { Link } from "react-router-dom";
 import { Droplets, Flame, Dumbbell, Plus } from "lucide-react";
 import { useHealth, addWater } from "../../lib/healthStore.js";
 import "./fx.css";
+import HealthStripGhost, { hsRemembered, hsRemember } from "./HealthStripGhost.jsx";
+import { useEffect } from "react";
 import { waterTotal, waterGoal, mealTotals, dayTargets, dayKeyOf, dowOf, vnNum } from "../../lib/health.js";
 
 // Dải Sức khoẻ ở Tổng quan (chỉ chủ, chỉ hiện khi đã nhập chỉ số): nước + nút uống 1 ly, calo, buổi tập hôm nay
 export default function HealthStrip() {
   const { ready, rawCfg, cfg, days } = useHealth();
-  if (!ready || !rawCfg?.profile) return null;
+  const on = !!(ready && rawCfg?.profile);
+  useEffect(() => { if (ready) hsRemember(on); }, [ready, on]);
+  if (!ready) return hsRemembered() ? <HealthStripGhost /> : null; // chưa có số liệu: giữ chỗ nếu lần trước có dải
+  if (!on) return null;
   const key = dayKeyOf(Date.now()), day = days[key] || {};
   const drunk = waterTotal(day), goal = waterGoal(cfg, day), glass = cfg.water.glassMl || 250;
   const tot = mealTotals(day), tg = dayTargets(cfg);
