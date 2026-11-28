@@ -116,6 +116,10 @@ export default function Dashboard() {
     ...(isOwner && repUnsent > 0 && now.getDate() >= 25 ? [{ k: "rep", to: "/bao-cao", tone: "bg-amber-400", title: `Báo cáo tháng ${now.getMonth() + 1}: còn ${repUnsent} thương hiệu chưa gửi`, sub: "Mở Báo cáo → bấm thương hiệu để soạn & đánh dấu" }] : []),
     ...(isOwner ? attention.slice(0, 2).map((r) => ({ k: "b" + r.id, to: `/bao-cao/${r.id}`, tone: "bg-amber-400", title: `${r.name}: ${["ads", "web", "fp", "seo"].filter((k) => r.cells[k].t === "b").map((k) => ({ ads: "quảng cáo", web: "website", fp: "fanpage", seo: "SEO" })[k]).join(", ") || "nhiều việc trễ"} dưới chỉ tiêu`, sub: "Mở báo cáo thương hiệu" })) : []),
   ].slice(0, 6);
+  // 28/11 (đo CLS lần mở mới trên 4G): số kênh chưa về → giữ sẵn chỗ 2 dòng "thương hiệu cần chú ý" bằng dòng chờ mờ,
+  // số về thì thay đúng chỗ đó → trang không bị đẩy xuống (lần mở mới trên điện thoại không có bộ nhớ phiên)
+  const repWait = isOwner && !rep.data?.at && !rep.data?.errors?.length;
+  const holdN = repWait ? Math.max(0, Math.min(2, 6 - urgent.length)) : 0;
   const coinOk = perms.includes("coinDemo") && !!settings.paperBot;
 
   // 11/11: Tuỳ chỉnh ô nào hiện + thứ tự (chủ lưu trong settings theo email; tài khoản phụ giữ ở trình duyệt này)
@@ -148,7 +152,7 @@ export default function Dashboard() {
             <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Việc của hôm nay</span>
             <button onClick={() => setMore((v) => !v)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3.5 py-1.5 text-[12.5px] font-bold text-white hover:bg-slate-700">{more ? "Thu gọn" : "Xem chi tiết hôm nay"} <ChevronDown size={14} className={more ? "rotate-180" : ""} /></button>
           </div>
-          <h2 className="mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px]">{headline}</h2>
+          <h2 className={`mt-1 text-xl font-extrabold tracking-tight text-slate-900 sm:text-[22px] ${repWait ? "max-sm:min-h-14" : ""}`}>{headline}</h2>
           <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
             <MiniTile to="/khach-hang" icon={HandCoins} label="Cần thu" value={recvN ? formatShort(T.receivableTotal) : "0"} sub={recvN ? `${recvN} khoản` : "không có nợ tới hạn"} tone={recvN ? "text-rose-600" : "text-emerald-600"} />
             {tasksOn(settings, tasks)
@@ -159,10 +163,13 @@ export default function Dashboard() {
               ? <MiniTile to="/bao-cao" icon={Activity} label="Cần chú ý" value={rep.loading && !rep.data?.at ? "…" : rep.data?.errors?.length ? "?" : attention.length} sub={rep.data?.errors?.length ? "chưa lấy được số kênh — mở Báo cáo, Làm mới" : `${health.length} thương hiệu đang chạy`} tone={attention.length ? "text-rose-600" : "text-emerald-600"} />
               : <MiniTile to="/khach-hang" icon={Activity} label="Khách hàng" value={customerList.length} sub="đang quản lý" />}
           </div>
-          {urgent.length > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (
+          {urgent.length + holdN > 0 && <div className="mt-3 grid gap-1.5 sm:grid-cols-2">{urgent.map((u) => (
             <Link key={u.k} to={u.to} className="flex items-center gap-2.5 rounded-xl bg-white/70 px-3 py-2 ring-1 ring-slate-100 hover:ring-indigo-200">
               <span className={`h-2 w-2 shrink-0 rounded-full ${u.tone}`} /><div className="min-w-0"><div className="truncate text-[13px] font-semibold text-slate-800">{u.title}</div><div className="truncate text-[11.5px] text-slate-400">{u.sub}</div></div>
-            </Link>))}</div>}
+            </Link>))}{Array.from({ length: holdN }, (_, i) => (
+            <div key={"hold" + i} aria-hidden="true" className="flex items-center gap-2.5 rounded-xl bg-white/50 px-3 py-2 ring-1 ring-slate-100">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-slate-200" /><div className="min-w-0 flex-1"><div className="h-[19.5px] py-1"><div className="h-full w-2/3 animate-pulse rounded bg-slate-100" /></div><div className="h-[17px] py-1"><div className="h-full w-1/2 animate-pulse rounded bg-slate-100" /></div></div>
+            </div>))}</div>}
         </div>
       </div>
     ),

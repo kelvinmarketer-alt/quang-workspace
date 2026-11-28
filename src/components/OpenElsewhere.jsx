@@ -36,10 +36,11 @@ export default function OpenElsewhere() {
     return () => { supabase.removeChannel(ch); };
   }, [ownerId, myEmail, me]);
   if (!others.length || hidden) return null;
+  // 28/11: nổi ở góc dưới (không chen vào đầu trang → trang không bị đẩy xuống khi thông báo hiện sau vài giây)
   const here = devName();
   const names = [...new Set(others.map((o) => (o.dev === here ? `tab khác trên ${o.dev} này` : o.dev)))].join(", ");
   return (
-    <div role="status" className="mx-3 mt-2 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] leading-snug text-amber-900 sm:mx-5">
+    <div role="status" className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-40 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] leading-snug text-amber-900 shadow-lg sm:inset-x-auto sm:bottom-4 sm:right-4 sm:max-w-sm">
       <MonitorSmartphone size={16} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1"><b>App đang mở ở {names}.</b> Nên chỉ sửa ở một nơi; sửa cùng lúc app vẫn gộp được nhưng số có thể nhảy qua lại.</div>
       <button type="button" aria-label="Ẩn thông báo" title="Ẩn thông báo" onClick={() => setHidden(true)} className="shrink-0 rounded-lg p-1 text-amber-700 hover:bg-amber-100"><X size={14} /></button>
