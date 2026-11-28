@@ -140,10 +140,10 @@ export default function Settings() {
       {cur === "account" && <>
       <Card>
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white"><UserCircle size={22} /></div>
-            <div>
-              <div className="text-sm font-bold text-slate-800">{user?.email || "—"}</div>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-sky-500 text-white"><UserCircle size={22} /></div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-800" title={user?.email || ""}>{user?.email || "—"}</div>
               {/* 01/11: theo trạng thái lưu thật (trước luôn ghi "Đã đồng bộ" kể cả khi lỗi) */}
               <div className={`flex items-center gap-1 text-[11px] font-semibold ${syncStatus === "error" ? "text-rose-600" : syncStatus === "saving" ? "text-amber-600" : "text-emerald-600"}`}><Cloud size={12} /> {syncStatus === "error" ? "Chưa lưu được lên đám mây — app đang tự thử lại" : syncStatus === "saving" ? "Đang lưu lên đám mây…" : "Đã đồng bộ đám mây (Supabase)"}</div>
             </div>
