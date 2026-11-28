@@ -58,7 +58,12 @@ function Kpi({ label, value, delta, deltaGood = true, sub, spark, color }) {
 }
 
 export default function Dashboard() {
-  const { tasks, family, projects, customerList, isOwner, perms = [], settings = {}, members = [], myEmail = "", setSettings, setToast } = useData();
+  const { tasks, family, projects, customerList, isOwner, ownerId, perms = [], settings = {}, members = [], myEmail = "", setSettings, setToast } = useData();
+  // 28/11 (CLS): lúc mới mở, chủ app chưa xác định (ownerId đang tải) → đoán theo lần trước trên máy này, CHỈ để giữ chỗ giao diện
+  // (khung Sức khoẻ, dòng chờ báo cáo) cho trang khỏi nhảy. Quyền/dữ liệu vẫn theo isOwner thật.
+  const ownKey = `qws_dash_owner_${myEmail}`;
+  const ownerUi = ownerId ? isOwner : (() => { try { const v = localStorage.getItem(ownKey); return v == null ? isOwner : v === "1"; } catch { return isOwner; } })();
+  useEffect(() => { if (ownerId && myEmail) { try { localStorage.setItem(ownKey, isOwner ? "1" : "0"); } catch { /* máy chặn bộ nhớ */ } } }, [ownerId, isOwner, myEmail, ownKey]);
   const myName = members.find((m) => (m.email || "").toLowerCase() === (myEmail || "").toLowerCase())?.name;
   const nav = useNavigate();
   const T = useToday();
@@ -119,7 +124,7 @@ export default function Dashboard() {
   ].slice(0, 6);
   // 28/11 (đo CLS lần mở mới trên 4G): số kênh chưa về → giữ sẵn chỗ 2 dòng "thương hiệu cần chú ý" bằng dòng chờ mờ,
   // số về thì thay đúng chỗ đó → trang không bị đẩy xuống (lần mở mới trên điện thoại không có bộ nhớ phiên)
-  const repWait = isOwner && !rep.data?.at && !rep.data?.errors?.length;
+  const repWait = ownerUi && !rep.data?.at && !rep.data?.errors?.length;
   const holdN = repWait ? Math.max(0, Math.min(2, 6 - urgent.length)) : 0;
   const coinOk = perms.includes("coinDemo") && !!settings.paperBot;
 
@@ -267,13 +272,13 @@ export default function Dashboard() {
     <div className="bento space-y-4 p-3 sm:p-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{isOwner ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{ownerUi ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
           <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
         </div>
         <button type="button" onClick={() => setCustomizing(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50" title="Chọn ô hiện và thứ tự"><SlidersHorizontal size={14} /> Tuỳ chỉnh</button>
       </div>
 
-      {isOwner && <Suspense fallback={hsRemembered() ? <HealthStripGhost /> : null}><HealthStrip /></Suspense>}
+      {ownerUi && <Suspense fallback={hsRemembered() ? <HealthStripGhost /> : null}><HealthStrip /></Suspense>}
 
       {/* 11/11: một lưới chung — ô xếp theo thứ tự đã tuỳ chỉnh; "dense" để ô sau lấp chỗ trống cạnh cột Tuần này */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-flow-row-dense lg:grid-cols-12">
