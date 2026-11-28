@@ -6,20 +6,39 @@ import { ToastHost } from "./components/Toast.jsx";
 import TaskWatch from "./components/TaskWatch.jsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.jsx";
 // Trang khác tải KHI MỞ (chunk riêng) → mở app nhanh hơn; Tổng quan tải sẵn vì là trang đầu.
-const Dashboard = lazy(() => import("./pages/Dashboard.jsx"));
-const Customers = lazy(() => import("./pages/Customers.jsx"));
-const Ketoan = lazy(() => import("./pages/Ketoan.jsx"));
-const Tasks = lazy(() => import("./pages/Tasks.jsx"));
-const Coin = lazy(() => import("./pages/Coin.jsx"));
-const Ads = lazy(() => import("./pages/Ads.jsx"));
-const Vault = lazy(() => import("./pages/Vault.jsx"));
-const Resources = lazy(() => import("./pages/Resources.jsx"));
-const Settings = lazy(() => import("./pages/Settings.jsx"));
-const Web = lazy(() => import("./pages/Web.jsx"));
-const Fanpage = lazy(() => import("./pages/Fanpage.jsx"));
-const Reports = lazy(() => import("./pages/Reports.jsx"));
-const Library = lazy(() => import("./pages/Library.jsx"));
-const Health = lazy(() => import("./pages/Health.jsx"));
+const PAGE = {
+  Dashboard: () => import("./pages/Dashboard.jsx"),
+  Customers: () => import("./pages/Customers.jsx"),
+  Ketoan: () => import("./pages/Ketoan.jsx"),
+  Tasks: () => import("./pages/Tasks.jsx"),
+  Coin: () => import("./pages/Coin.jsx"),
+  Ads: () => import("./pages/Ads.jsx"),
+  Vault: () => import("./pages/Vault.jsx"),
+  Resources: () => import("./pages/Resources.jsx"),
+  Settings: () => import("./pages/Settings.jsx"),
+  Web: () => import("./pages/Web.jsx"),
+  Fanpage: () => import("./pages/Fanpage.jsx"),
+  Reports: () => import("./pages/Reports.jsx"),
+  Library: () => import("./pages/Library.jsx"),
+  Health: () => import("./pages/Health.jsx"),
+};
+const Dashboard = lazy(PAGE.Dashboard);
+const Customers = lazy(PAGE.Customers);
+const Ketoan = lazy(PAGE.Ketoan);
+const Tasks = lazy(PAGE.Tasks);
+const Coin = lazy(PAGE.Coin);
+const Ads = lazy(PAGE.Ads);
+const Vault = lazy(PAGE.Vault);
+const Resources = lazy(PAGE.Resources);
+const Settings = lazy(PAGE.Settings);
+const Web = lazy(PAGE.Web);
+const Fanpage = lazy(PAGE.Fanpage);
+const Reports = lazy(PAGE.Reports);
+const Library = lazy(PAGE.Library);
+const Health = lazy(PAGE.Health);
+// 28/11 (đo LCP 4G): tải SẴN mã trang đang mở ngay lúc app khởi động — song song với bước kiểm đăng nhập, không phải chờ xong mới tải
+const PATH_PAGE = { "": "Dashboard", "bao-cao": "Reports", "khach-hang": "Customers", "du-an": "Customers", "don-hang": "Customers", "ke-toan": "Ketoan", "chi-phi": "Ketoan", "quy": "Ketoan", "quy-thong-ke": "Ketoan", "tai-san": "Ketoan", "cong-viec": "Tasks", "lich": "Tasks", "coin": "Coin", "quang-cao": "Ads", "tai-nguyen": "Resources", "website": "Web", "fanpage": "Fanpage", "tai-khoan": "Vault", "kho-tai-lieu": "Library", "suc-khoe": "Health", "cai-dat": "Settings" };
+export function prefetchRoute(pathname = window.location.pathname) { const k = PATH_PAGE[pathname.split("/")[1] || ""]; if (k) PAGE[k]().catch(() => {}); }
 
 const PageLoading = () => (
   <div className="flex items-center justify-center py-24"><div className="h-7 w-7 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-500" /></div>

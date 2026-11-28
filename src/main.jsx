@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from "./lib/auth.jsx";
 import { officeOnlyAccount } from "./lib/officeOnly.js";
 import { DataProvider } from "./lib/store.jsx";
 import Login from "./pages/Login.jsx";
-import App from "./App.jsx";
+import App, { prefetchRoute } from "./App.jsx";
 import { sharedToken } from "./lib/sharedToken.js";
 const SharedDoc = lazy(() => import("./pages/SharedDoc.jsx")); // chỉ tải khi mở link chia sẻ
 // 28/11: phông Be Vietnam Pro đi kèm app (trước tải từ Google Fonts: chặn hiển thị ~0,6 giây trên 4G + chữ nhảy khi phông về)
@@ -19,6 +19,7 @@ import "./index.css";
 import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
 import { initMotion } from "./lib/motion.js";
 initMotion(); // hiệu ứng cuộn tới đâu chạy tới đó (thẻ, biểu đồ, thanh, bảng, số)
+if (!sharedToken()) prefetchRoute(); // tải sẵn mã trang đang mở, song song với kiểm đăng nhập
 
 function Gate() {
   const { loading, session } = useAuth();
