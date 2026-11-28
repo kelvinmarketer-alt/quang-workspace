@@ -60,7 +60,7 @@ export function LiveAds({ a, since, until, goalBase }) {
           const [st, tone] = statusOf(x.status);
           const v = x.spend > 0 && goalBase ? judgeGoal(x, goalBase[x.goal]) : null;
           const G = GOALS[x.goal] || GOALS.msg;
-          const M = ({ l, val, hi }) => <div className="min-w-0"><div className="text-[9.5px] font-bold uppercase tracking-wide text-slate-400">{l}</div><div className={`truncate text-[12.5px] font-extrabold tabular-nums ${hi || "text-slate-800"}`}>{val}</div></div>;
+          const M = ({ l, val, hi }) => <div className="min-w-0"><div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{l}</div><div className={`truncate text-[12.5px] font-extrabold tabular-nums ${hi || "text-slate-800"}`}>{val}</div></div>;
           return (
             <div key={x.id} className="rounded-xl border border-slate-100 p-2.5">
               <div className="flex gap-2.5">

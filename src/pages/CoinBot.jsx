@@ -483,7 +483,7 @@ export default function CoinBot({ active: visible = true }) {
               <div className="h-24">
                 <ResponsiveContainer>
                   <BarChart data={P.days}>
-                    <XAxis dataKey="d" tickFormatter={(d) => d.slice(8, 10) + "/" + d.slice(5, 7)} tick={{ fontSize: 9 }} minTickGap={20} />
+                    <XAxis dataKey="d" tickFormatter={(d) => d.slice(8, 10) + "/" + d.slice(5, 7)} tick={{ fontSize: 10 }} minTickGap={20} />
                     <Tooltip formatter={(v) => usd(v)} />
                     <ReferenceLine y={0} stroke="#cbd5e1" />
                     <Bar dataKey="v" name="Lãi/lỗ" isAnimationActive={false}>{P.days.map((d) => <Cell key={d.d} fill={d.v >= 0 ? "#10b981" : "#f43f5e"} />)}</Bar>

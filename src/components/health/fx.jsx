@@ -188,7 +188,7 @@ export function FastDial({ startMin, hours, nowMin, eating, size = 84 }) {
     <svg viewBox="0 0 100 100" width={size} height={size} role="img" aria-label={eating ? "Đang trong giờ ăn" : "Đang nhịn"}>
       <circle cx="50" cy="50" r="40" fill="none" stroke="rgb(139 92 246 / .25)" strokeWidth="10" />
       <path d={arc(startMin, end, 40)} fill="none" stroke="#10b981" strokeWidth="10" strokeLinecap="round" />
-      {[0, 6, 12, 18].map((h) => <text key={h} x={50 + 27 * Math.sin((h / 24) * 2 * Math.PI)} y={53.5 - 27 * Math.cos((h / 24) * 2 * Math.PI)} textAnchor="middle" fontSize="9" fontWeight="700" className="fill-slate-400">{h}</text>)}
+      {[0, 6, 12, 18].map((h) => <text key={h} x={50 + 27 * Math.sin((h / 24) * 2 * Math.PI)} y={53.5 - 27 * Math.cos((h / 24) * 2 * Math.PI)} textAnchor="middle" fontSize="10" fontWeight="700" className="fill-slate-400">{h}</text>)}
       <g className="sk-hand" style={{ transform: `rotate(${(nowMin / 1440) * 360}deg)` }}><line x1="50" y1="50" x2="50" y2="14" stroke={eating ? "#059669" : "#7c3aed"} strokeWidth="3" strokeLinecap="round" /></g>
       <circle cx="50" cy="50" r="5" fill={eating ? "#059669" : "#7c3aed"} />
     </svg>

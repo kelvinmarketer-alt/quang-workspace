@@ -174,12 +174,12 @@ export default function Dashboard() {
           <div key={d.toISOString()} className={`rounded-xl py-1.5 ${on ? "bg-slate-900 text-white" : "text-slate-500"}`}>
             <div className="text-[10.5px] font-semibold">{DOW[d.getDay()]}</div>
             <div className={`text-base font-extrabold tabular-nums ${on ? "text-white" : "text-slate-800"}`}>{d.getDate()}</div>
-            <div className={`text-[9.5px] ${l.special ? "font-bold text-amber-500" : on ? "text-slate-300" : "text-slate-400"}`}>{l.day}/{l.month}</div>
+            <div className={`text-[10px] ${l.special ? "font-bold text-amber-500" : on ? "text-slate-300" : "text-slate-400"}`}>{l.day}/{l.month}</div>
           </div>); })}</div>
         <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Sắp tới</div>
         <div className="space-y-1.5">{upcoming.map((e, i) => { const [tone, label] = TYPE_BADGE[e.type] || ["slate", ""]; const d = new Date(e.date); return (
           <div key={i} className={`${i > 1 && !phoneMore ? "hidden sm:flex" : "flex"} items-center gap-2.5 rounded-xl bg-slate-50 px-2.5 py-2`}>
-            <div className="w-9 shrink-0 text-center leading-none"><div className="text-[9.5px] font-bold text-slate-400">{MONTHS_VI[d.getMonth()]}</div><div className="text-[15px] font-extrabold text-slate-700">{d.getDate()}</div></div>
+            <div className="w-9 shrink-0 text-center leading-none"><div className="text-[10px] font-bold text-slate-400">{MONTHS_VI[d.getMonth()]}</div><div className="text-[15px] font-extrabold text-slate-700">{d.getDate()}</div></div>
             <div className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-800">{e.title}</div>
             {label && <Badge tone={tone}>{label}</Badge>}
           </div>); })}

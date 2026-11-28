@@ -86,7 +86,7 @@ export default function PnlCalendar({ title = "Lịch lãi/lỗ", items = [], so
           return (
             <button key={d} disabled={!x} onClick={() => setPick(pick === d ? null : d)} className={`flex min-h-[3.1rem] min-w-0 flex-col items-center justify-center rounded-lg px-0.5 py-1 ${bg} ${pick === d ? "ring-2 ring-indigo-400" : ""} ${d === today ? "outline outline-1 outline-slate-300" : ""}`}>
               <span className={`text-[12.5px] font-bold ${future ? "text-slate-300" : "text-slate-700"}`}>{Number(d.slice(8))}</span>
-              {x && <span className={`w-full truncate text-[9.5px] font-bold tabular-nums sm:text-[11px] ${tone(x.v)}`}>{compact(conv(x.v), cur)}</span>}
+              {x && <span className={`w-full truncate text-[10px] font-bold tabular-nums sm:text-[11px] ${tone(x.v)}`}>{compact(conv(x.v), cur)}</span>}
             </button>
           );
         })}

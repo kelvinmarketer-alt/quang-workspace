@@ -204,7 +204,7 @@ export function useSort() {
   return [st, toggle, () => setSt(null)];
 }
 export function SortTh({ label, on, dir, onClick, className = "" }) {
-  return <th className={className}><button type="button" onClick={onClick} className={`inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-slate-600 ${on ? "text-slate-700" : ""}`}>{label}{on && <span className="text-[8px]">{dir === "asc" ? "▲" : "▼"}</span>}</button></th>;
+  return <th className={className}><button type="button" onClick={onClick} className={`inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-slate-600 ${on ? "text-slate-700" : ""}`}>{label}{on && <span className="text-[10px]">{dir === "asc" ? "▲" : "▼"}</span>}</button></th>;
 }
 export const CsvButton = ({ onClick }) => (
   <button type="button" onClick={onClick} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700"><Download size={12} /> Xuất CSV</button>
