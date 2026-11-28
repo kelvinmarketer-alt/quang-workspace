@@ -4,7 +4,7 @@
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, Trash2, Eye, EyeOff, Pencil, Focus, Spline, Lock, Unlock, Copy, Undo2 } from "lucide-react";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, Trash2, Eye, EyeOff, Pencil, Focus, Spline, Lock, Unlock, Copy, Undo2, Hand, GripHorizontal } from "lucide-react";
 import { DrawLayer, makeDrawing, moveDrawing, stagePoint, setPoint, cloneDrawing, clicksOf, TOOLS, HINT, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
 import { DrawIcon } from "./DrawIcons.jsx";
 import { ask } from "./ConfirmDialog.jsx";
@@ -144,8 +144,39 @@ const emitHover = (msg) => HOVER.forEach((f) => f(msg));
 const VN = 7 * 3600;
 // draw (chỉ chủ): { items, tool, setTool, sel, setSel, onChange(items), tf, hidden } — hình vẽ của coin này
 const SCROLL = { vertTouchDrag: false, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true };
-export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]", wrapClass = "relative w-full", follow = false }) {
+// 28/11 (sếp: "trên điện thoại chưa tối ưu, không co kích thước chart như TradingView"):
+// - Kéo tự do (nút bàn tay): 1 ngón kéo cả ngang lẫn dọc như TradingView (không cuộn trang khi chạm chart). Nhớ trên máy; toàn màn hình mặc định bật.
+// - Thanh kéo dưới chart (resizeKey): kéo đổi chiều cao, bấm đúp về mặc định; nhớ riêng điện thoại / máy tính.
+// - Điện thoại: nhãn mức giá chỉ hiện số trên trục (bỏ chữ dài như "Vùng KL lớn ↑" đè lên nến).
+const PAN = { ...SCROLL, vertTouchDrag: true };
+const lsNum = (k) => { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : null; } catch { return null; } };
+const lsSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, String(v)); } catch { /* bỏ qua */ } };
+function usePhone() {
+  const q = "(max-width: 639px)";
+  const [on, setOn] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(q).matches);
+  useEffect(() => { const m = window.matchMedia?.(q); if (!m) return undefined; const f = () => setOn(m.matches); m.addEventListener?.("change", f); return () => m.removeEventListener?.("change", f); }, []);
+  return on;
+}
+export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, precision, fitKey, tags, compact, syncKey, draw, flow, className = "h-[300px] w-full sm:h-[420px]", wrapClass = "relative w-full", follow = false, resizeKey, panDefault = false }) {
   const box = useRef(null), api = useRef(null), fitted = useRef("");
+  const phone = usePhone();
+  const hKey = resizeKey ? `qws_chart_h_${resizeKey}_${phone ? "m" : "d"}` : null;
+  const [hUser, setHUser] = useState(() => (hKey ? lsNum(hKey) : null));
+  useEffect(() => { setHUser(hKey ? lsNum(hKey) : null); }, [hKey]);
+  const [panSaved, setPanSaved] = useState(() => { try { return localStorage.getItem("qws_chart_pan") === "1"; } catch { return false; } });
+  const pan = panDefault || panSaved;
+  const panRef = useRef(pan); panRef.current = pan;
+  const togglePan = () => { const v = !panSaved; setPanSaved(v); try { localStorage.setItem("qws_chart_pan", v ? "1" : "0"); } catch { /* bỏ qua */ } };
+  const startResize = (e) => {
+    if (!box.current) return;
+    e.preventDefault();
+    const y0 = e.clientY, h0 = box.current.getBoundingClientRect().height, max = Math.round(window.innerHeight * 0.92);
+    let last = h0;
+    const mv = (ev) => { last = Math.round(Math.min(max, Math.max(200, h0 + ev.clientY - y0))); if (box.current) box.current.style.height = `${last}px`; };
+    const upR = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", upR); window.removeEventListener("pointercancel", upR); setHUser(last); lsSet(hKey, last); };
+    window.addEventListener("pointermove", mv); window.addEventListener("pointerup", upR); window.addEventListener("pointercancel", upR);
+  };
+  const resetH = () => { setHUser(null); lsSet(hKey, null); if (box.current) box.current.style.height = ""; };
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
   const [edit, setEdit] = useState(null); // ô gõ chữ ghi chú: { id, x, y, value }
@@ -192,7 +223,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     const el = box.current;
     let pend = null, drag = null;
     const local = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-    const lock = (on) => { chart.applyOptions({ handleScroll: on ? false : SCROLL, handleScale: !on }); el.style.touchAction = on ? "none" : ""; }; // đang vẽ trên điện thoại: chạm không cuộn trang
+    const lock = (on) => { chart.applyOptions({ handleScroll: on ? false : panRef.current ? PAN : SCROLL, handleScale: !on }); el.style.touchAction = on || panRef.current ? "none" : ""; }; // đang vẽ trên điện thoại: chạm không cuộn trang
     a.lock = lock;
     const commit = (list) => drawRef.current?.onChange(list.slice(-MAX_PER_COIN));
     const onAxis = (x) => x > el.clientWidth - (chart.priceScale("right").width() || 0);
@@ -317,7 +348,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     const a = api.current; if (!a?.lock) return;
     a.lock(dTool !== "cursor" && !dHidden);
     if (dTool === "cursor") a.cancel?.();
-  }, [dTool, dHidden]);
+  }, [dTool, dHidden, pan]);
   const saveText = (v) => {
     const D = drawRef.current; if (!edit || !D) { setEdit(null); return; }
     const d = D.items.find((x) => x.id === edit.id);
@@ -378,13 +409,17 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   useEffect(() => {
     const a = api.current; if (!a) return;
     a.lines.forEach((pl) => a.candle.removePriceLine(pl));
-    a.lines = lines.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: ln.width || 1, lineStyle: ln.style ?? 2, axisLabelVisible: ln.axis !== false, title: ln.axis === false ? "" : ln.title }));
-  }, [linesSig]); // eslint-disable-line react-hooks/exhaustive-deps
+    a.lines = lines.map((ln) => a.candle.createPriceLine({ price: ln.price, color: ln.color, lineWidth: ln.width || 1, lineStyle: ln.style ?? 2, axisLabelVisible: ln.axis !== false, title: ln.axis === false || phone ? "" : ln.title }));
+  }, [linesSig, phone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={wrapClass}>
-      <div ref={box} className={className} />
-      <div className="absolute bottom-7 right-16 z-10 flex items-center gap-1">
+      <div ref={box} className={className} style={hUser ? { height: hUser, minHeight: 0 } : undefined} />
+      <div className={`absolute ${resizeKey ? "bottom-9" : "bottom-7"} right-16 z-10 flex items-center gap-1`}>
+        <button type="button" onClick={togglePan} disabled={panDefault} aria-pressed={pan} title={pan ? "Đang kéo tự do: 1 ngón kéo chart cả ngang lẫn dọc (không cuộn trang). Bấm để tắt" : "Bật kéo tự do: 1 ngón kéo chart cả ngang lẫn dọc như TradingView (đang tắt: vuốt dọc = cuộn trang)"} aria-label="Kéo tự do trên biểu đồ"
+          className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10.5px] font-bold shadow-sm sm:hidden ${pan ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 bg-white/90 text-slate-500"}`}>
+          <Hand size={12} />{pan ? "Kéo" : "Cuộn"}
+        </button>
         {onEma && (
           <button type="button" onClick={onEma} aria-pressed={!emaOff(tags)} title={emaOff(tags) ? "Đang ẩn 2 đường trung bình (EMA 20/50). Bấm để hiện" : "Bấm để ẩn 2 đường trung bình (EMA 20/50)"} aria-label="Ẩn hiện đường EMA"
             className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10.5px] font-bold shadow-sm ${emaOff(tags) ? "border-dashed border-slate-300 bg-white/90 text-slate-400 line-through" : "border-slate-200 bg-white/90 text-slate-600 hover:text-indigo-600"}`}>
@@ -396,6 +431,13 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
           <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
         </button>
       </div>
+      {resizeKey && (
+        <div role="separator" aria-orientation="horizontal" aria-label="Kéo để đổi chiều cao biểu đồ" title="Kéo lên / xuống để đổi chiều cao biểu đồ · bấm đúp về mặc định"
+          onPointerDown={startResize} onDoubleClick={resetH}
+          className="group flex h-5 cursor-ns-resize touch-none select-none items-center justify-center gap-1.5 text-slate-300 hover:text-indigo-500">
+          <GripHorizontal size={16} /><span className="text-[10px] font-bold opacity-0 group-hover:opacity-100 max-sm:opacity-100">{hUser ? `${hUser}px · bấm đúp về mặc định` : "kéo để đổi chiều cao"}</span>
+        </div>
+      )}
       {note && <div role="status" className={`pointer-events-none absolute left-1/2 top-2 z-20 -translate-x-1/2 rounded-lg px-2.5 py-1 text-[11.5px] font-bold shadow ${note.ok === false ? "bg-rose-600 text-white" : "bg-amber-500 text-white"}`}>{note.text}</div>}
       {flow?.badge && <div className="pointer-events-none absolute left-1.5 top-1.5 z-10 flex flex-wrap gap-1 text-[10.5px] font-bold tabular-nums">{flow.badge}</div>}
       {edit && (
