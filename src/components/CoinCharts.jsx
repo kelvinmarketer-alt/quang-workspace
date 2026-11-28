@@ -465,7 +465,7 @@ export function DrawBar({ tool, setTool, sel, setSel, hidden, setHidden, items, 
   const hint = tool === "cursor" ? null : HINT[tool] || HINT[clicksOf(tool)];
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-1 text-[11px] font-bold">
-      <div className="flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="toolbar" aria-label="Công cụ vẽ">
+      <div className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5 max-sm:w-[calc(100%-4.5rem)]" role="toolbar" aria-label="Công cụ vẽ">
         {TOOLS.map(([k, label, keys]) => (
           <button key={k} onClick={() => { setTool(tool === k && k !== "cursor" ? "cursor" : k); if (hidden && k !== "cursor") setHidden(false); }} title={`${label}${keys ? ` (${keys})` : ""}`} aria-label={label} aria-pressed={tool === k}
             className={`${btn} h-7 w-7 ${tool === k ? "bg-white text-indigo-600 shadow" : "text-slate-500 hover:bg-white/60 hover:text-slate-800"}`}>

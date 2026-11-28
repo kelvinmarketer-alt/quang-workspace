@@ -784,7 +784,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                 {tick?.sym === sym && <span className={`text-[13px] font-bold ${tick.chg >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{sPct(tick.chg)} <span className="font-semibold text-slate-400">{fx ? "hôm nay" : "24h"}</span></span>}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="no-scrollbar flex items-center gap-1.5 max-sm:-mx-3 max-sm:w-[calc(100%+1.5rem)] max-sm:overflow-x-auto max-sm:px-3 sm:flex-wrap [&>*]:shrink-0">
               <LayoutPicker n={grid.n} setN={setLayout} />
               {!multi && (<>
                 <div className="flex rounded-lg bg-slate-100 p-0.5">

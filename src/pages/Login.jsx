@@ -62,13 +62,13 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-sky-50 p-4">
+    <main className="grid min-h-screen place-items-center bg-gradient-to-br from-slate-50 via-indigo-50/40 to-sky-50 p-4">
       <ThemeFloat />
       <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl shadow-indigo-500/10">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
           <img src="/logo.png" alt="2BKIN" className="h-20 w-20 object-contain" />
           <h1 className="text-xl font-extrabold text-slate-900">Quang Workspace</h1>
-          <p className="text-sm text-slate-400">{mode === "in" ? "Đăng nhập để vào không gian làm việc" : "Tạo tài khoản mới"}</p>
+          <p className="text-sm text-slate-500">{mode === "in" ? "Đăng nhập để vào không gian làm việc" : "Tạo tài khoản mới"}</p>
         </div>
 
         <form onSubmit={submit} className="space-y-3">
@@ -93,7 +93,7 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-4 text-center text-xs text-slate-400">
+        <div className="mt-4 text-center text-xs text-slate-500">
           {/* 01/11: tắt tự đăng ký (lỗ hổng: người lạ tự tạo tài khoản) — chủ tạo tài khoản cho thành viên */}
           {mode === "in" ? (
             <>Chưa có tài khoản? Nhờ chủ workspace tạo tài khoản cho bạn.</>
@@ -102,6 +102,6 @@ export default function Login() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

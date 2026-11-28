@@ -1,0 +1,3 @@
+# App nội bộ — không cho máy tìm kiếm thu thập
+User-agent: *
+Disallow: /
