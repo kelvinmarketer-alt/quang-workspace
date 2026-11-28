@@ -26,7 +26,7 @@ function compact(v, cur) {
 }
 const full = (v, cur) => (cur === "VND" ? `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.round(Math.abs(v)).toLocaleString("vi-VN")} đ` : fmtUsdSigned(v));
 
-export default function PnlCalendar({ title = "Lịch lãi/lỗ", items = [], sources = [], base = "USD", rate = 26000, unit = "lệnh", word = "Lãi/lỗ", note, empty = "Chưa có lệnh nào đóng." }) {
+export default function PnlCalendar({ title = "Lịch lãi/lỗ", items = [], sources = [], base = "USD", rate = 26000, unit = "lệnh", word = "Lãi/lỗ", note, empty = "Chưa có lệnh nào đóng.", bare = false }) {
   const [range, setRange] = useState(30), [from, setFrom] = useState(() => addDays(todayKey(), -29)), [to, setTo] = useState(todayKey);
   const [cur, setCur] = useState(base), [month, setMonth] = useState(() => todayKey().slice(0, 7)), [pick, setPick] = useState(null);
   const conv = (v) => (cur === base ? v : cur === "VND" ? v * rate : v / rate);
@@ -50,8 +50,9 @@ export default function PnlCalendar({ title = "Lịch lãi/lỗ", items = [], so
   const picked = pick ? rows.filter((x) => x.d === pick).sort((a, b) => (b.t || 0) - (a.t || 0)) : [];
   const chip = (on) => `rounded-lg px-2.5 py-1.5 text-[12px] font-bold ${on ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"}`;
 
+  const Wrap = bare ? "div" : Card; // bare = nằm trong mục gập/mở có sẵn khung (Bot thật)
   return (
-    <Card className="!p-3 sm:!p-4">
+    <Wrap {...(bare ? {} : { className: "!p-3 sm:!p-4" })}>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><CalendarDays size={13} className="text-indigo-500" />{title}</span>
         <span className="ml-auto flex gap-0.5 rounded-lg bg-slate-100 p-0.5">{["USD", "VND"].map((c) => <button key={c} onClick={() => setCur(c)} className={`rounded-md px-2 py-1 text-[11px] font-bold ${cur === c ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>{c === "USD" ? "$" : "VNĐ"}</button>)}</span>
@@ -115,6 +116,6 @@ export default function PnlCalendar({ title = "Lịch lãi/lỗ", items = [], so
         ))}</div>
       )}
       {note && <div className="mt-2 text-[11px] leading-snug text-slate-400">{note}</div>}
-    </Card>
+    </Wrap>
   );
 }

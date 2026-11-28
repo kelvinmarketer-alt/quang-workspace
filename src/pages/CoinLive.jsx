@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { sw3Targets, SW3_TP } from "../lib/sw3Targets.js";
 import { Term } from "../components/Term.jsx";
 import { viReason } from "../lib/glossary.js";
-import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown, XOctagon, ListChecks, BarChart3, GitCompare, BellRing } from "lucide-react";
+import { Radio, Square, Play, Loader2, RefreshCw, ShieldAlert, Server, Settings2, KeyRound, ChevronDown, XOctagon, ListChecks, BarChart3, GitCompare, BellRing, History, ScrollText, CalendarDays } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card, Badge } from "../components/ui.jsx";
 import { supabase } from "../lib/supabase.js";
@@ -18,6 +18,7 @@ import { normLive, liveSummary, outcomeOf, compareDemoLive, cfgDiff, rulesText, 
 import { monthOf, monthLabel, MONTH_TARGET, demoResult, demoCacheGet, mergeCmd, useUsdVnd } from "../lib/coinShared.js";
 import InfoTip from "../components/InfoTip.jsx";
 import PnlCalendar from "../components/PnlCalendar.jsx";
+import { Fold, useFoldState } from "../components/Fold.jsx";
 
 // Tab "Bot thật": theo dõi bot giao dịch chạy nền trên máy bàn ở nhà (repo qws-live-bot) qua bảng Supabase qws_live_bot
 // — bot ghi dòng 'status' mỗi ~30 giây + dòng 'history' (lịch sử lệnh thật); app ghi dòng 'command' (LUÔN gộp với dữ liệu cũ)
@@ -33,6 +34,9 @@ const EV = { placed: "Đặt lệnh chờ", open: "Khớp lệnh", close: "Đón
 const MODE_L = { testnet: "Testnet", live: "Tiền thật" };
 const plain = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toUpperCase().replace(/\s+/g, " ").trim();
 const Title = ({ icon: I, children, right }) => <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">{I && <I size={13} className="text-indigo-500" />}{children}{right && <span className="ml-auto normal-case tracking-normal">{right}</span>}</div>;
+// 28/11 sếp: trang dài → các mục phụ gập sẵn (luôn mở: số dư, lệnh đang chạy, nút Dừng/Đóng hết); nhớ mục đang mở trên máy
+const NS = "qws_live_open";
+const evAt = (e) => (typeof e?.at === "number" ? (e.at > 1e9 ? dt(e.at) : "") : String(e?.at || "").slice(5, 16));
 const Num = ({ label, v, sub, t = "text-slate-900" }) => <div className="min-w-0 bg-white px-3 py-2.5"><div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</div><div className={`break-words text-lg font-extrabold leading-snug tabular-nums ${t}`}>{v}</div>{sub && <div className="break-words text-[11px] leading-snug text-slate-400">{sub}</div>}</div>;
 
 // Bản bot đang chạy so với bản mới nhất đã phát hành trên web app (/bot-release/manifest.json) — thấy ngay ở đầu trang
@@ -293,8 +297,7 @@ export default function CoinLive({ active }) {
 
       <LiveResults hist={hist} st={st} session={session} />
 
-      <Card className="!p-3">
-        <Title>Nhật ký bot</Title>
+      <Fold ns={NS} id="log" icon={ScrollText} title="Nhật ký bot" summary={(st.events || []).length ? `${st.events.length} mục · mới nhất ${evAt(st.events[0])} ${EV[st.events[0].ev] || st.events[0].ev || ""}` : "chưa có hoạt động"}>
         {(st.events || []).length ? <div className="divide-y divide-slate-100">{st.events.map((e, i) => (
           <div key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-[12px]">
             <span className="w-[118px] shrink-0 tabular-nums text-[11px] text-slate-400">{typeof e.at === "number" ? (e.at > 1e9 ? dt(e.at) : "") : e.at}</span>
@@ -306,7 +309,7 @@ export default function CoinLive({ active }) {
             {(e.why || e.msg) && <span className="text-slate-400">{e.why || e.msg}</span>}
           </div>
         ))}</div> : <div className="py-4 text-center text-[12px] text-slate-400">Chưa có hoạt động.</div>}
-      </Card>
+      </Fold>
 
       <div className="flex items-start gap-2 px-3 text-[11px] leading-snug text-slate-400 sm:px-0">
         <ShieldAlert size={13} className="mt-0.5 shrink-0" />
@@ -320,7 +323,7 @@ export default function CoinLive({ active }) {
 const APP_RULES_HASH = typeof __RULES_HASH__ !== "undefined" ? __RULES_HASH__ : null; // eslint-disable-line no-undef
 const RISK_KEYS = [["riskPct", "Rủi ro / lệnh", (v) => `${fmtNum(v, 2, 0)}%`], ["maxOpen", "Tối đa lệnh mở", (v) => `${v}`], ["dailyStopPct", "Dừng ngày", (v) => `-${fmtNum(v, 2, 0)}%`], ["maxLev", "Đòn bẩy tối đa", (v) => `${v}x`]];
 function RulesCard({ st, session, cmd }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useFoldState(NS, "rules", false);
   const sum = st.cfgSummary, v = st.version || {};
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
   const diffs = useMemo(() => {
@@ -337,7 +340,7 @@ function RulesCard({ st, session, cmd }) {
   const when = (t) => { if (!t) return null; const d = new Date(t); return isNaN(d) ? null : d.toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
   return (
     <Card className="!p-3" id="bot-rules">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-1.5 text-left"><Title icon={ListChecks}>Luật & phiên bản bot</Title><span className={`ml-auto mb-1.5 shrink-0 text-[11.5px] font-bold ${allOk ? "text-emerald-700" : "text-amber-700"}`}>{allOk ? <>✓ Đồng bộ<span className="hidden sm:inline"> hoàn toàn với Demo</span></> : "⚠ Cần xem"}</span><ChevronDown size={15} className={`mb-1.5 shrink-0 text-slate-400 transition ${open || !allOk ? "rotate-180" : ""}`} /></button>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open || !allOk} className="flex w-full items-center gap-1.5 text-left"><Title icon={ListChecks}>Luật & phiên bản bot</Title><span className={`ml-auto mb-1.5 shrink-0 text-[11.5px] font-bold ${allOk ? "text-emerald-700" : "text-amber-700"}`}>{allOk ? <>✓ Đồng bộ<span className="hidden sm:inline"> hoàn toàn với Demo</span></> : "⚠ Cần xem"}</span><ChevronDown size={15} className={`mb-1.5 shrink-0 text-slate-400 transition ${open || !allOk ? "rotate-180" : ""}`} /></button>
       {(open || !allOk) && <>
       {sum ? <div className="text-[12.5px] leading-snug text-slate-700"><b>Bot đang chạy luật:</b> {rulesText(sum)}</div>
         : <div className="rounded-lg bg-amber-50 p-2 text-[12px] font-bold text-amber-800">Bot trên máy bàn là bản cũ, chưa báo bộ luật đang chạy. {st.version?.source === "site" ? "Bấm Cài đặt bot → Tự cập nhật → “Cập nhật ngay”." : "Bản này chưa biết tự cập nhật từ web: tải ZIP mới MỘT LẦN (repo qws-live-bot → Code → Download ZIP), bấm go-cai-dat.bat, giải nén chép đè (giữ .env và thư mục data), bấm cai-dat-windows.bat — từ đó bot tự cập nhật, không cần token."}</div>}
@@ -442,9 +445,11 @@ function LiveResults({ hist, st, session }) {
     </Card>
   );
   const pf = S.pf == null ? "—" : S.pf === Infinity ? "∞" : fmtNum(S.pf, 2);
+  const modeRow = <div className="mb-2 flex items-center gap-2 text-[11px] font-bold text-slate-400">Chế độ<span className="ml-auto">{modeTabs}</span></div>;
+  const lastExit = list.filter((t) => t.exitAt != null).reduce((a, t) => (!a || t.exitAt > a.exitAt ? t : a), null);
   return (<>
-    <Card className="!p-3">
-      <Title icon={BarChart3} right={modeTabs}>Kết quả lệnh thật</Title>
+    <Fold ns={NS} id="results" icon={BarChart3} title="Kết quả lệnh thật" summary={`${MODE_L[m] || m} · ${S.n} lệnh · ${fmtUsdSigned(S.total)} · thắng ${fmtPct(S.winRate, 0)}`}>
+      {modeRow}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-100 sm:grid-cols-4">
         <Num label="Lãi / lỗ tổng" v={fmtUsdSigned(S.total)} sub={`TB ${fmtUsdSigned(S.expUsd)}/lệnh`} t={tone(S.total)} />
         <Num label="Tỉ lệ thắng" v={fmtPct(S.winRate)} sub={`${S.wins} thắng · ${S.losses} thua · ${S.bes} hoà`} />
@@ -470,13 +475,15 @@ function LiveResults({ hist, st, session }) {
           </ResponsiveContainer>
         </div>
       ) : <div className="py-4 text-center text-[12px] text-slate-400">Cần ít nhất 1 lệnh đã đóng để vẽ đường vốn.</div>}
-    </Card>
+    </Fold>
 
-    <PnlCalendar key={m} title={`Lịch lãi/lỗ · ${MODE_L[m] || m}`} items={calItems} sources={calSources} rate={vnd} note={`Tính theo ngày ĐÓNG lệnh (giờ VN), đã trừ phí.${modes.length > 1 ? " Đổi Tiền thật / Testnet ở nút phía trên." : ""} Bấm 1 ngày để xem từng lệnh.`} />
+    <Fold ns={NS} id="cal" icon={CalendarDays} title="Lịch lãi/lỗ" summary={`${MODE_L[m] || m} · theo ngày đóng lệnh`}>
+    <PnlCalendar bare key={m} title={`Lịch lãi/lỗ · ${MODE_L[m] || m}`} items={calItems} sources={calSources} rate={vnd} note={`Tính theo ngày ĐÓNG lệnh (giờ VN), đã trừ phí.${modes.length > 1 ? " Đổi Tiền thật / Testnet ở nút phía trên." : ""} Bấm 1 ngày để xem từng lệnh.`} />
+    </Fold>
 
-    <Card className="!p-3">
+    <Fold ns={NS} id="history" icon={History} title="Lịch sử lệnh" summary={`${MODE_L[m] || m} · ${list.length} lệnh${lastExit ? ` · gần nhất ${dt(lastExit.exitAt)}` : ""}`}>
+      {modeRow}
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">Lịch sử lệnh thật</span>
         {[["all", "Tất cả"], ["win", "Thắng"], ["loss", "Thua"]].map(([k, l]) => <button key={k} onClick={() => { setFilter(k); setShowN(30); }} className={chip(filter === k)}>{l}</button>)}
         <span className="ml-auto text-[11px] text-slate-400">{shown.length} lệnh</span>
       </div>
@@ -519,7 +526,7 @@ function LiveResults({ hist, st, session }) {
       ))}</div>
       {!shown.length && <div className="py-6 text-center text-[12px] text-slate-400">Không có lệnh nào khớp bộ lọc.</div>}
       {shown.length > showN && <button onClick={() => setShowN((n) => n + 100)} className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-slate-50 py-2 text-[12px] font-bold text-slate-500"><ChevronDown size={14} /> Xem thêm ({shown.length - showN})</button>}
-    </Card>
+    </Fold>
 
     <DemoVsLive session={session} list={list} others={all.filter((t) => t.mode !== m)} events={st.events} />
   </>);
@@ -528,7 +535,8 @@ function LiveResults({ hist, st, session }) {
 // ---------- Demo và Thật: chạy lại phiên Demo (Web Worker) rồi khớp từng tín hiệu theo id — CHỈ tính khi mở ra ----------
 const KIND = { both: ["Khớp cả hai", "emerald"], demo: ["Demo có – bot không vào", "amber"], live: ["Bot có – demo không", "violet"] };
 function DemoVsLive({ session, list, others, events }) {
-  const [open, setOpen] = useState(false), [res, setRes] = useState(null), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [kind, setKind] = useState("all"), [showN, setShowN] = useState(40);
+  const [open, setOpen] = useFoldState(NS, "demo", false);
+  const [res, setRes] = useState(null), [busy, setBusy] = useState(""), [err, setErr] = useState(""), [kind, setKind] = useState("all"), [showN, setShowN] = useState(40);
   const runId = useRef(0);
   const sig = list.map((t) => `${t.id}:${t.exitAt || ""}`).join("|");
   const run = async () => {
@@ -555,7 +563,7 @@ function DemoVsLive({ session, list, others, events }) {
   const slipTxt = (v) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : ""}${fmtNum(v, 3)}%`);
   return (
     <Card className="!p-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800">
         <GitCompare size={16} className="shrink-0 text-indigo-500" /> Demo và Thật
         <span className="min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{res ? `${res.nBoth} tín hiệu trùng · chênh ${fmtR(res.diffR)}` : "so từng tín hiệu: R, trượt giá, lệnh bỏ lỡ"}</span>
         <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
@@ -614,9 +622,10 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   const logBot = useBotLog();
   const demo = useMemo(() => (session ? cfgOf(session) : null), [session]);
   const c0 = { mode: st.mode || "testnet", riskPct: 2, capitalCap: 0, maxOpen: 3, dailyStopPct: 6, maxLev: 20, notify: true, followDemo: true, ...(st.settings || {}), ...(cmd?.config || {}) };
-  const [open, setOpen] = useState(defaultOpen);
+  const [saved0, setSaved0] = useFoldState(NS, "settings", false), [force, setForce] = useState(!!defaultOpen);
+  const open = saved0 || force, setOpen = (fn) => { const n = fn(open); if (!n) setForce(false); setSaved0(n); };
   const [f, setF] = useState(c0), [k, setK] = useState({ key: "", secret: "" }), [confirm, setConfirm] = useState(""), [msg, setMsg] = useState(null), [saving, setSaving] = useState(false);
-  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+  useEffect(() => { if (defaultOpen) setForce(true); }, [defaultOpen]);
   const live = f.mode === "live", saved = cmd?.keys?.[f.mode], stale = saved && saved.pubFp && st.pubFp && saved.pubFp !== st.pubFp;
   const inp = "w-full rounded-lg border border-slate-200 px-2.5 py-2 text-sm";
   const follow = f.followDemo !== false && !!demo; // rủi ro & giới hạn lấy theo phiên Demo → 2 bên luôn đồng bộ
@@ -674,7 +683,7 @@ function BotSettings({ st, cmd, session, onSaved, defaultOpen, liveChecks = [] }
   };
   return (
     <Card className="!p-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800"><Settings2 size={16} className="shrink-0 text-indigo-500" /> <span className="shrink-0 whitespace-nowrap">Cài đặt bot</span><span className="ml-1 min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{(cmd?.config?.mode || st.mode) === "live" ? "Tiền thật" : "Testnet"} · rủi ro {fmtNum(c0.riskPct, 2, 0)}%{Object.keys(st.cfgSummary?.riskBySetup || {}).length ? ` (${Object.entries(st.cfgSummary?.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, c0.riskPct), 2, 0)}%`).join(", ")})` : ""} · {cmd?.keys?.[c0.mode] ? `khoá …${cmd.keys[c0.mode].last4}` : st.keySrc === ".env" && st.mode === c0.mode ? "đang dùng khoá trong máy bot (.env)" : "chưa có khoá"}{c0.notify === false ? " · tắt thông báo" : ""}</span><ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 text-left text-[13.5px] font-extrabold text-slate-800"><Settings2 size={16} className="shrink-0 text-indigo-500" /> <span className="shrink-0 whitespace-nowrap">Cài đặt bot</span><span className="ml-1 min-w-0 truncate text-[11.5px] font-semibold text-slate-400">{(cmd?.config?.mode || st.mode) === "live" ? "Tiền thật" : "Testnet"} · rủi ro {fmtNum(c0.riskPct, 2, 0)}%{Object.keys(st.cfgSummary?.riskBySetup || {}).length ? ` (${Object.entries(st.cfgSummary?.riskBySetup).map(([k, x]) => `${k} ${fmtNum(Math.min(x, c0.riskPct), 2, 0)}%`).join(", ")})` : ""} · {cmd?.keys?.[c0.mode] ? `khoá …${cmd.keys[c0.mode].last4}` : st.keySrc === ".env" && st.mode === c0.mode ? "đang dùng khoá trong máy bot (.env)" : "chưa có khoá"}{c0.notify === false ? " · tắt thông báo" : ""}</span><ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} /></button>
       {open && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
