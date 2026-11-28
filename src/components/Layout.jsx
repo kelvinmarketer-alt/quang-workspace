@@ -19,7 +19,6 @@ import { generateCalendarEvents } from "../lib/events.js";
 import { pushSupported, permission, enablePush, isSubscribed } from "../lib/push.js";
 import { todayISO, fmtDateVI } from "../lib/format.js";
 import { OFFICE_URL, officeHref, useOfficeNotifications, useOfficeAccess, officeAgo } from "../lib/office.js";
-import { peekReportData, buildBrandRows, missingMeasure } from "../lib/reports.js";
 import { MeasureList } from "./MeasureAlerts.jsx";
 
 function PushPrompt() {
@@ -404,11 +403,18 @@ function Notifications() {
     return [...overdue, ...dueToday, ...ev.map((e) => ({ ...e, to: "/lich" }))].slice(0, 8);
   }, [tasks, family, today]);
   // Job chưa gắn đo lường — dùng số kênh đang nhớ (Tổng quan / Báo cáo đã tải), không tải thêm
+  // 28/11: module báo cáo (webData/fbPages/adsDiagnose) tải SAU khi app mở (hoặc ngay khi mở chuông) — nhẹ lần mở đầu
+  const [rep, setRep] = useState(null);
+  useEffect(() => {
+    if (!isOwner || rep) return undefined;
+    const t = setTimeout(() => { import("../lib/reports.js").then(setRep).catch(() => {}); }, open ? 0 : 4000);
+    return () => clearTimeout(t);
+  }, [isOwner, open, rep]);
   const miss = useMemo(() => {
-    const data = isOwner ? peekReportData() : null;
+    const data = isOwner && rep ? rep.peekReportData() : null;
     if (!data?.at) return [];
-    return missingMeasure(buildBrandRows({ customers: customerList, projects, tasks, data, links: settings.reportLinks || {} }), data, settings.measureSkip || {});
-  }, [isOwner, open, customerList, projects, tasks, settings.reportLinks, settings.measureSkip]); // eslint-disable-line react-hooks/exhaustive-deps
+    return rep.missingMeasure(rep.buildBrandRows({ customers: customerList, projects, tasks, data, links: settings.reportLinks || {} }), data, settings.measureSkip || {});
+  }, [rep, isOwner, open, customerList, projects, tasks, settings.reportLinks, settings.measureSkip]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div ref={ref} className="relative">

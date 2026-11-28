@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Loader2 } from "lucide-react";
@@ -7,7 +7,8 @@ import { officeOnlyAccount } from "./lib/officeOnly.js";
 import { DataProvider } from "./lib/store.jsx";
 import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
-import SharedDoc, { sharedToken } from "./pages/SharedDoc.jsx";
+import { sharedToken } from "./lib/sharedToken.js";
+const SharedDoc = lazy(() => import("./pages/SharedDoc.jsx")); // chỉ tải khi mở link chia sẻ
 import "./index.css";
 import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
 import { initMotion } from "./lib/motion.js";
@@ -44,7 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       {/* 09/11: link chia sẻ tài liệu /xem/<mã> — mở KHÔNG cần đăng nhập, không nạp dữ liệu workspace */}
-      {sharedToken() ? <SharedDoc token={sharedToken()} /> : (
+      {sharedToken() ? <Suspense fallback={<div className="grid min-h-screen place-items-center text-slate-400"><Loader2 className="animate-spin" /></div>}><SharedDoc token={sharedToken()} /></Suspense> : (
         <AuthProvider>
           <Gate />
         </AuthProvider>

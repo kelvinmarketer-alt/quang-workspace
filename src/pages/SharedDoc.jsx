@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, FileText, Link2, AlertTriangle } from "lucide-react";
 import { libSharedGet, frameDoc, KINDS, fmtDate } from "../lib/library.js";
 
-export const sharedToken = (pathname = window.location.pathname) => { const m = /^\/xem\/([A-Za-z0-9_-]{32,128})\/?$/.exec(pathname); return m ? m[1] : null; };
+export { sharedToken } from "../lib/sharedToken.js";
 
 export default function SharedDoc({ token }) {
   const [state, setState] = useState("loading"), [doc, setDoc] = useState(null);
