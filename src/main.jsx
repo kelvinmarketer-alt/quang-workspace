@@ -9,6 +9,12 @@ import Login from "./pages/Login.jsx";
 import App from "./App.jsx";
 import { sharedToken } from "./lib/sharedToken.js";
 const SharedDoc = lazy(() => import("./pages/SharedDoc.jsx")); // chỉ tải khi mở link chia sẻ
+// 28/11: phông Be Vietnam Pro đi kèm app (trước tải từ Google Fonts: chặn hiển thị ~0,6 giây trên 4G + chữ nhảy khi phông về)
+import "@fontsource/be-vietnam-pro/400.css";
+import "@fontsource/be-vietnam-pro/500.css";
+import "@fontsource/be-vietnam-pro/600.css";
+import "@fontsource/be-vietnam-pro/700.css";
+import "@fontsource/be-vietnam-pro/800.css";
 import "./index.css";
 import "./lib/theme.js"; // áp giao diện sáng/tối đã lưu ngay khi mở app
 import { initMotion } from "./lib/motion.js";

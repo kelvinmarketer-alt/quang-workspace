@@ -1,7 +1,18 @@
 @import "tailwindcss";
 
+/* 28/11: phông dự phòng chỉnh đúng kích thước Be Vietnam Pro (đo bằng fontTools: rộng TB 0,520em so với Arial 0,474em)
+   → lúc phông thật chưa tải xong, chữ chiếm đúng chỗ, phông về không làm trang nhảy (CLS) */
+@font-face {
+  font-family: "Be Vietnam Pro Fallback";
+  src: local("Arial"), local("Helvetica Neue"), local("Roboto");
+  size-adjust: 109.65%;
+  ascent-override: 91.2%;
+  descent-override: 24.17%;
+  line-gap-override: 0%;
+}
+
 @theme {
-  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Be Vietnam Pro", "Be Vietnam Pro Fallback", ui-sans-serif, system-ui, sans-serif;
   --color-ink-50: #f6f7fb;
  
 }
