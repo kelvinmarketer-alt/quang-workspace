@@ -391,7 +391,7 @@ export default function CoinMarket({ active = true, venue = "coin" }) {
                     <button key={k} onClick={() => setTf(k)} className={`rounded-md px-2 py-1 text-[12px] font-extrabold sm:px-2.5 ${tf === k ? "bg-white text-amber-600 shadow" : "text-slate-500"}`}>{TF[k].label}</button>
                   ))}
                 </div>
-                <button onClick={() => load(false)} disabled={loading} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
+                <button onClick={() => load(false)} disabled={loading} aria-label="Tải lại giá" className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
               </>)}
               {full && isOwner && <AlertPop store={alertStore} pair={pairOf(sym)} market={usedMkt} price={price} fx={fx} />}
               <button onClick={() => setReplay((r) => !r)} aria-pressed={replay} title={replay ? "Thoát backtest, về biểu đồ thường" : "Backtest: tua lại nến tự trade, hoặc chạy luật tự động"}

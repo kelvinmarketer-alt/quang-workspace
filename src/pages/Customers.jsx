@@ -239,7 +239,7 @@ export default function Customers() {
         </div>
         {/* MOBILE: dropdown lọc */}
         <div className="mt-2.5 grid grid-cols-2 gap-2 sm:hidden">
-          <select value={typeF} onChange={(e) => setTypeF(e.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
+          <select value={typeF} onChange={(e) => setTypeF(e.target.value)} aria-label="Lọc khách theo trạng thái" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold">
             {[["all", "Đang hợp tác", counts.active], ["off", "Off", counts.off]].map(([v, l, n]) => (
               <option key={v} value={v}>{l}{n > 0 ? ` (${n})` : ""}</option>
             ))}
@@ -285,7 +285,7 @@ export default function Customers() {
                 {/* DÒNG KHÁCH */}
                 <div className="flex items-center gap-2 p-3 sm:gap-3 sm:p-3.5">
                   {canW && (
-                    <button onClick={() => toggle(c.id)} className="-m-1.5 shrink-0 p-1.5 text-slate-300 hover:text-indigo-600 sm:m-0 sm:p-0">
+                    <button onClick={() => toggle(c.id)} aria-label={isPicked ? `Bỏ chọn ${c.name}` : `Chọn ${c.name}`} aria-pressed={isPicked} className="-m-1.5 shrink-0 p-1.5 text-slate-300 hover:text-indigo-600 sm:m-0 sm:p-0">
                       {isPicked ? <CheckSquare size={20} className="text-indigo-600" /> : <Square size={20} />}
                     </button>
                   )}

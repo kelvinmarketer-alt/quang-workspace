@@ -145,7 +145,7 @@ function KetoanReport() {
       <Card>
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {/* MOBILE: dropdown kỳ */}
-          <select value={preset} onChange={(e) => setPreset(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 sm:hidden">
+          <select value={preset} onChange={(e) => setPreset(e.target.value)} aria-label="Khoảng thời gian" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 sm:hidden">
             {PRESETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
           {/* DESKTOP: chips kỳ */}

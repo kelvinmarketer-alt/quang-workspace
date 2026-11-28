@@ -208,9 +208,9 @@ export default function Calendar() {
               <div className="text-xs text-slate-400">Âm lịch năm {canChiYear(selLunar.year)}</div>
             </div>
             <div className="flex items-center gap-1">
-              <button onClick={() => setCursor(new Date(year, month - 1, 1))} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronLeft size={18} /></button>
+              <button onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Tháng trước" className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronLeft size={18} /></button>
               <button onClick={() => { const n = new Date(); setCursor(new Date(n.getFullYear(), n.getMonth(), 1)); setSelected(isoOf(n)); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50">Hôm nay</button>
-              <button onClick={() => setCursor(new Date(year, month + 1, 1))} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronRight size={18} /></button>
+              <button onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Tháng sau" className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"><ChevronRight size={18} /></button>
             </div>
           </div>
 
@@ -300,7 +300,7 @@ export default function Calendar() {
         )}
 
         {/* MOBILE: dropdown danh mục */}
-        <select value={catF} onChange={(e) => setCatF(e.target.value)} className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
+        <select value={catF} onChange={(e) => setCatF(e.target.value)} aria-label="Lọc theo loại sự kiện" className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold sm:hidden">
           {[["all", "Tất cả"], ...CAT_KEYS.map((k) => [k, CATS[k].label])].map(([v, l]) => (
             <option key={v} value={v}>{l}</option>
           ))}
@@ -321,7 +321,7 @@ export default function Calendar() {
             const isPicked = picked.has(r.id);
             return (
               <div key={r.id + r.date} className={`flex items-start gap-2.5 rounded-xl border p-3 ${r.done ? "opacity-60" : ""} ${isPicked ? "border-indigo-300 bg-indigo-50/60" : r.willRemind && !r.done ? "border-amber-200 bg-amber-50/50" : "border-slate-100"}`}>
-                {fam && <button onClick={() => toggle(r.id)} className="-m-1.5 grid h-9 w-9 shrink-0 place-items-center text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>}
+                {fam && <button onClick={() => toggle(r.id)} aria-label={isPicked ? "Bỏ chọn" : "Chọn"} aria-pressed={isPicked} className="-m-1.5 grid h-9 w-9 shrink-0 place-items-center text-slate-300">{isPicked ? <CheckSquare size={18} className="text-indigo-600" /> : <Square size={18} />}</button>}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${KIND_COLOR[r.kind] || "bg-slate-400"}`} />
@@ -363,9 +363,9 @@ export default function Calendar() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
-                <th className="w-8 px-2 py-2">{selectable.length > 0 && <button onClick={toggleAll}>{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-300" />}</button>}</th>
+                <th className="w-8 px-2 py-2">{selectable.length > 0 ? <button onClick={toggleAll} aria-label={allPicked ? "Bỏ chọn tất cả" : "Chọn tất cả"} aria-pressed={allPicked}>{allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} className="text-slate-300" />}</button> : <span className="sr-only">Chọn</span>}</th>
                 <th className="px-2 py-2">Còn</th><th className="px-2 py-2">Sự kiện</th><th className="px-2 py-2">Loại</th>
-                <th className="px-2 py-2">Dương</th><th className="px-2 py-2">Âm</th><th className="px-2 py-2">Năm</th><th className="px-2 py-2">Ghi chú</th><th className="px-2 py-2"></th>
+                <th className="px-2 py-2">Dương</th><th className="px-2 py-2">Âm</th><th className="px-2 py-2">Năm</th><th className="px-2 py-2">Ghi chú</th><th className="px-2 py-2"><span className="sr-only">Thao tác</span></th>
               </tr>
             </thead>
             <tbody>
@@ -376,7 +376,7 @@ export default function Calendar() {
                 const isPicked = picked.has(r.id);
                 return (
                   <tr key={r.id + r.date} className={`group border-b border-slate-50 ${r.done ? "opacity-55" : ""} ${isPicked ? "bg-indigo-50/70" : r.willRemind && !r.done ? "bg-amber-50/60" : ""}`}>
-                    <td className="px-2 py-2.5">{fam && (<button onClick={() => toggle(r.id)} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button>)}</td>
+                    <td className="px-2 py-2.5">{fam && (<button onClick={() => toggle(r.id)} aria-label={isPicked ? "Bỏ chọn" : "Chọn"} aria-pressed={isPicked} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button>)}</td>
                     <td className="whitespace-nowrap px-2 py-2.5">
                       {r.done ? (
                         <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-2 py-1 text-xs font-extrabold text-emerald-700"><CircleCheck size={12} /> Hoàn thành</span>

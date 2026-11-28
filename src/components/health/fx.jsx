@@ -64,7 +64,7 @@ export function WaterTank({ ml, goal, height = 230, width = 118 }) {
 export function CupRow({ count, total }) {
   const n = Math.min(14, Math.max(total, count));
   return (
-    <div className="flex flex-wrap gap-1" aria-label={`Đã uống ${count} trên ${total} ly`}>
+    <div className="flex flex-wrap gap-1" role="img" aria-label={`Đã uống ${count} trên ${total} ly`}>
       {Array.from({ length: n }, (_, i) => {
         const on = i < count;
         return (

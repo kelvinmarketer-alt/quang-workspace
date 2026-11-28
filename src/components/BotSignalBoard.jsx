@@ -2,7 +2,8 @@
 // trạng thái ĐÃ KHỚP (lệnh đang mở) / CHỜ KHỚP (lệnh chờ đặt ở giá) / CHỜ TÍN HIỆU, giá vào · SL · TP, lực mua/bán 20 nến.
 // Dữ liệu = đúng kết quả Demo (cùng luật bot thật), chỉ thêm lực mua/bán lấy từ nến Binance Futures.
 import { useEffect, useState } from "react";
-import { Radar, Zap, Clock, CheckCircle2 } from "lucide-react";
+import { Radar, Zap, Clock, CheckCircle2, ChevronDown } from "lucide-react";
+import { useFoldState } from "./Fold.jsx";
 import { Card } from "./ui.jsx";
 import { TFS, SETUPS, symOf } from "../lib/paperBot.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
@@ -42,6 +43,8 @@ const STATUS = {
 export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, active, stopped, onPick, sel }) {
   const streams = cfg.coins.flatMap((c) => cfg.tfs.map((t) => [c, t]));
   const [press, setPress] = useState({});
+  // 28/11 (sếp "hoàn hảo 10/10"): cặp CHƯA CÓ LỆNH gom vào 1 dòng gập (38 thẻ ≈ 4.500px trên điện thoại); cặp có lệnh luôn hiện
+  const [showIdle, setShowIdle] = useFoldState("qws_bot_open", "idle", false);
   const sig = streams.map(([c, t]) => c + t).join(",");
   useEffect(() => {
     if (!active) return undefined;
@@ -73,6 +76,58 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
   const planOf = (r) => (r.open ? { side: r.open.side, entry: r.open.entry, sl: r.open.curSl ?? r.open.sl, tp: r.open.tp, setup: r.open.setup, rr: r.open.uR, at: r.open.entryAt }
     : r.pend ? { side: r.pend.side, entry: r.pend.lim, sl: r.pend.sl, tp: r.pend.market || r.pend.limEntry ? r.pend.tp : r.pend.lim + r.pend.side * (r.pend.rr ?? cfg.rr) * Math.abs(r.pend.lim - r.pend.sl), setup: r.pend.setup, at: r.pend.signalAt, until: r.pend.limEntry ? r.pend.fallbackAt : r.pend.until, market: r.pend.market, limEntry: r.pend.limEntry } : null); // SW3: vào lệnh thị trường, TP = mức chốt 1/3 · D: lệnh chờ, tới fallbackAt chưa khớp thì vào thị trường
 
+  const renderGroup = (g) => {
+      const [gLabel, gCls] = STATUS[Object.keys(order).find((k) => order[k] === g.best)];
+      return (
+        <div key={g.coin} className="grid gap-2 px-3 py-2.5 md:grid-cols-[130px_1fr_150px] md:gap-3">
+          <div className="flex items-center gap-2 md:block">
+            <b className="text-[14px] text-slate-800">{g.coin}/USDT</b>
+            <div className="md:mt-1"><span className={`rounded border px-1.5 text-[10px] font-extrabold ${gCls}`}>{gLabel}</span></div>
+            {g.price != null && <div className="ml-auto text-[12px] font-bold tabular-nums text-slate-600 md:ml-0 md:mt-1">{fmtPx(g.price)}</div>}
+          </div>
+          <div className="space-y-1.5">
+            {g.items.map((r) => {
+              const [label, cls] = STATUS[r.st], plan = planOf(r), on = sel && sel.coin === r.coin && sel.tf === r.tf, t = r.open, q = r.pend;
+              const box = !plan ? "border-slate-200" : plan.side === 1 ? "border-emerald-300/70" : "border-rose-300/70";
+              return (
+                <button key={r.tf} onClick={() => onPick?.(r.coin, r.tf)} className={`block w-full rounded-xl border bg-slate-50/50 px-2.5 py-1.5 text-left transition hover:bg-slate-100 ${box} ${on ? "ring-2 ring-cyan-400/50" : ""}`}>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px]">
+                    <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
+                    {plan ? <>
+                      <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "MUA" : "BÁN"}</span>
+                      <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{plan.market && !t ? "VÀO NGAY" : label}</span>
+                      <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
+                      {t && <b className={`ml-auto tabular-nums sm:hidden ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b>}
+                      <span className="flex w-full flex-wrap gap-x-3 tabular-nums sm:ml-auto sm:w-auto">
+                        <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
+                        <span className="text-rose-600">Cắt lỗ <b>{fmtPx(plan.sl)}</b></span>
+                        <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} <b>{fmtPx(plan.tp)}</b></span>
+                        {t ? <b className={`hidden sm:inline ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
+                      </span>
+                    </> : <>
+                      <Clock size={12} className="shrink-0 text-slate-400" />
+                      <span className="min-w-0 flex-1 truncate text-slate-500"><span className="font-semibold text-slate-600">Chờ nến H4 đạt đủ điều kiện</span>{r.last ? <> · lệnh gần nhất đã đóng: {dt(r.last.entryAt)} {r.last.side === 1 ? "MUA" : "BÁN"} → <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{viReason(r.last.reason)} {rr(r.last.r)}</b></> : ""}</span>
+                      <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh từ đầu phiên</span>
+                    </>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-col justify-center gap-1">
+            {g.items.map((r) => { const p = press[`${r.coin}|${r.tf}`]; return (
+              <div key={r.tf}>
+                {p == null ? <div className="text-right text-[11px] text-slate-400">…</div> : <>
+                  <div className="flex justify-between text-[10.5px] font-bold tabular-nums"><span className="text-emerald-600">{TFS[r.tf].label} · {p}% Mua</span><span className="text-rose-600">{100 - p}%</span></div>
+                  <div className="mt-0.5 flex h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="bg-emerald-500" style={{ width: `${p}%` }} /><div className="bg-rose-500" style={{ width: `${100 - p}%` }} /></div>
+                </>}
+              </div>
+            ); })}
+          </div>
+        </div>
+      );
+  };
+
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2">
@@ -85,57 +140,11 @@ export default function BotSignalBoard({ cfg, trades, pending = [], live, ver, a
         <span>Cặp</span><span>Lệnh theo luật bot (từng khung)</span><span className="text-right">Lực mua / bán 20 nến</span>
       </div>
       <div className="divide-y divide-slate-100">
-        {groups.map((g) => {
-          const [gLabel, gCls] = STATUS[Object.keys(order).find((k) => order[k] === g.best)];
-          return (
-            <div key={g.coin} className="grid gap-2 px-3 py-2.5 md:grid-cols-[130px_1fr_150px] md:gap-3">
-              <div className="flex items-center gap-2 md:block">
-                <b className="text-[14px] text-slate-800">{g.coin}/USDT</b>
-                <div className="md:mt-1"><span className={`rounded border px-1.5 text-[10px] font-extrabold ${gCls}`}>{gLabel}</span></div>
-                {g.price != null && <div className="ml-auto text-[12px] font-bold tabular-nums text-slate-600 md:ml-0 md:mt-1">{fmtPx(g.price)}</div>}
-              </div>
-              <div className="space-y-1.5">
-                {g.items.map((r) => {
-                  const [label, cls] = STATUS[r.st], plan = planOf(r), on = sel && sel.coin === r.coin && sel.tf === r.tf, t = r.open, q = r.pend;
-                  const box = !plan ? "border-slate-200" : plan.side === 1 ? "border-emerald-300/70" : "border-rose-300/70";
-                  return (
-                    <button key={r.tf} onClick={() => onPick?.(r.coin, r.tf)} className={`block w-full rounded-xl border bg-slate-50/50 px-2.5 py-1.5 text-left transition hover:bg-slate-100 ${box} ${on ? "ring-2 ring-cyan-400/50" : ""}`}>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px]">
-                        <span className="rounded border border-slate-200 px-1 text-[10px] font-bold text-slate-500">{TFS[r.tf].label}</span>
-                        {plan ? <>
-                          <span className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${plan.side === 1 ? "bg-emerald-500/15 text-emerald-600" : "bg-rose-500/15 text-rose-600"}`}><Zap size={11} />{plan.side === 1 ? "MUA" : "BÁN"}</span>
-                          <span className={`rounded border px-1.5 text-[10px] font-extrabold ${cls}`}>{plan.market && !t ? "VÀO NGAY" : label}</span>
-                          <span className="text-slate-500">{setupName(plan.setup)} · {ago(plan.at)}{q?.blocked && !t ? ` · không đặt: ${q.blocked}` : ""}</span>
-                          {t && <b className={`ml-auto tabular-nums sm:hidden ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b>}
-                          <span className="flex w-full flex-wrap gap-x-3 tabular-nums sm:ml-auto sm:w-auto">
-                            <span>{t ? "vào" : plan.market ? "vào thị trường ~" : "chờ"} <b className="text-amber-500">{fmtPx(plan.entry)}</b>{!t && !plan.market && r.price != null && <span className="text-slate-400"> · còn cách {fmtNum(Math.max(0, ((r.price - plan.entry) / plan.entry) * 100 * plan.side), 2, 2)}%</span>}</span>
-                            <span className="text-rose-600">Cắt lỗ <b>{fmtPx(plan.sl)}</b></span>
-                            <span className="text-emerald-600">{plan.setup === "SW3" ? "Chốt 1/3" : "Chốt lời"} <b>{fmtPx(plan.tp)}</b></span>
-                            {t ? <b className={`hidden sm:inline ${plan.rr >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{rr(plan.rr)}</b> : plan.until ? <span className="text-slate-400">{plan.market ? "hết hạn" : plan.limEntry ? "chưa khớp thì vào thị trường lúc" : "huỷ"} {dt(plan.until).slice(6)}</span> : null}
-                          </span>
-                        </> : <>
-                          <Clock size={12} className="shrink-0 text-slate-400" />
-                          <span className="min-w-0 flex-1 truncate text-slate-500"><span className="font-semibold text-slate-600">Chờ nến H4 đạt đủ điều kiện</span>{r.last ? <> · lệnh gần nhất đã đóng: {dt(r.last.entryAt)} {r.last.side === 1 ? "MUA" : "BÁN"} → <b className={r.last.r >= 0 ? "text-emerald-600" : "text-rose-600"}>{viReason(r.last.reason)} {rr(r.last.r)}</b></> : ""}</span>
-                          <span className="shrink-0 text-[10.5px] text-slate-400">{r.n} lệnh từ đầu phiên</span>
-                        </>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex flex-col justify-center gap-1">
-                {g.items.map((r) => { const p = press[`${r.coin}|${r.tf}`]; return (
-                  <div key={r.tf}>
-                    {p == null ? <div className="text-right text-[11px] text-slate-400">…</div> : <>
-                      <div className="flex justify-between text-[10.5px] font-bold tabular-nums"><span className="text-emerald-600">{TFS[r.tf].label} · {p}% Mua</span><span className="text-rose-600">{100 - p}%</span></div>
-                      <div className="mt-0.5 flex h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="bg-emerald-500" style={{ width: `${p}%` }} /><div className="bg-rose-500" style={{ width: `${100 - p}%` }} /></div>
-                    </>}
-                  </div>
-                ); })}
-              </div>
-            </div>
-          );
-        })}
+        {(() => { const busy = groups.filter((g) => g.best < order.wait), idle = groups.filter((g) => g.best >= order.wait); return <>
+        {busy.map(renderGroup)}
+        {idle.length > 0 && <button type="button" onClick={() => setShowIdle(!showIdle)} aria-expanded={showIdle} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12.5px] font-bold text-slate-600 hover:bg-slate-50"><Clock size={14} className="shrink-0 text-slate-400" /><span className="min-w-0 flex-1">{idle.length} cặp chưa có lệnh <span className="font-semibold text-slate-400">· {idle.slice(0, 6).map((g) => g.coin).join(", ")}{idle.length > 6 ? "…" : ""}</span></span><ChevronDown size={15} className={`shrink-0 text-slate-400 transition ${showIdle ? "rotate-180" : ""}`} /></button>}
+        {showIdle && idle.map(renderGroup)}
+        </>; })()}
       </div>
       <div className="flex items-center gap-1.5 border-t border-slate-100 px-3 py-1.5 text-[10.5px] text-slate-400"><CheckCircle2 size={11} /> Cùng luật với bot thật (v{cfg.cfgVer}). Lực mua/bán = khối lượng khớp chủ động 20 nến gần nhất trên Binance Futures.</div>
     </Card>

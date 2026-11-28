@@ -225,7 +225,7 @@ export default function CoinLive({ active }) {
             : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Mất liên lạc · báo lần cuối {ago(st.at)}</span>}
           {stopped && <Badge tone="rose">ĐANG DỪNG</Badge>}
           <VerBadge st={st} />
-          {syncOk != null && <a href="#bot-rules" className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${syncOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{syncOk ? "✓ Đồng bộ Demo" : "⚠ Khác Demo — xem"}</a>}
+          {syncOk != null && <a href="#bot-rules" className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${syncOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{syncOk ? "✓ Đồng bộ Demo" : "⚠ Khác Demo — xem"}</a>}
           <div className="ml-auto flex flex-wrap justify-end gap-1.5">
             <button onClick={load} aria-label="Làm mới" className="rounded-lg border border-slate-200 p-2 text-slate-500"><RefreshCw size={14} /></button>
             {!isOwner ? <span className="rounded-lg bg-sky-50 px-2.5 py-2 text-[12px] font-bold text-sky-700">Chỉ xem</span> : stopped ? <button disabled={busy} onClick={() => setStop(false)} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-50"><Play size={13} /> Chạy lại</button>

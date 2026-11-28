@@ -425,7 +425,7 @@ export default function Resources() {
           <Search size={16} className="shrink-0 text-slate-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Tìm tên / link / tài khoản / ghi chú / khách…" className="w-full text-sm outline-none" />
         </div>
-        <select value={custF} onChange={(e) => setCustF(e.target.value)} className="max-w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
+        <select value={custF} onChange={(e) => setCustF(e.target.value)} aria-label="Lọc theo khách" className="max-w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
           <option value="all">Tất cả khách</option>
           {activeCustomers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>

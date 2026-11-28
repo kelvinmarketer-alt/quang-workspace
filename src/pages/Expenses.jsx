@@ -198,7 +198,7 @@ export default function Expenses() {
     const off = e.active === false, isPicked = picked.has(e.id);
     return (
       <tr key={e.id} className={`group border-b border-slate-50 ${isPicked ? "bg-indigo-50/70" : ""} ${off ? "opacity-50" : ""}`}>
-        <td className="px-2 py-2.5"><button onClick={() => toggle(e.id)} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button></td>
+        <td className="px-2 py-2.5"><button onClick={() => toggle(e.id)} aria-label={isPicked ? `Bỏ chọn ${e.name || "khoản chi"}` : `Chọn ${e.name || "khoản chi"}`} aria-pressed={isPicked} className="text-slate-300 hover:text-indigo-600">{isPicked ? <CheckSquare size={16} className="text-indigo-600" /> : <Square size={16} />}</button></td>
         <td className="px-2 py-2.5"><div className="font-semibold text-slate-800">{e.name}{off && <span className="ml-1.5 text-[10px] font-bold text-slate-400">(dừng)</span>}</div>{e.note && <div className="text-[11px] text-slate-400">{e.note}</div>}</td>
         <td className="px-2 py-2.5"><Badge tone={CAT_TONE[e.category] || "slate"}>{e.category}</Badge></td>
         <td className="px-2 py-2.5 text-right font-bold text-slate-800">{formatShort(e.amount)}</td>
@@ -278,8 +278,8 @@ export default function Expenses() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[11px] font-bold uppercase text-slate-400">
-                    <th className="w-8 px-2 py-2"></th><th className="px-2 py-2">Khoản chi</th><th className="px-2 py-2">Danh mục</th>
-                    <th className="px-2 py-2 text-right">Số tiền</th><th className="px-2 py-2 text-right">~ / tháng</th><th className="px-2 py-2">Từ</th><th className="px-2 py-2"></th>
+                    <th className="w-8 px-2 py-2"><span className="sr-only">Chọn</span></th><th className="px-2 py-2">Khoản chi</th><th className="px-2 py-2">Danh mục</th>
+                    <th className="px-2 py-2 text-right">Số tiền</th><th className="px-2 py-2 text-right">~ / tháng</th><th className="px-2 py-2">Từ</th><th className="px-2 py-2"><span className="sr-only">Thao tác</span></th>
                   </tr>
                 </thead>
                 <tbody>

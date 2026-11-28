@@ -269,12 +269,12 @@ function LinkEditor({ data }) {
   const unl = (data?.web || []).filter((s) => !L.web[s.domain] && links.web?.[s.domain] !== "none").length + (data?.pages || []).filter((p) => !L.page[p.id] && links.page?.[p.id] !== "none").length; // "Không thuộc khách nào" = đã xử lý
   return (
     <div className="card no-print p-0">
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 p-4 text-left">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 p-4 text-left">
         <Link2 size={16} className="text-indigo-500" /><span className="text-sm font-extrabold text-slate-800">Gắn website & fanpage với khách</span>
         {unl > 0 && <span className="shrink-0 whitespace-nowrap"><Badge tone="amber">{unl} chưa gắn</Badge></span>}
-        <span className="ml-auto hidden text-[12px] text-slate-400 sm:inline">tài khoản quảng cáo gắn ở <Link onClick={(e) => e.stopPropagation()} to="/cai-dat" className="font-bold text-indigo-600">Cài đặt</Link></span>
-        <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition sm:ml-0 ${open ? "rotate-180" : ""}`} />
+        <ChevronDown size={16} className={`ml-auto shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
       </button>
+      <div className="-mt-2 hidden px-4 pb-2 text-[12px] text-slate-400 sm:block">Tài khoản quảng cáo gắn ở <Link to="/cai-dat" className="font-bold text-indigo-600">Cài đặt</Link></div>
       {open && (
         <div className="grid gap-4 border-t border-slate-100 p-4 md:grid-cols-2">
           <div><div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Website</div>

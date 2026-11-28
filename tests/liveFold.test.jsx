@@ -62,3 +62,16 @@ describe("Bot thật · mục gập/mở", () => {
     expect(head("Cài đặt bot").getAttribute("aria-expanded")).toBe("false");
   });
 });
+
+describe("Demo · bảng tín hiệu: cặp chưa có lệnh gom 1 dòng gập", () => {
+  it("không hiện từng thẻ CHƯA CÓ LỆNH; bấm dòng gom → hiện, nhớ lựa chọn", async () => {
+    const B = (await import("../src/components/BotSignalBoard.jsx")).default;
+    await act(async () => { render(<B cfg={{ coins: ["BTC", "ETH", "SOL"], tfs: ["4h"], cfgVer: 1 }} trades={[]} pending={[]} active={false} />); });
+    const btn = screen.getByRole("button", { name: /3 cặp chưa có lệnh/ });
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("BTC/USDT")).toBeNull();
+    await act(async () => { fireEvent.click(btn); });
+    expect(screen.getByText("BTC/USDT")).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("qws_bot_open"))).toMatchObject({ idle: true });
+  });
+});

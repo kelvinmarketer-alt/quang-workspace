@@ -52,6 +52,14 @@ body { text-wrap-style: pretty; }
 h1, h2, h3, h4, h5, h6, p, li, label, button, span, small, b, strong, div, dt, dd, th, td { text-wrap-style: balance; }
 pre, code, textarea { text-wrap-style: auto; }
 
+/* 28/11 (sếp "hoàn hảo 10/10"): chuẩn WCAG 2.2 — trên màn hình cảm ứng mọi nút / ô chọn / link đứng riêng tối thiểu 24×24px
+   cho dễ bấm bằng ngón tay. Link nằm trong câu (display inline) không bị ảnh hưởng. Để ở lớp base: class riêng vẫn ghi đè được. */
+@layer base {
+  @media (pointer: coarse) {
+    button, [role="button"], select, summary, a[href] { min-height: 24px; min-width: 24px; }
+  }
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
