@@ -3,12 +3,13 @@
 // - Lưới: mỗi ô coin + khung riêng, tự tải nến mỗi phút; ô đang chọn điều khiển AI / chỉ báo bên dưới.
 // - Rê chuột ở 1 ô → các ô CÙNG COIN hiện vạch giá đó (đồng bộ qua bus trong module, không vẽ lại React).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
-import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, Trash2, Eye, EyeOff, Pencil, Focus, Spline, Lock, Unlock, Copy, Undo2, Hand, GripHorizontal } from "lucide-react";
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers, PriceScaleMode } from "lightweight-charts";
+import { Loader2, AlertTriangle, Maximize2, Minimize2, Tag, Link2, ChevronLeft, ChevronRight, Trash2, Eye, EyeOff, Pencil, Focus, Spline, Lock, Unlock, Copy, Undo2, Hand, GripHorizontal, SlidersHorizontal } from "lucide-react";
 import { DrawLayer, makeDrawing, moveDrawing, stagePoint, setPoint, cloneDrawing, clicksOf, TOOLS, HINT, COLORS, MAX_PER_COIN } from "../lib/chartDraw.js";
 import { DrawIcon } from "./DrawIcons.jsx";
 import { ask } from "./ConfirmDialog.jsx";
-import { TF, fetchKlines, analyze } from "../lib/ta.js";
+import { TF, fetchKlines, analyze, rsi as rsiOf, macd as macdOf } from "../lib/ta.js";
+import { useChartPrefs, savePrefs, heikinAshi, STYLES } from "../lib/chartPrefs.js";
 import { fmtPx, fmtNum } from "../lib/format.js";
 import { useWhale, cvdOf, flowMarks, bigMin, usdK } from "../lib/whale.js";
 import { useLiveKline, mergeBar } from "../lib/liveKline.js";
@@ -162,7 +163,14 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   const phone = usePhone();
   const hKey = resizeKey ? `qws_chart_h_${resizeKey}_${phone ? "m" : "d"}` : null;
   const [hUser, setHUser] = useState(() => (hKey ? lsNum(hKey) : null));
-  useEffect(() => { setHUser(hKey ? lsNum(hKey) : null); }, [hKey]);
+  useEffect(() => {
+    setHUser(hKey ? lsNum(hKey) : null);
+    if (!hKey) return undefined;
+    const f = (e) => { if (e.detail?.k === hKey) { setHUser(e.detail.v); if (box.current) box.current.style.height = e.detail.v ? `${e.detail.v}px` : ""; } };
+    window.addEventListener("qws-chart-h", f); return () => window.removeEventListener("qws-chart-h", f);
+  }, [hKey]);
+  const prefs = useChartPrefs();
+  const [prefOpen, setPrefOpen] = useState(false);
   const [panSaved, setPanSaved] = useState(() => { try { return localStorage.getItem("qws_chart_pan") === "1"; } catch { return false; } });
   const pan = panDefault || panSaved;
   const panRef = useRef(pan); panRef.current = pan;
@@ -173,10 +181,10 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     const y0 = e.clientY, h0 = box.current.getBoundingClientRect().height, max = Math.round(window.innerHeight * 0.92);
     let last = h0;
     const mv = (ev) => { last = Math.round(Math.min(max, Math.max(200, h0 + ev.clientY - y0))); if (box.current) box.current.style.height = `${last}px`; };
-    const upR = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", upR); window.removeEventListener("pointercancel", upR); setHUser(last); lsSet(hKey, last); };
+    const upR = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", upR); window.removeEventListener("pointercancel", upR); setHUser(last); lsSet(hKey, last); window.dispatchEvent(new CustomEvent("qws-chart-h", { detail: { k: hKey, v: last } })); };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", upR); window.addEventListener("pointercancel", upR);
   };
-  const resetH = () => { setHUser(null); lsSet(hKey, null); if (box.current) box.current.style.height = ""; };
+  const resetH = () => { setHUser(null); lsSet(hKey, null); if (box.current) box.current.style.height = ""; window.dispatchEvent(new CustomEvent("qws-chart-h", { detail: { k: hKey, v: null } })); };
   const drawRef = useRef(draw); drawRef.current = draw;
   const candlesRef = useRef(candles); candlesRef.current = candles;
   const [edit, setEdit] = useState(null); // ô gõ chữ ghi chú: { id, x, y, value }
@@ -188,7 +196,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
   useEffect(() => {
     const chart = createChart(box.current, {
       autoSize: true,
-      layout: { background: { type: "solid", color: "transparent" }, textColor: "#64748b", fontSize: 11 },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#64748b", fontSize: 11, panes: { enableResize: true, separatorColor: "rgba(148,163,184,0.35)", separatorHoverColor: "rgba(99,102,241,0.35)" } }, // kéo vạch giữa các tầng để đổi cao từng tầng
       grid: { vertLines: { color: "rgba(148,163,184,0.12)" }, horzLines: { color: "rgba(148,163,184,0.12)" } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, rightOffset: 8 },
@@ -201,6 +209,7 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
     const line = (color) => chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     const a = { chart, candle, vol, l20: line("#f59e0b"), l50: line("#6366f1"), markers: createSeriesMarkers(candle, []), lines: [], sync: null };
+    a.cl = chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: true, visible: false }); // kiểu "Đường" (giá đóng cửa)
     api.current = a;
     // Rê chuột → báo giá cho các ô khác cùng coin; nhận giá từ ô khác → vạch chấm ngang
     const onMove = (p) => {
@@ -366,7 +375,11 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
     const T = (t) => t + VN, first = candles[0].time, last = candles[candles.length - 1].time;
     a.candle.applyOptions({ priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision } });
     a.chart.applyOptions({ localization: { locale: "vi-VN", priceFormatter: (p) => Number(p).toLocaleString("vi-VN", { minimumFractionDigits: precision, maximumFractionDigits: precision }) } }); // số kiểu Việt (83.003,06) như phần còn lại của app
-    a.candle.setData(candles.map(({ time, open, high, low, close }) => ({ time: T(time), open, high, low, close })));
+    // Kiểu nến: Heikin Ashi chỉ đổi cách VẼ; "Đường" giữ chuỗi nến nhưng tô trong suốt (mốc, đường giá, hình vẽ vẫn bám chuỗi nến)
+    const bars = prefs.style === "ha" ? heikinAshi(candles) : candles, isLine = prefs.style === "line", clear = "rgba(0,0,0,0)";
+    a.candle.applyOptions(isLine ? { upColor: clear, downColor: clear, wickUpColor: clear, wickDownColor: clear } : { upColor: "#10b981", downColor: "#f43f5e", wickUpColor: "#10b981", wickDownColor: "#f43f5e" });
+    a.candle.setData(bars.map(({ time, open, high, low, close }) => ({ time: T(time), open, high, low, close })));
+    a.cl.applyOptions({ visible: isLine }); a.cl.setData(isLine ? candles.map((c) => ({ time: T(c.time), value: c.close })) : []);
     a.vol.setData(candles.map((c) => ({ time: T(c.time), value: c.volume, color: (flow?.delta ? (c.buy || 0) >= (c.sell || 0) : c.close >= c.open) ? `rgba(16,185,129,${flow?.delta ? 0.6 : 0.35})` : `rgba(244,63,94,${flow?.delta ? 0.6 : 0.35})` })));
     a.l20.setData(e20.map((p) => ({ time: T(p.time), value: p.value }))); a.l50.setData(e50.map((p) => ({ time: T(p.time), value: p.value })));
     a.l20.applyOptions({ visible: m20 !== "off", lastValueVisible: m20 === "full" });
@@ -383,20 +396,43 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
       const ts = a.chart.timeScale(), r = ts.getVisibleLogicalRange();
       if (r && r.to < candles.length + 2 && r.to > candles.length - 12) ts.setVisibleLogicalRange({ from: r.from + (candles.length + 6 - r.to), to: candles.length + 6 });
     }
-  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact, flow?.marks, flow?.delta, follow]);
+  }, [candles, e20, e50, events, marks, precision, fitKey, m20, m50, mSmc, compact, flow?.marks, flow?.delta, follow, prefs.style]);
+  useEffect(() => { api.current?.chart.priceScale("right").applyOptions({ mode: prefs.log ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal }); }, [prefs.log]);
 
   // Tầng phụ dòng tiền: CVD (tầng 2) + OI (tầng 3) — dựng lại khi bật/tắt, cập nhật dữ liệu khi có nến mới
-  const hasCvd = !!flow?.cvd, hasOi = !!flow?.oi;
+  // 28/11: + RSI, MACD (bật ở nút "Chỉ báo"); kéo vạch giữa 2 tầng để đổi cao
+  const hasCvd = !!flow?.cvd, hasOi = !!flow?.oi, hasRsi = !!prefs.rsi, hasMacd = !!prefs.macd;
   useEffect(() => {
     const a = api.current; if (!a) return;
-    for (const k of ["cvdS", "oiS"]) if (a[k]) { a.chart.removeSeries(a[k]); a[k] = null; }
+    for (const k of ["cvdS", "oiS", "rsiS", "macdH", "macdL", "macdG"]) if (a[k]) { a.chart.removeSeries(a[k]); a[k] = null; }
     for (let i = a.chart.panes().length - 1; i >= 1; i--) a.chart.removePane(i);
     let pane = 1;
     const sub = (color, title) => a.chart.addSeries(LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title, priceFormat: { type: "volume" } }, pane++);
     if (hasCvd) a.cvdS = sub("#0ea5e9", "Mua−bán cộng dồn");
     if (hasOi) a.oiS = sub("#a855f7", "Tiền lệnh mở $");
-    const P = a.chart.panes(); P[0]?.setStretchFactor(P.length > 1 ? 3.2 : 1); for (let i = 1; i < P.length; i++) P[i].setStretchFactor(1);
-  }, [hasCvd, hasOi]);
+    if (hasRsi) {
+      a.rsiS = a.chart.addSeries(LineSeries, { color: "#8b5cf6", lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: "RSI", priceFormat: { type: "price", precision: 1, minMove: 0.1 }, autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }, pane++);
+      for (const v of [70, 30]) a.rsiS.createPriceLine({ price: v, color: v === 70 ? "#f43f5e" : "#10b981", lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+    }
+    if (hasMacd) {
+      const q = pane++, pf = { type: "price", precision: 4, minMove: 0.0001 };
+      a.macdH = a.chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false, priceFormat: pf }, q);
+      a.macdL = a.chart.addSeries(LineSeries, { color: "#2563eb", lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: "MACD", priceFormat: pf }, q);
+      a.macdG = a.chart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat: pf }, q);
+    }
+    const P = a.chart.panes(); P[0]?.setStretchFactor(P.length > 1 ? 2 + P.length : 1); for (let i = 1; i < P.length; i++) P[i].setStretchFactor(1);
+  }, [hasCvd, hasOi, hasRsi, hasMacd]);
+  useEffect(() => {
+    const a = api.current; if (!a || !candles.length) return;
+    const T = (t) => t + VN, cl = candles.map((c) => c.close);
+    const ser = (arr) => arr.map((v, i) => (v == null ? { time: T(candles[i].time) } : { time: T(candles[i].time), value: v })); // điểm chưa đủ dữ liệu = khoảng trống
+    if (a.rsiS) { a.rsiS.setData(ser(rsiOf(cl, prefs.rsiN))); a.rsiS.applyOptions({ title: `RSI ${prefs.rsiN}` }); }
+    if (a.macdL) {
+      const m = macdOf(cl);
+      a.macdL.setData(ser(m.line)); a.macdG.setData(ser(m.signal));
+      a.macdH.setData(m.hist.map((v, i) => (v == null ? { time: T(candles[i].time) } : { time: T(candles[i].time), value: v, color: v >= 0 ? "rgba(16,185,129,0.55)" : "rgba(244,63,94,0.55)" })));
+    }
+  }, [candles, hasRsi, hasMacd, prefs.rsiN]);
   useEffect(() => {
     const a = api.current; if (!a) return;
     const T = (t) => t + VN, first = candles[0]?.time ?? 0;
@@ -426,6 +462,13 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
             <Spline size={12} />EMA
           </button>
         )}
+        <div className="relative">
+          <button type="button" onClick={() => setPrefOpen((v) => !v)} aria-expanded={prefOpen} title="Chỉ báo (RSI, MACD), thang log, kiểu nến" aria-label="Chỉ báo và kiểu biểu đồ"
+            className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10.5px] font-bold shadow-sm ${prefOpen || prefs.rsi || prefs.macd || prefs.log || prefs.style !== "candle" ? "border-indigo-300 bg-indigo-50 text-indigo-600" : "border-slate-200 bg-white/90 text-slate-500 hover:text-indigo-600"}`}>
+            <SlidersHorizontal size={12} /><span className="hidden sm:inline">Chỉ báo</span>
+          </button>
+          {prefOpen && <ChartPrefsPop prefs={prefs} onClose={() => setPrefOpen(false)} />}
+        </div>
         <button type="button" onClick={() => api.current?.refit?.()} title="Căn lại biểu đồ: giá tự co giãn vừa nến, về các nến gần nhất (hoặc bấm đúp vào trục giá)" aria-label="Căn lại biểu đồ"
           className="flex items-center gap-1 rounded-md border border-slate-200 bg-white/90 px-1.5 py-1 text-[10.5px] font-bold text-slate-500 shadow-sm hover:text-indigo-600">
           <Focus size={12} /><span className="hidden sm:inline">Căn chart</span>
@@ -447,6 +490,45 @@ export function CandleChart({ onEma, candles, e20, e50, events, marks, lines, pr
           style={{ left: Math.max(4, Math.min(edit.x, (box.current?.clientWidth || 300) - 190)), top: Math.max(4, edit.y - 30) }}
           className="absolute z-20 w-44 rounded-md border border-indigo-300 bg-white px-2 py-1 text-[12px] text-slate-800 shadow outline-none" />
       )}
+    </div>
+  );
+}
+
+// Hộp "Chỉ báo" (28/11): RSI / MACD tầng riêng, thang log, kiểu nến — áp cho mọi biểu đồ trên máy này
+function ChartPrefsPop({ prefs, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const out = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    const esc = (e) => { if (e.key === "Escape") onClose(); };
+    const t = setTimeout(() => window.addEventListener("pointerdown", out), 0);
+    window.addEventListener("keydown", esc);
+    return () => { clearTimeout(t); window.removeEventListener("pointerdown", out); window.removeEventListener("keydown", esc); };
+  }, [onClose]);
+  const row = "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50";
+  return (
+    <div ref={ref} role="dialog" aria-label="Chỉ báo và kiểu biểu đồ" className="pop-solid absolute bottom-full right-0 z-30 mb-1.5 w-60 rounded-xl border border-slate-200 bg-white p-2 text-[12px] font-semibold text-slate-700 shadow-2xl">
+      <div className="px-2 pb-1 text-[10.5px] font-extrabold uppercase tracking-wide text-slate-400">Chỉ báo tầng riêng</div>
+      <label className={row}>
+        <input type="checkbox" checked={prefs.rsi} onChange={(e) => savePrefs({ rsi: e.target.checked })} className="accent-indigo-600" />
+        <span className="flex-1">RSI · quá mua 70 / quá bán 30</span>
+        <input type="number" min={2} max={50} value={prefs.rsiN} onChange={(e) => savePrefs({ rsiN: e.target.value })} aria-label="Số nến RSI" className="w-12 rounded-md border border-slate-200 px-1 py-0.5 text-right tabular-nums" />
+      </label>
+      <label className={row}>
+        <input type="checkbox" checked={prefs.macd} onChange={(e) => savePrefs({ macd: e.target.checked })} className="accent-indigo-600" />
+        <span className="flex-1">MACD (12, 26, 9)</span>
+      </label>
+      <div className="mt-1 border-t border-slate-100 px-2 pb-1 pt-2 text-[10.5px] font-extrabold uppercase tracking-wide text-slate-400">Kiểu biểu đồ</div>
+      <div className="flex gap-1 px-2" role="radiogroup" aria-label="Kiểu nến">
+        {STYLES.map(([k, l]) => (
+          <button key={k} type="button" role="radio" aria-checked={prefs.style === k} onClick={() => savePrefs({ style: k })}
+            className={`flex-1 whitespace-nowrap rounded-md px-1.5 py-1 text-[11.5px] font-bold ${prefs.style === k ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>{l}</button>
+        ))}
+      </div>
+      <label className={`${row} mt-1`}>
+        <input type="checkbox" checked={prefs.log} onChange={(e) => savePrefs({ log: e.target.checked })} className="accent-indigo-600" />
+        <span className="flex-1">Thang giá log <span className="font-normal text-slate-400">· hợp khung 1D / 1W</span></span>
+      </label>
+      <div className="px-2 pt-1 text-[10.5px] font-normal leading-snug text-slate-400">Kéo vạch giữa các tầng để đổi chiều cao từng tầng. Heikin Ashi chỉ đổi cách vẽ, giá và cảnh báo vẫn theo nến thật.</div>
     </div>
   );
 }
@@ -545,7 +627,7 @@ function useCells(sym, tf, mkt, active) {
 }
 
 const EMPTY = [], NOFLOW = {};
-function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn, extra }) {
+function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected, active, ai, draw, onPick, onChange, onFocus, height, flowOn, extra, rk }) {
   const { sym, tf } = cell;
   const st = useCells(sym, tf, mkt, active);
   const ta = useMemo(() => (st.candles.length > 30 ? analyze(st.candles) : null), [st.candles]);
@@ -575,7 +657,7 @@ function GridCell({ onEma, i, cell, mkt, watch, tags, compact, focused, selected
           <div className={`flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-[12px] font-semibold text-rose-600 ${height}`}><AlertTriangle size={14} /> {st.err}</div>
         ) : (<>
           {st.loading && !st.candles.length && <div className="absolute inset-0 z-10 flex items-center justify-center gap-1.5 text-[12px] font-bold text-slate-400"><Loader2 size={14} className="animate-spin" /> Đang tải {sym} {TF[tf].label}…</div>}
-          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={extra?.marks || EMPTY} lines={lines} precision={st.market === "mt5" ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} />
+          <CandleChart onEma={onEma} candles={st.candles} e20={ta?.series.e20 || EMPTY} e50={ta?.series.e50 || EMPTY} events={ta?.series.events || EMPTY} marks={extra?.marks || EMPTY} lines={lines} precision={st.market === "mt5" ? fxDigits(sym) ?? precisionOf(price) : precisionOf(price)} fitKey={st.key} tags={tags} compact={compact} syncKey={sym} draw={draw} flow={flow} className={`w-full ${height}`} resizeKey={rk} />
         </>)}
       </div>
     </div>
@@ -616,7 +698,7 @@ export function ChartGrid({ onEma, grid, setGrid, mkt, watch, tags, active, aiFo
       <div ref={scroller} className={`flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto sm:grid sm:overflow-visible ${cols}`}>
         {shown.map((i) => (
           <GridCell key={i} onEma={onEma} i={i} cell={cells[i]} mkt={mkt} watch={watch} tags={tags} compact={compact} focused={focus === i} selected={grid.active === i} active={active}
-            ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height}
+            ai={aiFor(cells[i])} draw={drawFor?.(cells[i])} onPick={pick} onChange={change} onFocus={toggleFocus} height={height} rk={full ? undefined : `grid${focus != null ? "f" : n}`}
             flowOn={flowOn && (focus === i || n <= 2 ? flowOn : { ...flowOn, cvd: false, oi: false })} extra={extraFor?.(cells[i].sym, cells[i].tf)} />
         ))}
       </div>
