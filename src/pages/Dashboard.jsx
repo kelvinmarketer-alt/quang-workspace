@@ -125,7 +125,11 @@ export default function Dashboard() {
   // 28/11 (đo CLS lần mở mới trên 4G): số kênh chưa về → giữ sẵn chỗ 2 dòng "thương hiệu cần chú ý" bằng dòng chờ mờ,
   // số về thì thay đúng chỗ đó → trang không bị đẩy xuống (lần mở mới trên điện thoại không có bộ nhớ phiên)
   const repWait = ownerUi && !rep.data?.at && !rep.data?.errors?.length;
-  const holdN = repWait ? Math.max(0, Math.min(2, 6 - urgent.length)) : 0;
+  // 28/11: giữ đúng số dòng lần trước (nhớ trên máy) thay vì cố định 2 → số về không đẩy trang thêm
+  const urgKey = `qws_dash_urg_${myEmail}`;
+  const urgPrev = (() => { try { const v = parseInt(localStorage.getItem(urgKey), 10); return Number.isFinite(v) ? v : null; } catch { return null; } })();
+  const holdN = repWait ? Math.max(0, Math.min(6, urgPrev ?? urgent.length + 2) - urgent.length) : 0;
+  useEffect(() => { if (!repWait && ownerId) { try { localStorage.setItem(urgKey, String(urgent.length)); } catch { /* máy chặn bộ nhớ */ } } }, [repWait, ownerId, urgent.length, urgKey]);
   const coinOk = perms.includes("coinDemo") && !!settings.paperBot;
 
   // 11/11: Tuỳ chỉnh ô nào hiện + thứ tự (chủ lưu trong settings theo email; tài khoản phụ giữ ở trình duyệt này)
@@ -273,7 +277,7 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{ownerUi ? "Chào anh Quang" : `Chào ${myName || "bạn"}`}</h1>
-          <span className="text-[13px] font-medium text-slate-500">{fmtDateVI(now)} · âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
+          <span className="text-[13px] font-medium text-slate-500"><span className="whitespace-nowrap">{fmtDateVI(now)}</span><span className="max-sm:hidden"> · </span><br className="sm:hidden" />âm lịch {li.label}{li.special ? ` · ${li.special}` : ""} · {li.canChiYear}</span>
         </div>
         <button type="button" onClick={() => setCustomizing(true)} className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[12.5px] font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50" title="Chọn ô hiện và thứ tự"><SlidersHorizontal size={14} /> Tuỳ chỉnh</button>
       </div>
